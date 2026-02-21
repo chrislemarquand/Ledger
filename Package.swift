@@ -1,0 +1,24 @@
+// swift-tools-version: 6.2
+import PackageDescription
+
+let package = Package(
+    name: "ExifEdit",
+    platforms: [
+        .macOS(.v15)
+    ],
+    products: [
+        .library(name: "ExifEditCore", targets: ["ExifEditCore"]),
+        .executable(name: "ExifEditMac", targets: ["ExifEditMac"])
+    ],
+    targets: [
+        .target(name: "ExifEditCore"),
+        .executableTarget(
+            name: "ExifEditMac",
+            dependencies: ["ExifEditCore"]
+        ),
+        .testTarget(
+            name: "ExifEditCoreTests",
+            dependencies: ["ExifEditCore"]
+        )
+    ]
+)
