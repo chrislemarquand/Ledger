@@ -10,35 +10,62 @@ struct ExifEditMacApp: App {
             EmptyView()
         }
         .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About Logbook") {
+                    appDelegate.showAboutPanel()
+                }
+            }
+
+            CommandGroup(replacing: .undoRedo) {
+                Button("Undo") {
+                    performUndo()
+                }
+                .keyboardShortcut("z", modifiers: .command)
+
+                Button("Redo") {
+                    performRedo()
+                }
+                .keyboardShortcut("Z", modifiers: [.command, .shift])
+            }
+
             CommandGroup(replacing: .newItem) {
                 Button("Open Folder…") {
                     NSApp.sendAction(#selector(NativeThreePaneSplitViewController.openFolderAction(_:)), to: nil, from: nil)
                 }
                 .keyboardShortcut("o", modifiers: .command)
-            }
-
-            CommandGroup(after: .newItem) {
-                Button("Refresh") {
-                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.refreshAction(_:)), to: nil, from: nil)
-                }
-                .keyboardShortcut("r", modifiers: .command)
 
                 Divider()
-
-                Button("Reveal in Finder") {
-                    appDelegate.appModel?.revealSelectionInFinder()
-                }
-                .keyboardShortcut("r", modifiers: [.command, .shift])
-                .disabled((appDelegate.appModel?.selectedFileURLs.isEmpty ?? true))
 
                 Button("Open in Default App") {
                     appDelegate.appModel?.openSelectedInDefaultApp()
                 }
                 .keyboardShortcut(.return, modifiers: .command)
                 .disabled((appDelegate.appModel?.selectedFileURLs.isEmpty ?? true))
+
+                Button("Reveal in Finder") {
+                    appDelegate.appModel?.revealSelectionInFinder()
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled((appDelegate.appModel?.selectedFileURLs.isEmpty ?? true))
+            }
+
+            CommandGroup(after: .pasteboard) {
+                Menu("Find") {
+                    Button("Find…") {
+                        NSApp.sendAction(#selector(NativeThreePaneSplitViewController.focusSearchAction(_:)), to: nil, from: nil)
+                    }
+                    .keyboardShortcut("f", modifiers: .command)
+                }
             }
 
             CommandGroup(after: .toolbar) {
+                Button("Show Sidebar") {
+                    NSApp.sendAction(#selector(NSSplitViewController.toggleSidebar(_:)), to: nil, from: nil)
+                }
+                .keyboardShortcut("s", modifiers: [.command, .option])
+
+                Divider()
+
                 Button("Gallery View") {
                     appDelegate.appModel?.browserViewMode = .gallery
                 }
@@ -52,6 +79,34 @@ struct ExifEditMacApp: App {
                 .disabled((appDelegate.appModel?.browserViewMode ?? .gallery) == .list)
 
                 Divider()
+
+                Menu("Sort By") {
+                    let sort = appDelegate.appModel?.browserSort ?? .name
+
+                    Button {
+                        appDelegate.appModel?.browserSort = .name
+                    } label: {
+                        if sort == .name { Label("Name", systemImage: "checkmark") } else { Text("Name") }
+                    }
+
+                    Button {
+                        appDelegate.appModel?.browserSort = .created
+                    } label: {
+                        if sort == .created { Label("Date Created", systemImage: "checkmark") } else { Text("Date Created") }
+                    }
+
+                    Button {
+                        appDelegate.appModel?.browserSort = .size
+                    } label: {
+                        if sort == .size { Label("Size", systemImage: "checkmark") } else { Text("Size") }
+                    }
+
+                    Button {
+                        appDelegate.appModel?.browserSort = .kind
+                    } label: {
+                        if sort == .kind { Label("Kind", systemImage: "checkmark") } else { Text("Kind") }
+                    }
+                }
 
                 Button("Zoom In") {
                     NSApp.sendAction(#selector(NativeThreePaneSplitViewController.zoomInAction(_:)), to: nil, from: nil)
@@ -67,15 +122,51 @@ struct ExifEditMacApp: App {
             }
 
             CommandMenu("Metadata") {
+                Button("Refresh Files and Metadata") {
+                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.refreshAction(_:)), to: nil, from: nil)
+                }
+                .keyboardShortcut("r", modifiers: .command)
+
                 Button("Apply Metadata Changes") {
                     NSApp.sendAction(#selector(NativeThreePaneSplitViewController.applyChangesAction(_:)), to: nil, from: nil)
                 }
                 .keyboardShortcut("s", modifiers: .command)
+                .disabled(!(appDelegate.appModel?.canApplyMetadataChanges ?? false))
 
-                Button("Restore Last Operation") {
-                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.restoreAction(_:)), to: nil, from: nil)
+                Divider()
+
+                Menu("Import") {
+                    Button("Import GPX…") {
+                        NSApp.sendAction(#selector(NativeThreePaneSplitViewController.importGPXAction(_:)), to: nil, from: nil)
+                    }
+                    .disabled((appDelegate.appModel?.browserItems.isEmpty ?? true))
                 }
-                .keyboardShortcut("z", modifiers: [.command, .shift])
+
+                Menu("Presets") {
+                    Menu("Apply Preset") {
+                        if (appDelegate.appModel?.presets.isEmpty ?? true) {
+                            Text("No Presets")
+                        } else {
+                            ForEach(appDelegate.appModel?.presets ?? []) { preset in
+                                Button(preset.name) {
+                                    appDelegate.appModel?.applyPreset(presetID: preset.id)
+                                }
+                                .disabled((appDelegate.appModel?.selectedFileURLs.isEmpty ?? true))
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    Button("Save Current as Preset…") {
+                        NSApp.sendAction(#selector(NativeThreePaneSplitViewController.saveCurrentAsPresetAction(_:)), to: nil, from: nil)
+                    }
+                    .disabled((appDelegate.appModel?.selectedFileURLs.isEmpty ?? true))
+
+                    Button("Manage Presets…") {
+                        NSApp.sendAction(#selector(NativeThreePaneSplitViewController.managePresetsAction(_:)), to: nil, from: nil)
+                    }
+                }
             }
 
             CommandGroup(after: .windowArrangement) {
@@ -93,14 +184,94 @@ struct ExifEditMacApp: App {
                     }
                 }
             }
+
         }
+    }
+
+    private func performUndo() {
+        if let undoManager = NSApp.keyWindow?.firstResponder?.undoManager, undoManager.canUndo {
+            undoManager.undo()
+            return
+        }
+        _ = appDelegate.appModel?.undoLastMetadataEdit()
+    }
+
+    private func performRedo() {
+        if let undoManager = NSApp.keyWindow?.firstResponder?.undoManager, undoManager.canRedo {
+            undoManager.redo()
+            return
+        }
+        _ = appDelegate.appModel?.redoLastMetadataEdit()
     }
 }
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindowController: MainWindowController?
+    private var isShowingTerminateConfirmation = false
+    private var allowImmediateTermination = false
     var appModel: AppModel? { mainWindowController?.appModel }
+
+    func showAboutPanel() {
+        let bundle = Bundle.main
+        let appName = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
+            ?? "Logbook"
+        let shortVersion = (bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.0.0"
+        let buildVersion = (bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? "1"
+        let combinedVersion = "\(shortVersion) (\(buildVersion))"
+        let exifToolVersion = bundledExifToolVersion() ?? "Unknown"
+
+        let purpose = "A local EXIF/IPTC/XMP editor powered by ExifTool."
+        let credits = NSMutableAttributedString(
+            string: "\(purpose)\n\nUses ExifTool \(exifToolVersion) by Phil Harvey\n"
+        )
+        let linkText = "https://exiftool.org/"
+        let linkRange = NSRange(location: credits.length, length: (linkText as NSString).length)
+        credits.append(NSAttributedString(string: linkText))
+        credits.addAttributes(
+            [
+                .link: linkText,
+                .underlineStyle: NSUnderlineStyle.single.rawValue,
+            ],
+            range: linkRange
+        )
+
+        let options: [NSApplication.AboutPanelOptionKey: Any] = [
+            .applicationName: appName,
+            .applicationVersion: combinedVersion,
+            .credits: credits,
+            NSApplication.AboutPanelOptionKey(rawValue: "Copyright"): "© 2026 Chris Le Marquand",
+        ]
+        NSApp.orderFrontStandardAboutPanel(options: options)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func bundledExifToolVersion() -> String? {
+        guard let executablePath = Bundle.main.path(forResource: "exiftool/bin/exiftool", ofType: nil) else {
+            return nil
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executablePath)
+        process.arguments = ["-ver"]
+
+        let outputPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return nil }
+            let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+            let text = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return text?.isEmpty == false ? text : nil
+        } catch {
+            return nil
+        }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let model = AppModel()
@@ -112,6 +283,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if allowImmediateTermination {
+            allowImmediateTermination = false
+            return .terminateNow
+        }
+
+        guard let appModel, appModel.hasUnsavedEdits else {
+            return .terminateNow
+        }
+
+        guard !isShowingTerminateConfirmation else {
+            return .terminateCancel
+        }
+        isShowingTerminateConfirmation = true
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "You have unsaved metadata changes."
+        alert.informativeText = "Quit and discard unsaved edits?"
+        alert.addButton(withTitle: "Quit")
+        alert.addButton(withTitle: "Cancel")
+
+        let keyWindow = NSApp.keyWindow ?? mainWindowController?.window
+        if let keyWindow {
+            alert.beginSheetModal(for: keyWindow) { [weak self] response in
+                guard let self else { return }
+                self.isShowingTerminateConfirmation = false
+                if response == .alertFirstButtonReturn {
+                    self.allowImmediateTermination = true
+                    sender.terminate(nil)
+                } else {
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+            }
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                let response = alert.runModal()
+                self.isShowingTerminateConfirmation = false
+                if response == .alertFirstButtonReturn {
+                    self.allowImmediateTermination = true
+                    sender.terminate(nil)
+                } else {
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+            }
+        }
+        return .terminateCancel
     }
 }
 
