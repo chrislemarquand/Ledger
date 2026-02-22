@@ -1808,6 +1808,7 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
     private var lastThumbnailInvalidationToken = UUID()
     private var pendingThumbnailRefreshURLs: Set<URL> = []
     private var isRenderingState = false
+    private var zoomRestoreToken = 0
     private var pinchAccumulator: CGFloat = 0
     private var lastMagnification: CGFloat = 0
     private let pinchThreshold: CGFloat = 0.14
@@ -1924,14 +1925,14 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
         let pendingURLs = Set(currentURLs.filter { model.hasPendingEdits(for: $0) })
 
         let listChanged = currentURLs != lastRenderedURLs
-        let columnsChanged = layout.columnCount != model.galleryColumnCount
+        let targetColumnCount = max(model.galleryColumnCount, 1)
+        let columnsChanged = layout.columnCount != targetColumnCount
         let selectionChanged = selectedURLs != lastRenderedSelected
         let pendingChanged = pendingURLs != lastRenderedPending
         let primaryChanged = model.primarySelectionURL != lastRenderedPrimarySelectionURL
 
         if columnsChanged {
-            layout.columnCount = max(model.galleryColumnCount, 1)
-            layout.invalidateLayout()
+            applyColumnCount(targetColumnCount, animated: true)
         }
 
         if listChanged {
@@ -1968,6 +1969,86 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
         }
 
         updateQuickLookArtifacts()
+    }
+
+    private func applyColumnCount(_ targetColumnCount: Int, animated: Bool) {
+        guard targetColumnCount > 0 else { return }
+        guard layout.columnCount != targetColumnCount else { return }
+
+        zoomRestoreToken += 1
+        let restoreToken = zoomRestoreToken
+        let anchor = captureZoomTransitionAnchor()
+        let canAnimate = animated
+            && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            && view.window != nil
+            && collectionView.numberOfItems(inSection: 0) > 0
+
+        if canAnimate {
+            applyFadeTransition(to: collectionView)
+        }
+
+        layout.columnCount = targetColumnCount
+        layout.invalidateLayout()
+        restoreZoomTransitionAnchor(anchor, token: restoreToken)
+        updateQuickLookArtifacts()
+    }
+
+    private func applyFadeTransition(to view: NSView) {
+        guard let layer = view.layer else { return }
+        layer.removeAnimation(forKey: "galleryZoomFade")
+        let transition = CATransition()
+        transition.type = .fade
+        transition.duration = 0.15
+        transition.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        layer.add(transition, forKey: "galleryZoomFade")
+    }
+
+    private struct ZoomTransitionAnchor {
+        let itemIndex: Int
+    }
+
+    private func captureZoomTransitionAnchor() -> ZoomTransitionAnchor? {
+        if let primary = model.primarySelectionURL,
+           let index = items.firstIndex(where: { $0.url == primary }) {
+            return ZoomTransitionAnchor(itemIndex: index)
+        }
+
+        let visible = collectionView.indexPathsForVisibleItems()
+        guard !visible.isEmpty else { return nil }
+        let visibleRect = collectionView.visibleRect
+        let center = CGPoint(x: visibleRect.midX, y: visibleRect.midY)
+        guard let currentLayout = collectionView.collectionViewLayout else { return nil }
+
+        let best = visible.min { lhs, rhs in
+            let lhsFrame = currentLayout.layoutAttributesForItem(at: lhs)?.frame ?? .zero
+            let rhsFrame = currentLayout.layoutAttributesForItem(at: rhs)?.frame ?? .zero
+            let lhsCenter = CGPoint(x: lhsFrame.midX, y: lhsFrame.midY)
+            let rhsCenter = CGPoint(x: rhsFrame.midX, y: rhsFrame.midY)
+            let lhsDistance = hypot(lhsCenter.x - center.x, lhsCenter.y - center.y)
+            let rhsDistance = hypot(rhsCenter.x - center.x, rhsCenter.y - center.y)
+            return lhsDistance < rhsDistance
+        }
+
+        guard let index = best?.item else { return nil }
+        return ZoomTransitionAnchor(itemIndex: index)
+    }
+
+    private func restoreZoomTransitionAnchor(_ anchor: ZoomTransitionAnchor?, token: Int) {
+        guard let anchor else { return }
+        guard anchor.itemIndex >= 0, anchor.itemIndex < items.count else { return }
+        guard collectionView.numberOfSections > 0 else { return }
+        let currentCount = collectionView.numberOfItems(inSection: 0)
+        guard anchor.itemIndex < currentCount else { return }
+
+        let indexPath = IndexPath(item: anchor.itemIndex, section: 0)
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            guard token == self.zoomRestoreToken else { return }
+            guard self.collectionView.numberOfSections > 0 else { return }
+            let liveCount = self.collectionView.numberOfItems(inSection: 0)
+            guard anchor.itemIndex < liveCount else { return }
+            self.collectionView.scrollToItems(at: [indexPath], scrollPosition: .nearestVerticalEdge)
+        }
     }
 
     private func refreshVisibleCellState(pendingURLs: Set<URL>, selectedURLs: Set<URL>) {
