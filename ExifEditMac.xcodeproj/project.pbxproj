@@ -414,16 +414,18 @@
 					ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 					CODE_SIGN_ENTITLEMENTS = Config/ExifEditMac.entitlements;
 					INFOPLIST_FILE = "Config/ExifEditMac-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = Logbook;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.chrislemarquand.Logbook;
-				PRODUCT_NAME = Logbook;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
+					INFOPLIST_KEY_CFBundleDisplayName = Logbook;
+					LD_RUNPATH_SEARCH_PATHS = (
+						"$(inherited)",
+						"@executable_path/../Frameworks",
+					);
+					MARKETING_VERSION = 0.1.0;
+					CURRENT_PROJECT_VERSION = 1;
+					MACOSX_DEPLOYMENT_TARGET = 26.0;
+					PRODUCT_BUNDLE_IDENTIFIER = com.chrislemarquand.Logbook;
+					PRODUCT_NAME = Logbook;
+					SWIFT_EMIT_LOC_STRINGS = YES;
+					SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
 		};
@@ -434,16 +436,18 @@
 					ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 					CODE_SIGN_ENTITLEMENTS = Config/ExifEditMac.entitlements;
 					INFOPLIST_FILE = "Config/ExifEditMac-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = Logbook;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.chrislemarquand.Logbook;
-				PRODUCT_NAME = Logbook;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
+					INFOPLIST_KEY_CFBundleDisplayName = Logbook;
+					LD_RUNPATH_SEARCH_PATHS = (
+						"$(inherited)",
+						"@executable_path/../Frameworks",
+					);
+					MARKETING_VERSION = 0.1.0;
+					CURRENT_PROJECT_VERSION = 1;
+					MACOSX_DEPLOYMENT_TARGET = 26.0;
+					PRODUCT_BUNDLE_IDENTIFIER = com.chrislemarquand.Logbook;
+					PRODUCT_NAME = Logbook;
+					SWIFT_EMIT_LOC_STRINGS = YES;
+					SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};

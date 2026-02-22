@@ -10,40 +10,56 @@ struct ExifEditMacApp: App {
             EmptyView()
         }
         .commands {
+            CommandGroup(replacing: .appSettings) {
+                // Settings intentionally hidden for now; fallback to default implementation later.
+            }
+
             CommandGroup(replacing: .appInfo) {
-                Button("About Logbook") {
+                Button {
                     appDelegate.showAboutPanel()
+                } label: {
+                    Label("About Logbook", systemImage: "info.circle")
                 }
             }
 
             CommandGroup(replacing: .undoRedo) {
-                Button("Undo") {
+                Button {
                     performUndo()
+                } label: {
+                    Label("Undo", systemImage: "arrow.uturn.backward")
                 }
                 .keyboardShortcut("z", modifiers: .command)
 
-                Button("Redo") {
+                Button {
                     performRedo()
+                } label: {
+                    Label("Redo", systemImage: "arrow.uturn.forward")
                 }
                 .keyboardShortcut("Z", modifiers: [.command, .shift])
             }
 
             CommandGroup(replacing: .newItem) {
-                Button("Open Folder…") {
+                Button {
                     NSApp.sendAction(#selector(NativeThreePaneSplitViewController.openFolderAction(_:)), to: nil, from: nil)
+                } label: {
+                    Label("Open Folder…", systemImage: "folder")
                 }
                 .keyboardShortcut("o", modifiers: .command)
 
                 Divider()
 
-                Button("Open in Default App") {
+                Button {
                     appDelegate.appModel?.openSelectedInDefaultApp()
+                } label: {
+                    Label("Open in Default App", systemImage: "arrow.up.forward.app")
                 }
                 .keyboardShortcut(.return, modifiers: .command)
                 .disabled((appDelegate.appModel?.selectedFileURLs.isEmpty ?? true))
 
-                Button("Reveal in Finder") {
+                Button {
                     appDelegate.appModel?.revealSelectionInFinder()
+                } label: {
+                    Label("Reveal in Finder", systemImage: "folder")
                 }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
                 .disabled((appDelegate.appModel?.selectedFileURLs.isEmpty ?? true))
@@ -51,29 +67,37 @@ struct ExifEditMacApp: App {
 
             CommandGroup(after: .pasteboard) {
                 Menu("Find") {
-                    Button("Find…") {
+                    Button {
                         NSApp.sendAction(#selector(NativeThreePaneSplitViewController.focusSearchAction(_:)), to: nil, from: nil)
+                    } label: {
+                        Label("Find…", systemImage: "magnifyingglass")
                     }
                     .keyboardShortcut("f", modifiers: .command)
                 }
             }
 
             CommandGroup(after: .toolbar) {
-                Button("Show Sidebar") {
+                Button {
                     NSApp.sendAction(#selector(NSSplitViewController.toggleSidebar(_:)), to: nil, from: nil)
+                } label: {
+                    Label(appDelegate.appModel?.isSidebarCollapsed == true ? "Show Sidebar" : "Hide Sidebar", systemImage: "sidebar.left")
                 }
                 .keyboardShortcut("s", modifiers: [.command, .option])
 
                 Divider()
 
-                Button("Gallery View") {
+                Button {
                     appDelegate.appModel?.browserViewMode = .gallery
+                } label: {
+                    Label("Gallery View", systemImage: "square.grid.3x2")
                 }
                 .keyboardShortcut("1", modifiers: .command)
                 .disabled((appDelegate.appModel?.browserViewMode ?? .gallery) == .gallery)
 
-                Button("List View") {
+                Button {
                     appDelegate.appModel?.browserViewMode = .list
+                } label: {
+                    Label("List View", systemImage: "list.bullet")
                 }
                 .keyboardShortcut("2", modifiers: .command)
                 .disabled((appDelegate.appModel?.browserViewMode ?? .gallery) == .list)
@@ -108,39 +132,38 @@ struct ExifEditMacApp: App {
                     }
                 }
 
-                Button("Zoom In") {
+                Button {
                     NSApp.sendAction(#selector(NativeThreePaneSplitViewController.zoomInAction(_:)), to: nil, from: nil)
+                } label: {
+                    Label("Zoom In", systemImage: "plus.magnifyingglass")
                 }
                 .keyboardShortcut("+", modifiers: .command)
                 .disabled(!(appDelegate.appModel?.browserViewMode == .gallery && (appDelegate.appModel?.canIncreaseGalleryZoom ?? false)))
 
-                Button("Zoom Out") {
+                Button {
                     NSApp.sendAction(#selector(NativeThreePaneSplitViewController.zoomOutAction(_:)), to: nil, from: nil)
+                } label: {
+                    Label("Zoom Out", systemImage: "minus.magnifyingglass")
                 }
                 .keyboardShortcut("-", modifiers: .command)
                 .disabled(!(appDelegate.appModel?.browserViewMode == .gallery && (appDelegate.appModel?.canDecreaseGalleryZoom ?? false)))
             }
 
             CommandMenu("Metadata") {
-                Button("Refresh Files and Metadata") {
+                Button {
                     NSApp.sendAction(#selector(NativeThreePaneSplitViewController.refreshAction(_:)), to: nil, from: nil)
+                } label: {
+                    Label("Refresh Files and Metadata", systemImage: "arrow.clockwise")
                 }
                 .keyboardShortcut("r", modifiers: .command)
 
-                Button("Apply Metadata Changes") {
+                Button {
                     NSApp.sendAction(#selector(NativeThreePaneSplitViewController.applyChangesAction(_:)), to: nil, from: nil)
+                } label: {
+                    Label("Apply Metadata Changes", systemImage: "square.and.arrow.down")
                 }
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(!(appDelegate.appModel?.canApplyMetadataChanges ?? false))
-
-                Divider()
-
-                Menu("Import") {
-                    Button("Import GPX…") {
-                        NSApp.sendAction(#selector(NativeThreePaneSplitViewController.importGPXAction(_:)), to: nil, from: nil)
-                    }
-                    .disabled((appDelegate.appModel?.browserItems.isEmpty ?? true))
-                }
 
                 Menu("Presets") {
                     Menu("Apply Preset") {
@@ -148,8 +171,10 @@ struct ExifEditMacApp: App {
                             Text("No Presets")
                         } else {
                             ForEach(appDelegate.appModel?.presets ?? []) { preset in
-                                Button(preset.name) {
+                                Button {
                                     appDelegate.appModel?.applyPreset(presetID: preset.id)
+                                } label: {
+                                    Label(preset.name, systemImage: "slider.horizontal.3")
                                 }
                                 .disabled((appDelegate.appModel?.selectedFileURLs.isEmpty ?? true))
                             }
@@ -158,30 +183,28 @@ struct ExifEditMacApp: App {
 
                     Divider()
 
-                    Button("Save Current as Preset…") {
+                    Button {
                         NSApp.sendAction(#selector(NativeThreePaneSplitViewController.saveCurrentAsPresetAction(_:)), to: nil, from: nil)
+                    } label: {
+                        Label("Save Current as Preset…", systemImage: "square.and.arrow.down.on.square")
                     }
                     .disabled((appDelegate.appModel?.selectedFileURLs.isEmpty ?? true))
 
-                    Button("Manage Presets…") {
+                    Button {
                         NSApp.sendAction(#selector(NativeThreePaneSplitViewController.managePresetsAction(_:)), to: nil, from: nil)
+                    } label: {
+                        Label("Manage Presets…", systemImage: "slider.horizontal.below.square.filled.and.square")
                     }
                 }
-            }
-
-            CommandGroup(after: .windowArrangement) {
-                Divider()
-                Button("Info Panel") {
-                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.debugAction(_:)), to: nil, from: nil)
-                }
-                .keyboardShortcut("i", modifiers: [.command, .option])
             }
 
             CommandGroup(after: .help) {
-                Button("ExifTool Documentation") {
+                Button {
                     if let url = URL(string: "https://exiftool.org/") {
                         NSWorkspace.shared.open(url)
                     }
+                } label: {
+                    Label("ExifTool Documentation", systemImage: "link")
                 }
             }
 
@@ -223,16 +246,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let exifToolVersion = bundledExifToolVersion() ?? "Unknown"
 
         let purpose = "A local EXIF/IPTC/XMP editor powered by ExifTool."
+        let nativeFont = NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        let nativeColor = NSColor.secondaryLabelColor
         let credits = NSMutableAttributedString(
-            string: "\(purpose)\n\nUses ExifTool \(exifToolVersion) by Phil Harvey\n"
+            string: "\(purpose)\n\nUses ExifTool \(exifToolVersion) by Phil Harvey\n",
+            attributes: [
+                .font: nativeFont,
+                .foregroundColor: nativeColor
+            ]
         )
         let linkText = "https://exiftool.org/"
         let linkRange = NSRange(location: credits.length, length: (linkText as NSString).length)
-        credits.append(NSAttributedString(string: linkText))
+        credits.append(NSAttributedString(
+            string: linkText,
+            attributes: [
+                .font: nativeFont,
+                .foregroundColor: nativeColor
+            ]
+        ))
         credits.addAttributes(
             [
                 .link: linkText,
-                .underlineStyle: NSUnderlineStyle.single.rawValue,
+                .underlineStyle: NSUnderlineStyle.single.rawValue
             ],
             range: linkRange
         )
@@ -355,68 +390,5 @@ final class MainWindowController: NSWindowController {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
-    }
-}
-
-struct MetadataDebugSheet: View {
-    private enum DebugViewMode: String, CaseIterable, Identifiable {
-        case exifToolLog = "ExifTool Log"
-        case parsedFields = "Parsed Fields"
-
-        var id: String { rawValue }
-    }
-
-    @ObservedObject var model: AppModel
-    var onClose: (() -> Void)?
-    @State private var mode: DebugViewMode = .exifToolLog
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Metadata Info")
-                    .font(.title3.weight(.semibold))
-                Spacer()
-                Picker("View", selection: $mode) {
-                    ForEach(DebugViewMode.allCases) { item in
-                        Text(item.rawValue).tag(item)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 250)
-                if mode == .exifToolLog {
-                    Button("Clear Log") {
-                        model.clearExifToolTraceLog()
-                    }
-                }
-                Button("Copy") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(displayText, forType: .string)
-                }
-                Button("Close") { onClose?() }
-                    .keyboardShortcut(.cancelAction)
-            }
-
-            Text(mode == .exifToolLog
-                ? "Live exiftool command/output log (temporary debugging tool)."
-                : "Raw parsed fields from current selection (temporary debugging tool).")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            TextEditor(text: .constant(displayText))
-                .font(.system(.body, design: .monospaced))
-                .textSelection(.enabled)
-                .frame(minHeight: 420)
-        }
-        .padding()
-        .frame(minWidth: 860, minHeight: 560)
-    }
-
-    private var displayText: String {
-        switch mode {
-        case .exifToolLog:
-            return model.exifToolTraceText
-        case .parsedFields:
-            return model.metadataDebugText
-        }
     }
 }

@@ -5,6 +5,7 @@ import ImageIO
 import QuickLookThumbnailing
 import Quartz
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -143,6 +144,7 @@ final class AppModel: ObservableObject {
 
     @Published var sidebarItems: [SidebarItem] = []
     @Published var selectedSidebarID: String? = "recent-7d"
+    @Published var isSidebarCollapsed = false
     @Published var browserItems: [BrowserItem] = []
     @Published var browserSort: BrowserSort {
         didSet { UserDefaults.standard.set(browserSort.rawValue, forKey: Self.browserSortKey) }
@@ -171,7 +173,6 @@ final class AppModel: ObservableObject {
     @Published var browserThumbnailInvalidationToken = UUID()
     @Published var browserThumbnailInvalidatedURLs: Set<URL> = []
     @Published var lastResult: OperationResult?
-    @Published var exifToolTraces: [ExifToolInvocationTrace] = []
     @Published var isFolderMetadataLoading = false
     @Published var folderMetadataLoadCompleted = 0
     @Published var folderMetadataLoadTotal = 0
@@ -310,16 +311,6 @@ final class AppModel: ObservableObject {
         }
         loadPresets()
 
-        _ = NotificationCenter.default.addObserver(
-            forName: .exifToolInvocationDidFinish,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let trace = notification.userInfo?["trace"] as? ExifToolInvocationTrace else { return }
-            Task { @MainActor [weak self] in
-                self?.appendTrace(trace)
-            }
-        }
     }
 
     func increaseGalleryZoom() {
@@ -938,8 +929,12 @@ final class AppModel: ObservableObject {
         )
     }
 
-    func dismissPresetEditor() {
+    func dismissPresetEditor(reopenManagePresets: Bool = false) {
         activePresetEditor = nil
+        guard reopenManagePresets else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.isManagePresetsPresented = true
+        }
     }
 
     func applyPreset(presetID: UUID) {
@@ -956,6 +951,7 @@ final class AppModel: ObservableObject {
 
         var unknownTagIDs: [String] = []
         var stagedFieldCount = 0
+        let previousState = currentPendingEditState()
 
         for field in preset.fields {
             guard let tag = editableTag(forID: field.tagID) else {
@@ -978,6 +974,7 @@ final class AppModel: ObservableObject {
                 : "Preset contains unsupported fields only."
             return
         }
+        registerMetadataUndoIfNeeded(previous: previousState)
         recalculateInspectorState()
         let ignoredText = unknownTagIDs.isEmpty ? "" : " Ignored \(unknownTagIDs.count) unsupported preset field(s)."
         setStatusMessage(
@@ -991,7 +988,11 @@ final class AppModel: ObservableObject {
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = false
-        panel.allowedFileTypes = ["gpx", "xml"]
+        var contentTypes: [UTType] = [.xml]
+        if let gpxType = UTType(filenameExtension: "gpx") {
+            contentTypes.insert(gpxType, at: 0)
+        }
+        panel.allowedContentTypes = contentTypes
         panel.prompt = "Import GPX"
 
         guard panel.runModal() == .OK, let gpxURL = panel.url else { return }
@@ -1009,7 +1010,9 @@ final class AppModel: ObservableObject {
                     metadataByFile = map
                 }
 
+                let previousState = currentPendingEditState()
                 let result = stageGPXImport(points: points, sourceURL: gpxURL)
+                registerMetadataUndoIfNeeded(previous: previousState)
                 if hasImportConflicts {
                     isImportConflictSheetPresented = true
                 } else {
@@ -1040,6 +1043,8 @@ final class AppModel: ObservableObject {
     }
 
     func applyImportConflictResolution() {
+        let previousState = currentPendingEditState()
+
         for (fileURL, entries) in pendingImportNonConflictEdits {
             for (tag, record) in entries {
                 stageEdit(record.value, for: tag, fileURLs: [fileURL], source: record.source)
@@ -1064,6 +1069,7 @@ final class AppModel: ObservableObject {
         pendingImportConflictChoices = [:]
         pendingImportNonConflictEdits = [:]
         isImportConflictSheetPresented = false
+        registerMetadataUndoIfNeeded(previous: previousState)
         recalculateInspectorState()
         setStatusMessage("Staged imported metadata. Resolved \(resolvedCount) conflict(s).", autoClearAfterSuccess: true)
     }
@@ -1751,75 +1757,6 @@ final class AppModel: ObservableObject {
             }
         }
         return result
-    }
-
-    var metadataDebugText: String {
-        guard !selectedFileURLs.isEmpty else {
-            return "No files selected.\n\nSelect one or more files to inspect raw parsed metadata."
-        }
-
-        let sortedURLs = selectedFileURLs.sorted { $0.path < $1.path }
-        var lines: [String] = []
-
-        for url in sortedURLs {
-            lines.append("=== \(url.path) ===")
-
-            guard let snapshot = metadataByFile[url] else {
-                lines.append("(metadata not loaded yet)")
-                lines.append("")
-                continue
-            }
-
-            if !snapshot.diagnostics.isEmpty {
-                lines.append("Diagnostics:")
-                snapshot.diagnostics.forEach { lines.append("- \($0)") }
-            }
-
-            for field in snapshot.fields.sorted(by: {
-                if $0.namespace.rawValue == $1.namespace.rawValue {
-                    return $0.key < $1.key
-                }
-                return $0.namespace.rawValue < $1.namespace.rawValue
-            }) {
-                lines.append("[\(field.namespace.rawValue)] \(field.key) = \(field.value)")
-            }
-
-            lines.append("")
-        }
-
-        return lines.joined(separator: "\n")
-    }
-
-    var exifToolTraceText: String {
-        guard !exifToolTraces.isEmpty else {
-            return "No exiftool commands captured yet.\n\nRead/write metadata to populate this log."
-        }
-
-        return exifToolTraces
-            .map { trace in
-                var lines: [String] = []
-                lines.append("[\(Self.logTimestampFormatter.string(from: trace.timestamp))] \(trace.kind.rawValue.uppercased()) \(trace.succeeded ? "OK" : "FAIL")")
-                if let filePath = trace.filePath {
-                    lines.append("File: \(filePath)")
-                }
-                lines.append("Duration: \(String(format: "%.3fs", trace.duration))")
-                lines.append("Command:")
-                lines.append(shellJoinedCommand(executable: trace.executablePath, arguments: trace.arguments))
-                if !trace.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    lines.append("stdout:")
-                    lines.append(trace.stdout)
-                }
-                if !trace.stderr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    lines.append("stderr:")
-                    lines.append(trace.stderr)
-                }
-                return lines.joined(separator: "\n")
-            }
-            .joined(separator: "\n\n----------------------------------------\n\n")
-    }
-
-    func clearExifToolTraceLog() {
-        exifToolTraces.removeAll()
     }
 
     var selectedSidebarItem: SidebarItem? {
@@ -2833,13 +2770,6 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func appendTrace(_ trace: ExifToolInvocationTrace) {
-        exifToolTraces.append(trace)
-        if exifToolTraces.count > 200 {
-            exifToolTraces.removeFirst(exifToolTraces.count - 200)
-        }
-    }
-
     private func invalidateAllBrowserThumbnails() {
         browserThumbnailInvalidatedURLs = []
         browserThumbnailInvalidationToken = UUID()
@@ -2994,27 +2924,6 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func shellJoinedCommand(executable: String, arguments: [String]) -> String {
-        let parts = [executable] + arguments
-        return parts.map(Self.shellQuote).joined(separator: " ")
-    }
-
-    private static func shellQuote(_ value: String) -> String {
-        if value.isEmpty { return "''" }
-        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "/._-=:"))
-        if value.unicodeScalars.allSatisfy({ allowed.contains($0) }) {
-            return value
-        }
-        return "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
-    }
-
-    private static let logTimestampFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
-        return formatter
-    }()
-
     private static let editableTagsByID: [String: EditableTag] = {
         Dictionary(uniqueKeysWithValues: EditableTag.common.map { ($0.id, $0) })
     }()
@@ -3045,8 +2954,11 @@ private final class QuickLookPreviewController: NSObject, @preconcurrency QLPrev
         }
         syncSelection(forIndex: panel.currentPreviewItemIndex)
 
-        panelObservation = panel.observe(\.currentPreviewItemIndex, options: [.new]) { [weak self] panel, _ in
-            self?.syncSelection(forIndex: panel.currentPreviewItemIndex)
+        panelObservation = panel.observe(\.currentPreviewItemIndex, options: [.new]) { [weak self] _, change in
+            guard let index = change.newValue else { return }
+            Task { @MainActor [weak self] in
+                self?.syncSelection(forIndex: index)
+            }
         }
 
         panel.makeKeyAndOrderFront(nil)
@@ -3117,9 +3029,9 @@ private final class QuickLookPreviewController: NSObject, @preconcurrency QLPrev
                 case .up, .down:
                     model.moveSelectionInList(direction: direction, extendingSelection: false)
                 case .left:
-                    moveLinearly(in: panel, delta: -1)
+                    _ = moveLinearly(in: panel, delta: -1)
                 case .right:
-                    moveLinearly(in: panel, delta: 1)
+                    _ = moveLinearly(in: panel, delta: 1)
                 default:
                     return false
                 }

@@ -64,13 +64,13 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
     private var didConfigureWindow = false
     private var didInstallTopChromeFade = false
     private var nativeToolbarDelegate: NativeToolbarDelegate?
-    private var debugWindowController: NSWindowController?
     private var modelObserver: AnyCancellable?
     private var statusObserver: AnyCancellable?
     private weak var topChromeFadeView: NSVisualEffectView?
     private let topChromeFadeHeight: CGFloat = 72
     private var spacebarMonitor: Any?
     private var browserFocusRequestObserver: NSObjectProtocol?
+    private var splitResizeObserver: NSObjectProtocol?
     private var didApplyInitialContentSplit = false
 
     init(model: AppModel) {
@@ -147,6 +147,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
         contentSplitController.splitView.dividerStyle = .thin
         contentSplitController.splitView.autosaveName = NSSplitView.AutosaveName("Logbook.ContentSplit")
         installTopChromeFadeIfNeeded()
+        syncSidebarCollapsedState()
+        installSplitResizeObserverIfNeeded()
     }
 
     private func resetSplitAutosaveStateIfNeeded() {
@@ -302,13 +304,35 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            guard let self, let window = self.view.window else { return }
-            window.makeFirstResponder(self.browserController.view)
+            Task { @MainActor [weak self] in
+                guard let self, let window = self.view.window else { return }
+                window.makeFirstResponder(self.browserController.view)
+            }
         }
+    }
+
+    private func installSplitResizeObserverIfNeeded() {
+        guard splitResizeObserver == nil else { return }
+        splitResizeObserver = NotificationCenter.default.addObserver(
+            forName: NSSplitView.didResizeSubviewsNotification,
+            object: splitView,
+            queue: .main
+        ) { [weak self] _ in
+            self?.syncSidebarCollapsedState()
+        }
+    }
+
+    func isSidebarCollapsedForMenu() -> Bool {
+        sidebarItem.isCollapsed
+    }
+
+    private func syncSidebarCollapsedState() {
+        model.isSidebarCollapsed = sidebarItem.isCollapsed
     }
 
     private func shouldHandleBrowserKeyCommands() -> Bool {
         guard let window = view.window else { return false }
+        guard canHandleBrowserShortcuts(in: window) else { return false }
 
         // Never hijack space while editing text fields.
         if let textView = window.firstResponder as? NSTextView, textView.isEditable {
@@ -321,8 +345,25 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
 
     private func shouldHandleInspectorTabCommands() -> Bool {
         guard let window = view.window else { return false }
+        guard canHandleBrowserShortcuts(in: window) else { return false }
         guard let responderView = window.firstResponder as? NSView else { return false }
         return responderView === inspectorController.view || responderView.isDescendant(of: inspectorController.view)
+    }
+
+    private func canHandleBrowserShortcuts(in window: NSWindow) -> Bool {
+        // If any app-modal panel (e.g. NSOpenPanel.runModal) is active, browser shortcuts must be disabled.
+        if NSApp.modalWindow != nil {
+            return false
+        }
+
+        // If our window is presenting a sheet (e.g. preset editor), don't route keyboard shortcuts to the browser.
+        if window.attachedSheet != nil {
+            return false
+        }
+
+        // Only handle browser shortcuts while our main split window is key.
+        guard let keyWindow = NSApp.keyWindow else { return false }
+        return keyWindow === window
     }
 
     private func moveDirection(forKeyCode keyCode: UInt16) -> MoveCommandDirection? {
@@ -446,11 +487,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
     }
 
     @objc
-    func debugAction(_: Any?) {
-        showDebugPanel()
-    }
-
-    @objc
     func zoomOutAction(_: Any?) {
         guard model.browserViewMode == .gallery else { return }
         model.decreaseGalleryZoom()
@@ -563,39 +599,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
         }
     }
 
-    private func showDebugPanel() {
-        if let debugWindow = debugWindowController?.window {
-            debugWindow.makeKeyAndOrderFront(nil)
-            return
-        }
-
-        let content = MetadataDebugSheet(model: model) { [weak self] in
-            self?.debugWindowController?.close()
-        }
-        let hostingController = NSHostingController(rootView: content)
-        let infoPanel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 860, height: 560),
-            styleMask: [.titled, .closable, .resizable, .utilityWindow],
-            backing: .buffered,
-            defer: false
-        )
-        infoPanel.contentViewController = hostingController
-        infoPanel.title = "Info"
-        infoPanel.minSize = NSSize(width: 700, height: 420)
-        infoPanel.isReleasedWhenClosed = false
-        infoPanel.hidesOnDeactivate = false
-        infoPanel.isFloatingPanel = true
-        infoPanel.level = .floating
-        infoPanel.animationBehavior = .utilityWindow
-        infoPanel.collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
-        infoPanel.becomesKeyOnlyIfNeeded = false
-
-        let controller = NSWindowController(window: infoPanel)
-        debugWindowController = controller
-        controller.showWindow(nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
-
     @MainActor
     private final class NativeToolbarDelegate: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
         private weak var controller: NativeThreePaneSplitViewController?
@@ -604,10 +607,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
         private var zoomOutItem: NSToolbarItem?
         private var zoomInItem: NSToolbarItem?
         private var sortItem: NSMenuToolbarItem?
-        private var importMenuItem: NSMenuToolbarItem?
         private var presetsMenuItem: NSMenuToolbarItem?
         private var applyChangesItem: NSToolbarItem?
-        private var importMenu: NSMenu?
         private var presetsMenu: NSMenu?
         private var searchItem: NSSearchToolbarItem?
         private var searchWidthConstraint: NSLayoutConstraint?
@@ -625,7 +626,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
                 .sort,
                 .zoomOut,
                 .zoomIn,
-                .importTools,
                 .presetTools,
                 .flexibleSpace,
                 .openFolder,
@@ -735,18 +735,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
                 item.toolTip = "Sort files"
                 sortItem = item
                 return item
-            case .importTools:
-                let item = NSMenuToolbarItem(itemIdentifier: itemIdentifier)
-                item.label = "Import"
-                item.paletteLabel = "Import"
-                item.image = NSImage(systemSymbolName: "square.and.arrow.down.on.square", accessibilityDescription: "Import")
-                item.toolTip = "Import metadata"
-                updateImportMenu()
-                if let importMenu {
-                    item.menu = importMenu
-                }
-                importMenuItem = item
-                return item
             case .presetTools:
                 let item = NSMenuToolbarItem(itemIdentifier: itemIdentifier)
                 item.label = "Presets"
@@ -825,7 +813,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
                     sortMenu.item(withTitle: "Kind")?.state = .on
                 }
             }
-            updateImportMenu()
             updatePresetsMenu()
             controller.view.window?.title = controller.toolbarTitleText()
             controller.view.window?.subtitle = controller.toolbarSubtitleText()
@@ -858,40 +845,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
             return true
         }
 
-        private func updateImportMenu() {
-            guard let controller else { return }
-            let menu = NSMenu(title: "Import")
-
-            let refreshItem = NSMenuItem(
-                title: "Refresh Files and Metadata",
-                action: #selector(NativeThreePaneSplitViewController.refreshAction(_:)),
-                keyEquivalent: ""
-            )
-            refreshItem.target = controller
-            menu.addItem(refreshItem)
-            menu.addItem(.separator())
-
-            let gpxItem = NSMenuItem(
-                title: "Import GPX…",
-                action: #selector(NativeThreePaneSplitViewController.importGPXAction(_:)),
-                keyEquivalent: ""
-            )
-            gpxItem.target = controller
-            gpxItem.isEnabled = !controller.model.browserItems.isEmpty
-            menu.addItem(gpxItem)
-
-            let csvItem = NSMenuItem(title: "Import CSV… (Coming Soon)", action: nil, keyEquivalent: "")
-            csvItem.isEnabled = false
-            menu.addItem(csvItem)
-
-            let referenceItem = NSMenuItem(title: "Import Reference Folder… (Coming Soon)", action: nil, keyEquivalent: "")
-            referenceItem.isEnabled = false
-            menu.addItem(referenceItem)
-
-            importMenu = menu
-            importMenuItem?.menu = menu
-        }
-
         private func updatePresetsMenu() {
             guard let controller else { return }
             let menu = NSMenu(title: "Presets")
@@ -912,7 +865,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
                     )
                     item.target = controller
                     item.representedObject = preset.id.uuidString
-                    item.state = controller.model.selectedPresetID == preset.id ? .on : .off
                     item.isEnabled = !controller.model.selectedFileURLs.isEmpty
                     applySubmenu.addItem(item)
                 }
@@ -963,7 +915,6 @@ private extension NSToolbarItem.Identifier {
     static let loadingStatus = NSToolbarItem.Identifier("ExifEditMac.Toolbar.LoadingStatus")
     static let viewMode = NSToolbarItem.Identifier("ExifEditMac.Toolbar.ViewMode")
     static let sort = NSToolbarItem.Identifier("ExifEditMac.Toolbar.Sort")
-    static let importTools = NSToolbarItem.Identifier("ExifEditMac.Toolbar.ImportTools")
     static let presetTools = NSToolbarItem.Identifier("ExifEditMac.Toolbar.PresetTools")
     static let zoomOut = NSToolbarItem.Identifier("ExifEditMac.Toolbar.ZoomOut")
     static let zoomIn = NSToolbarItem.Identifier("ExifEditMac.Toolbar.ZoomIn")
@@ -1079,6 +1030,7 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
     private var lastThumbnailInvalidationToken = UUID()
     private var pendingInvalidatedThumbnailURLs: Set<URL> = []
     private var pendingThumbnailRefreshURLs: Set<URL> = []
+    private var isRenderingState = false
     private var lastRenderedItemURLs: [URL] = []
     private var contextMenuTargetURLs: [URL] = []
     private var didApplyInitialColumnFit = false
@@ -1409,6 +1361,7 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
 
         let openItem = NSMenuItem(title: "Open in \(openAppName)", action: #selector(openFromContextMenu(_:)), keyEquivalent: "")
         openItem.target = self
+        openItem.image = NSImage(systemSymbolName: "arrow.up.forward.app", accessibilityDescription: nil)
         menu.addItem(openItem)
 
         menu.addItem(.separator())
@@ -1419,20 +1372,24 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         let applyItem = NSMenuItem(title: "Apply Metadata Changes", action: #selector(applyFromContextMenu(_:)), keyEquivalent: "")
         applyItem.target = self
         applyItem.isEnabled = hasPending
+        applyItem.image = NSImage(systemSymbolName: "square.and.arrow.down", accessibilityDescription: nil)
         menu.addItem(applyItem)
 
         let refreshItem = NSMenuItem(title: "Refresh Metadata", action: #selector(refreshFromContextMenu(_:)), keyEquivalent: "")
         refreshItem.target = self
+        refreshItem.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
         menu.addItem(refreshItem)
 
         let clearItem = NSMenuItem(title: "Clear Metadata Changes", action: #selector(clearFromContextMenu(_:)), keyEquivalent: "")
         clearItem.target = self
         clearItem.isEnabled = hasPending
+        clearItem.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
         menu.addItem(clearItem)
 
         let restoreItem = NSMenuItem(title: "Restore from Last Backup", action: #selector(restoreFromContextMenu(_:)), keyEquivalent: "")
         restoreItem.target = self
         restoreItem.isEnabled = hasRestorable
+        restoreItem.image = NSImage(systemSymbolName: "arrow.uturn.backward.circle", accessibilityDescription: nil)
         menu.addItem(restoreItem)
         return menu
     }
@@ -1679,7 +1636,7 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
 
     private let scrollView = NSScrollView()
     private let collectionView = AppKitGalleryCollectionView()
-    private let layout = AppKitGalleryLayout()
+    private var layout = AppKitGalleryLayout()
 
     private var isApplyingProgrammaticSelection = false
     private var contextMenuTargetURLs: [URL] = []
@@ -1694,6 +1651,7 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
     private var thumbnailVersionCounter = 0
     private var lastThumbnailInvalidationToken = UUID()
     private var pendingThumbnailRefreshURLs: Set<URL> = []
+    private var isRenderingState = false
     private var pinchAccumulator: CGFloat = 0
     private var lastMagnification: CGFloat = 0
     private let pinchThreshold: CGFloat = 0.14
@@ -1775,6 +1733,10 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
     }
 
     private func renderState() {
+        guard !isRenderingState else { return }
+        isRenderingState = true
+        defer { isRenderingState = false }
+
         if lastThumbnailInvalidationToken != model.browserThumbnailInvalidationToken {
             lastThumbnailInvalidationToken = model.browserThumbnailInvalidationToken
             let invalidated = model.browserThumbnailInvalidatedURLs
@@ -1821,7 +1783,7 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
             layout.invalidateLayout()
         }
 
-        if listChanged || columnsChanged {
+        if listChanged {
             collectionView.reloadData()
             lastRenderedURLs = currentURLs
         }
@@ -1973,20 +1935,21 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
         let hasPending = contextMenuTargetURLs.contains { model.hasPendingEdits(for: $0) }
         let hasRestorable = contextMenuTargetURLs.contains { model.hasRestorableBackup(for: $0) }
 
-        func makeItem(_ title: String, action: Selector, enabled: Bool = true) -> NSMenuItem {
+        func makeItem(_ title: String, action: Selector, symbolName: String, enabled: Bool = true) -> NSMenuItem {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
             item.target = self
             item.isEnabled = enabled
+            item.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
             return item
         }
 
         let menu = NSMenu()
-        menu.addItem(makeItem("Open in \(openAppName)", action: #selector(openFromContextMenu(_:))))
+        menu.addItem(makeItem("Open in \(openAppName)", action: #selector(openFromContextMenu(_:)), symbolName: "arrow.up.forward.app"))
         menu.addItem(.separator())
-        menu.addItem(makeItem("Apply Metadata Changes", action: #selector(applyFromContextMenu(_:)), enabled: hasPending))
-        menu.addItem(makeItem("Refresh Metadata", action: #selector(refreshFromContextMenu(_:))))
-        menu.addItem(makeItem("Clear Metadata Changes", action: #selector(clearFromContextMenu(_:)), enabled: hasPending))
-        menu.addItem(makeItem("Restore from Last Backup", action: #selector(restoreFromContextMenu(_:)), enabled: hasRestorable))
+        menu.addItem(makeItem("Apply Metadata Changes", action: #selector(applyFromContextMenu(_:)), symbolName: "square.and.arrow.down", enabled: hasPending))
+        menu.addItem(makeItem("Refresh Metadata", action: #selector(refreshFromContextMenu(_:)), symbolName: "arrow.clockwise"))
+        menu.addItem(makeItem("Clear Metadata Changes", action: #selector(clearFromContextMenu(_:)), symbolName: "xmark.circle", enabled: hasPending))
+        menu.addItem(makeItem("Restore from Last Backup", action: #selector(restoreFromContextMenu(_:)), symbolName: "arrow.uturn.backward.circle", enabled: hasRestorable))
         return menu
     }
 
@@ -2167,9 +2130,9 @@ private final class AppKitGalleryLayout: NSCollectionViewFlowLayout {
         }
     }
 
-    private let defaultInsets = NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
-    private let horizontalSpacing: CGFloat = 12
-    private let verticalSpacing: CGFloat = 14
+    private let defaultInsets = NSEdgeInsets(top: 18, left: 18, bottom: 18, right: 18)
+    private let horizontalSpacing: CGFloat = 14
+    private let verticalSpacing: CGFloat = 16
     private let titleHeight: CGFloat = 22
     private let titleGap: CGFloat = 6
 
@@ -2223,6 +2186,12 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
     override func loadView() {
         view = NSView(frame: .zero)
         configureViewHierarchy()
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        let liveSide = max(1, floor(min(thumbnailContainer.bounds.width, thumbnailContainer.bounds.height)))
+        updateTileSide(liveSide, animated: false)
     }
 
     private func configureViewHierarchy() {
@@ -2299,11 +2268,28 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         setImage(image)
         applySelection(isSelected: isSelected)
         applyPending(hasPendingEdits: hasPendingEdits)
-        let fitted = fittedThumbnailSize(for: image?.size, in: tileSide)
-        imageWidthConstraint?.constant = fitted.width
-        imageHeightConstraint?.constant = fitted.height
-        overlayWidthConstraint?.constant = fitted.width
-        overlayHeightConstraint?.constant = fitted.height
+        updateTileSide(tileSide, animated: false)
+    }
+
+    func updateTileSide(_ tileSide: CGFloat, animated: Bool) {
+        let fitted = fittedThumbnailSize(for: thumbnailImageView.image?.size, in: tileSide)
+        guard animated else {
+            imageWidthConstraint?.constant = fitted.width
+            imageHeightConstraint?.constant = fitted.height
+            overlayWidthConstraint?.constant = fitted.width
+            overlayHeightConstraint?.constant = fitted.height
+            return
+        }
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.16
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            context.allowsImplicitAnimation = true
+            imageWidthConstraint?.animator().constant = fitted.width
+            imageHeightConstraint?.animator().constant = fitted.height
+            overlayWidthConstraint?.animator().constant = fitted.width
+            overlayHeightConstraint?.animator().constant = fitted.height
+        }
     }
 
     func applySelection(isSelected: Bool) {
@@ -2786,13 +2772,6 @@ struct InspectorView: View {
         return (width, height)
     }
 
-    private func mapRegion(for coordinate: CLLocationCoordinate2D) -> MKCoordinateRegion {
-        MKCoordinateRegion(
-            center: coordinate,
-            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-        )
-    }
-
     private func numericValue(forTagID id: String) -> Double? {
         guard let tag = AppModel.EditableTag.common.first(where: { $0.id == id }) else {
             return nil
@@ -2958,7 +2937,17 @@ private struct PresetEditorSheet: View {
 
             HStack {
                 Spacer()
-                Button("Cancel") { model.dismissPresetEditor() }
+                Button("Cancel") {
+                    let reopenManagePresets: Bool = {
+                        switch editor.mode {
+                        case .createFromCurrent:
+                            return false
+                        case .createBlank, .edit:
+                            return true
+                        }
+                    }()
+                    model.dismissPresetEditor(reopenManagePresets: reopenManagePresets)
+                }
                     .keyboardShortcut(.cancelAction)
                 Button(editorPrimaryButtonTitle) {
                     handleSave()
@@ -2967,7 +2956,7 @@ private struct PresetEditorSheet: View {
             }
         }
         .padding(16)
-        .frame(minWidth: 760, minHeight: 640)
+        .frame(width: 760, height: 520)
         .alert("Preset name already exists", isPresented: duplicateAlertBinding) {
             Button("Replace") {
                 replaceExistingPreset()
@@ -3030,8 +3019,15 @@ private struct PresetEditorSheet: View {
     private func valueBinding(for tag: AppModel.EditableTag) -> Binding<String> {
         Binding(
             get: { editor.valuesByTagID[tag.id] ?? "" },
-            set: { editor.valuesByTagID[tag.id] = $0 }
+            set: { updatePresetValue($0, for: tag) }
         )
+    }
+
+    private func updatePresetValue(_ value: String, for tag: AppModel.EditableTag) {
+        editor.valuesByTagID[tag.id] = value
+        if !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            editor.includedTagIDs.insert(tag.id)
+        }
     }
 
     @ViewBuilder
@@ -3044,7 +3040,7 @@ private struct PresetEditorSheet: View {
                         "",
                         selection: Binding(
                             get: { model.parseEditableDateValue(editor.valuesByTagID[tag.id] ?? "") ?? date },
-                            set: { editor.valuesByTagID[tag.id] = model.formatEditableDateValue($0) }
+                            set: { updatePresetValue(model.formatEditableDateValue($0), for: tag) }
                         ),
                         displayedComponents: [.date, .hourAndMinute]
                     )
@@ -3052,7 +3048,7 @@ private struct PresetEditorSheet: View {
                     .datePickerStyle(.field)
 
                     Button {
-                        editor.valuesByTagID[tag.id] = ""
+                        updatePresetValue("", for: tag)
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
@@ -3065,7 +3061,7 @@ private struct PresetEditorSheet: View {
                         .textFieldStyle(.roundedBorder)
                         .disabled(true)
                     Button("Set") {
-                        editor.valuesByTagID[tag.id] = model.formatEditableDateValue(Date())
+                        updatePresetValue(model.formatEditableDateValue(Date()), for: tag)
                     }
                     .controlSize(.small)
                 }
