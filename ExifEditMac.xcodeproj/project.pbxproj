@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		469CE1912F4B7DE400D51BC9 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 469CE1902F4B7DE400D51BC9 /* AppIcon.icon */; };
 		A100001B0000000000000001 /* Sources/ExifEditMac/AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000B0000000000000001 /* Sources/ExifEditMac/AppModel.swift */; };
 		A100001C0000000000000001 /* Sources/ExifEditMac/ExifEditMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000C0000000000000001 /* Sources/ExifEditMac/ExifEditMacApp.swift */; };
 		A100001D0000000000000001 /* Sources/ExifEditMac/MainContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000D0000000000000001 /* Sources/ExifEditMac/MainContentView.swift */; };
@@ -44,6 +45,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		469CE1902F4B7DE400D51BC9 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		A10000010000000000000001 /* Lattice.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Lattice.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000020000000000000001 /* ExifEditCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ExifEditCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000030000000000000001 /* Config/ExifEditMac-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Config/ExifEditMac-Info.plist"; sourceTree = SOURCE_ROOT; };
@@ -127,6 +129,7 @@
 			children = (
 				A10000560000000000000001 /* Sources/ExifEditMac */,
 				A10000570000000000000001 /* Sources/ExifEditCore */,
+				469CE1902F4B7DE400D51BC9 /* AppIcon.icon */,
 			);
 			sourceTree = "<group>";
 		};
@@ -298,6 +301,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B100001D0000000000000001 /* Assets.xcassets in Resources */,
+				469CE1912F4B7DE400D51BC9 /* AppIcon.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -407,6 +411,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A10000050000000000000001 /* Config/Debug.xcconfig */;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = BrandAccent;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Config/ExifEditMac.entitlements;
@@ -418,7 +423,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.2;
+				MARKETING_VERSION = 0.4;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = "$(APP_DISPLAY_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -430,6 +435,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A10000060000000000000001 /* Config/Release.xcconfig */;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = BrandAccent;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Config/ExifEditMac.entitlements;
@@ -441,7 +447,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.2;
+				MARKETING_VERSION = 0.4;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = "$(APP_DISPLAY_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

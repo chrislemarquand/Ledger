@@ -531,13 +531,25 @@ final class AppModel: ObservableObject {
             UserDefaults.standard.set(selectedPresetID?.uuidString, forKey: Self.selectedPresetIDKey)
         }
     }
-    @Published var activePresetEditor: PresetEditorState?
-    @Published var isManagePresetsPresented = false
+    @Published var activePresetEditor: PresetEditorState? {
+        didSet {
+            notifyInspectorDidChange()
+        }
+    }
+    @Published var isManagePresetsPresented = false {
+        didSet {
+            notifyInspectorDidChange()
+        }
+    }
     @Published var searchQuery = ""
     @Published var statusMessage = "Ready"
     @Published var browserThumbnailInvalidationToken = UUID()
     @Published var browserThumbnailInvalidatedURLs: Set<URL> = []
-    @Published var lastResult: OperationResult?
+    @Published var lastResult: OperationResult? {
+        didSet {
+            notifyInspectorDidChange()
+        }
+    }
     @Published var isFolderMetadataLoading = false
     @Published var folderMetadataLoadCompleted = 0
     @Published var folderMetadataLoadTotal = 0
@@ -550,21 +562,30 @@ final class AppModel: ObservableObject {
     @Published var collapsedInspectorSections: Set<String> {
         didSet {
             UserDefaults.standard.set(Array(collapsedInspectorSections), forKey: Self.collapsedInspectorSectionsKey)
+            notifyInspectorDidChange()
         }
     }
+    @Published private(set) var inspectorRefreshRevision: UInt64 = 0
 
     @Published private var pendingEditsByFile: [URL: [EditableTag: StagedEditRecord]] = [:]
     @Published private var inspectorPreviewImages: [URL: NSImage] = [:]
+    @Published private var inspectorPreviewRenderedSide: [URL: CGFloat] = [:]
     private var mixedTags: Set<EditableTag> = []
     private var isRevertingSidebarSelection = false
+    private var suppressNextSidebarSelectionChange = false
     private var favoriteItems: [SidebarItem] = []
     private var locationItems: [SidebarItem] = []
     private var recentLocationLastOpenedAtByID: [String: Date] = [:]
     private var folderMetadataLoadTask: Task<Void, Never>?
     private var folderMetadataLoadID = UUID()
+    private var browserItemHydrationTask: Task<Void, Never>?
+    private var browserItemHydrationID = UUID()
+    private var selectionMetadataLoadTask: Task<Void, Never>?
     private var previewPreloadTask: Task<Void, Never>?
+    private var deferredPreviewPreloadTask: Task<Void, Never>?
     private var previewPreloadID = UUID()
     private var inspectorPreviewInflight: Set<URL> = []
+    private var inspectorPreviewTasksByURL: [URL: Task<Void, Never>] = [:]
     private var inspectorPreviewRecency: [URL] = []
     private var staleMetadataFiles: Set<URL> = []
     private var selectionAnchorURL: URL?
@@ -593,7 +614,12 @@ final class AppModel: ObservableObject {
     private static let collapsedInspectorSectionsKey = "ui.inspector.collapsed.sections"
     private static let selectedPresetIDKey = "ui.presets.selected.id"
     private static let selectionMetadataBatchSize = 120
+    private static let selectionMetadataDebounceNanoseconds: UInt64 = 90_000_000
     private static let folderMetadataBatchSize = 8
+    private static let metadataReadTimeoutNanoseconds: UInt64 = 8_000_000_000
+    private static let previewBulkStartDelayNanoseconds: UInt64 = 220_000_000
+    private static let inspectorPreviewTargetSide: CGFloat = 700
+    private static let inspectorPreviewFullSide: CGFloat = 1400
     private static let maxInspectorPreviewCacheEntries = 600
     private static let maxRecentLocations = 20
     nonisolated private static let supportedImageExtensions: Set<String> = [
@@ -928,6 +954,26 @@ final class AppModel: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting(urls)
     }
 
+    func revealInFinder(_ fileURLs: [URL]) {
+        let urls = Array(Set(fileURLs)).sorted(by: { $0.path < $1.path })
+        guard !urls.isEmpty else {
+            statusMessage = "Select one or more files to reveal in Finder."
+            return
+        }
+        NSWorkspace.shared.activateFileViewerSelecting(urls)
+    }
+
+    func canOpenSidebarItemInFinder(_ item: SidebarItem) -> Bool {
+        sidebarOpenURL(for: item.kind) != nil
+    }
+
+    func openSidebarItemInFinder(_ item: SidebarItem) {
+        guard let url = sidebarOpenURL(for: item.kind) else { return }
+        if !NSWorkspace.shared.open(url) {
+            statusMessage = "Could not open \(item.title) in Finder."
+        }
+    }
+
     private static func columnCount(forLegacyZoom zoom: CGFloat) -> Int {
         let legacyZoomMin = CGFloat(0.55)
         let legacyZoomMax = CGFloat(3.0)
@@ -999,6 +1045,8 @@ final class AppModel: ObservableObject {
                     staleMetadataFiles.remove(snapshot.fileURL)
                 }
                 metadataByFile = map
+                invalidateInspectorPreviews(for: files)
+                ThumbnailPipeline.invalidateCachedImages(for: Set(files))
                 for fileURL in files {
                     forceReloadInspectorPreview(for: fileURL)
                 }
@@ -1020,15 +1068,7 @@ final class AppModel: ObservableObject {
             backgroundWarmTasksBySelectionID[id]?.cancel()
             backgroundWarmTasksBySelectionID[id] = nil
         }
-        guard let selected = selectedSidebarItem else { return }
-
-        let itemToLoad: SidebarItem
-        if case let .folder(url) = selected.kind,
-           let updated = noteRecentLocation(url, titleOverride: selected.title) {
-            itemToLoad = updated
-        } else {
-            itemToLoad = selected
-        }
+        guard let itemToLoad = selectedSidebarItem else { return }
 
         // Avoid touching protected locations on app launch; compute counts only after explicit selection.
         ensureSidebarImageCount(for: itemToLoad)
@@ -1036,6 +1076,10 @@ final class AppModel: ObservableObject {
     }
 
     func handleSidebarSelectionChange(from oldID: String?, to newID: String?) {
+        if suppressNextSidebarSelectionChange {
+            suppressNextSidebarSelectionChange = false
+            return
+        }
         if isRevertingSidebarSelection {
             isRevertingSidebarSelection = false
             return
@@ -1077,7 +1121,7 @@ final class AppModel: ObservableObject {
     func discardUnsavedEdits() {
         registerMetadataUndoIfNeeded(previous: currentPendingEditState())
         pendingEditsByFile.removeAll()
-        recalculateInspectorState()
+        recalculateInspectorState(forceNotify: true)
         setStatusMessage("Discarded unsaved metadata changes.", autoClearAfterSuccess: true)
     }
 
@@ -1088,7 +1132,7 @@ final class AppModel: ObservableObject {
         for fileURL in uniqueURLs {
             pendingEditsByFile[fileURL] = nil
         }
-        recalculateInspectorState()
+        recalculateInspectorState(forceNotify: true)
         setStatusMessage("Cleared metadata changes for \(uniqueURLs.count) file(s).", autoClearAfterSuccess: true)
     }
 
@@ -1475,10 +1519,24 @@ final class AppModel: ObservableObject {
     }
 
     func updateValue(_ value: String, for tag: EditableTag) {
+        let currentValue = draftValues[tag] ?? ""
+        if currentValue == value {
+            return
+        }
+
+        let currentTrimmed = currentValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let incomingTrimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if currentTrimmed == incomingTrimmed {
+            // Focus transitions in NSTextField can emit whitespace-equivalent reassignments.
+            // Treat these as no-ops to avoid transient staged-edit dots.
+            return
+        }
+
         let previousState = currentPendingEditState()
         draftValues[tag] = value
         trackPendingEdit(value, for: tag, source: .manual)
         registerMetadataUndoIfNeeded(previous: previousState)
+        notifyInspectorDidChange()
     }
 
     @discardableResult
@@ -1632,6 +1690,43 @@ final class AppModel: ObservableObject {
         default:
             return "—"
         }
+    }
+
+    func imagePixelDimensions(for fileURL: URL) -> (Int, Int)? {
+        guard let snapshot = metadataByFile[fileURL] else { return nil }
+        let widthKeys: Set<String> = ["ImageWidth", "ExifImageWidth", "PixelXDimension"]
+        let heightKeys: Set<String> = ["ImageHeight", "ExifImageHeight", "PixelYDimension"]
+
+        let width = snapshot.fields
+            .first(where: { widthKeys.contains($0.key) })
+            .flatMap { parseDimensionValue($0.value) }
+        let height = snapshot.fields
+            .first(where: { heightKeys.contains($0.key) })
+            .flatMap { parseDimensionValue($0.value) }
+
+        guard let width, let height, width > 0, height > 0 else { return nil }
+        return (width, height)
+    }
+
+    private func parseDimensionValue(_ raw: String) -> Int? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if let direct = Int(trimmed), direct > 0 {
+            return direct
+        }
+        if let number = Double(trimmed), number.isFinite {
+            let rounded = Int(number.rounded())
+            return rounded > 0 ? rounded : nil
+        }
+        let ns = trimmed as NSString
+        if let match = try? NSRegularExpression(pattern: "\\d+")
+            .firstMatch(in: trimmed, range: NSRange(location: 0, length: ns.length)) {
+            let candidate = ns.substring(with: match.range)
+            if let parsed = Int(candidate), parsed > 0 {
+                return parsed
+            }
+        }
+        return nil
     }
 
     func pickerOptions(for tag: EditableTag) -> [PickerOption]? {
@@ -2116,31 +2211,58 @@ final class AppModel: ObservableObject {
     }
 
     var sidebarSectionOrder: [String] {
-        ["Import Sources", "Favourites", "Recent Locations"]
+        ["Sources", "Pinned", "Recents"]
     }
 
-    private func noteRecentLocation(_ url: URL, titleOverride: String? = nil) -> SidebarItem? {
+    private func noteRecentLocation(
+        _ url: URL,
+        titleOverride: String? = nil,
+        promoteToTopIfExisting: Bool = false
+    ) -> SidebarItem? {
         guard let canonical = canonicalSidebarURL(url) else {
             return nil
         }
+        if let pinnedItem = favoriteSidebarItem(forCanonicalURL: canonical) {
+            removeRecentLocation(forCanonicalURL: canonical)
+            persistRecentLocations()
+            refreshSidebarItems(preferredSelectionID: pinnedItem.id)
+            return pinnedItem
+        }
+
         let id = "folder::\(canonical.path)"
         let title = titleOverride ?? canonical.lastPathComponent
-        recentLocationLastOpenedAtByID[id] = Date()
+        var didMutateRecentLocations = false
+        let now = Date()
 
         if let existingIndex = locationItems.firstIndex(where: { $0.id == id }) {
             let existing = locationItems[existingIndex]
             if existing.title != title {
-                locationItems[existingIndex] = SidebarItem(id: id, title: title, section: "Recent Locations", kind: .folder(canonical))
+                locationItems[existingIndex] = SidebarItem(id: id, title: title, section: "Recents", kind: .folder(canonical))
+                didMutateRecentLocations = true
             }
+            if promoteToTopIfExisting, existingIndex > 0 {
+                let item = locationItems.remove(at: existingIndex)
+                locationItems.insert(item, at: 0)
+                didMutateRecentLocations = true
+            }
+            recentLocationLastOpenedAtByID[id] = now
         } else {
+            // Keep insertion order stable by recording first-seen time once.
+            recentLocationLastOpenedAtByID[id] = now
             locationItems.append(
-                SidebarItem(id: id, title: title, section: "Recent Locations", kind: .folder(canonical))
+                SidebarItem(id: id, title: title, section: "Recents", kind: .folder(canonical))
             )
             trimRecentLocationsToLimit()
+            didMutateRecentLocations = true
         }
 
-        persistRecentLocations()
-        refreshSidebarItems(preferredSelectionID: id)
+        if didMutateRecentLocations {
+            persistRecentLocations()
+            refreshSidebarItems(preferredSelectionID: id)
+        } else {
+            // Persist recency changes without changing in-session order.
+            persistRecentLocations()
+        }
         return locationItems.first(where: { $0.id == id })
     }
 
@@ -2311,19 +2433,34 @@ final class AppModel: ObservableObject {
     }
 
     private func didChooseFolder(_ folderURL: URL) {
-        guard let item = noteRecentLocation(folderURL) else {
+        guard let item = noteRecentLocation(folderURL, promoteToTopIfExisting: false) else {
             statusMessage = "Could not open location."
             return
         }
+        if selectedSidebarID != item.id {
+            suppressNextSidebarSelectionChange = true
+            selectedSidebarID = item.id
+        }
         loadFiles(for: item.kind)
+        NotificationCenter.default.post(
+            name: Notification.Name("\(AppBrand.identifierPrefix).SidebarShouldResignFocus"),
+            object: nil
+        )
     }
 
     private func loadFiles(for kind: SidebarKind) {
         folderMetadataLoadTask?.cancel()
         folderMetadataLoadTask = nil
         folderMetadataLoadID = UUID()
+        browserItemHydrationTask?.cancel()
+        browserItemHydrationTask = nil
+        browserItemHydrationID = UUID()
+        selectionMetadataLoadTask?.cancel()
+        selectionMetadataLoadTask = nil
         previewPreloadTask?.cancel()
         previewPreloadTask = nil
+        deferredPreviewPreloadTask?.cancel()
+        deferredPreviewPreloadTask = nil
         previewPreloadID = UUID()
 
         let urls: [URL]
@@ -2344,24 +2481,19 @@ final class AppModel: ObservableObject {
         }
 
         clearLoadedContentState(preserveSessionCaches: true)
+        let hydrationID = UUID()
+        browserItemHydrationID = hydrationID
         browserItems = urls.map {
-            let resourceValues = try? $0.resourceValues(
-                forKeys: [
-                    .contentModificationDateKey,
-                    .creationDateKey,
-                    .fileSizeKey,
-                    .localizedTypeDescriptionKey
-                ]
-            )
-            return BrowserItem(
+            BrowserItem(
                 url: $0,
                 name: $0.lastPathComponent,
-                modifiedAt: resourceValues?.contentModificationDate,
-                createdAt: resourceValues?.creationDate,
-                sizeBytes: resourceValues?.fileSize,
-                kind: resourceValues?.localizedTypeDescription
+                modifiedAt: nil,
+                createdAt: nil,
+                sizeBytes: nil,
+                kind: nil
             )
         }
+        startBrowserItemHydration(for: urls, hydrationID: hydrationID)
 
         startFolderMetadataPrefetch(for: urls, batchSize: metadataBatchSize(for: kind))
     }
@@ -2370,12 +2502,19 @@ final class AppModel: ObservableObject {
         folderMetadataLoadTask?.cancel()
         folderMetadataLoadTask = nil
         folderMetadataLoadID = UUID()
+        browserItemHydrationTask?.cancel()
+        browserItemHydrationTask = nil
+        browserItemHydrationID = UUID()
+        selectionMetadataLoadTask?.cancel()
+        selectionMetadataLoadTask = nil
         isFolderMetadataLoading = false
         folderMetadataLoadCompleted = 0
         folderMetadataLoadTotal = 0
 
         previewPreloadTask?.cancel()
         previewPreloadTask = nil
+        deferredPreviewPreloadTask?.cancel()
+        deferredPreviewPreloadTask = nil
         previewPreloadID = UUID()
         isPreviewPreloading = false
         previewPreloadCompleted = 0
@@ -2392,10 +2531,81 @@ final class AppModel: ObservableObject {
         pendingEditsByFile = [:]
         if !preserveSessionCaches {
             inspectorPreviewImages = [:]
+            inspectorPreviewRenderedSide = [:]
             inspectorPreviewRecency = []
         }
         inspectorPreviewInflight = []
+        for task in inspectorPreviewTasksByURL.values {
+            task.cancel()
+        }
+        inspectorPreviewTasksByURL = [:]
         clearMetadataUndoHistory()
+        recalculateInspectorState(forceNotify: true)
+    }
+
+    private func startBrowserItemHydration(for files: [URL], hydrationID: UUID) {
+        browserItemHydrationTask?.cancel()
+        browserItemHydrationTask = nil
+        guard !files.isEmpty else { return }
+
+        browserItemHydrationTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            typealias BrowserFileAttributes = (modifiedAt: Date?, createdAt: Date?, sizeBytes: Int?, kind: String?)
+            var attributesByURL: [URL: BrowserFileAttributes] = [:]
+            attributesByURL.reserveCapacity(files.count)
+
+            let batchSize = 96
+            for batchStart in stride(from: 0, to: files.count, by: batchSize) {
+                if Task.isCancelled { return }
+                guard self.browserItemHydrationID == hydrationID else { return }
+
+                let batchEnd = min(batchStart + batchSize, files.count)
+                let batch = Array(files[batchStart..<batchEnd])
+                let batchResult = await Task.detached(priority: .utility) { () -> [URL: BrowserFileAttributes] in
+                    var result: [URL: BrowserFileAttributes] = [:]
+                    result.reserveCapacity(batch.count)
+                    for fileURL in batch {
+                        let resourceValues = try? fileURL.resourceValues(
+                            forKeys: [
+                                .contentModificationDateKey,
+                                .creationDateKey,
+                                .fileSizeKey,
+                                .localizedTypeDescriptionKey
+                            ]
+                        )
+                        result[fileURL] = (
+                            resourceValues?.contentModificationDate,
+                            resourceValues?.creationDate,
+                            resourceValues?.fileSize,
+                            resourceValues?.localizedTypeDescription
+                        )
+                    }
+                    return result
+                }.value
+
+                if Task.isCancelled { return }
+                guard self.browserItemHydrationID == hydrationID else { return }
+                attributesByURL.merge(batchResult) { _, new in new }
+
+                let currentURLs = Set(self.browserItems.map(\.url))
+                if !currentURLs.isEmpty {
+                    self.browserItems = self.browserItems.map { item in
+                        guard let attrs = attributesByURL[item.url] else { return item }
+                        return BrowserItem(
+                            url: item.url,
+                            name: item.name,
+                            modifiedAt: attrs.modifiedAt,
+                            createdAt: attrs.createdAt,
+                            sizeBytes: attrs.sizeBytes,
+                            kind: attrs.kind
+                        )
+                    }
+                }
+            }
+
+            guard !Task.isCancelled, self.browserItemHydrationID == hydrationID else { return }
+            self.browserItemHydrationTask = nil
+        }
     }
 
     private func sortBrowserItems(_ items: [BrowserItem]) -> [BrowserItem] {
@@ -2441,9 +2651,9 @@ final class AppModel: ObservableObject {
 
     private func baseSidebarItems() -> [SidebarItem] {
         var items: [SidebarItem] = [
-            SidebarItem(id: "source-pictures", title: "Pictures", section: "Import Sources", kind: .pictures),
-            SidebarItem(id: "source-desktop", title: "Desktop", section: "Import Sources", kind: .desktop),
-            SidebarItem(id: "source-downloads", title: "Downloads", section: "Import Sources", kind: .downloads)
+            SidebarItem(id: "source-pictures", title: "Pictures", section: "Sources", kind: .pictures),
+            SidebarItem(id: "source-desktop", title: "Desktop", section: "Sources", kind: .desktop),
+            SidebarItem(id: "source-downloads", title: "Downloads", section: "Sources", kind: .downloads)
         ]
         items.append(contentsOf: mountedVolumeSidebarItems())
         return items
@@ -2483,10 +2693,15 @@ final class AppModel: ObservableObject {
         case .desktop, .downloads:
             return true
         case let .favorite(url), let .folder(url):
-            return isWithinOrSame(url, root: desktopDirectoryURL()) || isWithinOrSame(url, root: downloadsDirectoryURL())
+            let resolved = url.standardizedFileURL.resolvingSymlinksInPath()
+            let desktop = desktopDirectoryURL().standardizedFileURL.resolvingSymlinksInPath()
+            let downloads = downloadsDirectoryURL().standardizedFileURL.resolvingSymlinksInPath()
+            return resolved.path == desktop.path || resolved.path == downloads.path
         case let .mountedVolume(url):
-            // Volumes mounted under ~/Desktop or ~/Downloads still inherit privacy prompts.
-            return isWithinOrSame(url, root: desktopDirectoryURL()) || isWithinOrSame(url, root: downloadsDirectoryURL())
+            let resolved = url.standardizedFileURL.resolvingSymlinksInPath()
+            let desktop = desktopDirectoryURL().standardizedFileURL.resolvingSymlinksInPath()
+            let downloads = downloadsDirectoryURL().standardizedFileURL.resolvingSymlinksInPath()
+            return resolved.path == desktop.path || resolved.path == downloads.path
         case .pictures:
             return false
         }
@@ -2547,14 +2762,15 @@ final class AppModel: ObservableObject {
             SidebarItem(
                 id: id,
                 title: title,
-                section: "Favourites",
+                section: "Pinned",
                 kind: .favorite(canonical)
             )
         )
+        removeRecentLocation(forCanonicalURL: canonical)
         persistFavorites()
-        refreshSidebarItems()
-        selectedSidebarID = id
-        statusMessage = "Pinned \(title) to Favourites."
+        persistRecentLocations()
+        refreshSidebarItems(preferredSelectionID: id)
+        statusMessage = "Pinned \(title) to Pinned."
     }
 
     private func moveSelectedFavorite(offset: Int) {
@@ -2635,7 +2851,7 @@ final class AppModel: ObservableObject {
                     SidebarItem(
                         id: id,
                         title: favorite.displayName,
-                        section: "Favourites",
+                        section: "Pinned",
                         kind: .favorite(canonical)
                     )
                 )
@@ -2663,7 +2879,7 @@ final class AppModel: ObservableObject {
     private func reconcileAndLoadRecentLocations() {
         do {
             let stored = try recentLocationsStore.loadRecentLocations()
-            var normalized: [(item: SidebarItem, order: Int, lastOpenedAt: Date?)] = []
+            var normalized: [(item: SidebarItem, order: Int)] = []
             var openedByID: [String: Date] = [:]
             for location in stored.sorted(by: { $0.order < $1.order }) {
                 let url = URL(fileURLWithPath: location.path)
@@ -2675,10 +2891,10 @@ final class AppModel: ObservableObject {
                 let item = SidebarItem(
                         id: id,
                         title: location.displayName,
-                        section: "Recent Locations",
+                        section: "Recents",
                         kind: .folder(canonical)
                     )
-                normalized.append((item: item, order: location.order, lastOpenedAt: location.lastOpenedAt))
+                normalized.append((item: item, order: location.order))
                 if let opened = location.lastOpenedAt {
                     openedByID[id] = opened
                 }
@@ -2686,15 +2902,16 @@ final class AppModel: ObservableObject {
                     break
                 }
             }
-            let sorted = normalized.sorted { lhs, rhs in
-                let lhsDate = lhs.lastOpenedAt ?? .distantPast
-                let rhsDate = rhs.lastOpenedAt ?? .distantPast
-                if lhsDate != rhsDate {
-                    return lhsDate > rhsDate
+            locationItems = normalized
+                .sorted { lhs, rhs in
+                    let lhsOpened = openedByID[lhs.item.id] ?? .distantPast
+                    let rhsOpened = openedByID[rhs.item.id] ?? .distantPast
+                    if lhsOpened != rhsOpened {
+                        return lhsOpened > rhsOpened
+                    }
+                    return lhs.order < rhs.order
                 }
-                return lhs.order < rhs.order
-            }
-            locationItems = sorted.map(\.item)
+                .map(\.item)
             recentLocationLastOpenedAtByID = openedByID
             persistRecentLocations()
         } catch {
@@ -2724,19 +2941,28 @@ final class AppModel: ObservableObject {
     private func trimRecentLocationsToLimit() {
         guard locationItems.count > Self.maxRecentLocations else { return }
         while locationItems.count > Self.maxRecentLocations {
-            let removalIndex = locationItems.enumerated()
-                .min { lhs, rhs in
-                    let lhsDate = recentLocationLastOpenedAtByID[lhs.element.id] ?? .distantPast
-                    let rhsDate = recentLocationLastOpenedAtByID[rhs.element.id] ?? .distantPast
-                    if lhsDate != rhsDate {
-                        return lhsDate < rhsDate
-                    }
-                    return lhs.offset < rhs.offset
-                }?
-                .offset ?? (locationItems.count - 1)
-            let removedID = locationItems.remove(at: removalIndex).id
+            // Remove the oldest inserted entry to keep order stable.
+            let removedID = locationItems.removeFirst().id
             recentLocationLastOpenedAtByID[removedID] = nil
         }
+    }
+
+    private func favoriteSidebarItem(forCanonicalURL canonical: URL) -> SidebarItem? {
+        favoriteItems.first { item in
+            guard case let .favorite(url) = item.kind else { return false }
+            return url.standardizedFileURL.resolvingSymlinksInPath().path == canonical.path
+        }
+    }
+
+    @discardableResult
+    private func removeRecentLocation(forCanonicalURL canonical: URL) -> Bool {
+        let before = locationItems.count
+        locationItems.removeAll { item in
+            guard case let .folder(url) = item.kind else { return false }
+            return url.standardizedFileURL.resolvingSymlinksInPath().path == canonical.path
+        }
+        recentLocationLastOpenedAtByID.removeValue(forKey: "folder::\(canonical.path)")
+        return locationItems.count != before
     }
 
     private func mountedVolumeSidebarItems() -> [SidebarItem] {
@@ -2771,7 +2997,7 @@ final class AppModel: ObservableObject {
             return SidebarItem(
                 id: "volume::\(url.path)",
                 title: title,
-                section: "Import Sources",
+                section: "Sources",
                 kind: .mountedVolume(url)
             )
         }
@@ -2855,6 +3081,19 @@ final class AppModel: ObservableObject {
             return url
         case .pictures, .desktop, .downloads:
             return nil
+        }
+    }
+
+    private func sidebarOpenURL(for kind: SidebarKind) -> URL? {
+        switch kind {
+        case .pictures:
+            return picturesDirectoryURL()
+        case .desktop:
+            return desktopDirectoryURL()
+        case .downloads:
+            return downloadsDirectoryURL()
+        case let .mountedVolume(url), let .favorite(url), let .folder(url):
+            return url
         }
     }
 
@@ -3211,12 +3450,25 @@ final class AppModel: ObservableObject {
         return first
     }
 
-    private func recalculateInspectorState() {
+    private func recalculateInspectorState(forceNotify: Bool = false) {
         let selectedURLs = Array(selectedFileURLs)
+        var didChange = false
         guard !selectedURLs.isEmpty else {
-            baselineValues = [:]
-            draftValues = [:]
-            mixedTags = []
+            if !baselineValues.isEmpty {
+                baselineValues = [:]
+                didChange = true
+            }
+            if !draftValues.isEmpty {
+                draftValues = [:]
+                didChange = true
+            }
+            if !mixedTags.isEmpty {
+                mixedTags = []
+                didChange = true
+            }
+            if didChange || forceNotify {
+                notifyInspectorDidChange()
+            }
             return
         }
 
@@ -3274,9 +3526,25 @@ final class AppModel: ObservableObject {
             }
         }
 
-        baselineValues = nextBaseline
-        draftValues = nextDraft
-        mixedTags = nextMixedTags
+        if baselineValues != nextBaseline {
+            baselineValues = nextBaseline
+            didChange = true
+        }
+        if draftValues != nextDraft {
+            draftValues = nextDraft
+            didChange = true
+        }
+        if mixedTags != nextMixedTags {
+            mixedTags = nextMixedTags
+            didChange = true
+        }
+        if didChange || forceNotify {
+            notifyInspectorDidChange()
+        }
+    }
+
+    private func notifyInspectorDidChange() {
+        inspectorRefreshRevision &+= 1
     }
 
     private func canonicalInspectorValue(_ value: String, for tag: EditableTag) -> String {
@@ -3507,7 +3775,6 @@ final class AppModel: ObservableObject {
         let files = Array(selectedFileURLs)
         let selectionAtStart = Set(files)
         guard !files.isEmpty else {
-            recalculateInspectorState()
             return
         }
 
@@ -3515,7 +3782,6 @@ final class AppModel: ObservableObject {
             staleMetadataFiles.contains(fileURL) || metadataByFile[fileURL] == nil
         }
         guard !filesToLoad.isEmpty else {
-            recalculateInspectorState()
             return
         }
 
@@ -3555,7 +3821,7 @@ final class AppModel: ObservableObject {
             isFolderMetadataLoading = false
             folderMetadataLoadCompleted = 0
             folderMetadataLoadTotal = 0
-            startPreviewPreload(for: files)
+            scheduleDeferredPreviewPreload(for: files)
             return
         }
 
@@ -3599,21 +3865,47 @@ final class AppModel: ObservableObject {
             if !self.selectedFileURLs.isEmpty {
                 self.recalculateInspectorState()
             }
-            self.startPreviewPreload(for: files)
+            self.scheduleDeferredPreviewPreload(for: files)
+        }
+    }
+
+    private func scheduleDeferredPreviewPreload(for files: [URL]) {
+        deferredPreviewPreloadTask?.cancel()
+        deferredPreviewPreloadTask = nil
+        let filesSnapshot = files
+        deferredPreviewPreloadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: Self.previewBulkStartDelayNanoseconds)
+            guard !Task.isCancelled else { return }
+            self.startPreviewPreload(for: filesSnapshot)
         }
     }
 
     private func startPreviewPreload(for files: [URL]) {
         previewPreloadTask?.cancel()
         previewPreloadTask = nil
+        deferredPreviewPreloadTask?.cancel()
+        deferredPreviewPreloadTask = nil
         let preloadID = UUID()
         previewPreloadID = preloadID
 
         var filesToPreload: [URL] = []
-        for fileURL in files where inspectorPreviewImages[fileURL] == nil {
-            if let cached = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: 700) {
-                storeInspectorPreview(cached, for: fileURL)
+        for fileURL in files {
+            let currentSide = inspectorPreviewRenderedSide[fileURL] ?? 0
+            if currentSide >= Self.inspectorPreviewTargetSide {
+                continue
+            }
+            if let cached = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: Self.inspectorPreviewTargetSide) {
+                storeInspectorPreview(
+                    cached,
+                    for: fileURL,
+                    renderedSide: max(Self.inspectorPreviewTargetSide, renderedSide(for: cached))
+                )
             } else {
+                if currentSide <= 0,
+                   let cachedLowRes = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: 1) {
+                    storeInspectorPreview(cachedLowRes, for: fileURL, renderedSide: renderedSide(for: cachedLowRes))
+                }
                 filesToPreload.append(fileURL)
             }
         }
@@ -3637,10 +3929,15 @@ final class AppModel: ObservableObject {
                 await Task.yield()
 
                 self.inspectorPreviewInflight.insert(fileURL)
-                if let image = await Self.generateInspectorPreviewOffMain(for: fileURL) {
-                    self.storeInspectorPreview(image, for: fileURL)
+                if let image = await Self.generateInspectorPreviewOffMain(for: fileURL, priority: .utility) {
+                    self.storeInspectorPreview(
+                        image,
+                        for: fileURL,
+                        renderedSide: max(Self.inspectorPreviewFullSide, self.renderedSide(for: image))
+                    )
                 }
                 self.inspectorPreviewInflight.remove(fileURL)
+                self.inspectorPreviewTasksByURL[fileURL] = nil
 
                 self.previewPreloadCompleted = index + 1
             }
@@ -3653,21 +3950,58 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private static func generateInspectorPreviewOffMain(for fileURL: URL) async -> NSImage? {
-        await Task.detached(priority: .utility) {
-            await ThumbnailPipeline.generateThumbnail(fileURL: fileURL, maxPixelSize: 1400)
+    private static func generateInspectorPreviewOffMain(for fileURL: URL, priority: TaskPriority) async -> NSImage? {
+        await Task.detached(priority: priority) {
+            await ThumbnailPipeline.generateThumbnail(fileURL: fileURL, maxPixelSize: Self.inspectorPreviewFullSide)
         }.value
+    }
+
+    private struct MetadataReadTimeoutError: LocalizedError {
+        let fileCount: Int
+
+        var errorDescription: String? {
+            "Timed out reading metadata for \(fileCount) file(s)."
+        }
+    }
+
+    private func readMetadataWithTimeout(_ files: [URL], timeoutNanoseconds: UInt64) async throws -> [FileMetadataSnapshot] {
+        try await withThrowingTaskGroup(of: [FileMetadataSnapshot].self) { group in
+            group.addTask {
+                try await self.engine.readMetadata(files: files)
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: timeoutNanoseconds)
+                throw MetadataReadTimeoutError(fileCount: files.count)
+            }
+
+            guard let first = try await group.next() else {
+                group.cancelAll()
+                return []
+            }
+            group.cancelAll()
+            return first
+        }
     }
 
     private func readMetadataBatchResilient(_ files: [URL]) async -> [FileMetadataSnapshot] {
         guard !files.isEmpty else { return [] }
         do {
-            return try await engine.readMetadata(files: files)
+            return try await readMetadataWithTimeout(
+                files,
+                timeoutNanoseconds: Self.metadataReadTimeoutNanoseconds
+            )
+        } catch is MetadataReadTimeoutError {
+            // Do not immediately re-enter per-file reads after a timeout; that can queue behind
+            // the same stuck operation path and stall progress updates.
+            return []
         } catch {
             var partial: [FileMetadataSnapshot] = []
             for file in files {
                 if Task.isCancelled { break }
-                if let one = try? await engine.readMetadata(files: [file]).first {
+                if let one = try? await readMetadataWithTimeout(
+                    [file],
+                    timeoutNanoseconds: Self.metadataReadTimeoutNanoseconds
+                ).first {
                     partial.append(one)
                 }
             }
@@ -3676,10 +4010,34 @@ final class AppModel: ObservableObject {
     }
 
     func selectionChanged() {
+        let selection = selectedFileURLs
+        cancelStaleInspectorPreviewTasks(keeping: selection)
+
+        previewPreloadTask?.cancel()
+        previewPreloadTask = nil
+        previewPreloadID = UUID()
+        isPreviewPreloading = false
+
+        if let primary = primarySelectionURL {
+            inspectorPreviewTasksByURL[primary]?.cancel()
+            inspectorPreviewTasksByURL[primary] = nil
+            inspectorPreviewInflight.remove(primary)
+            loadInspectorPreview(for: primary, force: false, priority: .userInitiated)
+        }
+
+        scheduleDeferredPreviewPreload(for: browserItems.map(\.url))
+
         // Recompute immediately so UI doesn't show stale single-file values while async load runs.
-        recalculateInspectorState()
-        Task {
-            await loadMetadataForSelection()
+        // Force a refresh even when canonical values happen to be unchanged, so selection/header state updates.
+        recalculateInspectorState(forceNotify: true)
+        let needsMetadataLoad = selection.contains { staleMetadataFiles.contains($0) || metadataByFile[$0] == nil }
+        guard needsMetadataLoad else { return }
+        selectionMetadataLoadTask?.cancel()
+        selectionMetadataLoadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: Self.selectionMetadataDebounceNanoseconds)
+            guard !Task.isCancelled else { return }
+            await self.loadMetadataForSelection()
         }
     }
 
@@ -3769,34 +4127,77 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func loadInspectorPreview(for fileURL: URL, force: Bool) {
-        if !force, inspectorPreviewImages[fileURL] != nil {
+    private func loadInspectorPreview(for fileURL: URL, force: Bool, priority: TaskPriority? = nil) {
+        let requestPriority = priority ?? (selectedFileURLs.contains(fileURL) ? .userInitiated : .utility)
+        if !force, (inspectorPreviewRenderedSide[fileURL] ?? 0) >= Self.inspectorPreviewTargetSide {
             markInspectorPreviewAsRecentlyUsed(fileURL)
             return
         }
         if !force,
-           let cached = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: 700) {
-            storeInspectorPreview(cached, for: fileURL)
+           let cached = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: Self.inspectorPreviewTargetSide) {
+            storeInspectorPreview(
+                cached,
+                for: fileURL,
+                renderedSide: max(Self.inspectorPreviewTargetSide, renderedSide(for: cached))
+            )
             return
+        }
+        if !force, inspectorPreviewImages[fileURL] == nil,
+           let cachedLowRes = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: 1) {
+            storeInspectorPreview(cachedLowRes, for: fileURL, renderedSide: renderedSide(for: cachedLowRes))
+        }
+
+        if force {
+            inspectorPreviewTasksByURL[fileURL]?.cancel()
+            inspectorPreviewTasksByURL[fileURL] = nil
+            inspectorPreviewInflight.remove(fileURL)
+            inspectorPreviewImages[fileURL] = nil
+            inspectorPreviewRenderedSide[fileURL] = nil
+            ThumbnailPipeline.invalidateCachedImages(for: [fileURL])
         }
         guard !inspectorPreviewInflight.contains(fileURL) else { return }
         inspectorPreviewInflight.insert(fileURL)
 
-        Task { @MainActor [weak self] in
+        let task = Task { @MainActor [weak self] in
             guard let self else { return }
-            let image = await Self.generateInspectorPreviewOffMain(for: fileURL)
+            let image = await Self.generateInspectorPreviewOffMain(for: fileURL, priority: requestPriority)
             if let image {
-                self.storeInspectorPreview(image, for: fileURL)
+                self.storeInspectorPreview(
+                    image,
+                    for: fileURL,
+                    renderedSide: max(Self.inspectorPreviewFullSide, self.renderedSide(for: image))
+                )
             }
             self.inspectorPreviewInflight.remove(fileURL)
+            self.inspectorPreviewTasksByURL[fileURL] = nil
         }
+        inspectorPreviewTasksByURL[fileURL] = task
     }
 
-    private func storeInspectorPreview(_ image: NSImage, for fileURL: URL) {
+    private func invalidateInspectorPreviews(for fileURLs: [URL]) {
+        guard !fileURLs.isEmpty else { return }
+        let targets = Set(fileURLs)
+        for fileURL in targets {
+            inspectorPreviewTasksByURL[fileURL]?.cancel()
+            inspectorPreviewTasksByURL[fileURL] = nil
+            inspectorPreviewInflight.remove(fileURL)
+            inspectorPreviewImages[fileURL] = nil
+            inspectorPreviewRenderedSide[fileURL] = nil
+        }
+        inspectorPreviewRecency.removeAll(where: { targets.contains($0) })
+    }
+
+    private func storeInspectorPreview(_ image: NSImage, for fileURL: URL, renderedSide: CGFloat) {
         inspectorPreviewImages[fileURL] = image
-        ThumbnailPipeline.storeCachedImage(image, for: fileURL, renderedSide: 1400)
+        let side = max(1, renderedSide)
+        inspectorPreviewRenderedSide[fileURL] = max(side, inspectorPreviewRenderedSide[fileURL] ?? 0)
+        ThumbnailPipeline.storeCachedImage(image, for: fileURL, renderedSide: side)
         markInspectorPreviewAsRecentlyUsed(fileURL)
         trimInspectorPreviewCacheIfNeeded()
+    }
+
+    private func renderedSide(for image: NSImage) -> CGFloat {
+        max(image.size.width, image.size.height)
     }
 
     private static func migrateLegacySupportDirectoryIfNeeded() {
@@ -3829,6 +4230,7 @@ final class AppModel: ObservableObject {
         let evicted = inspectorPreviewRecency.prefix(excessCount)
         for fileURL in evicted {
             inspectorPreviewImages[fileURL] = nil
+            inspectorPreviewRenderedSide[fileURL] = nil
             inspectorPreviewInflight.remove(fileURL)
         }
         inspectorPreviewRecency.removeFirst(excessCount)
@@ -3847,18 +4249,24 @@ final class AppModel: ObservableObject {
     }
 
     private func warmCachesInBackground(files: [URL]) async {
+        // Never contend with the active foreground load. Warm only when the UI is idle.
+        while isFolderMetadataLoading || isPreviewPreloading {
+            if Task.isCancelled { return }
+            try? await Task.sleep(nanoseconds: 300_000_000)
+        }
+        try? await Task.sleep(nanoseconds: Self.previewBulkStartDelayNanoseconds)
+        if Task.isCancelled { return }
+
         let filesNeedingMetadata = files.filter { fileURL in
             staleMetadataFiles.contains(fileURL) || metadataByFile[fileURL] == nil
         }
         if !filesNeedingMetadata.isEmpty {
             var map = metadataByFile
-            for batchStart in stride(from: 0, to: filesNeedingMetadata.count, by: Self.folderMetadataBatchSize) {
+            for fileURL in filesNeedingMetadata {
                 if Task.isCancelled { return }
                 await Task.yield()
 
-                let batchEnd = min(batchStart + Self.folderMetadataBatchSize, filesNeedingMetadata.count)
-                let batch = Array(filesNeedingMetadata[batchStart..<batchEnd])
-                let snapshots = await readMetadataBatchResilient(batch)
+                let snapshots = await readMetadataBatchResilient([fileURL])
                 if Task.isCancelled { return }
 
                 for snapshot in snapshots {
@@ -3869,20 +4277,38 @@ final class AppModel: ObservableObject {
             metadataByFile = map
         }
 
-        let filesNeedingPreview = files.filter { inspectorPreviewImages[$0] == nil }
+        let filesNeedingPreview = files.filter { (inspectorPreviewRenderedSide[$0] ?? 0) < Self.inspectorPreviewTargetSide }
         for fileURL in filesNeedingPreview {
             if Task.isCancelled { return }
             await Task.yield()
 
-            if inspectorPreviewImages[fileURL] != nil { continue }
-            if let cached = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: 700) {
-                storeInspectorPreview(cached, for: fileURL)
+            if (inspectorPreviewRenderedSide[fileURL] ?? 0) >= Self.inspectorPreviewTargetSide { continue }
+            if let cached = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: Self.inspectorPreviewTargetSide) {
+                storeInspectorPreview(
+                    cached,
+                    for: fileURL,
+                    renderedSide: max(Self.inspectorPreviewTargetSide, renderedSide(for: cached))
+                )
                 continue
             }
             inspectorPreviewInflight.insert(fileURL)
-            if let image = await Self.generateInspectorPreviewOffMain(for: fileURL) {
-                storeInspectorPreview(image, for: fileURL)
+            if let image = await Self.generateInspectorPreviewOffMain(for: fileURL, priority: .utility) {
+                storeInspectorPreview(
+                    image,
+                    for: fileURL,
+                    renderedSide: max(Self.inspectorPreviewFullSide, renderedSide(for: image))
+                )
             }
+            inspectorPreviewInflight.remove(fileURL)
+        }
+    }
+
+    private func cancelStaleInspectorPreviewTasks(keeping keepURLs: Set<URL>) {
+        let staleURLs = inspectorPreviewTasksByURL.keys.filter { !keepURLs.contains($0) }
+        guard !staleURLs.isEmpty else { return }
+        for fileURL in staleURLs {
+            inspectorPreviewTasksByURL[fileURL]?.cancel()
+            inspectorPreviewTasksByURL[fileURL] = nil
             inspectorPreviewInflight.remove(fileURL)
         }
     }

@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 public protocol ExifToolServiceProtocol: Sendable {
     func readMetadata(files: [URL]) async throws -> [FileMetadataSnapshot]
@@ -32,10 +33,14 @@ public extension Notification.Name {
 public struct ExifToolService: ExifToolServiceProtocol {
     private let executableURL: URL
     private let commandBuilder: ExifToolCommandBuilder
+    private let readTimeout: TimeInterval
+    private let writeTimeout: TimeInterval
 
     public init(
         executableURL: URL? = nil,
-        commandBuilder: ExifToolCommandBuilder = ExifToolCommandBuilder()
+        commandBuilder: ExifToolCommandBuilder = ExifToolCommandBuilder(),
+        readTimeout: TimeInterval = 12,
+        writeTimeout: TimeInterval = 25
     ) throws {
         if let executableURL {
             self.executableURL = executableURL
@@ -46,6 +51,8 @@ public struct ExifToolService: ExifToolServiceProtocol {
         }
 
         self.commandBuilder = commandBuilder
+        self.readTimeout = max(1, readTimeout)
+        self.writeTimeout = max(1, writeTimeout)
     }
 
     public func readMetadata(files: [URL]) async throws -> [FileMetadataSnapshot] {
@@ -246,12 +253,30 @@ public struct ExifToolService: ExifToolServiceProtocol {
         process.standardError = stderr
 
         try process.run()
+        let deadline = startedAt.addingTimeInterval(timeout(for: kind))
+        var timedOut = false
+        while process.isRunning {
+            if Date() >= deadline {
+                timedOut = true
+                process.terminate()
+                Thread.sleep(forTimeInterval: 0.2)
+                if process.isRunning {
+                    kill(process.processIdentifier, SIGKILL)
+                }
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
         process.waitUntilExit()
 
         let stdoutData = stdout.fileHandleForReading.readDataToEndOfFile()
         let stderrData = stderr.fileHandleForReading.readDataToEndOfFile()
         let stdoutText = String(decoding: stdoutData, as: UTF8.self)
-        let stderrText = String(decoding: stderrData, as: UTF8.self)
+        var stderrText = String(decoding: stderrData, as: UTF8.self)
+        if timedOut {
+            let timeoutText = "Timed out after \(Int(timeout(for: kind)))s while running exiftool."
+            stderrText = stderrText.isEmpty ? timeoutText : "\(stderrText)\n\(timeoutText)"
+        }
 
         emitTrace(
             ExifToolInvocationTrace(
@@ -287,5 +312,14 @@ public struct ExifToolService: ExifToolServiceProtocol {
         guard text.count > limit else { return text }
         let kept = text.prefix(limit)
         return "\(kept)\n… (truncated)"
+    }
+
+    private func timeout(for kind: ExifToolCommandKind) -> TimeInterval {
+        switch kind {
+        case .read:
+            return readTimeout
+        case .write:
+            return writeTimeout
+        }
     }
 }

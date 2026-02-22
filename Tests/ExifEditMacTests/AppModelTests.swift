@@ -7,7 +7,7 @@ import XCTest
 final class AppModelTests: XCTestCase {
     func testSidebarSectionOrderMatchesV1Sidebar() {
         let model = makeModel()
-        XCTAssertEqual(model.sidebarSectionOrder, ["Import Sources", "Favourites", "Recent Locations"])
+        XCTAssertEqual(model.sidebarSectionOrder, ["Sources", "Pinned", "Recents"])
     }
 
     func testSidebarStartsWithNoSelection() {
@@ -29,7 +29,7 @@ final class AppModelTests: XCTestCase {
         ])
 
         let model = makeModel(favoritesStore: favoritesStore)
-        let favorites = model.sidebarItems.filter { $0.section == "Favourites" }
+        let favorites = model.sidebarItems.filter { $0.section == "Pinned" }
 
         XCTAssertEqual(favorites.count, 1)
         XCTAssertEqual(favorites.first?.title, "Valid")
@@ -46,10 +46,10 @@ final class AppModelTests: XCTestCase {
         try FileManager.default.createDirectory(at: b, withIntermediateDirectories: true)
 
         let model = makeModel()
-        model.pinSidebarItem(.init(id: "folder::\(a.path)", title: "A", section: "Recent Locations", kind: .folder(a)))
-        model.pinSidebarItem(.init(id: "folder::\(b.path)", title: "B", section: "Recent Locations", kind: .folder(b)))
+        model.pinSidebarItem(.init(id: "folder::\(a.path)", title: "A", section: "Recents", kind: .folder(a)))
+        model.pinSidebarItem(.init(id: "folder::\(b.path)", title: "B", section: "Recents", kind: .folder(b)))
 
-        var favorites = model.sidebarItems.filter { $0.section == "Favourites" }
+        var favorites = model.sidebarItems.filter { $0.section == "Pinned" }
         XCTAssertEqual(favorites.map(\.title), ["A", "B"])
 
         guard favorites.count == 2 else {
@@ -58,7 +58,7 @@ final class AppModelTests: XCTestCase {
         }
 
         model.moveFavoriteUp(favorites[1])
-        favorites = model.sidebarItems.filter { $0.section == "Favourites" }
+        favorites = model.sidebarItems.filter { $0.section == "Pinned" }
         XCTAssertEqual(favorites.map(\.title), ["B", "A"])
     }
 
@@ -74,11 +74,11 @@ final class AppModelTests: XCTestCase {
         try FileManager.default.createDirectory(at: c, withIntermediateDirectories: true)
 
         let model = makeModel()
-        model.pinSidebarItem(.init(id: "folder::\(a.path)", title: "A", section: "Recent Locations", kind: .folder(a)))
-        model.pinSidebarItem(.init(id: "folder::\(b.path)", title: "B", section: "Recent Locations", kind: .folder(b)))
-        model.pinSidebarItem(.init(id: "folder::\(c.path)", title: "C", section: "Recent Locations", kind: .folder(c)))
+        model.pinSidebarItem(.init(id: "folder::\(a.path)", title: "A", section: "Recents", kind: .folder(a)))
+        model.pinSidebarItem(.init(id: "folder::\(b.path)", title: "B", section: "Recents", kind: .folder(b)))
+        model.pinSidebarItem(.init(id: "folder::\(c.path)", title: "C", section: "Recents", kind: .folder(c)))
 
-        let favorites = model.sidebarItems.filter { $0.section == "Favourites" }
+        let favorites = model.sidebarItems.filter { $0.section == "Pinned" }
         guard favorites.count == 3 else {
             XCTFail("Expected three favorites")
             return
@@ -87,7 +87,7 @@ final class AppModelTests: XCTestCase {
         model.selectSidebar(id: favorites[1].id)
         model.unpinSidebarItem(favorites[1])
 
-        let updatedFavorites = model.sidebarItems.filter { $0.section == "Favourites" }
+        let updatedFavorites = model.sidebarItems.filter { $0.section == "Pinned" }
         XCTAssertEqual(updatedFavorites.map(\.title), ["A", "C"])
         XCTAssertEqual(model.selectedSidebarID, updatedFavorites.last?.id)
     }
@@ -105,21 +105,21 @@ final class AppModelTests: XCTestCase {
 
         let favoritesStore = InMemoryFavoritesStore()
         let firstLaunch = makeModel(favoritesStore: favoritesStore)
-        firstLaunch.pinSidebarItem(.init(id: "folder::\(a.path)", title: "A", section: "Recent Locations", kind: .folder(a)))
-        firstLaunch.pinSidebarItem(.init(id: "folder::\(b.path)", title: "B", section: "Recent Locations", kind: .folder(b)))
-        firstLaunch.pinSidebarItem(.init(id: "folder::\(c.path)", title: "C", section: "Recent Locations", kind: .folder(c)))
+        firstLaunch.pinSidebarItem(.init(id: "folder::\(a.path)", title: "A", section: "Recents", kind: .folder(a)))
+        firstLaunch.pinSidebarItem(.init(id: "folder::\(b.path)", title: "B", section: "Recents", kind: .folder(b)))
+        firstLaunch.pinSidebarItem(.init(id: "folder::\(c.path)", title: "C", section: "Recents", kind: .folder(c)))
 
-        var firstFavorites = firstLaunch.sidebarItems.filter { $0.section == "Favourites" }
+        var firstFavorites = firstLaunch.sidebarItems.filter { $0.section == "Pinned" }
         guard firstFavorites.count == 3 else {
             XCTFail("Expected three favorites")
             return
         }
         firstLaunch.moveFavoriteUp(firstFavorites[2])
-        firstFavorites = firstLaunch.sidebarItems.filter { $0.section == "Favourites" }
+        firstFavorites = firstLaunch.sidebarItems.filter { $0.section == "Pinned" }
         XCTAssertEqual(firstFavorites.map(\.title), ["A", "C", "B"])
 
         let secondLaunch = makeModel(favoritesStore: favoritesStore)
-        let relaunchedFavorites = secondLaunch.sidebarItems.filter { $0.section == "Favourites" }
+        let relaunchedFavorites = secondLaunch.sidebarItems.filter { $0.section == "Pinned" }
         XCTAssertEqual(relaunchedFavorites.map(\.title), ["A", "C", "B"])
     }
 
@@ -138,12 +138,65 @@ final class AppModelTests: XCTestCase {
         firstLaunch.openFolder(at: b)
         firstLaunch.openFolder(at: b)
 
-        let firstRecent = firstLaunch.sidebarItems.filter { $0.section == "Recent Locations" }
+        let firstRecent = firstLaunch.sidebarItems.filter { $0.section == "Recents" }
         XCTAssertEqual(firstRecent.map(\.title), ["A", "B"])
 
         let secondLaunch = makeModel(recentLocationsStore: recentLocationsStore)
-        let secondRecent = secondLaunch.sidebarItems.filter { $0.section == "Recent Locations" }
+        let secondRecent = secondLaunch.sidebarItems.filter { $0.section == "Recents" }
         XCTAssertEqual(secondRecent.map(\.title), ["B", "A"])
+    }
+
+    func testOpenExistingRecentReappliesSidebarSelection() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let a = temp.appendingPathComponent("A", isDirectory: true)
+        let b = temp.appendingPathComponent("B", isDirectory: true)
+        try FileManager.default.createDirectory(at: a, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: b, withIntermediateDirectories: true)
+
+        let model = makeModel()
+        model.openFolder(at: a)
+        model.openFolder(at: b)
+
+        model.selectedSidebarID = nil
+        model.openFolder(at: b)
+
+        XCTAssertEqual(model.selectedSidebarID, "folder::\(b.path)")
+        let recents = model.sidebarItems.filter { $0.section == "Recents" }
+        XCTAssertEqual(recents.map(\.title), ["A", "B"])
+    }
+
+    func testPinnedLocationIsRemovedFromRecentsAndSelectedOnOpen() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let a = temp.appendingPathComponent("A", isDirectory: true)
+        let b = temp.appendingPathComponent("B", isDirectory: true)
+        try FileManager.default.createDirectory(at: a, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: b, withIntermediateDirectories: true)
+
+        let model = makeModel()
+        model.openFolder(at: a)
+        model.openFolder(at: b)
+
+        let recentsBeforePin = model.sidebarItems.filter { $0.section == "Recents" }
+        XCTAssertEqual(recentsBeforePin.map(\.title), ["A", "B"])
+
+        guard let bRecent = recentsBeforePin.first(where: { $0.title == "B" }) else {
+            XCTFail("Expected B in recents before pin")
+            return
+        }
+        model.pinSidebarItem(bRecent)
+
+        let pinned = model.sidebarItems.filter { $0.section == "Pinned" }
+        XCTAssertEqual(pinned.map(\.title), ["B"])
+        let recentsAfterPin = model.sidebarItems.filter { $0.section == "Recents" }
+        XCTAssertEqual(recentsAfterPin.map(\.title), ["A"])
+
+        model.selectedSidebarID = nil
+        model.openFolder(at: b)
+        XCTAssertEqual(model.selectedSidebarID, "favorite::\(b.path)")
     }
 
     func testFileActionStatesReflectPendingEdits() throws {

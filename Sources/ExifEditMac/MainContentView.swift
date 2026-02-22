@@ -1,4 +1,4 @@
-import AppKit
+@preconcurrency import AppKit
 import Combine
 import ExifEditCore
 import ImageIO
@@ -9,6 +9,8 @@ import SwiftUI
 private extension Notification.Name {
     static let inspectorDidRequestBrowserFocus = Notification.Name("\(AppBrand.identifierPrefix).InspectorDidRequestBrowserFocus")
     static let inspectorDidRequestFieldNavigation = Notification.Name("\(AppBrand.identifierPrefix).InspectorDidRequestFieldNavigation")
+    static let sidebarDidRequestFocus = Notification.Name("\(AppBrand.identifierPrefix).SidebarDidRequestFocus")
+    static let browserDidRequestFocus = Notification.Name("\(AppBrand.identifierPrefix).BrowserDidRequestFocus")
 }
 
 private func appAnimation(duration: Double) -> Animation? {
@@ -50,6 +52,41 @@ private func generateQuickLookThumbnail(fileURL: URL, maxPixelSize: CGFloat) asy
     return await withCheckedContinuation { continuation in
         QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { thumbnail, _ in
             continuation.resume(returning: thumbnail?.nsImage)
+        }
+    }
+}
+
+private struct InspectorPreviewActionPressedKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+private extension EnvironmentValues {
+    var inspectorPreviewActionIsPressed: Bool {
+        get { self[InspectorPreviewActionPressedKey.self] }
+        set { self[InspectorPreviewActionPressedKey.self] = newValue }
+    }
+}
+
+private struct InspectorPreviewActionButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .environment(\.inspectorPreviewActionIsPressed, configuration.isPressed)
+    }
+}
+
+private struct InspectorPreviewActionLabel: View {
+    let symbolName: String
+    let title: String
+    @Environment(\.inspectorPreviewActionIsPressed) private var isPressed
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Image(systemName: symbolName)
+                .font(.body)
+                .foregroundStyle(isPressed ? Color.white : Color.secondary)
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 }
@@ -142,6 +179,26 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewWillDisappear() {
+        super.viewWillDisappear()
+        teardownObserversAndMonitors()
+    }
+
+    private func teardownObserversAndMonitors() {
+        if let spacebarMonitor {
+            NSEvent.removeMonitor(spacebarMonitor)
+            self.spacebarMonitor = nil
+        }
+        if let browserFocusRequestObserver {
+            NotificationCenter.default.removeObserver(browserFocusRequestObserver)
+            self.browserFocusRequestObserver = nil
+        }
+        if let splitResizeObserver {
+            NotificationCenter.default.removeObserver(splitResizeObserver)
+            self.splitResizeObserver = nil
+        }
     }
 
     override func viewDidLoad() {
@@ -240,6 +297,12 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
         spacebarMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
             let modifiers = event.modifierFlags.intersection([.command, .shift, .control, .option, .function])
+            let isTabWithoutCommand = event.keyCode == 48 && (modifiers.isEmpty || modifiers == [.shift])
+
+            if isTabWithoutCommand && shouldHandlePaneTabSwitchCommands() {
+                togglePaneFocusBetweenSidebarAndBrowser()
+                return nil
+            }
 
             if shouldHandleInspectorTabCommands() && event.keyCode == 48 { // Tab
                 if modifiers.isEmpty {
@@ -281,6 +344,17 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
                 return nil
             case 123, 124, 125, 126: // Arrow keys
                 guard let direction = moveDirection(forKeyCode: event.keyCode) else { return event }
+                if modifiers.isEmpty {
+                    if model.browserViewMode == .gallery {
+                        model.moveSelectionInGallery(direction: direction, extendingSelection: false)
+                        return nil
+                    }
+                    if direction == .up || direction == .down {
+                        model.moveSelectionInList(direction: direction, extendingSelection: false)
+                        return nil
+                    }
+                    return event
+                }
                 let isShiftOnly = modifiers == [.shift]
                 let isCommandShift = modifiers == [.command, .shift]
                 guard isShiftOnly || isCommandShift else { return event }
@@ -328,8 +402,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, let window = self.view.window else { return }
-                window.makeFirstResponder(self.browserController.view)
+                guard let self else { return }
+                self.focusBrowserPane()
             }
         }
     }
@@ -373,6 +447,50 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
         guard canHandleBrowserShortcuts(in: window) else { return false }
         guard let responderView = window.firstResponder as? NSView else { return false }
         return responderView === inspectorController.view || responderView.isDescendant(of: inspectorController.view)
+    }
+
+    private func shouldHandlePaneTabSwitchCommands() -> Bool {
+        guard let window = view.window else { return false }
+        guard canHandleBrowserShortcuts(in: window) else { return false }
+
+        if let textView = window.firstResponder as? NSTextView, textView.isEditable {
+            return false
+        }
+
+        guard let responderView = window.firstResponder as? NSView else { return false }
+        let inBrowser = responderView === browserController.view || responderView.isDescendant(of: browserController.view)
+        let inSidebar = responderView === sidebarController.view || responderView.isDescendant(of: sidebarController.view)
+        return inBrowser || inSidebar
+    }
+
+    private func togglePaneFocusBetweenSidebarAndBrowser() {
+        guard let window = view.window,
+              let responderView = window.firstResponder as? NSView
+        else {
+            return
+        }
+
+        let inSidebar = responderView === sidebarController.view || responderView.isDescendant(of: sidebarController.view)
+        if inSidebar {
+            focusBrowserPane()
+            return
+        }
+
+        let inBrowser = responderView === browserController.view || responderView.isDescendant(of: browserController.view)
+        if inBrowser {
+            NotificationCenter.default.post(name: .sidebarDidRequestFocus, object: nil)
+        }
+    }
+
+    private func focusBrowserPane() {
+        guard let window = view.window else { return }
+        let filteredItems = model.filteredBrowserItems
+        if !filteredItems.isEmpty, model.selectedFileURLs.isEmpty {
+            let firstURL = filteredItems[0].url
+            model.setSelectionFromList([firstURL], focusedURL: firstURL)
+        }
+        NotificationCenter.default.post(name: .browserDidRequestFocus, object: nil)
+        window.makeFirstResponder(browserController.view)
     }
 
     private func canHandleBrowserShortcuts(in window: NSWindow) -> Bool {
@@ -486,6 +604,16 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
     @objc
     func focusSearchAction(_: Any?) {
         nativeToolbarDelegate?.focusSearchField()
+    }
+
+    @objc
+    func focusInspectorEntryAction(_: Any?) {
+        guard !model.selectedFileURLs.isEmpty else { return }
+        NotificationCenter.default.post(
+            name: .inspectorDidRequestFieldNavigation,
+            object: nil,
+            userInfo: ["backward": false]
+        )
     }
 
     @objc
@@ -982,6 +1110,9 @@ struct NavigationSidebarView: View {
         .listStyle(.sidebar)
         .frame(maxHeight: .infinity)
         .focused($isSidebarFocused)
+        .onReceive(NotificationCenter.default.publisher(for: .sidebarDidRequestFocus)) { _ in
+            isSidebarFocused = true
+        }
         .onChange(of: model.selectedSidebarID) { oldValue, newValue in
             model.handleSidebarSelectionChange(from: oldValue, to: newValue)
         }
@@ -998,7 +1129,7 @@ struct NavigationSidebarView: View {
         case .mountedVolume:
             return "externaldrive"
         case .favorite:
-            return "star.fill"
+            return "pin"
         case .folder:
             return "folder"
         }
@@ -1011,40 +1142,37 @@ struct NavigationSidebarView: View {
             || model.canMoveFavoriteDown(item)
     }
 
+    @ViewBuilder
     private func sidebarRow(_ item: AppModel.SidebarItem) -> some View {
         let isSelected = model.selectedSidebarID == item.id
         let isInactiveSelected = isSelected && !isSidebarFocused
-        let countColor: Color = isInactiveSelected
-            ? .accentColor
-            : (isSelected ? .primary : Color(nsColor: .tertiaryLabelColor))
-        return HStack(spacing: 7) {
-            if isInactiveSelected {
-                Image(systemName: icon(for: item.kind))
-                    .font(.system(size: 15))
-                    .frame(width: 16, alignment: .center)
-                    .foregroundStyle(Color.accentColor)
-            } else {
-                Image(systemName: icon(for: item.kind))
-                    .font(.system(size: 15))
-                    .frame(width: 16, alignment: .center)
-            }
-            if isInactiveSelected {
-                Text(item.title)
-                    .foregroundStyle(Color.accentColor)
-            } else {
-                Text(item.title)
-            }
+        let row = HStack(spacing: 7) {
+            Image(systemName: icon(for: item.kind))
+                .font(.system(size: 15))
+                .frame(width: 16, alignment: .center)
+            Text(item.title)
             Spacer(minLength: 8)
-            Text(model.sidebarImageCountText(for: item) ?? "0")
-                .font(.system(size: 14))
-                .foregroundStyle(countColor)
-                .monospacedDigit()
-                .animation(nil, value: model.selectedSidebarID)
-            .frame(width: sidebarTrailingColumnWidth, alignment: .trailing)
-            .padding(.trailing, sidebarTrailingColumnInset)
+            if let countText = model.sidebarImageCountText(for: item) {
+                Text(countText)
+                    .font(.system(size: 14))
+                    .monospacedDigit()
+                    .animation(nil, value: model.selectedSidebarID)
+                    .frame(width: sidebarTrailingColumnWidth, alignment: .trailing)
+                    .padding(.trailing, sidebarTrailingColumnInset)
+            } else {
+                Color.clear
+                    .frame(width: sidebarTrailingColumnWidth, height: 1, alignment: .trailing)
+                    .padding(.trailing, sidebarTrailingColumnInset)
+            }
         }
         .padding(.leading, sectionItemIndent)
         .tag(item.id)
+
+        if isInactiveSelected {
+            row.foregroundStyle(Color.accentColor)
+        } else {
+            row
+        }
     }
 
     private func sidebarSectionHeader(_ section: String) -> some View {
@@ -1088,28 +1216,57 @@ struct NavigationSidebarView: View {
 
     @ViewBuilder
     private func sidebarContextMenu(for item: AppModel.SidebarItem) -> some View {
+        if model.canOpenSidebarItemInFinder(item) {
+            Button {
+                model.openSidebarItemInFinder(item)
+            } label: {
+                Label("Open in Finder", systemImage: "folder")
+                    .symbolRenderingMode(.monochrome)
+                    .foregroundStyle(.primary)
+            }
+        }
+
         if model.canPinSidebarItem(item) {
-            Button("Pin to Favourites") {
+            if model.canOpenSidebarItemInFinder(item) {
+                Divider()
+            }
+            Button {
                 model.pinSidebarItem(item)
+            } label: {
+                Label("Pin", systemImage: "pin")
+                    .symbolRenderingMode(.monochrome)
+                    .foregroundStyle(.primary)
             }
         }
 
         if model.canUnpinSidebarItem(item) {
-            Button("Unpin Favourite") {
+            Button {
                 model.unpinSidebarItem(item)
+            } label: {
+                Label("Unpin Pinned", systemImage: "pin.slash")
+                    .symbolRenderingMode(.monochrome)
+                    .foregroundStyle(.primary)
             }
 
             if model.canMoveFavoriteUp(item) || model.canMoveFavoriteDown(item) {
                 Divider()
             }
 
-            Button("Move Favourite Up") {
+            Button {
                 model.moveFavoriteUp(item)
+            } label: {
+                Label("Move Pinned Up", systemImage: "arrow.up")
+                    .symbolRenderingMode(.monochrome)
+                    .foregroundStyle(.primary)
             }
             .disabled(!model.canMoveFavoriteUp(item))
 
-            Button("Move Favourite Down") {
+            Button {
                 model.moveFavoriteDown(item)
+            } label: {
+                Label("Move Pinned Down", systemImage: "arrow.down")
+                    .symbolRenderingMode(.monochrome)
+                    .foregroundStyle(.primary)
             }
             .disabled(!model.canMoveFavoriteDown(item))
         }
@@ -1185,6 +1342,7 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
     private var lastRenderedItemURLs: [URL] = []
     private var contextMenuTargetURLs: [URL] = []
     private var didApplyInitialColumnFit = false
+    private var browserFocusObserver: NSObjectProtocol?
 
     init(model: AppModel, items: [AppModel.BrowserItem]) {
         self.model = model
@@ -1205,6 +1363,23 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
     override func viewDidLoad() {
         super.viewDidLoad()
         configureList()
+        browserFocusObserver = NotificationCenter.default.addObserver(
+            forName: .browserDidRequestFocus,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.focusListForKeyboardNavigation()
+            }
+        }
+    }
+
+    override func viewWillDisappear() {
+        super.viewWillDisappear()
+        if let browserFocusObserver {
+            NotificationCenter.default.removeObserver(browserFocusObserver)
+            self.browserFocusObserver = nil
+        }
     }
 
     override func viewDidLayout() {
@@ -1279,6 +1454,22 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         updateQuickLookSourceFrameFromCurrentSelection()
     }
 
+    private func focusListForKeyboardNavigation() {
+        guard model.browserViewMode == .list else { return }
+        guard let window = view.window else { return }
+        window.makeFirstResponder(tableView)
+    }
+
+    private func focusInspectorFromBrowser() {
+        guard model.browserViewMode == .list else { return }
+        guard !model.selectedFileURLs.isEmpty else { return }
+        _ = NSApp.sendAction(
+            #selector(NativeThreePaneSplitViewController.focusInspectorEntryAction(_:)),
+            to: nil,
+            from: self
+        )
+    }
+
     private func configureList() {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
@@ -1314,6 +1505,9 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         }
         tableView.contextMenuProvider = { [weak self] row in
             self?.menuForRow(row)
+        }
+        tableView.onActivateSelection = { [weak self] in
+            self?.focusInspectorFromBrowser()
         }
 
         let nameColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
@@ -1519,6 +1713,13 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         openItem.isEnabled = openState.isEnabled
         openItem.image = NSImage(systemSymbolName: openState.symbolName, accessibilityDescription: nil)
         menu.addItem(openItem)
+
+        let revealItem = NSMenuItem(title: "Reveal in Finder", action: #selector(revealInFinderFromContextMenu(_:)), keyEquivalent: "")
+        revealItem.target = self
+        revealItem.isEnabled = !targetURLs.isEmpty
+        revealItem.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
+        menu.addItem(revealItem)
+
         menu.addItem(.separator())
 
         let applyItem = NSMenuItem(title: applyState.title, action: #selector(applyFromContextMenu(_:)), keyEquivalent: "")
@@ -1551,6 +1752,12 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
     private func openFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty else { return }
         model.performFileAction(.openInDefaultApp, targetURLs: contextMenuTargetURLs)
+    }
+
+    @objc
+    private func revealInFinderFromContextMenu(_: Any?) {
+        guard !contextMenuTargetURLs.isEmpty else { return }
+        model.revealInFinder(contextMenuTargetURLs)
     }
 
     @objc
@@ -1725,6 +1932,7 @@ private final class BrowserListTableView: NSTableView {
     var onBackgroundClick: (() -> Void)?
     var onModifiedRowClick: ((Int, NSEvent.ModifierFlags) -> Void)?
     var contextMenuProvider: ((Int) -> NSMenu?)?
+    var onActivateSelection: (() -> Void)?
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
@@ -1752,6 +1960,20 @@ private final class BrowserListTableView: NSTableView {
         let clickedRow = row(at: point)
         guard clickedRow >= 0 else { return nil }
         return contextMenuProvider?(clickedRow)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard event.modifierFlags.intersection([.command, .control, .option, .shift, .function]).isEmpty else {
+            super.keyDown(with: event)
+            return
+        }
+
+        if event.keyCode == 36 || event.keyCode == 76 {
+            onActivateSelection?()
+            return
+        }
+
+        super.keyDown(with: event)
     }
 }
 
@@ -1812,6 +2034,7 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
     private var pinchAccumulator: CGFloat = 0
     private var lastMagnification: CGFloat = 0
     private let pinchThreshold: CGFloat = 0.14
+    private var browserFocusObserver: NSObjectProtocol?
 
     init(model: AppModel, items: [AppModel.BrowserItem]) {
         self.model = model
@@ -1831,6 +2054,23 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
     override func viewDidLoad() {
         super.viewDidLoad()
         configureGallery()
+        browserFocusObserver = NotificationCenter.default.addObserver(
+            forName: .browserDidRequestFocus,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.focusGalleryForKeyboardNavigation()
+            }
+        }
+    }
+
+    override func viewWillDisappear() {
+        super.viewWillDisappear()
+        if let browserFocusObserver {
+            NotificationCenter.default.removeObserver(browserFocusObserver)
+            self.browserFocusObserver = nil
+        }
     }
 
     func update(model: AppModel, items: [AppModel.BrowserItem]) {
@@ -1872,6 +2112,9 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
             self.model.setSelectionFromList([url], focusedURL: url)
             self.model.openInDefaultApp(url)
         }
+        collectionView.onActivateSelection = { [weak self] in
+            self?.focusInspectorFromBrowser()
+        }
         collectionView.contextMenuProvider = { [weak self] indexPath in
             self?.menuForItem(at: indexPath)
         }
@@ -1887,6 +2130,22 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
             scrollView.topAnchor.constraint(equalTo: view.topAnchor),
             scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
+    }
+
+    private func focusGalleryForKeyboardNavigation() {
+        guard model.browserViewMode == .gallery else { return }
+        guard let window = view.window else { return }
+        window.makeFirstResponder(collectionView)
+    }
+
+    private func focusInspectorFromBrowser() {
+        guard model.browserViewMode == .gallery else { return }
+        guard !model.selectedFileURLs.isEmpty else { return }
+        _ = NSApp.sendAction(
+            #selector(NativeThreePaneSplitViewController.focusInspectorEntryAction(_:)),
+            to: nil,
+            from: self
+        )
     }
 
     private func renderState() {
@@ -2200,6 +2459,7 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
 
         let menu = NSMenu()
         menu.addItem(makeItem(openState.title, action: #selector(openFromContextMenu(_:)), symbolName: openState.symbolName, enabled: openState.isEnabled))
+        menu.addItem(makeItem("Reveal in Finder", action: #selector(revealInFinderFromContextMenu(_:)), symbolName: "folder", enabled: !contextMenuTargetURLs.isEmpty))
         menu.addItem(.separator())
         menu.addItem(makeItem(applyState.title, action: #selector(applyFromContextMenu(_:)), symbolName: applyState.symbolName, enabled: applyState.isEnabled))
         menu.addItem(makeItem(refreshState.title, action: #selector(refreshFromContextMenu(_:)), symbolName: refreshState.symbolName, enabled: refreshState.isEnabled))
@@ -2212,6 +2472,12 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
     private func openFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty else { return }
         model.performFileAction(.openInDefaultApp, targetURLs: contextMenuTargetURLs)
+    }
+
+    @objc
+    private func revealInFinderFromContextMenu(_: Any?) {
+        guard !contextMenuTargetURLs.isEmpty else { return }
+        model.revealInFinder(contextMenuTargetURLs)
     }
 
     @objc
@@ -2330,6 +2596,7 @@ private final class AppKitGalleryCollectionView: NSCollectionView {
     var onMoveSelection: ((MoveCommandDirection) -> Void)?
     var contextMenuProvider: ((IndexPath) -> NSMenu?)?
     var onDoubleClick: ((IndexPath) -> Void)?
+    var onActivateSelection: (() -> Void)?
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
@@ -2353,6 +2620,11 @@ private final class AppKitGalleryCollectionView: NSCollectionView {
         if event.keyCode == 53 {
             deselectAll(nil)
             onBackgroundClick?()
+            return
+        }
+
+        if event.keyCode == 36 || event.keyCode == 76 {
+            onActivateSelection?()
             return
         }
 
@@ -2576,7 +2848,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
     }
 }
 struct InspectorView: View {
-    @ObservedObject var model: AppModel
+    let model: AppModel
     private let topScrollStartInset: CGFloat = 56
     private let contentHorizontalInset: CGFloat = 16
     private let sectionInnerInset: CGFloat = 12
@@ -2590,8 +2862,10 @@ struct InspectorView: View {
     @State private var editSessionSnapshots: [String: AppModel.EditSessionSnapshot] = [:]
     @State private var activeEditTagID: String?
     @State private var suppressNextFocusScrollAnimation = false
+    @State private var inspectorRefreshRevision: UInt64 = 0
 
     var body: some View {
+        let _ = inspectorRefreshRevision
         ScrollViewReader { proxy in
             ScrollView {
                 if model.selectedFileURLs.isEmpty {
@@ -2669,16 +2943,11 @@ struct InspectorView: View {
                                         Button {
                                             model.rotateLeft(fileURL: previewURL)
                                         } label: {
-                                            VStack(spacing: 4) {
-                                                Image(systemName: "rotate.left")
-                                                    .font(.body)
-                                                Text("Rotate")
-                                                    .font(.caption)
-                                            }
+                                            InspectorPreviewActionLabel(symbolName: "rotate.left", title: "Rotate")
                                             .frame(maxWidth: .infinity, minHeight: 44)
                                             .contentShape(Rectangle())
                                         }
-                                        .buttonStyle(.plain)
+                                        .buttonStyle(InspectorPreviewActionButtonStyle())
 
                                         Divider()
                                             .frame(height: 28)
@@ -2686,16 +2955,11 @@ struct InspectorView: View {
                                         Button {
                                             model.flipHorizontal(fileURL: previewURL)
                                         } label: {
-                                            VStack(spacing: 4) {
-                                                Image(systemName: "flip.horizontal")
-                                                    .font(.body)
-                                                Text("Flip")
-                                                    .font(.caption)
-                                            }
+                                            InspectorPreviewActionLabel(symbolName: "flip.horizontal", title: "Flip")
                                             .frame(maxWidth: .infinity, minHeight: 44)
                                             .contentShape(Rectangle())
                                         }
-                                        .buttonStyle(.plain)
+                                        .buttonStyle(InspectorPreviewActionButtonStyle())
 
                                         Divider()
                                             .frame(height: 28)
@@ -2703,16 +2967,11 @@ struct InspectorView: View {
                                         Button {
                                             model.openInDefaultApp(previewURL)
                                         } label: {
-                                            VStack(spacing: 4) {
-                                                Image(systemName: "arrow.up.forward.app")
-                                                    .font(.body)
-                                                Text("Open")
-                                                    .font(.caption)
-                                            }
+                                            InspectorPreviewActionLabel(symbolName: "arrow.up.forward.app", title: "Open")
                                             .frame(maxWidth: .infinity, minHeight: 44)
                                             .contentShape(Rectangle())
                                         }
-                                        .buttonStyle(.plain)
+                                        .buttonStyle(InspectorPreviewActionButtonStyle())
                                     }
                                 }
                                 .padding(sectionInnerInset)
@@ -2838,8 +3097,7 @@ struct InspectorView: View {
                                                         }
                                                     ),
                                                     prompt: Text(model.isMixedValue(for: tag) ? "Multiple values" : model.placeholderForTag(tag))
-                                                        .foregroundStyle(.secondary),
-                                                    axis: .vertical
+                                                        .foregroundStyle(.secondary)
                                                 )
                                                 .textFieldStyle(.roundedBorder)
                                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -2889,8 +3147,9 @@ struct InspectorView: View {
             }
             .ignoresSafeArea(.container, edges: .top)
             .contentMargins(.top, topScrollStartInset, for: .scrollContent)
-            .onChange(of: focusedTagID) { _, newValue in
+            .onChange(of: focusedTagID) { oldValue, newValue in
                 guard let newValue else { return }
+                guard oldValue != nil else { return }
                 DispatchQueue.main.async {
                     if suppressNextFocusScrollAnimation {
                         var transaction = Transaction()
@@ -2907,20 +3166,17 @@ struct InspectorView: View {
                 }
             }
         }
-        .onChange(of: focusedTagID) { oldValue, newValue in
-            guard let newValue,
-                  let tag = AppModel.EditableTag.common.first(where: { $0.id == newValue })
-            else {
-                return
-            }
-            editSessionSnapshots[newValue] = model.makeEditSessionSnapshot(for: tag)
-            activeEditTagID = newValue
-        }
         .onChange(of: model.selectedFileURLs) { _, _ in
             editSessionSnapshots.removeAll()
             focusedTagID = nil
             activeEditTagID = nil
             suppressNextFocusScrollAnimation = true
+        }
+        .onAppear {
+            inspectorRefreshRevision = model.inspectorRefreshRevision
+        }
+        .onReceive(model.$inspectorRefreshRevision.removeDuplicates()) { revision in
+            inspectorRefreshRevision = revision
         }
         .onExitCommand {
             let targetTagID = focusedTagID ?? activeEditTagID
@@ -2947,14 +3203,20 @@ struct InspectorView: View {
             let backward = (notification.userInfo?["backward"] as? Bool) ?? false
             moveInspectorFieldFocus(backward: backward)
         }
-        .sheet(item: $model.activePresetEditor) { editor in
+        .sheet(item: Binding(
+            get: { model.activePresetEditor },
+            set: { model.activePresetEditor = $0 }
+        )) { editor in
             PresetEditorSheet(
                 model: model,
                 initialEditor: editor
             )
         }
         .tint(AppTheme.accentColor)
-        .sheet(isPresented: $model.isManagePresetsPresented) {
+        .sheet(isPresented: Binding(
+            get: { model.isManagePresetsPresented },
+            set: { model.isManagePresetsPresented = $0 }
+        )) {
             PresetManagerSheet(model: model)
         }
     }
@@ -2995,7 +3257,7 @@ struct InspectorView: View {
         }()
 
         var parts: [String] = [typeText, sizeText]
-        if let (width, height) = imageDimensions(for: url),
+        if let (width, height) = model.imagePixelDimensions(for: url),
            width > 0, height > 0 {
             parts.append("\(width)×\(height)")
             let megapixels = (Double(width) * Double(height)) / 1_000_000
@@ -3026,17 +3288,6 @@ struct InspectorView: View {
         let totalSizeText = Self.byteCountFormatter.string(fromByteCount: totalSize)
 
         return "\(typeSummary), \(selectedCount) selected • \(totalSizeText) total"
-    }
-
-    private func imageDimensions(for url: URL) -> (Int, Int)? {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-              let width = properties[kCGImagePropertyPixelWidth] as? Int,
-              let height = properties[kCGImagePropertyPixelHeight] as? Int
-        else {
-            return nil
-        }
-        return (width, height)
     }
 
     private func numericValue(forTagID id: String) -> Double? {
@@ -3099,13 +3350,7 @@ struct InspectorView: View {
     }
 
     private func moveInspectorFieldFocus(backward: Bool) {
-        let focusableTagIDs = model.groupedEditableTags
-            .filter { !model.isInspectorSectionCollapsed($0.section) }
-            .flatMap(\.tags)
-            .filter { tag in
-                !model.isDateTimeTag(tag) && model.pickerOptions(for: tag) == nil
-            }
-            .map(\.id)
+        let focusableTagIDs = focusableInspectorTagIDs()
 
         guard !focusableTagIDs.isEmpty else { return }
 
@@ -3121,8 +3366,18 @@ struct InspectorView: View {
             nextID = backward ? focusableTagIDs.last! : focusableTagIDs.first!
         }
 
+        guard focusedTagID != nextID else { return }
         focusedTagID = nextID
-        activeEditTagID = nextID
+    }
+
+    private func focusableInspectorTagIDs() -> [String] {
+        model.groupedEditableTags
+            .filter { !model.isInspectorSectionCollapsed($0.section) }
+            .flatMap(\.tags)
+            .filter { tag in
+                !model.isDateTimeTag(tag) && model.pickerOptions(for: tag) == nil
+            }
+            .map(\.id)
     }
 }
 

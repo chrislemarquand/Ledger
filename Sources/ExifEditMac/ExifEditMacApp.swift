@@ -210,28 +210,28 @@ struct ExifEditMacApp: App {
                 Button {
                     appDelegate.appModel?.pinSelectedSidebarLocationToFavorites()
                 } label: {
-                    Label("Pin Location to Favourites", systemImage: "star")
+                    Label("Pin Location to Pinned", systemImage: "pin")
                 }
                 .disabled(!(appDelegate.appModel?.canPinSelectedSidebarLocation ?? false))
 
                 Button {
                     appDelegate.appModel?.unpinSelectedSidebarFavorite()
                 } label: {
-                    Label("Unpin Favourite", systemImage: "star.slash")
+                    Label("Unpin Pinned", systemImage: "pin.slash")
                 }
                 .disabled(!(appDelegate.appModel?.canUnpinSelectedSidebarLocation ?? false))
 
                 Button {
                     appDelegate.appModel?.moveSelectedFavoriteUp()
                 } label: {
-                    Label("Move Favourite Up", systemImage: "arrow.up")
+                    Label("Move Pinned Up", systemImage: "arrow.up")
                 }
                 .disabled(!(appDelegate.appModel?.canMoveSelectedFavoriteUp ?? false))
 
                 Button {
                     appDelegate.appModel?.moveSelectedFavoriteDown()
                 } label: {
-                    Label("Move Favourite Down", systemImage: "arrow.down")
+                    Label("Move Pinned Down", systemImage: "arrow.down")
                 }
                 .disabled(!(appDelegate.appModel?.canMoveSelectedFavoriteDown ?? false))
 
