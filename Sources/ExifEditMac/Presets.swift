@@ -29,16 +29,18 @@ struct FilePresetStore: PresetStoreProtocol {
     private static let schemaVersion = 1
     private let fileURL: URL
 
-    init(fileURL: URL = FilePresetStore.defaultFileURL()) {
+    init(fileURL: URL = FilePresetStore.currentFileURL()) {
         self.fileURL = fileURL
     }
 
     func loadPresets() throws -> [MetadataPreset] {
-        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+        let fileManager = FileManager.default
+        let candidates = [fileURL] + Self.legacyFileURLs()
+        guard let sourceURL = candidates.first(where: { fileManager.fileExists(atPath: $0.path) }) else {
             return []
         }
 
-        let data = try Data(contentsOf: fileURL)
+        let data = try Data(contentsOf: sourceURL)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let envelope = try decoder.decode(Envelope.self, from: data)
@@ -68,12 +70,15 @@ struct FilePresetStore: PresetStoreProtocol {
         }
     }
 
-    static func defaultFileURL() -> URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
-        return appSupport
-            .appendingPathComponent("Logbook", isDirectory: true)
+    static func currentFileURL() -> URL {
+        AppBrand.currentSupportDirectoryURL()
             .appendingPathComponent("presets.json", isDirectory: false)
+    }
+
+    private static func legacyFileURLs() -> [URL] {
+        AppBrand.legacySupportDirectoryURLs().map {
+            $0.appendingPathComponent("presets.json", isDirectory: false)
+        }
     }
 }
 

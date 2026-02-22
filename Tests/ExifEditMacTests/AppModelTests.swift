@@ -1,0 +1,253 @@
+import ExifEditCore
+@testable import ExifEditMac
+import Foundation
+import XCTest
+
+@MainActor
+final class AppModelTests: XCTestCase {
+    func testSidebarSectionOrderMatchesV1Sidebar() {
+        let model = makeModel()
+        XCTAssertEqual(model.sidebarSectionOrder, ["Import Sources", "Favourites", "Recent Locations"])
+    }
+
+    func testSidebarStartsWithNoSelection() {
+        let model = makeModel()
+        XCTAssertNil(model.selectedSidebarID)
+    }
+
+    func testFavoriteReconciliationDropsInvalidPaths() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let valid = temp.appendingPathComponent("valid", isDirectory: true)
+        try FileManager.default.createDirectory(at: valid, withIntermediateDirectories: true)
+        let missing = temp.appendingPathComponent("missing", isDirectory: true)
+
+        let favoritesStore = InMemoryFavoritesStore(favorites: [
+            SidebarFavorite(path: missing.path, displayName: "Missing", order: 0),
+            SidebarFavorite(path: valid.path, displayName: "Valid", order: 1)
+        ])
+
+        let model = makeModel(favoritesStore: favoritesStore)
+        let favorites = model.sidebarItems.filter { $0.section == "Favourites" }
+
+        XCTAssertEqual(favorites.count, 1)
+        XCTAssertEqual(favorites.first?.title, "Valid")
+        XCTAssertEqual(favoritesStore.saved.last?.count, 1)
+    }
+
+    func testPinAndReorderFavorites() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let a = temp.appendingPathComponent("A", isDirectory: true)
+        let b = temp.appendingPathComponent("B", isDirectory: true)
+        try FileManager.default.createDirectory(at: a, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: b, withIntermediateDirectories: true)
+
+        let model = makeModel()
+        model.pinSidebarItem(.init(id: "folder::\(a.path)", title: "A", section: "Recent Locations", kind: .folder(a)))
+        model.pinSidebarItem(.init(id: "folder::\(b.path)", title: "B", section: "Recent Locations", kind: .folder(b)))
+
+        var favorites = model.sidebarItems.filter { $0.section == "Favourites" }
+        XCTAssertEqual(favorites.map(\.title), ["A", "B"])
+
+        guard favorites.count == 2 else {
+            XCTFail("Expected two favorites")
+            return
+        }
+
+        model.moveFavoriteUp(favorites[1])
+        favorites = model.sidebarItems.filter { $0.section == "Favourites" }
+        XCTAssertEqual(favorites.map(\.title), ["B", "A"])
+    }
+
+    func testUnpinSelectedFavoriteSelectsAdjacentFavorite() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let a = temp.appendingPathComponent("A", isDirectory: true)
+        let b = temp.appendingPathComponent("B", isDirectory: true)
+        let c = temp.appendingPathComponent("C", isDirectory: true)
+        try FileManager.default.createDirectory(at: a, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: b, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: c, withIntermediateDirectories: true)
+
+        let model = makeModel()
+        model.pinSidebarItem(.init(id: "folder::\(a.path)", title: "A", section: "Recent Locations", kind: .folder(a)))
+        model.pinSidebarItem(.init(id: "folder::\(b.path)", title: "B", section: "Recent Locations", kind: .folder(b)))
+        model.pinSidebarItem(.init(id: "folder::\(c.path)", title: "C", section: "Recent Locations", kind: .folder(c)))
+
+        let favorites = model.sidebarItems.filter { $0.section == "Favourites" }
+        guard favorites.count == 3 else {
+            XCTFail("Expected three favorites")
+            return
+        }
+
+        model.selectSidebar(id: favorites[1].id)
+        model.unpinSidebarItem(favorites[1])
+
+        let updatedFavorites = model.sidebarItems.filter { $0.section == "Favourites" }
+        XCTAssertEqual(updatedFavorites.map(\.title), ["A", "C"])
+        XCTAssertEqual(model.selectedSidebarID, updatedFavorites.last?.id)
+    }
+
+    func testFavoriteOrderPersistsAcrossRelaunch() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let a = temp.appendingPathComponent("A", isDirectory: true)
+        let b = temp.appendingPathComponent("B", isDirectory: true)
+        let c = temp.appendingPathComponent("C", isDirectory: true)
+        try FileManager.default.createDirectory(at: a, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: b, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: c, withIntermediateDirectories: true)
+
+        let favoritesStore = InMemoryFavoritesStore()
+        let firstLaunch = makeModel(favoritesStore: favoritesStore)
+        firstLaunch.pinSidebarItem(.init(id: "folder::\(a.path)", title: "A", section: "Recent Locations", kind: .folder(a)))
+        firstLaunch.pinSidebarItem(.init(id: "folder::\(b.path)", title: "B", section: "Recent Locations", kind: .folder(b)))
+        firstLaunch.pinSidebarItem(.init(id: "folder::\(c.path)", title: "C", section: "Recent Locations", kind: .folder(c)))
+
+        var firstFavorites = firstLaunch.sidebarItems.filter { $0.section == "Favourites" }
+        guard firstFavorites.count == 3 else {
+            XCTFail("Expected three favorites")
+            return
+        }
+        firstLaunch.moveFavoriteUp(firstFavorites[2])
+        firstFavorites = firstLaunch.sidebarItems.filter { $0.section == "Favourites" }
+        XCTAssertEqual(firstFavorites.map(\.title), ["A", "C", "B"])
+
+        let secondLaunch = makeModel(favoritesStore: favoritesStore)
+        let relaunchedFavorites = secondLaunch.sidebarItems.filter { $0.section == "Favourites" }
+        XCTAssertEqual(relaunchedFavorites.map(\.title), ["A", "C", "B"])
+    }
+
+    func testRecentLocationsStayStableInSessionAndReorderOnRelaunch() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let a = temp.appendingPathComponent("A", isDirectory: true)
+        let b = temp.appendingPathComponent("B", isDirectory: true)
+        try FileManager.default.createDirectory(at: a, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: b, withIntermediateDirectories: true)
+
+        let recentLocationsStore = InMemoryRecentLocationsStore()
+        let firstLaunch = makeModel(recentLocationsStore: recentLocationsStore)
+        firstLaunch.openFolder(at: a)
+        firstLaunch.openFolder(at: b)
+        firstLaunch.openFolder(at: b)
+
+        let firstRecent = firstLaunch.sidebarItems.filter { $0.section == "Recent Locations" }
+        XCTAssertEqual(firstRecent.map(\.title), ["A", "B"])
+
+        let secondLaunch = makeModel(recentLocationsStore: recentLocationsStore)
+        let secondRecent = secondLaunch.sidebarItems.filter { $0.section == "Recent Locations" }
+        XCTAssertEqual(secondRecent.map(\.title), ["B", "A"])
+    }
+
+    func testFileActionStatesReflectPendingEdits() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let fileURL = temp.appendingPathComponent("sample.jpg")
+        try Data("x".utf8).write(to: fileURL)
+
+        let model = makeModel()
+        model.selectedFileURLs = [fileURL]
+
+        var apply = model.fileActionState(for: .applyMetadataChanges, targetURLs: [fileURL])
+        XCTAssertFalse(apply.isEnabled)
+
+        let preset = model.createPreset(
+            name: "Title preset",
+            notes: nil,
+            fields: [PresetFieldValue(tagID: "xmp-title", value: "New Title")]
+        )
+        XCTAssertNotNil(preset)
+
+        if let preset {
+            model.applyPreset(presetID: preset.id)
+        }
+
+        apply = model.fileActionState(for: .applyMetadataChanges, targetURLs: [fileURL])
+        XCTAssertTrue(apply.isEnabled)
+
+        let clear = model.fileActionState(for: .clearMetadataChanges, targetURLs: [fileURL])
+        XCTAssertTrue(clear.isEnabled)
+
+        model.performFileAction(.clearMetadataChanges, targetURLs: [fileURL])
+
+        let applyAfterClear = model.fileActionState(for: .applyMetadataChanges, targetURLs: [fileURL])
+        XCTAssertFalse(applyAfterClear.isEnabled)
+    }
+
+    private func makeModel(
+        favoritesStore: InMemoryFavoritesStore = InMemoryFavoritesStore(),
+        recentLocationsStore: InMemoryRecentLocationsStore = InMemoryRecentLocationsStore()
+    ) -> AppModel {
+        AppModel(
+            exifToolService: StubExifToolService(),
+            presetStore: InMemoryPresetStore(),
+            favoritesStore: favoritesStore,
+            recentLocationsStore: recentLocationsStore
+        )
+    }
+
+    private func makeTempDirectory() -> URL {
+        let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+}
+
+private struct StubExifToolService: ExifToolServiceProtocol {
+    func readMetadata(files _: [URL]) async throws -> [FileMetadataSnapshot] {
+        []
+    }
+
+    func writeMetadata(operation: EditOperation) async -> OperationResult {
+        OperationResult(operationID: operation.id, succeeded: operation.targetFiles, failed: [], backupLocation: nil, duration: 0)
+    }
+}
+
+private struct InMemoryPresetStore: PresetStoreProtocol {
+    func loadPresets() throws -> [MetadataPreset] { [] }
+    func savePresets(_: [MetadataPreset]) throws {}
+}
+
+private final class InMemoryFavoritesStore: SidebarFavoritesStoreProtocol {
+    var favorites: [SidebarFavorite]
+    var saved: [[SidebarFavorite]] = []
+
+    init(favorites: [SidebarFavorite] = []) {
+        self.favorites = favorites
+    }
+
+    func loadFavorites() throws -> [SidebarFavorite] {
+        favorites
+    }
+
+    func saveFavorites(_ favorites: [SidebarFavorite]) throws {
+        self.favorites = favorites
+        saved.append(favorites)
+    }
+}
+
+private final class InMemoryRecentLocationsStore: RecentLocationsStoreProtocol {
+    var locations: [RecentLocation]
+    var saved: [[RecentLocation]] = []
+
+    init(locations: [RecentLocation] = []) {
+        self.locations = locations
+    }
+
+    func loadRecentLocations() throws -> [RecentLocation] {
+        locations
+    }
+
+    func saveRecentLocations(_ locations: [RecentLocation]) throws {
+        self.locations = locations
+        saved.append(locations)
+    }
+}

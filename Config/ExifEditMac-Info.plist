@@ -20,7 +20,9 @@
     <string>$(CURRENT_PROJECT_VERSION)</string>
     <key>LSMinimumSystemVersion</key>
     <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+    <key>NSAccentColorName</key>
+    <string>BrandAccent</string>
     <key>NSHumanReadableCopyright</key>
-    <string>Copyright © $(CURRENT_YEAR) Logbook</string>
+    <string>Copyright © $(CURRENT_YEAR) $(APP_DISPLAY_NAME)</string>
 </dict>
 </plist>

@@ -19,6 +19,10 @@ let package = Package(
         .testTarget(
             name: "ExifEditCoreTests",
             dependencies: ["ExifEditCore"]
+        ),
+        .testTarget(
+            name: "ExifEditMacTests",
+            dependencies: ["ExifEditMac", "ExifEditCore"]
         )
     ]
 )

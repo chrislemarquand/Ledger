@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "A10000600000000000000001"
-               BuildableName = "Logbook.app"
+               BuildableName = "Lattice.app"
                BlueprintName = "ExifEditMac"
                ReferencedContainer = "container:ExifEditMac.xcodeproj">
             </BuildableReference>
@@ -58,7 +58,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A10000600000000000000001"
-            BuildableName = "Logbook.app"
+            BuildableName = "Lattice.app"
             BlueprintName = "ExifEditMac"
             ReferencedContainer = "container:ExifEditMac.xcodeproj">
          </BuildableReference>
@@ -75,7 +75,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A10000600000000000000001"
-            BuildableName = "Logbook.app"
+            BuildableName = "Lattice.app"
             BlueprintName = "ExifEditMac"
             ReferencedContainer = "container:ExifEditMac.xcodeproj">
          </BuildableReference>

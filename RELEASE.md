@@ -34,11 +34,11 @@ export NOTARY_PROFILE="EXIFEDIT_NOTARY"
 
 The final artifact is produced at:
 
-- `build/dmg/ExifEditMac.dmg`
+- `build/dmg/Lattice.dmg` (or `build/dmg/<AppName>.dmg` when `APP_NAME` is overridden)
 
 ## Script breakdown
 
-- `scripts/release/archive.sh`: archives signed Release build from `ExifEditMac.xcodeproj`.
+- `scripts/release/archive.sh`: archives signed Release build (project/scheme configurable via env vars).
 - `scripts/release/notarize.sh`: submits artifact to Apple notarization and staples ticket.
 - `scripts/release/create_dmg.sh`: creates and signs DMG from archived app.
 - `scripts/release/release.sh`: orchestrates zip notarization + DMG creation/notarization.

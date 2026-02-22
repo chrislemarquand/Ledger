@@ -18,7 +18,7 @@ struct ExifEditMacApp: App {
                 Button {
                     appDelegate.showAboutPanel()
                 } label: {
-                    Label("About Logbook", systemImage: "info.circle")
+                    Label("About \(AppBrand.displayName)", systemImage: "info.circle")
                 }
             }
 
@@ -49,12 +49,18 @@ struct ExifEditMacApp: App {
                 Divider()
 
                 Button {
-                    appDelegate.appModel?.openSelectedInDefaultApp()
+                    guard let model = appDelegate.appModel else { return }
+                    model.performFileAction(.openInDefaultApp, targetURLs: Array(model.selectedFileURLs))
                 } label: {
-                    Label("Open in Default App", systemImage: "arrow.up.forward.app")
+                    let model = appDelegate.appModel
+                    let state = model?.fileActionState(for: .openInDefaultApp, targetURLs: Array(model?.selectedFileURLs ?? []))
+                    Label(state?.title ?? "Open in Default App", systemImage: state?.symbolName ?? "arrow.up.forward.app")
                 }
                 .keyboardShortcut(.return, modifiers: .command)
-                .disabled((appDelegate.appModel?.selectedFileURLs.isEmpty ?? true))
+                .disabled({
+                    guard let model = appDelegate.appModel else { return true }
+                    return !model.fileActionState(for: .openInDefaultApp, targetURLs: Array(model.selectedFileURLs)).isEnabled
+                }())
 
                 Button {
                     appDelegate.appModel?.revealSelectionInFinder()
@@ -158,12 +164,76 @@ struct ExifEditMacApp: App {
                 .keyboardShortcut("r", modifiers: .command)
 
                 Button {
-                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.applyChangesAction(_:)), to: nil, from: nil)
+                    guard let model = appDelegate.appModel else { return }
+                    model.performFileAction(.applyMetadataChanges, targetURLs: Array(model.selectedFileURLs))
                 } label: {
-                    Label("Apply Metadata Changes", systemImage: "square.and.arrow.down")
+                    let model = appDelegate.appModel
+                    let state = model?.fileActionState(for: .applyMetadataChanges, targetURLs: Array(model?.selectedFileURLs ?? []))
+                    Label(state?.title ?? "Apply Metadata Changes", systemImage: state?.symbolName ?? "square.and.arrow.down")
                 }
                 .keyboardShortcut("s", modifiers: .command)
-                .disabled(!(appDelegate.appModel?.canApplyMetadataChanges ?? false))
+                .disabled({
+                    guard let model = appDelegate.appModel else { return true }
+                    return !model.fileActionState(for: .applyMetadataChanges, targetURLs: Array(model.selectedFileURLs)).isEnabled
+                }())
+
+                Button {
+                    guard let model = appDelegate.appModel else { return }
+                    model.performFileAction(.clearMetadataChanges, targetURLs: Array(model.selectedFileURLs))
+                } label: {
+                    let model = appDelegate.appModel
+                    let state = model?.fileActionState(for: .clearMetadataChanges, targetURLs: Array(model?.selectedFileURLs ?? []))
+                    Label(state?.title ?? "Clear Metadata Changes", systemImage: state?.symbolName ?? "xmark.circle")
+                }
+                .keyboardShortcut("k", modifiers: [.command, .shift])
+                .disabled({
+                    guard let model = appDelegate.appModel else { return true }
+                    return !model.fileActionState(for: .clearMetadataChanges, targetURLs: Array(model.selectedFileURLs)).isEnabled
+                }())
+
+                Button {
+                    guard let model = appDelegate.appModel else { return }
+                    model.performFileAction(.restoreFromLastBackup, targetURLs: Array(model.selectedFileURLs))
+                } label: {
+                    let model = appDelegate.appModel
+                    let state = model?.fileActionState(for: .restoreFromLastBackup, targetURLs: Array(model?.selectedFileURLs ?? []))
+                    Label(state?.title ?? "Restore from Last Backup", systemImage: state?.symbolName ?? "arrow.uturn.backward.circle")
+                }
+                .keyboardShortcut("b", modifiers: [.command, .shift])
+                .disabled({
+                    guard let model = appDelegate.appModel else { return true }
+                    return !model.fileActionState(for: .restoreFromLastBackup, targetURLs: Array(model.selectedFileURLs)).isEnabled
+                }())
+
+                Divider()
+
+                Button {
+                    appDelegate.appModel?.pinSelectedSidebarLocationToFavorites()
+                } label: {
+                    Label("Pin Location to Favourites", systemImage: "star")
+                }
+                .disabled(!(appDelegate.appModel?.canPinSelectedSidebarLocation ?? false))
+
+                Button {
+                    appDelegate.appModel?.unpinSelectedSidebarFavorite()
+                } label: {
+                    Label("Unpin Favourite", systemImage: "star.slash")
+                }
+                .disabled(!(appDelegate.appModel?.canUnpinSelectedSidebarLocation ?? false))
+
+                Button {
+                    appDelegate.appModel?.moveSelectedFavoriteUp()
+                } label: {
+                    Label("Move Favourite Up", systemImage: "arrow.up")
+                }
+                .disabled(!(appDelegate.appModel?.canMoveSelectedFavoriteUp ?? false))
+
+                Button {
+                    appDelegate.appModel?.moveSelectedFavoriteDown()
+                } label: {
+                    Label("Move Favourite Down", systemImage: "arrow.down")
+                }
+                .disabled(!(appDelegate.appModel?.canMoveSelectedFavoriteDown ?? false))
 
                 Menu("Presets") {
                     Menu("Apply Preset") {
@@ -239,7 +309,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let bundle = Bundle.main
         let appName = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
             ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
-            ?? "Logbook"
+            ?? AppBrand.displayName
         let shortVersion = (bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.0.0"
         let buildVersion = (bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? "1"
         let combinedVersion = "\(shortVersion) (\(buildVersion))"
@@ -381,7 +451,7 @@ final class MainWindowController: NSWindowController {
         let window = NSWindow(contentViewController: contentController)
         window.setContentSize(NSSize(width: 1320, height: 860))
         window.minSize = NSSize(width: 1200, height: 720)
-        window.title = "Logbook"
+        window.title = AppBrand.displayName
         window.isReleasedWhenClosed = false
         super.init(window: window)
         shouldCascadeWindows = true

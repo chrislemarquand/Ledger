@@ -7,8 +7,15 @@ import QuickLookThumbnailing
 import SwiftUI
 
 private extension Notification.Name {
-    static let inspectorDidRequestBrowserFocus = Notification.Name("Logbook.InspectorDidRequestBrowserFocus")
-    static let inspectorDidRequestFieldNavigation = Notification.Name("Logbook.InspectorDidRequestFieldNavigation")
+    static let inspectorDidRequestBrowserFocus = Notification.Name("\(AppBrand.identifierPrefix).InspectorDidRequestBrowserFocus")
+    static let inspectorDidRequestFieldNavigation = Notification.Name("\(AppBrand.identifierPrefix).InspectorDidRequestFieldNavigation")
+}
+
+private func appAnimation(duration: Double) -> Animation? {
+    if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+        return nil
+    }
+    return .easeInOut(duration: duration)
 }
 
 private func generateOrientedBrowserThumbnail(fileURL: URL, maxPixelSize: CGFloat) -> NSImage? {
@@ -51,9 +58,9 @@ private func generateQuickLookThumbnail(fileURL: URL, maxPixelSize: CGFloat) asy
 final class NativeThreePaneSplitViewController: NSSplitViewController {
     private var model: AppModel
 
-    private let sidebarController: NSHostingController<NavigationSidebarView>
-    private let browserController: NSHostingController<BrowserView>
-    private let inspectorController: NSHostingController<InspectorView>
+    private let sidebarController: NSHostingController<AnyView>
+    private let browserController: NSHostingController<AnyView>
+    private let inspectorController: NSHostingController<AnyView>
     private let contentSplitController: NSSplitViewController
 
     private let sidebarItem: NSSplitViewItem
@@ -76,9 +83,9 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
     init(model: AppModel) {
         self.model = model
 
-        sidebarController = NSHostingController(rootView: NavigationSidebarView(model: model))
-        browserController = NSHostingController(rootView: BrowserView(model: model))
-        inspectorController = NSHostingController(rootView: InspectorView(model: model))
+        sidebarController = NSHostingController(rootView: AnyView(NavigationSidebarView(model: model).tint(AppTheme.accentColor)))
+        browserController = NSHostingController(rootView: AnyView(BrowserView(model: model).tint(AppTheme.accentColor)))
+        inspectorController = NSHostingController(rootView: AnyView(InspectorView(model: model).tint(AppTheme.accentColor)))
         contentSplitController = NSSplitViewController()
 
         // Embedded hosting controllers should not drive container sizing from SwiftUI content updates.
@@ -142,25 +149,24 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
         resetSplitAutosaveStateIfNeeded()
         splitView.isVertical = true
         splitView.dividerStyle = .thin
-        splitView.autosaveName = NSSplitView.AutosaveName("Logbook.MainSplit")
+        splitView.autosaveName = NSSplitView.AutosaveName(Self.mainSplitAutosaveName)
         contentSplitController.splitView.isVertical = true
         contentSplitController.splitView.dividerStyle = .thin
-        contentSplitController.splitView.autosaveName = NSSplitView.AutosaveName("Logbook.ContentSplit")
+        contentSplitController.splitView.autosaveName = NSSplitView.AutosaveName(Self.contentSplitAutosaveName)
         installTopChromeFadeIfNeeded()
         syncSidebarCollapsedState()
         installSplitResizeObserverIfNeeded()
     }
 
     private func resetSplitAutosaveStateIfNeeded() {
-        let key = "ui.split.autosave.reset.v3"
+        let key = "ui.split.autosave.reset.v4"
         let defaults = UserDefaults.standard
         guard !defaults.bool(forKey: key) else { return }
 
-        // Clear any stale persisted split geometry from earlier custom split logic.
-        defaults.removeObject(forKey: "NSSplitView Subview Frames Logbook.MainSplit")
-        defaults.removeObject(forKey: "NSSplitView Subview Frames Logbook.ContentSplit")
-        defaults.removeObject(forKey: "NSSplitView Divider Positions Logbook.MainSplit")
-        defaults.removeObject(forKey: "NSSplitView Divider Positions Logbook.ContentSplit")
+        // Preserve old split layout by migrating prior-brand keys to the current brand namespace.
+        for legacyPrefix in AppBrand.legacyDisplayNames {
+            migrateSplitAutosaveValues(fromPrefix: legacyPrefix, toPrefix: AppBrand.identifierPrefix, defaults: defaults)
+        }
         defaults.set(true, forKey: key)
     }
 
@@ -200,8 +206,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
 
     private func hasPersistedContentSplitLayout() -> Bool {
         let defaults = UserDefaults.standard
-        return defaults.object(forKey: "NSSplitView Subview Frames Logbook.ContentSplit") != nil
-            || defaults.object(forKey: "NSSplitView Divider Positions Logbook.ContentSplit") != nil
+        return defaults.object(forKey: "NSSplitView Subview Frames \(Self.contentSplitAutosaveName)") != nil
+            || defaults.object(forKey: "NSSplitView Divider Positions \(Self.contentSplitAutosaveName)") != nil
     }
 
     private func configureWindowIfNeeded() {
@@ -216,7 +222,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
         window.subtitle = toolbarSubtitleText()
 
         let delegate = NativeToolbarDelegate(controller: self)
-        let toolbar = NSToolbar(identifier: "ExifEditMac.MainToolbar")
+        let toolbar = NSToolbar(identifier: "\(AppBrand.identifierPrefix).MainToolbar")
         toolbar.delegate = delegate
         toolbar.displayMode = .iconOnly
         toolbar.allowsUserCustomization = false
@@ -297,6 +303,23 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
         }
     }
 
+    private static var mainSplitAutosaveName: String { "\(AppBrand.identifierPrefix).MainSplit" }
+    private static var contentSplitAutosaveName: String { "\(AppBrand.identifierPrefix).ContentSplit" }
+
+    private func migrateSplitAutosaveValues(fromPrefix oldPrefix: String, toPrefix newPrefix: String, defaults: UserDefaults) {
+        guard oldPrefix != newPrefix else { return }
+        let keyPairs = [
+            ("NSSplitView Subview Frames \(oldPrefix).MainSplit", "NSSplitView Subview Frames \(newPrefix).MainSplit"),
+            ("NSSplitView Subview Frames \(oldPrefix).ContentSplit", "NSSplitView Subview Frames \(newPrefix).ContentSplit"),
+            ("NSSplitView Divider Positions \(oldPrefix).MainSplit", "NSSplitView Divider Positions \(newPrefix).MainSplit"),
+            ("NSSplitView Divider Positions \(oldPrefix).ContentSplit", "NSSplitView Divider Positions \(newPrefix).ContentSplit"),
+        ]
+        for (oldKey, newKey) in keyPairs {
+            guard defaults.object(forKey: newKey) == nil, let value = defaults.object(forKey: oldKey) else { continue }
+            defaults.set(value, forKey: newKey)
+        }
+    }
+
     private func installBrowserFocusRequestObserverIfNeeded() {
         guard browserFocusRequestObserver == nil else { return }
         browserFocusRequestObserver = NotificationCenter.default.addObserver(
@@ -318,7 +341,9 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
             object: splitView,
             queue: .main
         ) { [weak self] _ in
-            self?.syncSidebarCollapsedState()
+            Task { @MainActor [weak self] in
+                self?.syncSidebarCollapsedState()
+            }
         }
     }
 
@@ -377,9 +402,9 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
     }
 
     private func toolbarTitleText() -> String {
-        guard let item = model.selectedSidebarItem else { return "ExifEditMac" }
+        guard let item = model.selectedSidebarItem else { return AppBrand.displayName }
         switch item.kind {
-        case .recent24Hours, .recent7Days, .recent30Days, .pictures, .desktop, .downloads, .mountedVolume:
+        case .pictures, .desktop, .downloads, .mountedVolume, .favorite:
             return item.title
         case let .folder(url):
             return url.lastPathComponent
@@ -532,11 +557,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
     @objc
     func managePresetsAction(_: Any?) {
         model.isManagePresetsPresented = true
-    }
-
-    @objc
-    func importGPXAction(_: Any?) {
-        model.importGPX()
     }
 
     @objc
@@ -912,36 +932,56 @@ private struct ToolbarLoadingSpinner: View {
 }
 
 private extension NSToolbarItem.Identifier {
-    static let loadingStatus = NSToolbarItem.Identifier("ExifEditMac.Toolbar.LoadingStatus")
-    static let viewMode = NSToolbarItem.Identifier("ExifEditMac.Toolbar.ViewMode")
-    static let sort = NSToolbarItem.Identifier("ExifEditMac.Toolbar.Sort")
-    static let presetTools = NSToolbarItem.Identifier("ExifEditMac.Toolbar.PresetTools")
-    static let zoomOut = NSToolbarItem.Identifier("ExifEditMac.Toolbar.ZoomOut")
-    static let zoomIn = NSToolbarItem.Identifier("ExifEditMac.Toolbar.ZoomIn")
-    static let openFolder = NSToolbarItem.Identifier("ExifEditMac.Toolbar.OpenFolder")
-    static let applyChanges = NSToolbarItem.Identifier("ExifEditMac.Toolbar.ApplyChanges")
-    static let search = NSToolbarItem.Identifier("ExifEditMac.Toolbar.Search")
+    static let loadingStatus = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.LoadingStatus")
+    static let viewMode = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ViewMode")
+    static let sort = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.Sort")
+    static let presetTools = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.PresetTools")
+    static let zoomOut = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ZoomOut")
+    static let zoomIn = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ZoomIn")
+    static let openFolder = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.OpenFolder")
+    static let applyChanges = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ApplyChanges")
+    static let search = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.Search")
 }
 
 struct NavigationSidebarView: View {
     @ObservedObject var model: AppModel
+    @State private var collapsedSections: Set<String> = []
+    @State private var hoveredSection: String?
+    @Environment(\.controlActiveState) private var controlActiveState
+    @FocusState private var isSidebarFocused: Bool
+    private let sectionItemIndent: CGFloat = 11
+    private let sidebarTrailingColumnWidth: CGFloat = 28
+    private let sidebarTrailingColumnInset: CGFloat = 6
 
     var body: some View {
         List(selection: $model.selectedSidebarID) {
             ForEach(model.sidebarSectionOrder, id: \.self) { section in
                 let sectionItems = model.sidebarItems.filter { $0.section == section }
                 if !sectionItems.isEmpty {
-                    Section(section) {
-                        ForEach(sectionItems) { item in
-                            Label(item.title, systemImage: icon(for: item.kind))
-                                .tag(item.id)
+                    Section {
+                        if !collapsedSections.contains(section) {
+                            ForEach(sectionItems) { item in
+                                Group {
+                                    if hasSidebarActions(item) {
+                                        sidebarRow(item)
+                                            .contextMenu {
+                                                sidebarContextMenu(for: item)
+                                            }
+                                    } else {
+                                        sidebarRow(item)
+                                    }
+                                }
+                            }
                         }
+                    } header: {
+                        sidebarSectionHeader(section)
                     }
                 }
             }
         }
         .listStyle(.sidebar)
         .frame(maxHeight: .infinity)
+        .focused($isSidebarFocused)
         .onChange(of: model.selectedSidebarID) { oldValue, newValue in
             model.handleSidebarSelectionChange(from: oldValue, to: newValue)
         }
@@ -949,18 +989,129 @@ struct NavigationSidebarView: View {
 
     private func icon(for kind: AppModel.SidebarKind) -> String {
         switch kind {
-        case .recent24Hours, .recent7Days, .recent30Days:
-            return "clock.arrow.circlepath"
         case .pictures:
-            return "photo.on.rectangle"
+            return "photo"
         case .desktop:
-            return "desktopcomputer"
+            return "menubar.dock.rectangle"
         case .downloads:
             return "arrow.down.circle"
         case .mountedVolume:
             return "externaldrive"
+        case .favorite:
+            return "star.fill"
         case .folder:
             return "folder"
+        }
+    }
+
+    private func hasSidebarActions(_ item: AppModel.SidebarItem) -> Bool {
+        model.canPinSidebarItem(item)
+            || model.canUnpinSidebarItem(item)
+            || model.canMoveFavoriteUp(item)
+            || model.canMoveFavoriteDown(item)
+    }
+
+    private func sidebarRow(_ item: AppModel.SidebarItem) -> some View {
+        let isSelected = model.selectedSidebarID == item.id
+        let isInactiveSelected = isSelected && !isSidebarFocused
+        let countColor: Color = isInactiveSelected
+            ? .accentColor
+            : (isSelected ? .primary : Color(nsColor: .tertiaryLabelColor))
+        return HStack(spacing: 7) {
+            if isInactiveSelected {
+                Image(systemName: icon(for: item.kind))
+                    .font(.system(size: 15))
+                    .frame(width: 16, alignment: .center)
+                    .foregroundStyle(Color.accentColor)
+            } else {
+                Image(systemName: icon(for: item.kind))
+                    .font(.system(size: 15))
+                    .frame(width: 16, alignment: .center)
+            }
+            if isInactiveSelected {
+                Text(item.title)
+                    .foregroundStyle(Color.accentColor)
+            } else {
+                Text(item.title)
+            }
+            Spacer(minLength: 8)
+            Text(model.sidebarImageCountText(for: item) ?? "0")
+                .font(.system(size: 14))
+                .foregroundStyle(countColor)
+                .monospacedDigit()
+                .animation(nil, value: model.selectedSidebarID)
+            .frame(width: sidebarTrailingColumnWidth, alignment: .trailing)
+            .padding(.trailing, sidebarTrailingColumnInset)
+        }
+        .padding(.leading, sectionItemIndent)
+        .tag(item.id)
+    }
+
+    private func sidebarSectionHeader(_ section: String) -> some View {
+        Button {
+            toggleSection(section)
+        } label: {
+            Text(section)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(sidebarHeaderColor)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .trailing) {
+                    Image(systemName: collapsedSections.contains(section) ? "chevron.right" : "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(sidebarHeaderColor)
+                        .opacity(hoveredSection == section ? 1 : 0)
+                        .frame(width: sidebarTrailingColumnWidth, height: 22, alignment: .trailing)
+                        .contentShape(Rectangle())
+                        .padding(.trailing, sidebarTrailingColumnInset)
+                }
+        }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+        .onHover { isHovering in
+            hoveredSection = isHovering ? section : nil
+        }
+    }
+
+    private func toggleSection(_ section: String) {
+        if collapsedSections.contains(section) {
+            collapsedSections.remove(section)
+        } else {
+            collapsedSections.insert(section)
+        }
+    }
+
+    private var sidebarHeaderColor: Color {
+        controlActiveState == .key
+            ? Color(nsColor: .secondaryLabelColor)
+            : Color(nsColor: .disabledControlTextColor)
+    }
+
+    @ViewBuilder
+    private func sidebarContextMenu(for item: AppModel.SidebarItem) -> some View {
+        if model.canPinSidebarItem(item) {
+            Button("Pin to Favourites") {
+                model.pinSidebarItem(item)
+            }
+        }
+
+        if model.canUnpinSidebarItem(item) {
+            Button("Unpin Favourite") {
+                model.unpinSidebarItem(item)
+            }
+
+            if model.canMoveFavoriteUp(item) || model.canMoveFavoriteDown(item) {
+                Divider()
+            }
+
+            Button("Move Favourite Up") {
+                model.moveFavoriteUp(item)
+            }
+            .disabled(!model.canMoveFavoriteUp(item))
+
+            Button("Move Favourite Down") {
+                model.moveFavoriteDown(item)
+            }
+            .disabled(!model.canMoveFavoriteDown(item))
         }
     }
 }
@@ -1356,40 +1507,42 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         }
 
         contextMenuTargetURLs = targetURLs
-        let openAppName = model.defaultAppDisplayName(for: targetURLs.first)
         let menu = NSMenu()
+        let openState = model.fileActionState(for: .openInDefaultApp, targetURLs: targetURLs)
+        let refreshState = model.fileActionState(for: .refreshMetadata, targetURLs: targetURLs)
+        let applyState = model.fileActionState(for: .applyMetadataChanges, targetURLs: targetURLs)
+        let clearState = model.fileActionState(for: .clearMetadataChanges, targetURLs: targetURLs)
+        let restoreState = model.fileActionState(for: .restoreFromLastBackup, targetURLs: targetURLs)
 
-        let openItem = NSMenuItem(title: "Open in \(openAppName)", action: #selector(openFromContextMenu(_:)), keyEquivalent: "")
+        let openItem = NSMenuItem(title: openState.title, action: #selector(openFromContextMenu(_:)), keyEquivalent: "")
         openItem.target = self
-        openItem.image = NSImage(systemSymbolName: "arrow.up.forward.app", accessibilityDescription: nil)
+        openItem.isEnabled = openState.isEnabled
+        openItem.image = NSImage(systemSymbolName: openState.symbolName, accessibilityDescription: nil)
         menu.addItem(openItem)
-
         menu.addItem(.separator())
 
-        let hasPending = targetURLs.contains { model.hasPendingEdits(for: $0) }
-        let hasRestorable = targetURLs.contains { model.hasRestorableBackup(for: $0) }
-
-        let applyItem = NSMenuItem(title: "Apply Metadata Changes", action: #selector(applyFromContextMenu(_:)), keyEquivalent: "")
+        let applyItem = NSMenuItem(title: applyState.title, action: #selector(applyFromContextMenu(_:)), keyEquivalent: "")
         applyItem.target = self
-        applyItem.isEnabled = hasPending
-        applyItem.image = NSImage(systemSymbolName: "square.and.arrow.down", accessibilityDescription: nil)
+        applyItem.isEnabled = applyState.isEnabled
+        applyItem.image = NSImage(systemSymbolName: applyState.symbolName, accessibilityDescription: nil)
         menu.addItem(applyItem)
 
-        let refreshItem = NSMenuItem(title: "Refresh Metadata", action: #selector(refreshFromContextMenu(_:)), keyEquivalent: "")
+        let refreshItem = NSMenuItem(title: refreshState.title, action: #selector(refreshFromContextMenu(_:)), keyEquivalent: "")
         refreshItem.target = self
-        refreshItem.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
+        refreshItem.isEnabled = refreshState.isEnabled
+        refreshItem.image = NSImage(systemSymbolName: refreshState.symbolName, accessibilityDescription: nil)
         menu.addItem(refreshItem)
 
-        let clearItem = NSMenuItem(title: "Clear Metadata Changes", action: #selector(clearFromContextMenu(_:)), keyEquivalent: "")
+        let clearItem = NSMenuItem(title: clearState.title, action: #selector(clearFromContextMenu(_:)), keyEquivalent: "")
         clearItem.target = self
-        clearItem.isEnabled = hasPending
-        clearItem.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
+        clearItem.isEnabled = clearState.isEnabled
+        clearItem.image = NSImage(systemSymbolName: clearState.symbolName, accessibilityDescription: nil)
         menu.addItem(clearItem)
 
-        let restoreItem = NSMenuItem(title: "Restore from Last Backup", action: #selector(restoreFromContextMenu(_:)), keyEquivalent: "")
+        let restoreItem = NSMenuItem(title: restoreState.title, action: #selector(restoreFromContextMenu(_:)), keyEquivalent: "")
         restoreItem.target = self
-        restoreItem.isEnabled = hasRestorable
-        restoreItem.image = NSImage(systemSymbolName: "arrow.uturn.backward.circle", accessibilityDescription: nil)
+        restoreItem.isEnabled = restoreState.isEnabled
+        restoreItem.image = NSImage(systemSymbolName: restoreState.symbolName, accessibilityDescription: nil)
         menu.addItem(restoreItem)
         return menu
     }
@@ -1397,31 +1550,31 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
     @objc
     private func openFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty else { return }
-        model.openInDefaultApp(contextMenuTargetURLs)
+        model.performFileAction(.openInDefaultApp, targetURLs: contextMenuTargetURLs)
     }
 
     @objc
     private func applyFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty else { return }
-        model.applyChanges(for: contextMenuTargetURLs)
+        model.performFileAction(.applyMetadataChanges, targetURLs: contextMenuTargetURLs)
     }
 
     @objc
     private func refreshFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty else { return }
-        model.refreshMetadata(for: contextMenuTargetURLs)
+        model.performFileAction(.refreshMetadata, targetURLs: contextMenuTargetURLs)
     }
 
     @objc
     private func clearFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty else { return }
-        model.clearPendingEdits(for: contextMenuTargetURLs)
+        model.performFileAction(.clearMetadataChanges, targetURLs: contextMenuTargetURLs)
     }
 
     @objc
     private func restoreFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty else { return }
-        model.restoreLastOperation(for: contextMenuTargetURLs)
+        model.performFileAction(.restoreFromLastBackup, targetURLs: contextMenuTargetURLs)
     }
 
     private func handleModifiedRowClick(row: Int, modifiers: NSEvent.ModifierFlags) {
@@ -1631,6 +1784,8 @@ private struct BrowserGalleryCollectionRepresentable: NSViewControllerRepresenta
 
 @MainActor
 private final class BrowserGalleryViewController: NSViewController, NSCollectionViewDataSource, NSCollectionViewDelegate {
+    private static let maxThumbnailCacheEntries = 1_500
+
     private var model: AppModel
     private var items: [AppModel.BrowserItem]
 
@@ -1646,6 +1801,7 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
     private var lastRenderedPrimarySelectionURL: URL?
     private var thumbnailCache: [URL: NSImage] = [:]
     private var thumbnailRenderedSide: [URL: CGFloat] = [:]
+    private var thumbnailRecency: [URL] = []
     private var thumbnailInflight: Set<URL> = []
     private var thumbnailRequestVersion: [URL: Int] = [:]
     private var thumbnailVersionCounter = 0
@@ -1743,6 +1899,7 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
             if invalidated.isEmpty {
                 thumbnailCache.removeAll()
                 thumbnailRenderedSide.removeAll()
+                thumbnailRecency.removeAll()
                 thumbnailInflight.removeAll()
                 thumbnailRequestVersion.removeAll()
                 pendingThumbnailRefreshURLs.removeAll()
@@ -1771,12 +1928,6 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
         let selectionChanged = selectedURLs != lastRenderedSelected
         let pendingChanged = pendingURLs != lastRenderedPending
         let primaryChanged = model.primarySelectionURL != lastRenderedPrimarySelectionURL
-
-        if listChanged {
-            let urlSet = Set(currentURLs)
-            thumbnailCache = thumbnailCache.filter { urlSet.contains($0.key) }
-            thumbnailRenderedSide = thumbnailRenderedSide.filter { urlSet.contains($0.key) }
-        }
 
         if columnsChanged {
             layout.columnCount = max(model.galleryColumnCount, 1)
@@ -1899,6 +2050,8 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
             guard let image else { return }
             self.thumbnailCache[item.url] = image
             self.thumbnailRenderedSide[item.url] = requiredSide
+            self.markThumbnailAsRecentlyUsed(item.url)
+            self.trimThumbnailCacheIfNeeded()
             self.pendingThumbnailRefreshURLs.remove(item.url)
 
             guard let row = self.items.firstIndex(where: { $0.url == item.url }) else { return }
@@ -1913,6 +2066,25 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
             )
             self.updateQuickLookArtifacts()
         }
+    }
+
+    private func markThumbnailAsRecentlyUsed(_ url: URL) {
+        thumbnailRecency.removeAll(where: { $0 == url })
+        thumbnailRecency.append(url)
+    }
+
+    private func trimThumbnailCacheIfNeeded() {
+        guard thumbnailCache.count > Self.maxThumbnailCacheEntries else { return }
+        let overflow = thumbnailCache.count - Self.maxThumbnailCacheEntries
+        guard overflow > 0 else { return }
+
+        let urlsToRemove = Array(thumbnailRecency.prefix(overflow))
+        for url in urlsToRemove {
+            thumbnailCache.removeValue(forKey: url)
+            thumbnailRenderedSide.removeValue(forKey: url)
+            pendingThumbnailRefreshURLs.remove(url)
+        }
+        thumbnailRecency.removeFirst(min(overflow, thumbnailRecency.count))
     }
 
     private func menuForItem(at indexPath: IndexPath) -> NSMenu? {
@@ -1931,11 +2103,13 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
             }
         }
 
-        let openAppName = model.defaultAppDisplayName(for: contextMenuTargetURLs.first)
-        let hasPending = contextMenuTargetURLs.contains { model.hasPendingEdits(for: $0) }
-        let hasRestorable = contextMenuTargetURLs.contains { model.hasRestorableBackup(for: $0) }
+        let openState = model.fileActionState(for: .openInDefaultApp, targetURLs: contextMenuTargetURLs)
+        let refreshState = model.fileActionState(for: .refreshMetadata, targetURLs: contextMenuTargetURLs)
+        let applyState = model.fileActionState(for: .applyMetadataChanges, targetURLs: contextMenuTargetURLs)
+        let clearState = model.fileActionState(for: .clearMetadataChanges, targetURLs: contextMenuTargetURLs)
+        let restoreState = model.fileActionState(for: .restoreFromLastBackup, targetURLs: contextMenuTargetURLs)
 
-        func makeItem(_ title: String, action: Selector, symbolName: String, enabled: Bool = true) -> NSMenuItem {
+        func makeItem(_ title: String, action: Selector, symbolName: String, enabled: Bool) -> NSMenuItem {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
             item.target = self
             item.isEnabled = enabled
@@ -1944,43 +2118,43 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
         }
 
         let menu = NSMenu()
-        menu.addItem(makeItem("Open in \(openAppName)", action: #selector(openFromContextMenu(_:)), symbolName: "arrow.up.forward.app"))
+        menu.addItem(makeItem(openState.title, action: #selector(openFromContextMenu(_:)), symbolName: openState.symbolName, enabled: openState.isEnabled))
         menu.addItem(.separator())
-        menu.addItem(makeItem("Apply Metadata Changes", action: #selector(applyFromContextMenu(_:)), symbolName: "square.and.arrow.down", enabled: hasPending))
-        menu.addItem(makeItem("Refresh Metadata", action: #selector(refreshFromContextMenu(_:)), symbolName: "arrow.clockwise"))
-        menu.addItem(makeItem("Clear Metadata Changes", action: #selector(clearFromContextMenu(_:)), symbolName: "xmark.circle", enabled: hasPending))
-        menu.addItem(makeItem("Restore from Last Backup", action: #selector(restoreFromContextMenu(_:)), symbolName: "arrow.uturn.backward.circle", enabled: hasRestorable))
+        menu.addItem(makeItem(applyState.title, action: #selector(applyFromContextMenu(_:)), symbolName: applyState.symbolName, enabled: applyState.isEnabled))
+        menu.addItem(makeItem(refreshState.title, action: #selector(refreshFromContextMenu(_:)), symbolName: refreshState.symbolName, enabled: refreshState.isEnabled))
+        menu.addItem(makeItem(clearState.title, action: #selector(clearFromContextMenu(_:)), symbolName: clearState.symbolName, enabled: clearState.isEnabled))
+        menu.addItem(makeItem(restoreState.title, action: #selector(restoreFromContextMenu(_:)), symbolName: restoreState.symbolName, enabled: restoreState.isEnabled))
         return menu
     }
 
     @objc
     private func openFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty else { return }
-        model.openInDefaultApp(contextMenuTargetURLs)
+        model.performFileAction(.openInDefaultApp, targetURLs: contextMenuTargetURLs)
     }
 
     @objc
     private func applyFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty else { return }
-        model.applyChanges(for: contextMenuTargetURLs)
+        model.performFileAction(.applyMetadataChanges, targetURLs: contextMenuTargetURLs)
     }
 
     @objc
     private func refreshFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty else { return }
-        model.refreshMetadata(for: contextMenuTargetURLs)
+        model.performFileAction(.refreshMetadata, targetURLs: contextMenuTargetURLs)
     }
 
     @objc
     private func clearFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty else { return }
-        model.clearPendingEdits(for: contextMenuTargetURLs)
+        model.performFileAction(.clearMetadataChanges, targetURLs: contextMenuTargetURLs)
     }
 
     @objc
     private func restoreFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty else { return }
-        model.restoreLastOperation(for: contextMenuTargetURLs)
+        model.performFileAction(.restoreFromLastBackup, targetURLs: contextMenuTargetURLs)
     }
 
     @objc
@@ -2031,6 +2205,9 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
             fallback.size = NSSize(width: 128, height: 128)
             return fallback
         }()
+        if image != nil {
+            markThumbnailAsRecentlyUsed(item.url)
+        }
 
         cell.configure(
             name: item.name,
@@ -2212,7 +2389,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         selectionOverlay.wantsLayer = true
         selectionOverlay.layer?.cornerRadius = 8
         selectionOverlay.layer?.masksToBounds = true
-        selectionOverlay.layer?.borderWidth = 2
+        selectionOverlay.layer?.borderWidth = 2.5
         selectionOverlay.layer?.borderColor = NSColor.clear.cgColor
         thumbnailContainer.addSubview(selectionOverlay)
 
@@ -2293,7 +2470,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
     }
 
     func applySelection(isSelected: Bool) {
-        selectionOverlay.layer?.borderColor = isSelected ? NSColor.controlAccentColor.cgColor : NSColor.clear.cgColor
+        selectionOverlay.layer?.borderColor = isSelected ? AppTheme.accentStrongNSColor.cgColor : NSColor.clear.cgColor
     }
 
     func applyPending(hasPendingEdits: Bool) {
@@ -2331,6 +2508,7 @@ struct InspectorView: View {
     @FocusState private var focusedTagID: String?
     @State private var editSessionSnapshots: [String: AppModel.EditSessionSnapshot] = [:]
     @State private var activeEditTagID: String?
+    @State private var suppressNextFocusScrollAnimation = false
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -2379,7 +2557,7 @@ struct InspectorView: View {
                     if model.selectedFileURLs.count == 1 {
                         VStack(alignment: .leading, spacing: 8) {
                             Button {
-                                withAnimation(.easeInOut(duration: 0.15)) {
+                                withAnimation(appAnimation(duration: 0.15)) {
                                     model.toggleInspectorSection("Preview")
                                 }
                             } label: {
@@ -2390,7 +2568,7 @@ struct InspectorView: View {
                                         .frame(width: 10, alignment: .center)
                                     Text("PREVIEW")
                                         .font(.caption.weight(.semibold))
-                                        .foregroundStyle(Color(nsColor: .systemYellow))
+                                        .foregroundStyle(AppTheme.accentColor)
                                         .tracking(0.4)
                                     Spacer(minLength: 0)
                                 }
@@ -2469,7 +2647,7 @@ struct InspectorView: View {
                     ForEach(model.groupedEditableTags, id: \.section) { grouped in
                         VStack(alignment: .leading, spacing: 8) {
                             Button {
-                                withAnimation(.easeInOut(duration: 0.15)) {
+                                withAnimation(appAnimation(duration: 0.15)) {
                                     model.toggleInspectorSection(grouped.section)
                                 }
                             } label: {
@@ -2480,7 +2658,7 @@ struct InspectorView: View {
                                         .frame(width: 10, alignment: .center)
                                     Text(grouped.section.uppercased())
                                         .font(.caption.weight(.semibold))
-                                        .foregroundStyle(Color(nsColor: .systemYellow))
+                                        .foregroundStyle(AppTheme.accentColor)
                                         .tracking(0.4)
                                     Spacer(minLength: 0)
                                 }
@@ -2633,8 +2811,17 @@ struct InspectorView: View {
             .onChange(of: focusedTagID) { _, newValue in
                 guard let newValue else { return }
                 DispatchQueue.main.async {
-                    withAnimation(.easeInOut(duration: 0.12)) {
-                        proxy.scrollTo(newValue)
+                    if suppressNextFocusScrollAnimation {
+                        var transaction = Transaction()
+                        transaction.animation = nil
+                        withTransaction(transaction) {
+                            proxy.scrollTo(newValue)
+                        }
+                        suppressNextFocusScrollAnimation = false
+                    } else {
+                        withAnimation(appAnimation(duration: 0.12)) {
+                            proxy.scrollTo(newValue)
+                        }
                     }
                 }
             }
@@ -2652,6 +2839,7 @@ struct InspectorView: View {
             editSessionSnapshots.removeAll()
             focusedTagID = nil
             activeEditTagID = nil
+            suppressNextFocusScrollAnimation = true
         }
         .onExitCommand {
             let targetTagID = focusedTagID ?? activeEditTagID
@@ -2684,9 +2872,7 @@ struct InspectorView: View {
                 initialEditor: editor
             )
         }
-        .sheet(isPresented: $model.isImportConflictSheetPresented) {
-            ImportConflictResolutionSheet(model: model)
-        }
+        .tint(AppTheme.accentColor)
         .sheet(isPresented: $model.isManagePresetsPresented) {
             PresetManagerSheet(model: model)
         }
@@ -3290,87 +3476,6 @@ private struct PresetManagerSheet: View {
         } message: {
             Text("This cannot be undone.")
         }
-    }
-}
-
-private struct ImportConflictResolutionSheet: View {
-    @ObservedObject var model: AppModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Resolve Import Conflicts")
-                .font(.title3.weight(.semibold))
-
-            Text("Choose whether to keep existing staged values or use imported values.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    ForEach(model.groupedImportConflicts, id: \.fileURL) { group in
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(group.fileURL.lastPathComponent)
-                                .font(.headline)
-                            ForEach(group.conflicts, id: \.id) { conflict in
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(conflict.tag.label)
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.secondary)
-                                    HStack {
-                                        Text("Current: \(conflict.existing.value)")
-                                            .lineLimit(1)
-                                            .truncationMode(.middle)
-                                        Spacer(minLength: 0)
-                                    }
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    HStack {
-                                        Text("Imported: \(conflict.incomingValue)")
-                                            .lineLimit(1)
-                                            .truncationMode(.middle)
-                                        Spacer(minLength: 0)
-                                    }
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-
-                                    Picker(
-                                        "Choice",
-                                        selection: Binding(
-                                            get: { model.importConflictChoice(for: conflict.id) },
-                                            set: { model.setImportConflictChoice($0, for: conflict.id) }
-                                        )
-                                    ) {
-                                        Text("Keep Existing").tag(false)
-                                        Text("Use Imported").tag(true)
-                                    }
-                                    .pickerStyle(.segmented)
-                                }
-                                .padding(10)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(.quaternary.opacity(0.3))
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            HStack {
-                Spacer()
-                Button("Cancel") {
-                    model.cancelImportConflictResolution()
-                }
-                .keyboardShortcut(.cancelAction)
-
-                Button("Apply Decisions") {
-                    model.applyImportConflictResolution()
-                }
-                .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(16)
-        .frame(minWidth: 680, minHeight: 420)
     }
 }
 
