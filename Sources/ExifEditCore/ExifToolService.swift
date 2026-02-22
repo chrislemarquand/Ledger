@@ -90,11 +90,13 @@ public struct ExifToolService: ExifToolServiceProtocol {
 
     private static func findDefaultExifToolPath() -> URL? {
         let fileManager = FileManager.default
+        let bundled = Bundle.main.resourceURL?.appendingPathComponent("exiftool/bin/exiftool")
         let candidates = [
+            bundled?.path,
             "/opt/homebrew/bin/exiftool",
             "/usr/local/bin/exiftool",
             "/usr/bin/exiftool"
-        ]
+        ].compactMap { $0 }
 
         for path in candidates where fileManager.isExecutableFile(atPath: path) {
             return URL(fileURLWithPath: path)
@@ -223,6 +225,20 @@ public struct ExifToolService: ExifToolServiceProtocol {
         let process = Process()
         process.executableURL = executableURL
         process.arguments = arguments
+        process.currentDirectoryURL = executableURL.deletingLastPathComponent()
+
+        // Bundled exiftool is a Perl script that expects Image::ExifTool modules
+        // under a sibling "lib" folder.
+        let bundledLibPath = executableURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("lib")
+            .path
+        if FileManager.default.fileExists(atPath: bundledLibPath) {
+            var environment = ProcessInfo.processInfo.environment
+            let existing = environment["PERL5LIB"] ?? ""
+            environment["PERL5LIB"] = existing.isEmpty ? bundledLibPath : "\(bundledLibPath):\(existing)"
+            process.environment = environment
+        }
 
         let stdout = Pipe()
         let stderr = Pipe()
