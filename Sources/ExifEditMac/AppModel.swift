@@ -6,6 +6,175 @@ import QuickLookThumbnailing
 import Quartz
 import SwiftUI
 
+final class SharedBrowserThumbnailCache: @unchecked Sendable {
+    static let shared = SharedBrowserThumbnailCache(maxEntries: 3_000)
+
+    private let maxEntries: Int
+    private let lock = NSLock()
+    private var images: [URL: NSImage] = [:]
+    private var renderedSideByURL: [URL: CGFloat] = [:]
+    private var recency: [URL] = []
+
+    init(maxEntries: Int) {
+        self.maxEntries = max(100, maxEntries)
+    }
+
+    func image(for url: URL, minRenderedSide: CGFloat) -> NSImage? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let image = images[url] else { return nil }
+        if let rendered = renderedSideByURL[url], rendered + 0.5 < minRenderedSide {
+            return nil
+        }
+        touch(url)
+        return image
+    }
+
+    func store(_ image: NSImage, for url: URL, renderedSide: CGFloat) {
+        lock.lock()
+        defer { lock.unlock() }
+        images[url] = image
+        renderedSideByURL[url] = max(renderedSide, renderedSideByURL[url] ?? 0)
+        touch(url)
+        trimIfNeeded()
+    }
+
+    func invalidateAll() {
+        lock.lock()
+        defer { lock.unlock() }
+        images.removeAll()
+        renderedSideByURL.removeAll()
+        recency.removeAll()
+    }
+
+    func invalidate(urls: Set<URL>) {
+        guard !urls.isEmpty else { return }
+        lock.lock()
+        defer { lock.unlock() }
+        for url in urls {
+            images.removeValue(forKey: url)
+            renderedSideByURL.removeValue(forKey: url)
+        }
+        recency.removeAll(where: { urls.contains($0) })
+    }
+
+    private func touch(_ url: URL) {
+        recency.removeAll(where: { $0 == url })
+        recency.append(url)
+    }
+
+    private func trimIfNeeded() {
+        let overflow = images.count - maxEntries
+        guard overflow > 0 else { return }
+        let toRemove = recency.prefix(overflow)
+        for url in toRemove {
+            images.removeValue(forKey: url)
+            renderedSideByURL.removeValue(forKey: url)
+        }
+        recency.removeFirst(min(overflow, recency.count))
+    }
+}
+
+enum ThumbnailPipeline {
+    static func cachedImage(for fileURL: URL, minRenderedSide: CGFloat) -> NSImage? {
+        SharedBrowserThumbnailCache.shared.image(for: fileURL, minRenderedSide: minRenderedSide)
+    }
+
+    static func storeCachedImage(_ image: NSImage, for fileURL: URL, renderedSide: CGFloat) {
+        SharedBrowserThumbnailCache.shared.store(image, for: fileURL, renderedSide: renderedSide)
+    }
+
+    static func invalidateAllCachedImages() {
+        SharedBrowserThumbnailCache.shared.invalidateAll()
+    }
+
+    static func invalidateCachedImages(for fileURLs: Set<URL>) {
+        SharedBrowserThumbnailCache.shared.invalidate(urls: fileURLs)
+    }
+
+    static func fallbackIcon(for fileURL: URL, side: CGFloat) -> NSImage {
+        let icon = NSWorkspace.shared.icon(forFile: fileURL.path)
+        icon.size = NSSize(width: side, height: side)
+        return icon
+    }
+
+    static func generateThumbnail(fileURL: URL, maxPixelSize: CGFloat) async -> NSImage? {
+        if let cached = cachedImage(for: fileURL, minRenderedSide: maxPixelSize) {
+            return cached
+        }
+
+        if isLikelyImageFile(fileURL) {
+            if let oriented = generateOrientedThumbnail(fileURL: fileURL, maxPixelSize: maxPixelSize) {
+                storeCachedImage(oriented, for: fileURL, renderedSide: maxPixelSize)
+                return oriented
+            }
+            if let quickLook = await generateQuickLookThumbnail(fileURL: fileURL, maxPixelSize: maxPixelSize) {
+                storeCachedImage(quickLook, for: fileURL, renderedSide: maxPixelSize)
+                return quickLook
+            }
+        } else {
+            if let quickLook = await generateQuickLookThumbnail(fileURL: fileURL, maxPixelSize: maxPixelSize) {
+                storeCachedImage(quickLook, for: fileURL, renderedSide: maxPixelSize)
+                return quickLook
+            }
+            if let oriented = generateOrientedThumbnail(fileURL: fileURL, maxPixelSize: maxPixelSize) {
+                storeCachedImage(oriented, for: fileURL, renderedSide: maxPixelSize)
+                return oriented
+            }
+        }
+        if let decoded = NSImage(contentsOf: fileURL) {
+            storeCachedImage(decoded, for: fileURL, renderedSide: maxPixelSize)
+            return decoded
+        }
+        let fallback = fallbackIcon(for: fileURL, side: max(16, min(maxPixelSize, 256)))
+        storeCachedImage(fallback, for: fileURL, renderedSide: maxPixelSize)
+        return fallback
+    }
+
+    static func isLikelyImageFile(_ fileURL: URL) -> Bool {
+        let imageExtensions: Set<String> = [
+            "jpg", "jpeg", "heic", "heif", "png", "tif", "tiff", "gif", "bmp", "webp", "dng", "cr2", "cr3", "arw", "nef", "raf", "orf"
+        ]
+        return imageExtensions.contains(fileURL.pathExtension.lowercased())
+    }
+
+    private static func generateOrientedThumbnail(fileURL: URL, maxPixelSize: CGFloat) -> NSImage? {
+        guard let source = CGImageSourceCreateWithURL(fileURL as CFURL, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(32, Int(maxPixelSize)),
+            kCGImageSourceShouldCacheImmediately: true
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        return NSImage(cgImage: cgImage, size: .zero)
+    }
+
+    private static func generateQuickLookThumbnail(fileURL: URL, maxPixelSize: CGFloat) async -> NSImage? {
+        let request = QLThumbnailGenerator.Request(
+            fileAt: fileURL,
+            size: CGSize(width: maxPixelSize, height: maxPixelSize),
+            scale: NSScreen.main?.backingScaleFactor ?? 2,
+            representationTypes: .thumbnail
+        )
+
+        return await withCheckedContinuation { continuation in
+            QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { thumbnail, _ in
+                let image: NSImage? = {
+                    guard let thumbnail else { return nil }
+                    if thumbnail.type == .icon {
+                        return nil
+                    }
+                    return thumbnail.nsImage
+                }()
+                continuation.resume(returning: image)
+            }
+        }
+    }
+}
+
 enum AppBrand {
     static let fallbackDisplayName = "Lattice"
     static let legacyDisplayNames = ["Logbook", "ExifEditMac"]
@@ -1918,7 +2087,10 @@ final class AppModel: ObservableObject {
     }
 
     func sidebarImageCountText(for item: SidebarItem) -> String? {
-        "\(sidebarImageCounts[item.id] ?? 0)"
+        if let count = sidebarImageCounts[item.id] {
+            return "\(count)"
+        }
+        return isPrivacySensitiveSidebarKind(item.kind) ? nil : "0"
     }
 
     func ensureSidebarImageCount(for item: SidebarItem) {
@@ -2297,8 +2469,11 @@ final class AppModel: ObservableObject {
         warmSidebarImageCounts()
     }
 
-    private func warmSidebarImageCounts(includePrivacySensitive _: Bool = true) {
+    private func warmSidebarImageCounts(includePrivacySensitive: Bool = false) {
         for item in sidebarItems {
+            if !includePrivacySensitive, isPrivacySensitiveSidebarKind(item.kind) {
+                continue
+            }
             ensureSidebarImageCount(for: item)
         }
     }
@@ -3434,7 +3609,14 @@ final class AppModel: ObservableObject {
         let preloadID = UUID()
         previewPreloadID = preloadID
 
-        let filesToPreload = files.filter { inspectorPreviewImages[$0] == nil }
+        var filesToPreload: [URL] = []
+        for fileURL in files where inspectorPreviewImages[fileURL] == nil {
+            if let cached = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: 700) {
+                storeInspectorPreview(cached, for: fileURL)
+            } else {
+                filesToPreload.append(fileURL)
+            }
+        }
 
         guard !filesToPreload.isEmpty else {
             isPreviewPreloading = false
@@ -3471,54 +3653,9 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private static func generateInspectorPreview(for fileURL: URL) async -> NSImage? {
-        if let source = CGImageSourceCreateWithURL(fileURL as CFURL, nil) {
-            let options: [CFString: Any] = [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceThumbnailMaxPixelSize: 1400,
-                kCGImageSourceShouldCacheImmediately: true
-            ]
-            if let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) {
-                return NSImage(cgImage: cgImage, size: .zero)
-            }
-        }
-
-        let request = QLThumbnailGenerator.Request(
-            fileAt: fileURL,
-            size: CGSize(width: 1400, height: 1400),
-            scale: NSScreen.main?.backingScaleFactor ?? 2,
-            representationTypes: .thumbnail
-        )
-
-        let quickLookImage: NSImage? = await withCheckedContinuation { continuation in
-            QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { thumbnail, _ in
-                let image: NSImage? = {
-                    guard let thumbnail else { return nil }
-                    if thumbnail.type == .icon {
-                        return nil
-                    }
-                    return thumbnail.nsImage
-                }()
-                continuation.resume(returning: image)
-            }
-        }
-
-        if let quickLookImage {
-            return quickLookImage
-        }
-        if let decoded = NSImage(contentsOf: fileURL) {
-            return decoded
-        }
-        if Self.isLikelyImageFile(fileURL) {
-            return nil
-        }
-        return NSWorkspace.shared.icon(forFile: fileURL.path)
-    }
-
     private static func generateInspectorPreviewOffMain(for fileURL: URL) async -> NSImage? {
         await Task.detached(priority: .utility) {
-            await Self.generateInspectorPreview(for: fileURL)
+            await ThumbnailPipeline.generateThumbnail(fileURL: fileURL, maxPixelSize: 1400)
         }.value
     }
 
@@ -3637,6 +3774,11 @@ final class AppModel: ObservableObject {
             markInspectorPreviewAsRecentlyUsed(fileURL)
             return
         }
+        if !force,
+           let cached = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: 700) {
+            storeInspectorPreview(cached, for: fileURL)
+            return
+        }
         guard !inspectorPreviewInflight.contains(fileURL) else { return }
         inspectorPreviewInflight.insert(fileURL)
 
@@ -3652,6 +3794,7 @@ final class AppModel: ObservableObject {
 
     private func storeInspectorPreview(_ image: NSImage, for fileURL: URL) {
         inspectorPreviewImages[fileURL] = image
+        ThumbnailPipeline.storeCachedImage(image, for: fileURL, renderedSide: 1400)
         markInspectorPreviewAsRecentlyUsed(fileURL)
         trimInspectorPreviewCacheIfNeeded()
     }
@@ -3732,19 +3875,16 @@ final class AppModel: ObservableObject {
             await Task.yield()
 
             if inspectorPreviewImages[fileURL] != nil { continue }
+            if let cached = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: 700) {
+                storeInspectorPreview(cached, for: fileURL)
+                continue
+            }
             inspectorPreviewInflight.insert(fileURL)
             if let image = await Self.generateInspectorPreviewOffMain(for: fileURL) {
                 storeInspectorPreview(image, for: fileURL)
             }
             inspectorPreviewInflight.remove(fileURL)
         }
-    }
-
-    private static func isLikelyImageFile(_ fileURL: URL) -> Bool {
-        let imageExtensions: Set<String> = [
-            "jpg", "jpeg", "heic", "heif", "png", "tif", "tiff", "gif", "bmp", "webp", "dng", "cr2", "cr3", "arw", "nef", "raf", "orf"
-        ]
-        return imageExtensions.contains(fileURL.pathExtension.lowercased())
     }
 
     private func currentPendingEditState() -> PendingEditState {

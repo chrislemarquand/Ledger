@@ -10,7 +10,6 @@
 		A100001B0000000000000001 /* Sources/ExifEditMac/AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000B0000000000000001 /* Sources/ExifEditMac/AppModel.swift */; };
 		A100001C0000000000000001 /* Sources/ExifEditMac/ExifEditMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000C0000000000000001 /* Sources/ExifEditMac/ExifEditMacApp.swift */; };
 		A100001D0000000000000001 /* Sources/ExifEditMac/MainContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000D0000000000000001 /* Sources/ExifEditMac/MainContentView.swift */; };
-		A10001420000000000000001 /* Sources/ExifEditMac/Presets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001410000000000000001 /* Sources/ExifEditMac/Presets.swift */; };
 		A100001E0000000000000001 /* Sources/ExifEditCore/BackupManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000110000000000000001 /* Sources/ExifEditCore/BackupManager.swift */; };
 		A100001F0000000000000001 /* Sources/ExifEditCore/Domain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000120000000000000001 /* Sources/ExifEditCore/Domain.swift */; };
 		A10000200000000000000001 /* Sources/ExifEditCore/ExifEditEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000130000000000000001 /* Sources/ExifEditCore/ExifEditEngine.swift */; };
@@ -23,6 +22,7 @@
 		A10000270000000000000001 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A100003A0000000000000001 /* XCTest.framework */; };
 		A10000280000000000000001 /* libExifEditCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000370000000000000001 /* libExifEditCore.a */; };
 		A10000290000000000000001 /* libExifEditCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000370000000000000001 /* libExifEditCore.a */; };
+		A10001420000000000000001 /* Sources/ExifEditMac/Presets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001410000000000000001 /* Sources/ExifEditMac/Presets.swift */; };
 		B100001D0000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000D0000000000000001 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -57,7 +57,6 @@
 		A100000B0000000000000001 /* Sources/ExifEditMac/AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditMac/AppModel.swift; sourceTree = SOURCE_ROOT; };
 		A100000C0000000000000001 /* Sources/ExifEditMac/ExifEditMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditMac/ExifEditMacApp.swift; sourceTree = SOURCE_ROOT; };
 		A100000D0000000000000001 /* Sources/ExifEditMac/MainContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditMac/MainContentView.swift; sourceTree = SOURCE_ROOT; };
-		A10001410000000000000001 /* Sources/ExifEditMac/Presets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditMac/Presets.swift; sourceTree = SOURCE_ROOT; };
 		A10000110000000000000001 /* Sources/ExifEditCore/BackupManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/BackupManager.swift; sourceTree = SOURCE_ROOT; };
 		A10000120000000000000001 /* Sources/ExifEditCore/Domain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/Domain.swift; sourceTree = SOURCE_ROOT; };
 		A10000130000000000000001 /* Sources/ExifEditCore/ExifEditEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/ExifEditEngine.swift; sourceTree = SOURCE_ROOT; };
@@ -69,6 +68,7 @@
 		A100001A0000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/MetadataValidatorTests.swift; sourceTree = SOURCE_ROOT; };
 		A10000370000000000000001 /* libExifEditCore.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libExifEditCore.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		A100003A0000000000000001 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
+		A10001410000000000000001 /* Sources/ExifEditMac/Presets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditMac/Presets.swift; sourceTree = SOURCE_ROOT; };
 		B100000D0000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
@@ -406,44 +406,46 @@
 		A10001220000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A10000050000000000000001 /* Config/Debug.xcconfig */;
-				buildSettings = {
-					ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = BrandAccent;
-					CODE_SIGN_ENTITLEMENTS = Config/ExifEditMac.entitlements;
-					INFOPLIST_FILE = "Config/ExifEditMac-Info.plist";
-					INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
-					LD_RUNPATH_SEARCH_PATHS = (
-						"$(inherited)",
-						"@executable_path/../Frameworks",
-					);
-					MARKETING_VERSION = 0.2;
-					CURRENT_PROJECT_VERSION = 1;
-					MACOSX_DEPLOYMENT_TARGET = 26.0;
-					PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
-					PRODUCT_NAME = "$(APP_DISPLAY_NAME)";
-					SWIFT_EMIT_LOC_STRINGS = YES;
-					SWIFT_VERSION = 6.0;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = BrandAccent;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/ExifEditMac.entitlements;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = "Config/ExifEditMac-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
+				PRODUCT_NAME = "$(APP_DISPLAY_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
 		};
 		A10001230000000000000001 /* Release */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A10000060000000000000001 /* Config/Release.xcconfig */;
-				buildSettings = {
-					ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = BrandAccent;
-					CODE_SIGN_ENTITLEMENTS = Config/ExifEditMac.entitlements;
-					INFOPLIST_FILE = "Config/ExifEditMac-Info.plist";
-					INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
-					LD_RUNPATH_SEARCH_PATHS = (
-						"$(inherited)",
-						"@executable_path/../Frameworks",
-					);
-					MARKETING_VERSION = 0.2;
-					CURRENT_PROJECT_VERSION = 1;
-					MACOSX_DEPLOYMENT_TARGET = 26.0;
-					PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
-					PRODUCT_NAME = "$(APP_DISPLAY_NAME)";
-					SWIFT_EMIT_LOC_STRINGS = YES;
-					SWIFT_VERSION = 6.0;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = BrandAccent;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/ExifEditMac.entitlements;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = "Config/ExifEditMac-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
+				PRODUCT_NAME = "$(APP_DISPLAY_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};
