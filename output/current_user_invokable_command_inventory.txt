@@ -1,0 +1,104 @@
+Current user-invokable command inventory (from the code as of now):
+
+App/Menu Bar
+- About <AppName>
+- Undo (Cmd+Z)
+- Redo (Cmd+Shift+Z)
+- Open Folder… (Cmd+O)
+- Open in Default App (Cmd+Return)
+- Reveal in Finder (Cmd+Shift+R)
+- Find… (Cmd+F) 
+- Show/Hide Sidebar (Cmd+Option+S)
+- Gallery View (Cmd+1)
+- List View (Cmd+2)
+- Sort By > Name
+- Sort By > Date Created
+- Sort By > Size
+- Sort By > Kind
+- Zoom In (Cmd++)
+- Zoom Out (Cmd+-)
+- Refresh Files and Metadata (Cmd+R)
+- Apply Metadata Changes (Cmd+S)
+- Clear Metadata Changes (Cmd+Shift+K)
+- Restore from Last Backup (Cmd+Shift+B)
+- Pin Location to Pinned
+- Unpin Pinned
+- Move Pinned Up
+- Move Pinned Down
+- Presets > Apply Preset > <preset>
+- Presets > Save Current as Preset…
+- Presets > Manage Presets…
+- ExifTool Documentation (opens https://exiftool.org/)
+
+Toolbar
+- Toggle sidebar
+- View mode segmented control (Gallery/List)
+- Sort menu (Name/Date Created/Size/Kind)
+- Zoom out / Zoom in
+- Presets menu (Apply preset, Save current as preset, Manage presets)
+- Open Folder
+- Apply Metadata Changes
+- Search field (live file filtering)
+
+Sidebar
+- Select location/source
+- Collapse/expand sidebar sections
+- Sidebar top glyph: Hide Sidebar
+- Sidebar context menu actions (where applicable):
+- Open in Finder
+- Pin
+- Unpin Pinned
+- Move Pinned Up
+- Move Pinned Down
+
+Browser (List + Gallery)
+- Select single/multi/range items
+- Double-click item: Open in default app
+- Context menu on items:
+- Open in Default App
+- Reveal in Finder
+- Apply Metadata Changes
+- Refresh Metadata
+- Clear Metadata Changes
+- Restore from Last Backup
+- Keyboard commands:
+- Esc: clear selection
+- Space: Quick Look selection
+- Cmd+A: select all filtered files
+- Cmd+D: clear selection
+- Arrow keys: move selection
+- Shift+Arrow: extend selection
+- Cmd+Shift+Arrow: extend selection to boundary
+- Tab / Shift+Tab (sidebar/browser focus contexts): switch focus between sidebar and browser
+- Return/Enter in browser: focus inspector entry for selected file(s)
+- Gallery pinch gesture: adjust thumbnail grid density (zoom grid)
+
+Inspector
+- Collapse/expand Preview section
+- Preview actions (single selection):
+- Rotate
+- Flip Horizontal
+- Open
+- Collapse/expand metadata sections
+- Edit text metadata fields
+- Change picker-based metadata fields
+- Date/time field actions:
+- Set date/time
+- Clear date/time
+- Esc while editing field: cancel/revert current edit session and return focus to browser
+- Tab / Shift+Tab in inspector: move to next/previous editable field
+
+Preset Sheets
+- Preset editor:
+- Set preset name/notes
+- Include/exclude each field (checkbox)
+- Edit per-field preset values
+- Save Preset / Update Preset
+- Cancel
+- Duplicate-name resolution: Replace / Duplicate / Cancel
+- Preset manager:
+- Add…
+- Edit…
+- Duplicate
+- Delete (with confirm)
+- Close

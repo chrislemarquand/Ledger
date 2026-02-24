@@ -120,7 +120,7 @@ struct ExifEditMacApp: App {
 
             CommandGroup(after: .toolbar) {
                 Button {
-                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.toggleSidebarToolbarAction(_:)), to: nil, from: nil)
+                    NSApp.sendAction(#selector(NSSplitViewController.toggleSidebar(_:)), to: nil, from: nil)
                 } label: {
                     Label(appDelegate.appModel?.isSidebarCollapsed == true ? "Show Sidebar" : "Hide Sidebar", systemImage: "sidebar.left")
                 }

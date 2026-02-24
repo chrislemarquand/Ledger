@@ -372,12 +372,13 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
         didConfigureWindow = true
 
         window.styleMask.insert(.fullSizeContentView)
-        window.toolbarStyle = .automatic
+        window.toolbarStyle = .unified
         window.titleVisibility = .visible
         window.titlebarAppearsTransparent = false
 
         let delegate = NativeToolbarDelegate(controller: self)
-        let toolbar = NSToolbar(identifier: "\(AppBrand.identifierPrefix).MainToolbar")
+        // Bump toolbar identifier so AppKit rebuilds default item layout.
+        let toolbar = NSToolbar(identifier: "\(AppBrand.identifierPrefix).MainToolbar.v2")
         toolbar.delegate = delegate
         toolbar.displayMode = .iconOnly
         toolbar.allowsUserCustomization = false
@@ -551,19 +552,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
     }
 
     @objc
-    func toggleSidebarToolbarAction(_: Any?) {
-        NSAnimationContext.runAnimationGroup { [weak self] _ in
-            guard let self else { return }
-            self.sidebarItem.animator().isCollapsed.toggle()
-            self.syncSidebarCollapsedState()
-        } completionHandler: { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.focusBrowserPane()
-            }
-        }
-    }
-
-    @objc
     func toggleInspectorAction(_: Any?) {
         let previousResponder = view.window?.firstResponder
         inspectorItem.animator().isCollapsed.toggle()
@@ -579,20 +567,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
 
     private func syncSidebarCollapsedState() {
         model.isSidebarCollapsed = sidebarItem.isCollapsed
-        syncSidebarTogglePresentation()
         nativeToolbarDelegate?.refreshFromModel()
-    }
-
-    private func syncSidebarTogglePresentation() {
-        guard let toolbar = view.window?.toolbar else { return }
-        let identifier = NSToolbarItem.Identifier.toggleSidebar
-        let existingIndex = toolbar.items.firstIndex(where: { $0.itemIdentifier == identifier })
-        if sidebarItem.isCollapsed {
-            guard existingIndex == nil else { return }
-            toolbar.insertItem(withItemIdentifier: identifier, at: 0)
-        } else if let index = existingIndex {
-            toolbar.removeItem(at: index)
-        }
     }
 
     private func syncInspectorCollapsedState() {
@@ -654,11 +629,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
 
     private func focusBrowserPane() {
         guard let window = view.window else { return }
-        let filteredItems = model.filteredBrowserItems
-        if !filteredItems.isEmpty, model.selectedFileURLs.isEmpty {
-            let firstURL = filteredItems[0].url
-            model.setSelectionFromList([firstURL], focusedURL: firstURL)
-        }
         NotificationCenter.default.post(name: .browserDidRequestFocus, object: nil)
         window.makeFirstResponder(browserController.view)
     }
@@ -902,6 +872,9 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
 
         func toolbarDefaultItemIdentifiers(_: NSToolbar) -> [NSToolbarItem.Identifier] {
             return [
+                .toggleSidebar,
+                .sidebarTrackingSeparator,
+                .flexibleSpace,
                 .viewMode,
                 .sort,
                 .zoomOut,
@@ -909,7 +882,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
                 .presetTools,
                 .openFolder,
                 .toggleInspector,
-                .flexibleSpace,
                 .applyChanges,
                 .search
             ]
@@ -918,6 +890,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
         func toolbarAllowedItemIdentifiers(_: NSToolbar) -> [NSToolbarItem.Identifier] {
             return [
                 .toggleSidebar,
+                .sidebarTrackingSeparator,
                 .viewMode,
                 .sort,
                 .zoomOut,
@@ -940,10 +913,15 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
 
             switch itemIdentifier {
             case .toggleSidebar:
-                let item = NSToolbarItem(itemIdentifier: .toggleSidebar)
-                item.target = controller
-                item.action = #selector(NativeThreePaneSplitViewController.toggleSidebarToolbarAction(_:))
-                return item
+                // Let AppKit provide the native sidebar toggle toolbar item.
+                return nil
+            case .sidebarTrackingSeparator:
+                // Bind tracking explicitly to the outer sidebar/content divider.
+                return NSTrackingSeparatorToolbarItem(
+                    identifier: .sidebarTrackingSeparator,
+                    splitView: controller.splitView,
+                    dividerIndex: 0
+                )
             case .viewMode:
                 let control = NSSegmentedControl(
                     labels: ["", ""],
@@ -1259,23 +1237,6 @@ struct NavigationSidebarView: View {
         .animation(appAnimation(), value: collapsedSections)
         .listStyle(.sidebar)
         .frame(maxHeight: .infinity)
-        .overlay(alignment: .topTrailing) {
-            if !model.isSidebarCollapsed {
-                Button {
-                    requestSidebarToggle()
-                } label: {
-                    Image(systemName: "sidebar.left")
-                        .font(.system(size: UIMetrics.Sidebar.topControlGlyphSize, weight: .semibold))
-                        .foregroundStyle(sidebarHeaderColor)
-                        .frame(width: UIMetrics.Sidebar.topControlFrameSize, height: UIMetrics.Sidebar.topControlFrameSize)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Hide Sidebar")
-                .padding(.trailing, UIMetrics.Sidebar.trailingColumnInset)
-                .offset(y: UIMetrics.Sidebar.topControlYOffset)
-            }
-        }
         .focused($isSidebarFocused)
         .onReceive(NotificationCenter.default.publisher(for: .sidebarDidRequestFocus)) { _ in
             isSidebarFocused = true
@@ -1283,14 +1244,6 @@ struct NavigationSidebarView: View {
         .onChange(of: model.selectedSidebarID) { oldValue, newValue in
             model.handleSidebarSelectionChange(from: oldValue, to: newValue)
         }
-    }
-
-    private func requestSidebarToggle() {
-        _ = NSApp.sendAction(
-            #selector(NativeThreePaneSplitViewController.toggleSidebarToolbarAction(_:)),
-            to: nil,
-            from: nil
-        )
     }
 
     private func icon(for kind: AppModel.SidebarKind) -> String {
@@ -1477,7 +1430,8 @@ struct BrowserView: View {
         return .none
     }
 
-    var body: some View {
+    @ViewBuilder
+    private var browserContent: some View {
         ZStack {
             BrowserGalleryView(model: model)
                 .opacity(model.browserViewMode == .gallery ? 1 : 0)
@@ -1487,31 +1441,36 @@ struct BrowserView: View {
                 .opacity(model.browserViewMode == .list ? 1 : 0)
                 .allowsHitTesting(model.browserViewMode == .list)
         }
-        .overlay {
-            switch overlayState {
-            case .none:
-                EmptyView()
-            case .noSelection:
-                ContentUnavailableView(
-                    "No Folder Selected",
-                    systemImage: "folder",
-                    description: Text("Open a folder from the toolbar to start browsing metadata.")
-                )
-            case .loading:
+    }
+
+    @ViewBuilder
+    var body: some View {
+        switch overlayState {
+        case .none:
+            browserContent
+        case .loading:
+            ZStack {
+                browserContent
                 BrowserLoadingPlaceholderView(mode: model.browserViewMode)
-            case .emptyFolder:
-                ContentUnavailableView(
-                    "No Images",
-                    systemImage: "photo.on.rectangle.angled",
-                    description: Text("This folder has no supported image files.")
-                )
-            case .noResults:
-                ContentUnavailableView(
-                    "No Results",
-                    systemImage: "magnifyingglass",
-                    description: Text("Try a different search term.")
-                )
             }
+        case .noSelection:
+            ContentUnavailableView(
+                "No Folder Selected",
+                systemImage: "folder",
+                description: Text("Open a folder from the toolbar to start browsing metadata.")
+            )
+        case .emptyFolder:
+            ContentUnavailableView(
+                "No Images",
+                systemImage: "photo.on.rectangle.angled",
+                description: Text("This folder has no supported image files.")
+            )
+        case .noResults:
+            ContentUnavailableView(
+                "No Results",
+                systemImage: "magnifyingglass",
+                description: Text("Try a different search term.")
+            )
         }
     }
 }
@@ -1725,6 +1684,26 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         }
         pendingInvalidatedThumbnailURLs = []
 
+        if shouldAdoptTableSelectionIntoModel() {
+            let urls = Set(
+                tableView.selectedRowIndexes.compactMap { row -> URL? in
+                    guard row >= 0, row < items.count else { return nil }
+                    return items[row].url
+                }
+            )
+            if !urls.isEmpty {
+                let focusedURL: URL?
+                if tableView.selectedRow >= 0, tableView.selectedRow < items.count {
+                    focusedURL = items[tableView.selectedRow].url
+                } else {
+                    focusedURL = nil
+                }
+                model.setSelectionFromList(urls, focusedURL: focusedURL)
+                updateQuickLookSourceFrameFromCurrentSelection()
+            }
+            return
+        }
+
         let selectedIndexes = IndexSet(
             items.enumerated().compactMap { index, item in
                 model.selectedFileURLs.contains(item.url) ? index : nil
@@ -1736,6 +1715,14 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
             isApplyingProgrammaticSelection = false
         }
         updateQuickLookSourceFrameFromCurrentSelection()
+    }
+
+    private func shouldAdoptTableSelectionIntoModel() -> Bool {
+        guard model.selectedFileURLs.isEmpty else { return false }
+        guard !tableView.selectedRowIndexes.isEmpty else { return false }
+        guard let window = view.window else { return false }
+        guard let responderView = window.firstResponder as? NSView else { return false }
+        return responderView === tableView || responderView.isDescendant(of: tableView)
     }
 
     private func focusListForKeyboardNavigation() {
@@ -2370,6 +2357,9 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
             self.model.setSelectionFromList([url], focusedURL: url)
             self.model.openInDefaultApp(url)
         }
+        collectionView.onModifiedItemClick = { [weak self] indexPath, modifiers in
+            self?.handleModifiedItemClick(indexPath: indexPath, modifiers: modifiers)
+        }
         collectionView.onActivateSelection = { [weak self] in
             self?.focusInspectorFromBrowser()
         }
@@ -2833,6 +2823,21 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
         updateQuickLookArtifacts()
     }
 
+    private func handleModifiedItemClick(indexPath: IndexPath, modifiers: NSEvent.ModifierFlags) {
+        guard indexPath.item >= 0, indexPath.item < items.count else { return }
+        model.selectFile(items[indexPath.item].url, modifiers: modifiers, in: items)
+
+        let selectedIndexPaths = Set(
+            items.enumerated().compactMap { index, item -> IndexPath? in
+                model.selectedFileURLs.contains(item.url) ? IndexPath(item: index, section: 0) : nil
+            }
+        )
+        isApplyingProgrammaticSelection = true
+        collectionView.selectionIndexPaths = selectedIndexPaths
+        isApplyingProgrammaticSelection = false
+        updateQuickLookArtifacts()
+    }
+
     private static let imageWidthKeys: Set<String> = ["ImageWidth", "ExifImageWidth", "PixelXDimension"]
     private static let imageHeightKeys: Set<String> = ["ImageHeight", "ExifImageHeight", "PixelYDimension"]
 
@@ -2893,6 +2898,7 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
 private final class AppKitGalleryCollectionView: NSCollectionView {
     var onBackgroundClick: (() -> Void)?
     var onMoveSelection: ((MoveCommandDirection) -> Void)?
+    var onModifiedItemClick: ((IndexPath, NSEvent.ModifierFlags) -> Void)?
     var contextMenuProvider: ((IndexPath) -> NSMenu?)?
     var onDoubleClick: ((IndexPath) -> Void)?
     var onActivateSelection: (() -> Void)?
@@ -2902,6 +2908,11 @@ private final class AppKitGalleryCollectionView: NSCollectionView {
         guard let indexPath = indexPathForItem(at: point) else {
             deselectAll(nil)
             onBackgroundClick?()
+            return
+        }
+        let selectionModifiers = event.modifierFlags.intersection([.command, .shift])
+        if !selectionModifiers.isEmpty {
+            onModifiedItemClick?(indexPath, selectionModifiers)
             return
         }
         super.mouseDown(with: event)
