@@ -1,9 +1,7 @@
 @preconcurrency import AppKit
 import Combine
 import ExifEditCore
-import ImageIO
 import MapKit
-import QuickLookThumbnailing
 import SwiftUI
 
 private extension Notification.Name {
@@ -13,50 +11,124 @@ private extension Notification.Name {
     static let browserDidRequestFocus = Notification.Name("\(AppBrand.identifierPrefix).BrowserDidRequestFocus")
 }
 
-private func appAnimation(duration: Double) -> Animation? {
+private enum Motion {
+    static let duration: Double = 0.16
+    static var timingFunction: CAMediaTimingFunction { CAMediaTimingFunction(name: .easeInEaseOut) }
+}
+
+private enum UIMetrics {
+    enum Sidebar {
+        static let sectionItemIndent: CGFloat = 11
+        static let trailingColumnWidth: CGFloat = 28
+        static let trailingColumnInset: CGFloat = 6
+        static let topControlYOffset: CGFloat = -30
+        static let rowIconSize: CGFloat = 15
+        static let rowLeadingIconFrame: CGFloat = 16
+        static let rowSpacing: CGFloat = 7
+        static let headerFontSize: CGFloat = 11
+        static let headerChevronFrameHeight: CGFloat = 22
+        static let topControlGlyphSize: CGFloat = 16
+        static let topControlFrameSize: CGFloat = 24
+    }
+
+    enum List {
+        static let rowHeight: CGFloat = 24
+        static let cellHorizontalInset: CGFloat = 8
+        static let iconSize: CGFloat = 16
+        static let iconGap: CGFloat = 6
+        static let pendingDotSize: CGFloat = 6
+        static let pendingDotCornerRadius: CGFloat = 3
+    }
+
+    enum Gallery {
+        static let thumbnailCornerRadius: CGFloat = 8
+        static let selectionCornerRadius: CGFloat = 8
+        static let selectionOutset: CGFloat = 4
+        static let selectionBorderWidth: CGFloat = 3.5
+        static let pendingDotCornerRadius: CGFloat = 4
+        static let pendingDotSize: CGFloat = 8
+        static let pendingDotInset: CGFloat = 6
+        static let titleGap: CGFloat = 6
+    }
+}
+
+private func appAnimation() -> Animation? {
     if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
         return nil
     }
-    return .easeInOut(duration: duration)
+    return .easeInOut(duration: Motion.duration)
 }
 
-private func generateOrientedBrowserThumbnail(fileURL: URL, maxPixelSize: CGFloat) -> NSImage? {
-    guard let source = CGImageSourceCreateWithURL(fileURL as CFURL, nil) else { return nil }
-    let options: [CFString: Any] = [
-        kCGImageSourceCreateThumbnailFromImageAlways: true,
-        kCGImageSourceCreateThumbnailWithTransform: true,
-        kCGImageSourceThumbnailMaxPixelSize: max(32, Int(maxPixelSize)),
-        kCGImageSourceShouldCacheImmediately: true
-    ]
-    guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
-        return nil
+private actor SharedThumbnailRequestBroker {
+    static let shared = SharedThumbnailRequestBroker(maxConcurrentRequests: 4)
+
+    private struct RequestKey: Hashable {
+        let url: URL
+        let requiredSide: Int
     }
-    return NSImage(cgImage: cgImage, size: .zero)
-}
 
-private func isLikelyImageFile(_ fileURL: URL) -> Bool {
-    let imageExtensions: Set<String> = [
-        "jpg", "jpeg", "heic", "heif", "png", "tif", "tiff", "gif", "bmp", "webp", "dng", "cr2", "cr3", "arw", "nef", "raf", "orf"
-    ]
-    return imageExtensions.contains(fileURL.pathExtension.lowercased())
-}
+    private let maxConcurrentRequests: Int
+    private var activeRequestCount = 0
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var inflight: [RequestKey: Task<NSImage?, Never>] = [:]
 
-private func generateQuickLookThumbnail(fileURL: URL, maxPixelSize: CGFloat) async -> NSImage? {
-    let request = QLThumbnailGenerator.Request(
-        fileAt: fileURL,
-        size: CGSize(width: maxPixelSize, height: maxPixelSize),
-        scale: NSScreen.main?.backingScaleFactor ?? 2,
-        representationTypes: .thumbnail
-    )
+    init(maxConcurrentRequests: Int) {
+        self.maxConcurrentRequests = max(1, maxConcurrentRequests)
+    }
 
-    return await withCheckedContinuation { continuation in
-        QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { thumbnail, _ in
-            continuation.resume(returning: thumbnail?.nsImage)
+    func request(url: URL, requiredSide: CGFloat, forceRefresh: Bool) async -> NSImage? {
+        let normalizedSide = max(1, Int(requiredSide.rounded(.up)))
+        let key = RequestKey(url: url, requiredSide: normalizedSide)
+
+        if forceRefresh {
+            ThumbnailPipeline.invalidateCachedImages(for: [url])
+        } else if let task = inflight[key] {
+            return await task.value
         }
+
+        let task = Task<NSImage?, Never> { [weak self] in
+            guard let self else { return nil }
+            return await self.runWithPermit {
+                await ThumbnailPipeline.generateThumbnail(fileURL: url, maxPixelSize: CGFloat(normalizedSide))
+            }
+        }
+        inflight[key] = task
+        let image = await task.value
+        inflight[key] = nil
+        return image
+    }
+
+    private func acquirePermit() async {
+        if activeRequestCount < maxConcurrentRequests {
+            activeRequestCount += 1
+            return
+        }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    private func releasePermit() {
+        if !waiters.isEmpty {
+            let waiter = waiters.removeFirst()
+            waiter.resume()
+            return
+        }
+        activeRequestCount = max(0, activeRequestCount - 1)
+    }
+
+    private func runWithPermit(_ operation: @Sendable () async -> NSImage?) async -> NSImage? {
+        await acquirePermit()
+        defer { releasePermit() }
+        return await operation()
     }
 }
 
 private struct InspectorPreviewActionPressedKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+private struct InspectorPreviewActionHoveredKey: EnvironmentKey {
     static let defaultValue = false
 }
 
@@ -65,12 +137,30 @@ private extension EnvironmentValues {
         get { self[InspectorPreviewActionPressedKey.self] }
         set { self[InspectorPreviewActionPressedKey.self] = newValue }
     }
+
+    var inspectorPreviewActionIsHovered: Bool {
+        get { self[InspectorPreviewActionHoveredKey.self] }
+        set { self[InspectorPreviewActionHoveredKey.self] = newValue }
+    }
 }
 
 private struct InspectorPreviewActionButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .environment(\.inspectorPreviewActionIsPressed, configuration.isPressed)
+        InspectorPreviewActionButton(configuration: configuration)
+    }
+
+    private struct InspectorPreviewActionButton: View {
+        let configuration: Configuration
+        @State private var isHovered = false
+
+        var body: some View {
+            configuration.label
+                .environment(\.inspectorPreviewActionIsPressed, configuration.isPressed)
+                .environment(\.inspectorPreviewActionIsHovered, isHovered)
+                .onHover { hovering in
+                    isHovered = hovering
+                }
+        }
     }
 }
 
@@ -78,12 +168,13 @@ private struct InspectorPreviewActionLabel: View {
     let symbolName: String
     let title: String
     @Environment(\.inspectorPreviewActionIsPressed) private var isPressed
+    @Environment(\.inspectorPreviewActionIsHovered) private var isHovered
 
     var body: some View {
         VStack(spacing: 4) {
             Image(systemName: symbolName)
                 .font(.body)
-                .foregroundStyle(isPressed ? Color.white : Color.secondary)
+                .foregroundStyle(isPressed ? Color.white : (isHovered ? Color.primary : Color.secondary))
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -106,16 +197,16 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
     private let inspectorItem: NSSplitViewItem
 
     private var didConfigureWindow = false
-    private var didInstallTopChromeFade = false
     private var nativeToolbarDelegate: NativeToolbarDelegate?
     private var modelObserver: AnyCancellable?
     private var statusObserver: AnyCancellable?
-    private weak var topChromeFadeView: NSVisualEffectView?
-    private let topChromeFadeHeight: CGFloat = 72
     private var spacebarMonitor: Any?
     private var browserFocusRequestObserver: NSObjectProtocol?
     private var splitResizeObserver: NSObjectProtocol?
     private var didApplyInitialContentSplit = false
+    private var didApplyInitialInspectorVisibility = false
+    private var lastWindowTitleText = ""
+    private var lastWindowSubtitleText = ""
 
     init(model: AppModel) {
         self.model = model
@@ -148,7 +239,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
 
         inspectorItem.minimumThickness = 260
         inspectorItem.maximumThickness = 900
-        inspectorItem.canCollapse = false
+        inspectorItem.canCollapse = true
         inspectorItem.holdingPriority = .defaultLow
 
         // Prevent inspector content from forcing pane expansion during metadata/view updates.
@@ -165,14 +256,16 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 DispatchQueue.main.async {
-                    self?.nativeToolbarDelegate?.syncFromModel()
+                    self?.nativeToolbarDelegate?.refreshFromModel()
+                    self?.refreshWindowTitleSubtitleIfNeeded()
                 }
             }
 
         statusObserver = model.$statusMessage
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.nativeToolbarDelegate?.syncFromModel()
+                self?.nativeToolbarDelegate?.refreshFromModel()
+                self?.refreshWindowTitleSubtitleIfNeeded()
             }
     }
 
@@ -210,7 +303,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
         contentSplitController.splitView.isVertical = true
         contentSplitController.splitView.dividerStyle = .thin
         contentSplitController.splitView.autosaveName = NSSplitView.AutosaveName(Self.contentSplitAutosaveName)
-        installTopChromeFadeIfNeeded()
         syncSidebarCollapsedState()
         installSplitResizeObserverIfNeeded()
     }
@@ -229,6 +321,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
 
     override func viewDidAppear() {
         super.viewDidAppear()
+        ensureInitialInspectorVisibilityIfNeeded()
         configureWindowIfNeeded()
     }
 
@@ -261,6 +354,13 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
         didApplyInitialContentSplit = true
     }
 
+    private func ensureInitialInspectorVisibilityIfNeeded() {
+        guard !didApplyInitialInspectorVisibility else { return }
+        didApplyInitialInspectorVisibility = true
+        inspectorItem.isCollapsed = false
+        syncInspectorCollapsedState()
+    }
+
     private func hasPersistedContentSplitLayout() -> Bool {
         let defaults = UserDefaults.standard
         return defaults.object(forKey: "NSSplitView Subview Frames \(Self.contentSplitAutosaveName)") != nil
@@ -274,9 +374,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
         window.styleMask.insert(.fullSizeContentView)
         window.toolbarStyle = .automatic
         window.titleVisibility = .visible
-        window.titlebarAppearsTransparent = true
-        window.title = toolbarTitleText()
-        window.subtitle = toolbarSubtitleText()
+        window.titlebarAppearsTransparent = false
 
         let delegate = NativeToolbarDelegate(controller: self)
         let toolbar = NSToolbar(identifier: "\(AppBrand.identifierPrefix).MainToolbar")
@@ -287,9 +385,31 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
         window.toolbar = toolbar
 
         nativeToolbarDelegate = delegate
-        delegate.syncFromModel()
+        if sidebarItem.isCollapsed {
+            sidebarItem.isCollapsed = false
+        }
+        syncSidebarCollapsedState()
+        refreshWindowTitleSubtitleIfNeeded()
         installSpacebarQuickLookMonitorIfNeeded()
         installBrowserFocusRequestObserverIfNeeded()
+        syncInspectorCollapsedState()
+        DispatchQueue.main.async { [weak self] in
+            self?.focusBrowserPane()
+        }
+    }
+
+    private func refreshWindowTitleSubtitleIfNeeded() {
+        guard let window = view.window else { return }
+        let title = toolbarTitleText()
+        let subtitle = toolbarSubtitleText()
+        if title != lastWindowTitleText {
+            lastWindowTitleText = title
+            window.title = title
+        }
+        if subtitle != lastWindowSubtitleText {
+            lastWindowSubtitleText = subtitle
+            window.subtitle = subtitle
+        }
     }
 
     private func installSpacebarQuickLookMonitorIfNeeded() {
@@ -417,6 +537,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.syncSidebarCollapsedState()
+                self?.syncInspectorCollapsedState()
             }
         }
     }
@@ -425,8 +546,57 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
         sidebarItem.isCollapsed
     }
 
+    func isInspectorCollapsedForMenu() -> Bool {
+        inspectorItem.isCollapsed
+    }
+
+    @objc
+    func toggleSidebarToolbarAction(_: Any?) {
+        NSAnimationContext.runAnimationGroup { [weak self] _ in
+            guard let self else { return }
+            self.sidebarItem.animator().isCollapsed.toggle()
+            self.syncSidebarCollapsedState()
+        } completionHandler: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.focusBrowserPane()
+            }
+        }
+    }
+
+    @objc
+    func toggleInspectorAction(_: Any?) {
+        let previousResponder = view.window?.firstResponder
+        inspectorItem.animator().isCollapsed.toggle()
+        syncInspectorCollapsedState()
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let window = self.view.window else { return }
+            if let previousResponder {
+                _ = window.makeFirstResponder(previousResponder)
+            }
+        }
+    }
+
     private func syncSidebarCollapsedState() {
         model.isSidebarCollapsed = sidebarItem.isCollapsed
+        syncSidebarTogglePresentation()
+        nativeToolbarDelegate?.refreshFromModel()
+    }
+
+    private func syncSidebarTogglePresentation() {
+        guard let toolbar = view.window?.toolbar else { return }
+        let identifier = NSToolbarItem.Identifier.toggleSidebar
+        let existingIndex = toolbar.items.firstIndex(where: { $0.itemIdentifier == identifier })
+        if sidebarItem.isCollapsed {
+            guard existingIndex == nil else { return }
+            toolbar.insertItem(withItemIdentifier: identifier, at: 0)
+        } else if let index = existingIndex {
+            toolbar.removeItem(at: index)
+        }
+    }
+
+    private func syncInspectorCollapsedState() {
+        model.isInspectorCollapsed = inspectorItem.isCollapsed
     }
 
     private func shouldHandleBrowserKeyCommands() -> Bool {
@@ -553,44 +723,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
         return count == 1 ? "1 file" : "\(count) files"
     }
 
-    private func installTopChromeFadeIfNeeded() {
-        guard !didInstallTopChromeFade else { return }
-        didInstallTopChromeFade = true
-
-        let fadeView = PassthroughVisualEffectView()
-        fadeView.translatesAutoresizingMaskIntoConstraints = false
-        fadeView.material = .headerView
-        fadeView.blendingMode = .withinWindow
-        fadeView.state = .active
-        fadeView.maskImage = Self.topFadeMaskImage(height: Int(topChromeFadeHeight))
-        fadeView.isHidden = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
-        topChromeFadeView = fadeView
-        view.addSubview(fadeView, positioned: .above, relativeTo: splitView)
-
-        NSLayoutConstraint.activate([
-            fadeView.topAnchor.constraint(equalTo: view.topAnchor),
-            fadeView.leadingAnchor.constraint(equalTo: splitView.leadingAnchor),
-            fadeView.trailingAnchor.constraint(equalTo: splitView.trailingAnchor),
-            fadeView.heightAnchor.constraint(equalToConstant: topChromeFadeHeight)
-        ])
-    }
-
-    private static func topFadeMaskImage(height: Int) -> NSImage {
-        let image = NSImage(size: NSSize(width: 1, height: CGFloat(height)))
-        image.lockFocus()
-        let gradient = NSGradient(colors: [
-            NSColor(calibratedWhite: 1, alpha: 1),
-            NSColor(calibratedWhite: 1, alpha: 0.55),
-            NSColor(calibratedWhite: 1, alpha: 0)
-        ])!
-        gradient.draw(
-            in: NSRect(x: 0, y: 0, width: 1, height: CGFloat(height)),
-            angle: -90
-        )
-        image.unlockFocus()
-        return image
-    }
-
     @objc
     func openFolderAction(_: Any?) {
         model.openFolder()
@@ -643,38 +775,38 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
     func zoomOutAction(_: Any?) {
         guard model.browserViewMode == .gallery else { return }
         model.decreaseGalleryZoom()
-        nativeToolbarDelegate?.syncFromModel()
+        nativeToolbarDelegate?.refreshFromModel()
     }
 
     @objc
     func zoomInAction(_: Any?) {
         guard model.browserViewMode == .gallery else { return }
         model.increaseGalleryZoom()
-        nativeToolbarDelegate?.syncFromModel()
+        nativeToolbarDelegate?.refreshFromModel()
     }
 
     @objc
     func sortByNameAction(_: Any?) {
         model.browserSort = .name
-        nativeToolbarDelegate?.syncFromModel()
+        nativeToolbarDelegate?.refreshFromModel()
     }
 
     @objc
     func sortByCreatedAction(_: Any?) {
         model.browserSort = .created
-        nativeToolbarDelegate?.syncFromModel()
+        nativeToolbarDelegate?.refreshFromModel()
     }
 
     @objc
     func sortBySizeAction(_: Any?) {
         model.browserSort = .size
-        nativeToolbarDelegate?.syncFromModel()
+        nativeToolbarDelegate?.refreshFromModel()
     }
 
     @objc
     func sortByKindAction(_: Any?) {
         model.browserSort = .kind
-        nativeToolbarDelegate?.syncFromModel()
+        nativeToolbarDelegate?.refreshFromModel()
     }
 
     @objc
@@ -715,7 +847,10 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
     @objc
     private func viewModeChanged(_ sender: NSSegmentedControl) {
         model.browserViewMode = sender.selectedSegment == 1 ? .list : .gallery
-        nativeToolbarDelegate?.syncFromModel()
+        nativeToolbarDelegate?.refreshFromModel()
+        DispatchQueue.main.async { [weak self] in
+            self?.focusBrowserPane()
+        }
     }
 
     @objc
@@ -748,79 +883,66 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
     }
 
     @MainActor
-    private final class NativeToolbarDelegate: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
+    private final class NativeToolbarDelegate: NSObject, NSToolbarDelegate {
         private weak var controller: NativeThreePaneSplitViewController?
 
         private var viewModeControl: NSSegmentedControl?
         private var zoomOutItem: NSToolbarItem?
         private var zoomInItem: NSToolbarItem?
-        private var sortItem: NSMenuToolbarItem?
-        private var presetsMenuItem: NSMenuToolbarItem?
         private var applyChangesItem: NSToolbarItem?
-        private var presetsMenu: NSMenu?
         private var searchItem: NSSearchToolbarItem?
-        private var searchWidthConstraint: NSLayoutConstraint?
-        private var loadingItem: NSToolbarItem?
+        private var sortItem: NSToolbarItem?
+        private var presetsItem: NSToolbarItem?
+        private var sortMenu: NSMenu?
+        private var presetsMenu: NSMenu?
 
         init(controller: NativeThreePaneSplitViewController) {
             self.controller = controller
         }
 
-        func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-            [
-                .loadingStatus,
+        func toolbarDefaultItemIdentifiers(_: NSToolbar) -> [NSToolbarItem.Identifier] {
+            return [
+                .viewMode,
+                .sort,
+                .zoomOut,
+                .zoomIn,
+                .presetTools,
+                .openFolder,
+                .toggleInspector,
+                .flexibleSpace,
+                .applyChanges,
+                .search
+            ]
+        }
+
+        func toolbarAllowedItemIdentifiers(_: NSToolbar) -> [NSToolbarItem.Identifier] {
+            return [
                 .toggleSidebar,
                 .viewMode,
                 .sort,
                 .zoomOut,
                 .zoomIn,
                 .presetTools,
-                .flexibleSpace,
                 .openFolder,
+                .toggleInspector,
+                .flexibleSpace,
                 .applyChanges,
                 .search
             ]
         }
 
-        func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-            toolbarDefaultItemIdentifiers(toolbar)
-        }
-
         func toolbar(
-            _ toolbar: NSToolbar,
+            _: NSToolbar,
             itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
-            willBeInsertedIntoToolbar flag: Bool
+            willBeInsertedIntoToolbar _: Bool
         ) -> NSToolbarItem? {
             guard let controller else { return nil }
 
             switch itemIdentifier {
             case .toggleSidebar:
-                return NSToolbarItem(itemIdentifier: .toggleSidebar)
-            case .loadingStatus:
-                let spinnerView = NSHostingView(rootView: ToolbarLoadingSpinner())
-                spinnerView.translatesAutoresizingMaskIntoConstraints = false
-
-                let container = NSView(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
-                container.translatesAutoresizingMaskIntoConstraints = false
-                container.addSubview(spinnerView)
-                NSLayoutConstraint.activate([
-                    spinnerView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-                    spinnerView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-                    spinnerView.topAnchor.constraint(equalTo: container.topAnchor),
-                    spinnerView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-                    container.widthAnchor.constraint(equalToConstant: 16),
-                    container.heightAnchor.constraint(equalToConstant: 16)
-                ])
-
-                let item = NSToolbarItem(itemIdentifier: itemIdentifier)
-                item.label = "Loading"
-                item.paletteLabel = "Loading"
-                item.view = container
-                item.toolTip = "Loading metadata"
-                item.visibilityPriority = .high
-                item.isBordered = false
-                item.view?.isHidden = true
-                loadingItem = item
+                let item = NSToolbarItem(itemIdentifier: .toggleSidebar)
+                item.target = controller
+                item.action = #selector(NativeThreePaneSplitViewController.toggleSidebarToolbarAction(_:))
                 return item
             case .viewMode:
                 let control = NSSegmentedControl(
@@ -865,35 +987,24 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
                 zoomInItem = item
                 return item
             case .sort:
-                let menu = NSMenu(title: "Sort")
-                menu.autoenablesItems = false
-                menu.addItem(withTitle: "Name", action: #selector(NativeThreePaneSplitViewController.sortByNameAction(_:)), keyEquivalent: "")
-                menu.addItem(withTitle: "Date Created", action: #selector(NativeThreePaneSplitViewController.sortByCreatedAction(_:)), keyEquivalent: "")
-                menu.addItem(withTitle: "Size", action: #selector(NativeThreePaneSplitViewController.sortBySizeAction(_:)), keyEquivalent: "")
-                menu.addItem(withTitle: "Kind", action: #selector(NativeThreePaneSplitViewController.sortByKindAction(_:)), keyEquivalent: "")
-                for item in menu.items {
-                    item.target = controller
-                }
-
-                let item = NSMenuToolbarItem(itemIdentifier: itemIdentifier)
+                let item = NSToolbarItem(itemIdentifier: itemIdentifier)
                 item.label = "Sort"
                 item.paletteLabel = "Sort"
                 item.image = NSImage(systemSymbolName: "arrow.up.arrow.down", accessibilityDescription: "Sort")
-                item.menu = menu
+                item.target = self
+                item.action = #selector(showSortMenu(_:))
                 item.toolTip = "Sort files"
                 sortItem = item
                 return item
             case .presetTools:
-                let item = NSMenuToolbarItem(itemIdentifier: itemIdentifier)
+                let item = NSToolbarItem(itemIdentifier: itemIdentifier)
                 item.label = "Presets"
                 item.paletteLabel = "Presets"
                 item.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: "Presets")
+                item.target = self
+                item.action = #selector(showPresetsMenu(_:))
                 item.toolTip = "Presets"
-                updatePresetsMenu()
-                if let presetsMenu {
-                    item.menu = presetsMenu
-                }
-                presetsMenuItem = item
+                presetsItem = item
                 return item
             case .openFolder:
                 let item = NSToolbarItem(itemIdentifier: itemIdentifier)
@@ -915,6 +1026,15 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
                 item.toolTip = "Apply metadata changes"
                 applyChangesItem = item
                 return item
+            case .toggleInspector:
+                let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+                item.label = "Hide Inspector"
+                item.paletteLabel = "Hide Inspector"
+                item.image = NSImage(systemSymbolName: "sidebar.trailing", accessibilityDescription: "Show or hide inspector")
+                item.target = controller
+                item.action = #selector(NativeThreePaneSplitViewController.toggleInspectorAction(_:))
+                item.toolTip = "Show or hide inspector"
+                return item
             case .search:
                 let item = NSSearchToolbarItem(itemIdentifier: itemIdentifier)
                 item.label = "Search"
@@ -923,89 +1043,138 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
                 item.searchField.sendsSearchStringImmediately = true
                 item.searchField.target = controller
                 item.searchField.action = #selector(NativeThreePaneSplitViewController.searchChanged(_:))
-                item.searchField.delegate = self
-                item.preferredWidthForSearchField = 260
-                item.searchField.translatesAutoresizingMaskIntoConstraints = false
-                let widthConstraint = item.searchField.widthAnchor.constraint(equalToConstant: 260)
-                widthConstraint.priority = .required
-                widthConstraint.isActive = true
                 item.toolTip = "Search files"
                 searchItem = item
-                searchWidthConstraint = widthConstraint
                 return item
             default:
                 return nil
             }
         }
 
-        func syncFromModel() {
+        func refreshFromModel() {
             guard let controller else { return }
             let model = controller.model
-            if let viewModeControl {
-                viewModeControl.selectedSegment = model.browserViewMode == .gallery ? 0 : 1
-            }
+            updateViewMode(with: model)
+            updateZoom(with: model)
+            updateSortMenu(with: model)
+            updatePresetsMenu(with: model)
+            updateSearch(with: model)
+            updateApplyEnabled(with: model)
+        }
+
+        private func updateViewMode(with model: AppModel) {
+            viewModeControl?.selectedSegment = model.browserViewMode == .gallery ? 0 : 1
+        }
+
+        private func updateZoom(with model: AppModel) {
             zoomOutItem?.isEnabled = model.browserViewMode == .gallery && model.canDecreaseGalleryZoom
             zoomInItem?.isEnabled = model.browserViewMode == .gallery && model.canIncreaseGalleryZoom
-            if let sortMenu = sortItem?.menu {
-                for item in sortMenu.items {
-                    item.state = .off
-                }
-                switch model.browserSort {
-                case .name:
-                    sortMenu.item(withTitle: "Name")?.state = .on
-                case .created:
-                    sortMenu.item(withTitle: "Date Created")?.state = .on
-                case .size:
-                    sortMenu.item(withTitle: "Size")?.state = .on
-                case .kind:
-                    sortMenu.item(withTitle: "Kind")?.state = .on
-                }
-            }
-            updatePresetsMenu()
-            controller.view.window?.title = controller.toolbarTitleText()
-            controller.view.window?.subtitle = controller.toolbarSubtitleText()
-            if let searchField = searchItem?.searchField, searchField.stringValue != model.searchQuery {
-                searchField.stringValue = model.searchQuery
-            }
-            searchWidthConstraint?.constant = 260
-            applyChangesItem?.isEnabled = model.canApplyMetadataChanges
+        }
 
-            let shouldShowLoading = model.isFolderMetadataLoading || model.isPreviewPreloading || model.isApplyingMetadata
-            loadingItem?.view?.isHidden = !shouldShowLoading
+        private func updateSortMenu(with model: AppModel) {
+            let menu = makeSortMenu(model: model)
+            sortMenu = menu
+            for item in menu.items {
+                item.state = .off
+            }
+            switch model.browserSort {
+            case .name:
+                menu.item(withTitle: "Name")?.state = .on
+            case .created:
+                menu.item(withTitle: "Date Created")?.state = .on
+            case .size:
+                menu.item(withTitle: "Size")?.state = .on
+            case .kind:
+                menu.item(withTitle: "Kind")?.state = .on
+            }
+        }
+
+        private func updatePresetsMenu(with model: AppModel) {
+            presetsMenu = makePresetsMenu(model: model)
+        }
+
+        private func updateSearch(with model: AppModel) {
+            guard let searchField = searchItem?.searchField, searchField.stringValue != model.searchQuery else { return }
+            searchField.stringValue = model.searchQuery
+        }
+
+        private func updateApplyEnabled(with model: AppModel) {
+            applyChangesItem?.isEnabled = model.canApplyMetadataChanges
         }
 
         func focusSearchField() {
-            guard let window = controller?.view.window else { return }
-            guard let searchField = searchItem?.searchField else { return }
+            guard let window = controller?.view.window,
+                  let searchField = searchItem?.searchField else { return }
             window.makeFirstResponder(searchField)
             searchField.selectText(nil)
         }
 
-        func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-            guard commandSelector == #selector(NSResponder.cancelOperation(_:)),
-                  let searchField = control as? NSSearchField,
-                  let controller
-            else {
-                return false
+        @objc
+        private func showSortMenu(_ sender: Any?) {
+            guard let controller else { return }
+            if sortMenu == nil {
+                updateSortMenu(with: controller.model)
             }
-            searchField.stringValue = ""
-            controller.model.searchQuery = ""
-            return true
+            present(menu: sortMenu, sender: sender)
         }
 
-        private func updatePresetsMenu() {
+        @objc
+        private func showPresetsMenu(_ sender: Any?) {
             guard let controller else { return }
+            updatePresetsMenu(with: controller.model)
+            present(menu: presetsMenu, sender: sender)
+        }
+
+        private func present(menu: NSMenu?, sender: Any?) {
+            guard let menu,
+                  let controller,
+                  let window = controller.view.window,
+                  let contentView = window.contentView
+            else { return }
+            let anchorInScreen = NSEvent.mouseLocation
+            let anchorInWindow = window.convertPoint(fromScreen: anchorInScreen)
+            let anchorInContent = contentView.convert(anchorInWindow, from: nil)
+            menu.popUp(positioning: nil, at: CGPoint(x: anchorInContent.x, y: anchorInContent.y - 6), in: contentView)
+            _ = sender
+        }
+
+        private func makeSortMenu(model: AppModel) -> NSMenu {
+            guard let controller else { return NSMenu(title: "Sort") }
+            let menu = NSMenu(title: "Sort")
+            menu.autoenablesItems = false
+            menu.addItem(withTitle: "Name", action: #selector(NativeThreePaneSplitViewController.sortByNameAction(_:)), keyEquivalent: "")
+            menu.addItem(withTitle: "Date Created", action: #selector(NativeThreePaneSplitViewController.sortByCreatedAction(_:)), keyEquivalent: "")
+            menu.addItem(withTitle: "Size", action: #selector(NativeThreePaneSplitViewController.sortBySizeAction(_:)), keyEquivalent: "")
+            menu.addItem(withTitle: "Kind", action: #selector(NativeThreePaneSplitViewController.sortByKindAction(_:)), keyEquivalent: "")
+            for item in menu.items {
+                item.target = controller
+            }
+            switch model.browserSort {
+            case .name:
+                menu.item(withTitle: "Name")?.state = .on
+            case .created:
+                menu.item(withTitle: "Date Created")?.state = .on
+            case .size:
+                menu.item(withTitle: "Size")?.state = .on
+            case .kind:
+                menu.item(withTitle: "Kind")?.state = .on
+            }
+            return menu
+        }
+
+        private func makePresetsMenu(model: AppModel) -> NSMenu {
+            guard let controller else { return NSMenu(title: "Presets") }
             let menu = NSMenu(title: "Presets")
             menu.autoenablesItems = false
 
             let applyMenuItem = NSMenuItem(title: "Apply Preset", action: nil, keyEquivalent: "")
             let applySubmenu = NSMenu(title: "Apply Preset")
-            if controller.model.presets.isEmpty {
+            if model.presets.isEmpty {
                 let emptyItem = NSMenuItem(title: "No Presets", action: nil, keyEquivalent: "")
                 emptyItem.isEnabled = false
                 applySubmenu.addItem(emptyItem)
             } else {
-                for preset in controller.model.presets {
+                for preset in model.presets {
                     let item = NSMenuItem(
                         title: preset.name,
                         action: #selector(NativeThreePaneSplitViewController.applyPresetFromMenuAction(_:)),
@@ -1013,7 +1182,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
                     )
                     item.target = controller
                     item.representedObject = preset.id.uuidString
-                    item.isEnabled = !controller.model.selectedFileURLs.isEmpty
+                    item.isEnabled = !model.selectedFileURLs.isEmpty
                     applySubmenu.addItem(item)
                 }
             }
@@ -1027,7 +1196,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
                 keyEquivalent: ""
             )
             saveItem.target = controller
-            saveItem.isEnabled = !controller.model.selectedFileURLs.isEmpty
+            saveItem.isEnabled = !model.selectedFileURLs.isEmpty
             menu.addItem(saveItem)
 
             let manageItem = NSMenuItem(
@@ -1037,30 +1206,12 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
             )
             manageItem.target = controller
             menu.addItem(manageItem)
-
-            presetsMenu = menu
-            presetsMenuItem?.menu = menu
+            return menu
         }
     }
 }
 
-private final class PassthroughVisualEffectView: NSVisualEffectView {
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        nil
-    }
-}
-
-private struct ToolbarLoadingSpinner: View {
-    var body: some View {
-        ProgressView()
-            .controlSize(.small)
-            .progressViewStyle(.circular)
-            .frame(width: 16, height: 16)
-    }
-}
-
 private extension NSToolbarItem.Identifier {
-    static let loadingStatus = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.LoadingStatus")
     static let viewMode = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ViewMode")
     static let sort = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.Sort")
     static let presetTools = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.PresetTools")
@@ -1068,6 +1219,7 @@ private extension NSToolbarItem.Identifier {
     static let zoomIn = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ZoomIn")
     static let openFolder = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.OpenFolder")
     static let applyChanges = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ApplyChanges")
+    static let toggleInspector = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ToggleInspector")
     static let search = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.Search")
 }
 
@@ -1077,9 +1229,6 @@ struct NavigationSidebarView: View {
     @State private var hoveredSection: String?
     @Environment(\.controlActiveState) private var controlActiveState
     @FocusState private var isSidebarFocused: Bool
-    private let sectionItemIndent: CGFloat = 11
-    private let sidebarTrailingColumnWidth: CGFloat = 28
-    private let sidebarTrailingColumnInset: CGFloat = 6
 
     var body: some View {
         List(selection: $model.selectedSidebarID) {
@@ -1107,8 +1256,26 @@ struct NavigationSidebarView: View {
                 }
             }
         }
+        .animation(appAnimation(), value: collapsedSections)
         .listStyle(.sidebar)
         .frame(maxHeight: .infinity)
+        .overlay(alignment: .topTrailing) {
+            if !model.isSidebarCollapsed {
+                Button {
+                    requestSidebarToggle()
+                } label: {
+                    Image(systemName: "sidebar.left")
+                        .font(.system(size: UIMetrics.Sidebar.topControlGlyphSize, weight: .semibold))
+                        .foregroundStyle(sidebarHeaderColor)
+                        .frame(width: UIMetrics.Sidebar.topControlFrameSize, height: UIMetrics.Sidebar.topControlFrameSize)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Hide Sidebar")
+                .padding(.trailing, UIMetrics.Sidebar.trailingColumnInset)
+                .offset(y: UIMetrics.Sidebar.topControlYOffset)
+            }
+        }
         .focused($isSidebarFocused)
         .onReceive(NotificationCenter.default.publisher(for: .sidebarDidRequestFocus)) { _ in
             isSidebarFocused = true
@@ -1116,6 +1283,14 @@ struct NavigationSidebarView: View {
         .onChange(of: model.selectedSidebarID) { oldValue, newValue in
             model.handleSidebarSelectionChange(from: oldValue, to: newValue)
         }
+    }
+
+    private func requestSidebarToggle() {
+        _ = NSApp.sendAction(
+            #selector(NativeThreePaneSplitViewController.toggleSidebarToolbarAction(_:)),
+            to: nil,
+            from: nil
+        )
     }
 
     private func icon(for kind: AppModel.SidebarKind) -> String {
@@ -1146,10 +1321,10 @@ struct NavigationSidebarView: View {
     private func sidebarRow(_ item: AppModel.SidebarItem) -> some View {
         let isSelected = model.selectedSidebarID == item.id
         let isInactiveSelected = isSelected && !isSidebarFocused
-        let row = HStack(spacing: 7) {
+        let row = HStack(spacing: UIMetrics.Sidebar.rowSpacing) {
             Image(systemName: icon(for: item.kind))
-                .font(.system(size: 15))
-                .frame(width: 16, alignment: .center)
+                .font(.system(size: UIMetrics.Sidebar.rowIconSize))
+                .frame(width: UIMetrics.Sidebar.rowLeadingIconFrame, alignment: .center)
             Text(item.title)
             Spacer(minLength: 8)
             if let countText = model.sidebarImageCountText(for: item) {
@@ -1157,15 +1332,15 @@ struct NavigationSidebarView: View {
                     .font(.system(size: 14))
                     .monospacedDigit()
                     .animation(nil, value: model.selectedSidebarID)
-                    .frame(width: sidebarTrailingColumnWidth, alignment: .trailing)
-                    .padding(.trailing, sidebarTrailingColumnInset)
+                    .frame(width: UIMetrics.Sidebar.trailingColumnWidth, alignment: .trailing)
+                    .padding(.trailing, UIMetrics.Sidebar.trailingColumnInset)
             } else {
                 Color.clear
-                    .frame(width: sidebarTrailingColumnWidth, height: 1, alignment: .trailing)
-                    .padding(.trailing, sidebarTrailingColumnInset)
+                    .frame(width: UIMetrics.Sidebar.trailingColumnWidth, height: 1, alignment: .trailing)
+                    .padding(.trailing, UIMetrics.Sidebar.trailingColumnInset)
             }
         }
-        .padding(.leading, sectionItemIndent)
+        .padding(.leading, UIMetrics.Sidebar.sectionItemIndent)
         .tag(item.id)
 
         if isInactiveSelected {
@@ -1180,17 +1355,17 @@ struct NavigationSidebarView: View {
             toggleSection(section)
         } label: {
             Text(section)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: UIMetrics.Sidebar.headerFontSize, weight: .semibold))
                 .foregroundStyle(sidebarHeaderColor)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .overlay(alignment: .trailing) {
                     Image(systemName: collapsedSections.contains(section) ? "chevron.right" : "chevron.down")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: UIMetrics.Sidebar.headerFontSize, weight: .semibold))
                         .foregroundStyle(sidebarHeaderColor)
                         .opacity(hoveredSection == section ? 1 : 0)
-                        .frame(width: sidebarTrailingColumnWidth, height: 22, alignment: .trailing)
+                        .frame(width: UIMetrics.Sidebar.trailingColumnWidth, height: UIMetrics.Sidebar.headerChevronFrameHeight, alignment: .trailing)
                         .contentShape(Rectangle())
-                        .padding(.trailing, sidebarTrailingColumnInset)
+                        .padding(.trailing, UIMetrics.Sidebar.trailingColumnInset)
                 }
         }
         .buttonStyle(.plain)
@@ -1201,10 +1376,12 @@ struct NavigationSidebarView: View {
     }
 
     private func toggleSection(_ section: String) {
-        if collapsedSections.contains(section) {
-            collapsedSections.remove(section)
-        } else {
-            collapsedSections.insert(section)
+        withAnimation(appAnimation()) {
+            if collapsedSections.contains(section) {
+                collapsedSections.remove(section)
+            } else {
+                collapsedSections.insert(section)
+            }
         }
     }
 
@@ -1276,6 +1453,30 @@ struct NavigationSidebarView: View {
 struct BrowserView: View {
     @ObservedObject var model: AppModel
 
+    private enum OverlayState {
+        case none
+        case noSelection
+        case loading
+        case emptyFolder
+        case noResults
+    }
+
+    private var overlayState: OverlayState {
+        if model.selectedSidebarID == nil {
+            return .noSelection
+        }
+        if model.isFolderMetadataLoading, model.browserItems.isEmpty {
+            return .loading
+        }
+        if model.browserItems.isEmpty {
+            return .emptyFolder
+        }
+        if model.filteredBrowserItems.isEmpty {
+            return .noResults
+        }
+        return .none
+    }
+
     var body: some View {
         ZStack {
             BrowserGalleryView(model: model)
@@ -1287,14 +1488,87 @@ struct BrowserView: View {
                 .allowsHitTesting(model.browserViewMode == .list)
         }
         .overlay {
-            if model.browserItems.isEmpty {
+            switch overlayState {
+            case .none:
+                EmptyView()
+            case .noSelection:
+                ContentUnavailableView(
+                    "No Folder Selected",
+                    systemImage: "folder",
+                    description: Text("Open a folder from the toolbar to start browsing metadata.")
+                )
+            case .loading:
+                BrowserLoadingPlaceholderView(mode: model.browserViewMode)
+            case .emptyFolder:
                 ContentUnavailableView(
                     "No Images",
                     systemImage: "photo.on.rectangle.angled",
-                    description: Text("Open a folder from the toolbar to start browsing metadata.")
+                    description: Text("This folder has no supported image files.")
+                )
+            case .noResults:
+                ContentUnavailableView(
+                    "No Results",
+                    systemImage: "magnifyingglass",
+                    description: Text("Try a different search term.")
                 )
             }
         }
+    }
+}
+
+private struct BrowserLoadingPlaceholderView: View {
+    let mode: AppModel.BrowserViewMode
+
+    var body: some View {
+        Group {
+            if mode == .list {
+                VStack(spacing: 10) {
+                    ForEach(0 ..< 10, id: \.self) { _ in
+                        HStack(spacing: 10) {
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(.quaternary.opacity(0.42))
+                                .frame(width: 16, height: 16)
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(.quaternary.opacity(0.38))
+                                .frame(height: 12)
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(.quaternary.opacity(0.3))
+                                .frame(width: 54, height: 12)
+                        }
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 70)
+            } else {
+                GeometryReader { proxy in
+                    let columns = 4
+                    let spacing: CGFloat = 14
+                    let horizontalPadding: CGFloat = 18
+                    let usableWidth = max(1, proxy.size.width - (horizontalPadding * 2) - (CGFloat(columns - 1) * spacing))
+                    let side = floor(usableWidth / CGFloat(columns))
+
+                    VStack(alignment: .leading, spacing: spacing) {
+                        ForEach(0 ..< 3, id: \.self) { _ in
+                            HStack(spacing: spacing) {
+                                ForEach(0 ..< columns, id: \.self) { _ in
+                                    VStack(spacing: 6) {
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .fill(.quaternary.opacity(0.35))
+                                            .frame(width: side, height: side)
+                                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                            .fill(.quaternary.opacity(0.3))
+                                            .frame(width: side * 0.68, height: 12)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(.top, 74)
+                    .padding(.horizontal, horizontalPadding)
+                }
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 
@@ -1331,13 +1605,12 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
     private let tableView = BrowserListTableView(frame: .zero)
 
     private var isApplyingProgrammaticSelection = false
-    private var listThumbnailCache: [URL: NSImage] = [:]
-    private var listThumbnailInflight: Set<URL> = []
     private var listThumbnailRequestVersion: [URL: Int] = [:]
     private var listThumbnailVersionCounter = 0
     private var lastThumbnailInvalidationToken = UUID()
     private var pendingInvalidatedThumbnailURLs: Set<URL> = []
     private var pendingThumbnailRefreshURLs: Set<URL> = []
+    private var listThumbnailTasksByURL: [URL: Task<Void, Never>] = [:]
     private var isRenderingState = false
     private var lastRenderedItemURLs: [URL] = []
     private var contextMenuTargetURLs: [URL] = []
@@ -1363,6 +1636,7 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
     override func viewDidLoad() {
         super.viewDidLoad()
         configureList()
+        updateListPresentationState(hasItems: !items.isEmpty)
         browserFocusObserver = NotificationCenter.default.addObserver(
             forName: .browserDidRequestFocus,
             object: nil,
@@ -1376,6 +1650,10 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
 
     override func viewWillDisappear() {
         super.viewWillDisappear()
+        for task in listThumbnailTasksByURL.values {
+            task.cancel()
+        }
+        listThumbnailTasksByURL.removeAll()
         if let browserFocusObserver {
             NotificationCenter.default.removeObserver(browserFocusObserver)
             self.browserFocusObserver = nil
@@ -1386,6 +1664,7 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         super.viewDidLayout()
         syncTableWidthToViewportIfNeeded()
         applyInitialColumnFitIfNeeded()
+        updateListPresentationState(hasItems: !items.isEmpty)
     }
 
     override func viewDidAppear() {
@@ -1403,14 +1682,18 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
             let invalidated = model.browserThumbnailInvalidatedURLs
             pendingInvalidatedThumbnailURLs = invalidated
             if invalidated.isEmpty {
-                listThumbnailCache.removeAll()
-                listThumbnailInflight.removeAll()
+                ThumbnailPipeline.invalidateAllCachedImages()
+                for task in listThumbnailTasksByURL.values {
+                    task.cancel()
+                }
+                listThumbnailTasksByURL.removeAll()
                 listThumbnailRequestVersion.removeAll()
                 pendingThumbnailRefreshURLs.removeAll()
             } else {
                 pendingThumbnailRefreshURLs.formUnion(invalidated)
                 for url in invalidated {
-                    listThumbnailInflight.remove(url)
+                    listThumbnailTasksByURL[url]?.cancel()
+                    listThumbnailTasksByURL[url] = nil
                     listThumbnailRequestVersion.removeValue(forKey: url)
                 }
             }
@@ -1418,6 +1701,7 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
 
         syncTableWidthToViewportIfNeeded()
         applyInitialColumnFitIfNeeded()
+        updateListPresentationState(hasItems: !items.isEmpty)
         if hasListChanged() {
             tableView.reloadData()
         } else {
@@ -1482,7 +1766,8 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         tableView.frame = NSRect(origin: .zero, size: scrollView.contentView.bounds.size)
         tableView.autoresizingMask = [.width]
         tableView.usesAutomaticRowHeights = false
-        tableView.rowHeight = 24
+        tableView.rowHeight = UIMetrics.List.rowHeight
+        tableView.usesAlternatingRowBackgroundColors = true
         tableView.headerView = NSTableHeaderView()
         tableView.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
         tableView.allowsColumnResizing = true
@@ -1513,13 +1798,13 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         let nameColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
         nameColumn.title = "Name"
         nameColumn.minWidth = 60
-        nameColumn.width = 320
+        nameColumn.width = 300
         nameColumn.resizingMask = [.autoresizingMask, .userResizingMask]
 
         let createdColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("created"))
         createdColumn.title = "Date Created"
         createdColumn.minWidth = 84
-        createdColumn.width = 140
+        createdColumn.width = 160
         createdColumn.resizingMask = .userResizingMask
 
         let sizeColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("size"))
@@ -1557,6 +1842,11 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
             frame.size.width = width
             tableView.frame = frame
         }
+    }
+
+    private func updateListPresentationState(hasItems: Bool) {
+        tableView.usesAlternatingRowBackgroundColors = hasItems
+        tableView.headerView?.isHidden = !hasItems
     }
 
     private func applyInitialColumnFitIfNeeded() {
@@ -1604,7 +1894,7 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
                 pendingDot.identifier = NSUserInterfaceItemIdentifier("pending-dot")
                 pendingDot.translatesAutoresizingMaskIntoConstraints = false
                 pendingDot.wantsLayer = true
-                pendingDot.layer?.cornerRadius = 3
+                pendingDot.layer?.cornerRadius = UIMetrics.List.pendingDotCornerRadius
                 pendingDot.layer?.backgroundColor = NSColor.systemOrange.cgColor
                 view.addSubview(pendingDot)
 
@@ -1615,22 +1905,22 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
                 view.addSubview(iconView)
 
                 NSLayoutConstraint.activate([
-                    pendingDot.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
+                    pendingDot.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: UIMetrics.List.cellHorizontalInset),
                     pendingDot.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-                    pendingDot.widthAnchor.constraint(equalToConstant: 6),
-                    pendingDot.heightAnchor.constraint(equalToConstant: 6),
-                    iconView.leadingAnchor.constraint(equalTo: pendingDot.trailingAnchor, constant: 6),
+                    pendingDot.widthAnchor.constraint(equalToConstant: UIMetrics.List.pendingDotSize),
+                    pendingDot.heightAnchor.constraint(equalToConstant: UIMetrics.List.pendingDotSize),
+                    iconView.leadingAnchor.constraint(equalTo: pendingDot.trailingAnchor, constant: UIMetrics.List.iconGap),
                     iconView.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-                    iconView.widthAnchor.constraint(equalToConstant: 16),
-                    iconView.heightAnchor.constraint(equalToConstant: 16),
-                    textField.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 6),
-                    textField.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
+                    iconView.widthAnchor.constraint(equalToConstant: UIMetrics.List.iconSize),
+                    iconView.heightAnchor.constraint(equalToConstant: UIMetrics.List.iconSize),
+                    textField.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: UIMetrics.List.iconGap),
+                    textField.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -UIMetrics.List.cellHorizontalInset),
                     textField.centerYAnchor.constraint(equalTo: view.centerYAnchor)
                 ])
             } else {
                 NSLayoutConstraint.activate([
-                    textField.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
-                    textField.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
+                    textField.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: UIMetrics.List.cellHorizontalInset),
+                    textField.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -UIMetrics.List.cellHorizontalInset),
                     textField.centerYAnchor.constraint(equalTo: view.centerYAnchor)
                 ])
             }
@@ -1823,23 +2113,7 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
             let iconRectInWindow = tableView.convert(iconRectInTable, to: nil)
             let iconRectOnScreen = window.convertToScreen(iconRectInWindow)
             model.setQuickLookSourceFrame(for: item.url, rectOnScreen: iconRectOnScreen)
-            if let iconImageView = iconView as? NSImageView {
-                model.setQuickLookTransitionImage(for: item.url, image: quickLookTransitionSnapshot(for: iconImageView))
-            }
         }
-    }
-
-    private func quickLookTransitionSnapshot(for iconView: NSImageView) -> NSImage? {
-        guard iconView.bounds.width > 0, iconView.bounds.height > 0 else {
-            return iconView.image
-        }
-        guard let rep = iconView.bitmapImageRepForCachingDisplay(in: iconView.bounds) else {
-            return iconView.image
-        }
-        iconView.cacheDisplay(in: iconView.bounds, to: rep)
-        let image = NSImage(size: iconView.bounds.size)
-        image.addRepresentation(rep)
-        return image
     }
 
     private func configureListIcon(_ iconView: NSImageView, for item: AppModel.BrowserItem, atRow row: Int) {
@@ -1853,78 +2127,62 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
             model.setQuickLookSourceFrame(for: item.url, rectOnScreen: iconRectOnScreen)
         }
 
-        if let cached = listThumbnailCache[item.url] {
-            iconView.image = cached
-            if isActiveListView {
-                model.setQuickLookTransitionImage(for: item.url, image: quickLookTransitionSnapshot(for: iconView))
-            }
+        if let cached = ThumbnailPipeline.cachedImage(for: item.url, minRenderedSide: 1) {
+            iconView.image = model.displayImageForCurrentStagedState(cached, fileURL: item.url)
             requestListThumbnailIfNeeded(for: item, row: row, forceRefresh: pendingThumbnailRefreshURLs.contains(item.url))
             return
         }
 
-        if isLikelyImageFile(item.url) {
-            iconView.image = nil
-        } else {
-            let fallback = NSWorkspace.shared.icon(forFile: item.url.path)
-            fallback.size = NSSize(width: 16, height: 16)
-            iconView.image = fallback
-        }
-        if isActiveListView {
-            model.setQuickLookTransitionImage(for: item.url, image: quickLookTransitionSnapshot(for: iconView))
-        }
+        iconView.image = ThumbnailPipeline.fallbackIcon(for: item.url, side: 16)
 
         requestListThumbnailIfNeeded(for: item, row: row, forceRefresh: pendingThumbnailRefreshURLs.contains(item.url))
     }
 
-    private func requestListThumbnailIfNeeded(for item: AppModel.BrowserItem, row: Int, forceRefresh: Bool) {
-        if !forceRefresh, listThumbnailCache[item.url] != nil { return }
-        guard !listThumbnailInflight.contains(item.url) else { return }
-        listThumbnailInflight.insert(item.url)
+    private func requestListThumbnailIfNeeded(for item: AppModel.BrowserItem, row _: Int, forceRefresh: Bool) {
+        let requiredSide: CGFloat = 64
+        if !forceRefresh,
+           ThumbnailPipeline.cachedImage(for: item.url, minRenderedSide: requiredSide) != nil {
+            return
+        }
         listThumbnailVersionCounter += 1
         let requestVersion = listThumbnailVersionCounter
         listThumbnailRequestVersion[item.url] = requestVersion
-
-        Task { [weak self] in
-            let image = await Task.detached(priority: .userInitiated) {
-                var image = generateOrientedBrowserThumbnail(fileURL: item.url, maxPixelSize: 64)
-                if image == nil {
-                    image = await generateQuickLookThumbnail(fileURL: item.url, maxPixelSize: 64)
-                }
-                if image == nil {
-                    image = NSImage(contentsOf: item.url)
-                }
-                if image == nil, !isLikelyImageFile(item.url) {
-                    let fallback = NSWorkspace.shared.icon(forFile: item.url.path)
-                    fallback.size = NSSize(width: 16, height: 16)
-                    image = fallback
-                }
-                return image
-            }.value
-
+        listThumbnailTasksByURL[item.url]?.cancel()
+        listThumbnailTasksByURL[item.url] = Task { [weak self] in
             guard let self else { return }
-            self.listThumbnailInflight.remove(item.url)
-            guard self.listThumbnailRequestVersion[item.url] == requestVersion else { return }
-            self.pendingThumbnailRefreshURLs.remove(item.url)
-            guard let image else { return }
-            self.listThumbnailCache[item.url] = image
-
-            guard self.items.indices.contains(row), self.items[row].url == item.url else { return }
-            let nameColumn = self.tableView.column(withIdentifier: NSUserInterfaceItemIdentifier("name"))
-            guard nameColumn >= 0,
-                  let nameCell = self.tableView.view(atColumn: nameColumn, row: row, makeIfNecessary: false) as? NSTableCellView,
-                  let currentIcon = nameCell.subviews.first(where: { ($0 as? NSImageView)?.identifier?.rawValue == "name-icon" }) as? NSImageView,
-                  currentIcon.toolTip == item.url.path
-            else {
-                return
-            }
-
-            currentIcon.alphaValue = 1
-            currentIcon.image = image
-
-            if self.model.browserViewMode == .list {
-                self.model.setQuickLookTransitionImage(for: item.url, image: self.quickLookTransitionSnapshot(for: currentIcon))
-            }
+            let image = await SharedThumbnailRequestBroker.shared.request(
+                url: item.url,
+                requiredSide: requiredSide,
+                forceRefresh: forceRefresh
+            )
+            await self.completeListThumbnailRequest(url: item.url, requestVersion: requestVersion, image: image)
         }
+    }
+
+    private func completeListThumbnailRequest(url: URL, requestVersion: Int, image: NSImage?) async {
+        listThumbnailTasksByURL[url] = nil
+
+        guard listThumbnailRequestVersion[url] == requestVersion else { return }
+        pendingThumbnailRefreshURLs.remove(url)
+        guard let image else { return }
+
+        guard let row = items.firstIndex(where: { $0.url == url }) else { return }
+        let nameColumn = tableView.column(withIdentifier: NSUserInterfaceItemIdentifier("name"))
+        guard nameColumn >= 0,
+              let nameCell = tableView.view(atColumn: nameColumn, row: row, makeIfNecessary: false) as? NSTableCellView,
+              let currentIcon = nameCell.subviews.first(where: { ($0 as? NSImageView)?.identifier?.rawValue == "name-icon" }) as? NSImageView,
+              currentIcon.toolTip == url.path
+        else {
+            return
+        }
+
+        let transition = CATransition()
+        transition.type = .fade
+        transition.duration = Motion.duration
+        transition.timingFunction = Motion.timingFunction
+        currentIcon.layer?.add(transition, forKey: "listThumbnailSwapFade")
+        currentIcon.alphaValue = 1
+        currentIcon.image = model.displayImageForCurrentStagedState(image, fileURL: url)
     }
 }
 
@@ -1975,6 +2233,7 @@ private final class BrowserListTableView: NSTableView {
 
         super.keyDown(with: event)
     }
+
 }
 
 private struct BrowserGalleryView: View {
@@ -2006,8 +2265,6 @@ private struct BrowserGalleryCollectionRepresentable: NSViewControllerRepresenta
 
 @MainActor
 private final class BrowserGalleryViewController: NSViewController, NSCollectionViewDataSource, NSCollectionViewDelegate {
-    private static let maxThumbnailCacheEntries = 1_500
-
     private var model: AppModel
     private var items: [AppModel.BrowserItem]
 
@@ -2021,14 +2278,11 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
     private var lastRenderedSelected: Set<URL> = []
     private var lastRenderedPending: Set<URL> = []
     private var lastRenderedPrimarySelectionURL: URL?
-    private var thumbnailCache: [URL: NSImage] = [:]
-    private var thumbnailRenderedSide: [URL: CGFloat] = [:]
-    private var thumbnailRecency: [URL] = []
-    private var thumbnailInflight: Set<URL> = []
     private var thumbnailRequestVersion: [URL: Int] = [:]
     private var thumbnailVersionCounter = 0
     private var lastThumbnailInvalidationToken = UUID()
     private var pendingThumbnailRefreshURLs: Set<URL> = []
+    private var thumbnailTasksByURL: [URL: Task<Void, Never>] = [:]
     private var isRenderingState = false
     private var zoomRestoreToken = 0
     private var pinchAccumulator: CGFloat = 0
@@ -2067,6 +2321,10 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
 
     override func viewWillDisappear() {
         super.viewWillDisappear()
+        for task in thumbnailTasksByURL.values {
+            task.cancel()
+        }
+        thumbnailTasksByURL.removeAll()
         if let browserFocusObserver {
             NotificationCenter.default.removeObserver(browserFocusObserver)
             self.browserFocusObserver = nil
@@ -2157,17 +2415,19 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
             lastThumbnailInvalidationToken = model.browserThumbnailInvalidationToken
             let invalidated = model.browserThumbnailInvalidatedURLs
             if invalidated.isEmpty {
-                thumbnailCache.removeAll()
-                thumbnailRenderedSide.removeAll()
-                thumbnailRecency.removeAll()
-                thumbnailInflight.removeAll()
+                ThumbnailPipeline.invalidateAllCachedImages()
+                for task in thumbnailTasksByURL.values {
+                    task.cancel()
+                }
+                thumbnailTasksByURL.removeAll()
                 thumbnailRequestVersion.removeAll()
                 pendingThumbnailRefreshURLs.removeAll()
                 collectionView.reloadData()
             } else {
                 pendingThumbnailRefreshURLs.formUnion(invalidated)
                 for url in invalidated {
-                    thumbnailInflight.remove(url)
+                    thumbnailTasksByURL[url]?.cancel()
+                    thumbnailTasksByURL[url] = nil
                     thumbnailRequestVersion.removeValue(forKey: url)
                 }
                 let indexPaths = Set(items.enumerated().compactMap { index, item -> IndexPath? in
@@ -2206,7 +2466,11 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
         }
 
         if listChanged || columnsChanged || selectionChanged || pendingChanged {
-            refreshVisibleCellState(pendingURLs: pendingURLs, selectedURLs: selectedURLs)
+            refreshVisibleCellState(
+                pendingURLs: pendingURLs,
+                selectedURLs: selectedURLs,
+                needsFullReconfigure: listChanged || columnsChanged || pendingChanged
+            )
             lastRenderedPending = pendingURLs
         }
     }
@@ -2257,8 +2521,8 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
         layer.removeAnimation(forKey: "galleryZoomFade")
         let transition = CATransition()
         transition.type = .fade
-        transition.duration = 0.15
-        transition.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        transition.duration = Motion.duration
+        transition.timingFunction = Motion.timingFunction
         layer.add(transition, forKey: "galleryZoomFade")
     }
 
@@ -2310,13 +2574,31 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
         }
     }
 
-    private func refreshVisibleCellState(pendingURLs: Set<URL>, selectedURLs: Set<URL>) {
+    private func refreshVisibleCellState(
+        pendingURLs: Set<URL>,
+        selectedURLs: Set<URL>,
+        needsFullReconfigure: Bool
+    ) {
         for indexPath in collectionView.indexPathsForVisibleItems() {
             guard indexPath.item >= 0, indexPath.item < items.count else { continue }
             guard let cell = collectionView.item(at: indexPath) as? AppKitGalleryItem else { continue }
             let item = items[indexPath.item]
-            cell.applySelection(isSelected: selectedURLs.contains(item.url))
-            cell.applyPending(hasPendingEdits: pendingURLs.contains(item.url))
+            if needsFullReconfigure {
+                let baseImage = ThumbnailPipeline.cachedImage(for: item.url, minRenderedSide: 1)
+                    ?? ThumbnailPipeline.fallbackIcon(for: item.url, side: 128)
+                let displayImage = model.displayImageForCurrentStagedState(baseImage, fileURL: item.url)
+                cell.configure(
+                    name: item.name,
+                    image: displayImage,
+                    isSelected: selectedURLs.contains(item.url),
+                    hasPendingEdits: pendingURLs.contains(item.url),
+                    tileSide: max(layout.tileSide, 40),
+                    preferredAspectRatio: preferredAspectRatio(for: item.url)
+                )
+            } else {
+                cell.applySelection(isSelected: selectedURLs.contains(item.url))
+                cell.applyPending(hasPendingEdits: pendingURLs.contains(item.url))
+            }
         }
         updateQuickLookArtifacts()
     }
@@ -2336,95 +2618,63 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
         let rectInWindow = collectionView.convert(rectInCollection, to: nil)
         let rectOnScreen = window.convertToScreen(rectInWindow)
         model.setQuickLookSourceFrame(for: primaryURL, rectOnScreen: rectOnScreen)
-        model.setQuickLookTransitionImage(for: primaryURL, image: quickLookTransitionSnapshot(for: imageView))
-    }
-
-    private func quickLookTransitionSnapshot(for imageView: NSImageView) -> NSImage? {
-        guard imageView.bounds.width > 0, imageView.bounds.height > 0 else {
-            return imageView.image
-        }
-        guard let rep = imageView.bitmapImageRepForCachingDisplay(in: imageView.bounds) else {
-            return imageView.image
-        }
-        imageView.cacheDisplay(in: imageView.bounds, to: rep)
-        let image = NSImage(size: imageView.bounds.size)
-        image.addRepresentation(rep)
-        return image
     }
 
     private func requestThumbnailIfNeeded(for item: AppModel.BrowserItem, tileSide: CGFloat) {
         let requiredSide = max(tileSide, 120)
         let forceRefresh = pendingThumbnailRefreshURLs.contains(item.url)
-        if !forceRefresh,
-           let renderedSide = thumbnailRenderedSide[item.url],
-           renderedSide >= requiredSide * 0.9,
-           thumbnailCache[item.url] != nil {
+        if forceRefresh {
+            ThumbnailPipeline.invalidateCachedImages(for: [item.url])
+        } else if ThumbnailPipeline.cachedImage(for: item.url, minRenderedSide: requiredSide * 0.9) != nil {
             return
         }
-        guard !thumbnailInflight.contains(item.url) else { return }
-        thumbnailInflight.insert(item.url)
         thumbnailVersionCounter += 1
         let requestVersion = thumbnailVersionCounter
         thumbnailRequestVersion[item.url] = requestVersion
-
-        Task { [weak self] in
-            let image = await Task.detached(priority: .userInitiated) {
-                var image = generateOrientedBrowserThumbnail(fileURL: item.url, maxPixelSize: requiredSide * 2)
-                if image == nil {
-                    image = await generateQuickLookThumbnail(fileURL: item.url, maxPixelSize: requiredSide * 2)
-                }
-                if image == nil {
-                    image = NSImage(contentsOf: item.url)
-                }
-                if image == nil, !isLikelyImageFile(item.url) {
-                    let fallback = NSWorkspace.shared.icon(forFile: item.url.path)
-                    fallback.size = NSSize(width: 128, height: 128)
-                    image = fallback
-                }
-                return image
-            }.value
-
+        thumbnailTasksByURL[item.url]?.cancel()
+        thumbnailTasksByURL[item.url] = Task { [weak self] in
             guard let self else { return }
-            self.thumbnailInflight.remove(item.url)
-            guard self.thumbnailRequestVersion[item.url] == requestVersion else { return }
-            guard let image else { return }
-            self.thumbnailCache[item.url] = image
-            self.thumbnailRenderedSide[item.url] = requiredSide
-            self.markThumbnailAsRecentlyUsed(item.url)
-            self.trimThumbnailCacheIfNeeded()
-            self.pendingThumbnailRefreshURLs.remove(item.url)
-
-            guard let row = self.items.firstIndex(where: { $0.url == item.url }) else { return }
-            let indexPath = IndexPath(item: row, section: 0)
-            guard let cell = self.collectionView.item(at: indexPath) as? AppKitGalleryItem else { return }
-            cell.configure(
-                name: item.name,
-                image: image,
-                isSelected: self.model.selectedFileURLs.contains(item.url),
-                hasPendingEdits: self.model.hasPendingEdits(for: item.url),
-                tileSide: max(self.layout.tileSide, 40)
+            let image = await SharedThumbnailRequestBroker.shared.request(
+                url: item.url,
+                requiredSide: requiredSide * 2,
+                forceRefresh: forceRefresh
             )
-            self.updateQuickLookArtifacts()
+            await self.completeThumbnailRequest(
+                url: item.url,
+                requiredSide: requiredSide,
+                requestVersion: requestVersion,
+                image: image
+            )
         }
     }
 
-    private func markThumbnailAsRecentlyUsed(_ url: URL) {
-        thumbnailRecency.removeAll(where: { $0 == url })
-        thumbnailRecency.append(url)
-    }
+    private func completeThumbnailRequest(
+        url: URL,
+        requiredSide: CGFloat,
+        requestVersion: Int,
+        image: NSImage?
+    ) async {
+        thumbnailTasksByURL[url] = nil
 
-    private func trimThumbnailCacheIfNeeded() {
-        guard thumbnailCache.count > Self.maxThumbnailCacheEntries else { return }
-        let overflow = thumbnailCache.count - Self.maxThumbnailCacheEntries
-        guard overflow > 0 else { return }
+        guard thumbnailRequestVersion[url] == requestVersion else { return }
+        guard let image else { return }
 
-        let urlsToRemove = Array(thumbnailRecency.prefix(overflow))
-        for url in urlsToRemove {
-            thumbnailCache.removeValue(forKey: url)
-            thumbnailRenderedSide.removeValue(forKey: url)
-            pendingThumbnailRefreshURLs.remove(url)
-        }
-        thumbnailRecency.removeFirst(min(overflow, thumbnailRecency.count))
+        pendingThumbnailRefreshURLs.remove(url)
+
+        guard let row = items.firstIndex(where: { $0.url == url }) else { return }
+        let indexPath = IndexPath(item: row, section: 0)
+        guard let cell = collectionView.item(at: indexPath) as? AppKitGalleryItem else { return }
+        let item = items[row]
+        let displayImage = model.displayImageForCurrentStagedState(image, fileURL: url)
+        cell.configure(
+            name: item.name,
+            image: displayImage,
+            isSelected: model.selectedFileURLs.contains(url),
+            hasPendingEdits: model.hasPendingEdits(for: url),
+            tileSide: max(layout.tileSide, 40),
+            preferredAspectRatio: preferredAspectRatio(for: url)
+        )
+        updateQuickLookArtifacts()
     }
 
     private func menuForItem(at indexPath: IndexPath) -> NSMenu? {
@@ -2544,24 +2794,17 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
         }
 
         let item = items[indexPath.item]
-        let image = thumbnailCache[item.url] ?? {
-            if isLikelyImageFile(item.url) {
-                return nil
-            }
-            let fallback = NSWorkspace.shared.icon(forFile: item.url.path)
-            fallback.size = NSSize(width: 128, height: 128)
-            return fallback
-        }()
-        if image != nil {
-            markThumbnailAsRecentlyUsed(item.url)
-        }
+        let baseImage = ThumbnailPipeline.cachedImage(for: item.url, minRenderedSide: 1)
+            ?? ThumbnailPipeline.fallbackIcon(for: item.url, side: 128)
+        let displayImage = model.displayImageForCurrentStagedState(baseImage, fileURL: item.url)
 
         cell.configure(
             name: item.name,
-            image: image,
+            image: displayImage,
             isSelected: model.selectedFileURLs.contains(item.url),
             hasPendingEdits: model.hasPendingEdits(for: item.url),
-            tileSide: max(layout.tileSide, 40)
+            tileSide: max(layout.tileSide, 40),
+            preferredAspectRatio: preferredAspectRatio(for: item.url)
         )
         requestThumbnailIfNeeded(for: item, tileSide: max(layout.tileSide, 40))
         return cell
@@ -2588,6 +2831,62 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
         }
         model.setSelectionFromList(urls, focusedURL: focusedURL)
         updateQuickLookArtifacts()
+    }
+
+    private static let imageWidthKeys: Set<String> = ["ImageWidth", "ExifImageWidth", "PixelXDimension"]
+    private static let imageHeightKeys: Set<String> = ["ImageHeight", "ExifImageHeight", "PixelYDimension"]
+
+    private func preferredAspectRatio(for fileURL: URL) -> CGFloat? {
+        if let snapshot = model.metadataByFile[fileURL] {
+            let widthValue = snapshot.fields.first(where: { Self.imageWidthKeys.contains($0.key) })?.value
+            let heightValue = snapshot.fields.first(where: { Self.imageHeightKeys.contains($0.key) })?.value
+            if let width = parsePositiveNumber(widthValue),
+               let height = parsePositiveNumber(heightValue),
+               height > 0 {
+                let baseAspectRatio = width / height
+                return model.displayAspectRatioForCurrentStagedState(baseAspectRatio, fileURL: fileURL)
+            }
+        }
+
+        // Fallback: derive from cached thumbnail dimensions so rapid staged rotations
+        // can update ring geometry immediately even before fresh metadata/thumbnail lands.
+        if let cached = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: 1),
+           let size = resolvedImageSize(cached),
+           size.height > 0 {
+            let baseAspectRatio = size.width / size.height
+            return model.displayAspectRatioForCurrentStagedState(baseAspectRatio, fileURL: fileURL)
+        }
+
+        return nil
+    }
+
+    private func parsePositiveNumber(_ raw: String?) -> CGFloat? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let direct = Double(trimmed), direct > 0 {
+            return CGFloat(direct)
+        }
+        let pattern = #"[0-9]+(?:\.[0-9]+)?"#
+        guard let match = trimmed.range(of: pattern, options: .regularExpression) else { return nil }
+        guard let parsed = Double(trimmed[match]), parsed > 0 else { return nil }
+        return CGFloat(parsed)
+    }
+
+    private func resolvedImageSize(_ image: NSImage) -> CGSize? {
+        if image.size.width > 0, image.size.height > 0 {
+            return image.size
+        }
+        if let bitmap = image.representations.compactMap({ $0 as? NSBitmapImageRep }).first,
+           bitmap.pixelsWide > 0,
+           bitmap.pixelsHigh > 0 {
+            return CGSize(width: bitmap.pixelsWide, height: bitmap.pixelsHigh)
+        }
+        if let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+           cgImage.width > 0,
+           cgImage.height > 0 {
+            return CGSize(width: cgImage.width, height: cgImage.height)
+        }
+        return nil
     }
 }
 
@@ -2708,6 +3007,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
     private let selectionOverlay = NSView(frame: .zero)
     private let pendingDot = NSView(frame: .zero)
     private let titleField = NSTextField(labelWithString: "")
+    private var preferredAspectRatio: CGFloat?
     private var imageWidthConstraint: NSLayoutConstraint?
     private var imageHeightConstraint: NSLayoutConstraint?
     private var overlayWidthConstraint: NSLayoutConstraint?
@@ -2734,21 +3034,21 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         thumbnailImageView.translatesAutoresizingMaskIntoConstraints = false
         thumbnailImageView.imageScaling = .scaleProportionallyUpOrDown
         thumbnailImageView.wantsLayer = true
-        thumbnailImageView.layer?.cornerRadius = 8
+        thumbnailImageView.layer?.cornerRadius = UIMetrics.Gallery.thumbnailCornerRadius
         thumbnailImageView.layer?.masksToBounds = true
         thumbnailContainer.addSubview(thumbnailImageView)
 
         selectionOverlay.translatesAutoresizingMaskIntoConstraints = false
         selectionOverlay.wantsLayer = true
-        selectionOverlay.layer?.cornerRadius = 8
+        selectionOverlay.layer?.cornerRadius = UIMetrics.Gallery.selectionCornerRadius + UIMetrics.Gallery.selectionOutset
         selectionOverlay.layer?.masksToBounds = true
-        selectionOverlay.layer?.borderWidth = 2.5
+        selectionOverlay.layer?.borderWidth = UIMetrics.Gallery.selectionBorderWidth
         selectionOverlay.layer?.borderColor = NSColor.clear.cgColor
         thumbnailContainer.addSubview(selectionOverlay)
 
         pendingDot.translatesAutoresizingMaskIntoConstraints = false
         pendingDot.wantsLayer = true
-        pendingDot.layer?.cornerRadius = 4
+        pendingDot.layer?.cornerRadius = UIMetrics.Gallery.pendingDotCornerRadius
         pendingDot.layer?.backgroundColor = NSColor.systemOrange.cgColor
         pendingDot.isHidden = true
         thumbnailContainer.addSubview(pendingDot)
@@ -2772,12 +3072,12 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
             selectionOverlay.centerXAnchor.constraint(equalTo: thumbnailContainer.centerXAnchor),
             selectionOverlay.centerYAnchor.constraint(equalTo: thumbnailContainer.centerYAnchor),
 
-            pendingDot.widthAnchor.constraint(equalToConstant: 8),
-            pendingDot.heightAnchor.constraint(equalToConstant: 8),
-            pendingDot.trailingAnchor.constraint(equalTo: selectionOverlay.trailingAnchor, constant: -6),
-            pendingDot.topAnchor.constraint(equalTo: selectionOverlay.topAnchor, constant: 6),
+            pendingDot.widthAnchor.constraint(equalToConstant: UIMetrics.Gallery.pendingDotSize),
+            pendingDot.heightAnchor.constraint(equalToConstant: UIMetrics.Gallery.pendingDotSize),
+            pendingDot.trailingAnchor.constraint(equalTo: selectionOverlay.trailingAnchor, constant: -UIMetrics.Gallery.pendingDotInset),
+            pendingDot.topAnchor.constraint(equalTo: selectionOverlay.topAnchor, constant: UIMetrics.Gallery.pendingDotInset),
 
-            titleField.topAnchor.constraint(equalTo: thumbnailContainer.bottomAnchor, constant: 6),
+            titleField.topAnchor.constraint(equalTo: thumbnailContainer.bottomAnchor, constant: UIMetrics.Gallery.titleGap),
             titleField.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             titleField.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             titleField.bottomAnchor.constraint(lessThanOrEqualTo: view.bottomAnchor),
@@ -2793,8 +3093,16 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         overlayHeightConstraint?.isActive = true
     }
 
-    func configure(name: String, image: NSImage?, isSelected: Bool, hasPendingEdits: Bool, tileSide: CGFloat) {
+    func configure(
+        name: String,
+        image: NSImage?,
+        isSelected: Bool,
+        hasPendingEdits: Bool,
+        tileSide: CGFloat,
+        preferredAspectRatio: CGFloat?
+    ) {
         titleField.stringValue = name
+        self.preferredAspectRatio = preferredAspectRatio
         setImage(image)
         applySelection(isSelected: isSelected)
         applyPending(hasPendingEdits: hasPendingEdits)
@@ -2802,23 +3110,27 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
     }
 
     func updateTileSide(_ tileSide: CGFloat, animated: Bool) {
-        let fitted = fittedThumbnailSize(for: thumbnailImageView.image?.size, in: tileSide)
+        let fitted = fittedThumbnailSize(
+            preferredAspectRatio: preferredAspectRatio,
+            fallbackImageSize: resolvedImageSize(thumbnailImageView.image),
+            in: tileSide
+        )
         guard animated else {
             imageWidthConstraint?.constant = fitted.width
             imageHeightConstraint?.constant = fitted.height
-            overlayWidthConstraint?.constant = fitted.width
-            overlayHeightConstraint?.constant = fitted.height
+            overlayWidthConstraint?.constant = fitted.width + (UIMetrics.Gallery.selectionOutset * 2)
+            overlayHeightConstraint?.constant = fitted.height + (UIMetrics.Gallery.selectionOutset * 2)
             return
         }
 
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.16
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            context.duration = Motion.duration
+            context.timingFunction = Motion.timingFunction
             context.allowsImplicitAnimation = true
             imageWidthConstraint?.animator().constant = fitted.width
             imageHeightConstraint?.animator().constant = fitted.height
-            overlayWidthConstraint?.animator().constant = fitted.width
-            overlayHeightConstraint?.animator().constant = fitted.height
+            overlayWidthConstraint?.animator().constant = fitted.width + (UIMetrics.Gallery.selectionOutset * 2)
+            overlayHeightConstraint?.animator().constant = fitted.height + (UIMetrics.Gallery.selectionOutset * 2)
         }
     }
 
@@ -2831,20 +3143,67 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
     }
 
     func setImage(_ image: NSImage?) {
-        if thumbnailImageView.image !== image {
+        guard thumbnailImageView.image !== image else { return }
+        let shouldFadeTransition = thumbnailImageView.image != nil
+            && image != nil
+            && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+
+        if shouldFadeTransition {
+            let transition = CATransition()
+            transition.type = .fade
+            transition.duration = Motion.duration
+            transition.timingFunction = Motion.timingFunction
+            thumbnailImageView.layer?.add(transition, forKey: "thumbnailSwapFade")
+            thumbnailImageView.alphaValue = 1
+            thumbnailImageView.image = image
+        } else {
             thumbnailImageView.alphaValue = 1
             thumbnailImageView.image = image
         }
     }
 
-    private func fittedThumbnailSize(for imageSize: CGSize?, in side: CGFloat) -> CGSize {
-        guard let imageSize, imageSize.width > 0, imageSize.height > 0 else {
-            return CGSize(width: side, height: side)
+    private func resolvedImageSize(_ image: NSImage?) -> CGSize? {
+        guard let image else { return nil }
+        if image.size.width > 0, image.size.height > 0 {
+            return image.size
         }
-        let widthRatio = side / imageSize.width
-        let heightRatio = side / imageSize.height
-        let scale = min(widthRatio, heightRatio)
-        return CGSize(width: max(1, floor(imageSize.width * scale)), height: max(1, floor(imageSize.height * scale)))
+        if let bitmap = image.representations.compactMap({ $0 as? NSBitmapImageRep }).first,
+           bitmap.pixelsWide > 0,
+           bitmap.pixelsHigh > 0 {
+            return CGSize(width: bitmap.pixelsWide, height: bitmap.pixelsHigh)
+        }
+        if let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+           cgImage.width > 0,
+           cgImage.height > 0 {
+            return CGSize(width: cgImage.width, height: cgImage.height)
+        }
+        return nil
+    }
+
+    private func fittedThumbnailSize(
+        preferredAspectRatio: CGFloat?,
+        fallbackImageSize: CGSize?,
+        in side: CGFloat
+    ) -> CGSize {
+        let aspect: CGFloat
+        // Prefer the rendered image dimensions so the selector always matches what is on screen.
+        if let fallbackImageSize, fallbackImageSize.width > 0, fallbackImageSize.height > 0 {
+            aspect = fallbackImageSize.width / fallbackImageSize.height
+        } else if let preferredAspectRatio, preferredAspectRatio > 0 {
+            aspect = preferredAspectRatio
+        } else {
+            aspect = 1
+        }
+
+        if aspect >= 1 {
+            let width = max(1, floor(side))
+            let height = max(1, floor(side / aspect))
+            return CGSize(width: width, height: height)
+        } else {
+            let width = max(1, floor(side * aspect))
+            let height = max(1, floor(side))
+            return CGSize(width: width, height: height)
+        }
     }
 }
 struct InspectorView: View {
@@ -2912,7 +3271,7 @@ struct InspectorView: View {
                     if model.selectedFileURLs.count == 1 {
                         VStack(alignment: .leading, spacing: 8) {
                             Button {
-                                withAnimation(appAnimation(duration: 0.15)) {
+                                withAnimation(appAnimation()) {
                                     model.toggleInspectorSection("Preview")
                                 }
                             } label: {
@@ -2987,7 +3346,7 @@ struct InspectorView: View {
                     ForEach(model.groupedEditableTags, id: \.section) { grouped in
                         VStack(alignment: .leading, spacing: 8) {
                             Button {
-                                withAnimation(appAnimation(duration: 0.15)) {
+                                withAnimation(appAnimation()) {
                                     model.toggleInspectorSection(grouped.section)
                                 }
                             } label: {
@@ -3147,6 +3506,7 @@ struct InspectorView: View {
             }
             .ignoresSafeArea(.container, edges: .top)
             .contentMargins(.top, topScrollStartInset, for: .scrollContent)
+            .animation(appAnimation(), value: model.collapsedInspectorSections)
             .onChange(of: focusedTagID) { oldValue, newValue in
                 guard let newValue else { return }
                 guard oldValue != nil else { return }
@@ -3159,7 +3519,7 @@ struct InspectorView: View {
                         }
                         suppressNextFocusScrollAnimation = false
                     } else {
-                        withAnimation(appAnimation(duration: 0.12)) {
+                        withAnimation(appAnimation()) {
                             proxy.scrollTo(newValue)
                         }
                     }
@@ -3820,7 +4180,7 @@ private struct InspectorPreviewImageView: View {
     let fileURL: URL
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .topLeading) {
             if let image = model.inspectorPreviewImage(for: fileURL) {
                 Image(nsImage: image)
                     .resizable()
@@ -3834,12 +4194,23 @@ private struct InspectorPreviewImageView: View {
                 ProgressView()
                     .controlSize(.small)
             }
+
+            if model.hasPendingImageEdits(for: fileURL) {
+                Circle()
+                    .fill(Color.orange)
+                    .frame(width: 9, height: 9)
+                    .padding(8)
+            }
         }
         .frame(height: 220)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .task(id: fileURL) {
+        .task(id: previewTaskID) {
             model.ensureInspectorPreviewLoaded(for: fileURL)
         }
+    }
+
+    private var previewTaskID: String {
+        "\(fileURL.path)::\(model.inspectorRefreshRevision)"
     }
 }
 

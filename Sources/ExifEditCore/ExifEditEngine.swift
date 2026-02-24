@@ -39,6 +39,21 @@ public actor ExifEditEngine {
         )
     }
 
+    public func createBackup(operationID: UUID, files: [URL]) throws -> URL {
+        guard !files.isEmpty else {
+            throw ExifEditError.invalidOperation("No files were selected.")
+        }
+        return try backupManager.createBackup(operationID: operationID, files: files)
+    }
+
+    public func writeMetadataWithoutBackup(operation: EditOperation) async throws -> OperationResult {
+        guard !operation.targetFiles.isEmpty else {
+            throw ExifEditError.invalidOperation("No files were selected.")
+        }
+        try validator.validate(patches: operation.changes)
+        return await exifToolService.writeMetadata(operation: operation)
+    }
+
     public func restore(operationID: UUID) async throws -> OperationResult {
         try backupManager.restoreBackup(operationID: operationID)
     }

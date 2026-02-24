@@ -496,6 +496,31 @@ final class AppModel: ObservableObject {
         let updatedAt: Date
     }
 
+    enum StagedImageOperation: Hashable, Sendable {
+        case rotateLeft90
+        case flipHorizontal
+    }
+
+    private struct ImageTransformMatrix: Hashable {
+        let a: Int
+        let b: Int
+        let c: Int
+        let d: Int
+
+        static let identity = ImageTransformMatrix(a: 1, b: 0, c: 0, d: 1)
+        static let rotateLeft90 = ImageTransformMatrix(a: 0, b: -1, c: 1, d: 0)
+        static let flipHorizontal = ImageTransformMatrix(a: -1, b: 0, c: 0, d: 1)
+
+        func multiplied(by rhs: ImageTransformMatrix) -> ImageTransformMatrix {
+            ImageTransformMatrix(
+                a: a * rhs.a + b * rhs.c,
+                b: a * rhs.b + b * rhs.d,
+                c: c * rhs.a + d * rhs.c,
+                d: c * rhs.b + d * rhs.d
+            )
+        }
+    }
+
     struct EditSessionSnapshot {
         let tag: EditableTag
         let draftValue: String
@@ -505,12 +530,14 @@ final class AppModel: ObservableObject {
 
     private struct PendingEditState: Equatable {
         let pendingEditsByFile: [URL: [EditableTag: StagedEditRecord]]
+        let pendingImageOpsByFile: [URL: [StagedImageOperation]]
     }
 
     @Published var sidebarItems: [SidebarItem] = []
     @Published private(set) var sidebarImageCounts: [String: Int] = [:]
     @Published var selectedSidebarID: String?
     @Published var isSidebarCollapsed = false
+    @Published var isInspectorCollapsed = false
     @Published var browserItems: [BrowserItem] = []
     @Published var browserSort: BrowserSort {
         didSet { UserDefaults.standard.set(browserSort.rawValue, forKey: Self.browserSortKey) }
@@ -568,6 +595,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var inspectorRefreshRevision: UInt64 = 0
 
     @Published private var pendingEditsByFile: [URL: [EditableTag: StagedEditRecord]] = [:]
+    @Published private var pendingImageOpsByFile: [URL: [StagedImageOperation]] = [:]
     @Published private var inspectorPreviewImages: [URL: NSImage] = [:]
     @Published private var inspectorPreviewRenderedSide: [URL: CGFloat] = [:]
     private var mixedTags: Set<EditableTag> = []
@@ -591,7 +619,8 @@ final class AppModel: ObservableObject {
     private var selectionAnchorURL: URL?
     private var selectionFocusURL: URL?
     private var quickLookSourceFrames: [URL: NSRect] = [:]
-    private var quickLookTransitionImages: [URL: NSImage] = [:]
+    private var stagedQuickLookPreviewFiles: [URL: URL] = [:]
+    private var stagedQuickLookPreviewGenerationInFlight: Set<URL> = []
 
     private let engine: ExifEditEngine
     private let presetStore: PresetStoreProtocol
@@ -639,7 +668,10 @@ final class AppModel: ObservableObject {
     }
 
     var hasUnsavedEdits: Bool {
-        !pendingEditsByFile.isEmpty
+        if !pendingEditsByFile.isEmpty {
+            return true
+        }
+        return pendingImageOpsByFile.values.contains { !Self.normalizeStagedImageOperations($0).isEmpty }
     }
 
     var canApplyMetadataChanges: Bool {
@@ -846,37 +878,11 @@ final class AppModel: ObservableObject {
     }
 
     func rotateLeft(fileURL: URL) {
-        statusMessage = "Rotating \(fileURL.lastPathComponent)…"
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                try await Self.runSipsRotateLeft(fileURL: fileURL)
-                await MainActor.run {
-                    self.refreshMetadata(for: [fileURL])
-                }
-            } catch {
-                await MainActor.run {
-                    self.statusMessage = "Failed to rotate \(fileURL.lastPathComponent). \(error.localizedDescription)"
-                }
-            }
-        }
+        stageImageOperation(.rotateLeft90, for: fileURL)
     }
 
     func flipHorizontal(fileURL: URL) {
-        statusMessage = "Flipping \(fileURL.lastPathComponent)…"
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                try await Self.runSipsFlipHorizontal(fileURL: fileURL)
-                await MainActor.run {
-                    self.refreshMetadata(for: [fileURL])
-                }
-            } catch {
-                await MainActor.run {
-                    self.statusMessage = "Failed to flip \(fileURL.lastPathComponent). \(error.localizedDescription)"
-                }
-            }
-        }
+        stageImageOperation(.flipHorizontal, for: fileURL)
     }
 
     func quickLookSelection() {
@@ -894,28 +900,21 @@ final class AppModel: ObservableObject {
         } else {
             focusedURL = orderedItems.first
         }
-
         QuickLookPreviewController.shared.present(urls: orderedItems, focusedURL: focusedURL, model: self)
+    }
+
+    func quickLookDisplayURL(for sourceURL: URL) -> URL {
+        // Keep Quick Look on original file URLs for immediate, stable native behavior.
+        removeStagedQuickLookPreviewFile(for: sourceURL)
+        return sourceURL
     }
 
     func setQuickLookSourceFrame(for fileURL: URL, rectOnScreen: NSRect) {
         quickLookSourceFrames[fileURL] = rectOnScreen
     }
 
-    func setQuickLookTransitionImage(for fileURL: URL, image: NSImage?) {
-        if let image {
-            quickLookTransitionImages[fileURL] = image
-        } else {
-            quickLookTransitionImages.removeValue(forKey: fileURL)
-        }
-    }
-
     func quickLookSourceFrame(for fileURL: URL) -> NSRect? {
         return quickLookSourceFrames[fileURL]
-    }
-
-    func quickLookTransitionImage(for fileURL: URL) -> NSImage? {
-        quickLookTransitionImages[fileURL]
     }
 
     func setSelectionFromQuickLook(_ fileURL: URL) {
@@ -930,7 +929,7 @@ final class AppModel: ObservableObject {
     func inspectorPreviewImage(for fileURL: URL) -> NSImage? {
         guard let image = inspectorPreviewImages[fileURL] else { return nil }
         markInspectorPreviewAsRecentlyUsed(fileURL)
-        return image
+        return displayImageForCurrentStagedState(image, fileURL: fileURL)
     }
 
     func isInspectorPreviewLoading(for fileURL: URL) -> Bool {
@@ -1121,6 +1120,10 @@ final class AppModel: ObservableObject {
     func discardUnsavedEdits() {
         registerMetadataUndoIfNeeded(previous: currentPendingEditState())
         pendingEditsByFile.removeAll()
+        pendingImageOpsByFile.removeAll()
+        removeAllStagedQuickLookPreviewFiles()
+        invalidateAllBrowserThumbnails()
+        invalidateInspectorPreviews(for: browserItems.map(\.url))
         recalculateInspectorState(forceNotify: true)
         setStatusMessage("Discarded unsaved metadata changes.", autoClearAfterSuccess: true)
     }
@@ -1131,7 +1134,11 @@ final class AppModel: ObservableObject {
         registerMetadataUndoIfNeeded(previous: currentPendingEditState())
         for fileURL in uniqueURLs {
             pendingEditsByFile[fileURL] = nil
+            pendingImageOpsByFile[fileURL] = nil
+            removeStagedQuickLookPreviewFile(for: fileURL)
         }
+        invalidateBrowserThumbnails(for: uniqueURLs)
+        invalidateInspectorPreviews(for: uniqueURLs)
         recalculateInspectorState(forceNotify: true)
         setStatusMessage("Cleared metadata changes for \(uniqueURLs.count) file(s).", autoClearAfterSuccess: true)
     }
@@ -1183,25 +1190,66 @@ final class AppModel: ObservableObject {
 
             for (index, fileURL) in reachableFiles.enumerated() {
                 let patches = buildPatches(for: fileURL)
-                guard !patches.isEmpty else { continue }
+                let imageOps = effectiveImageOperations(for: fileURL)
+                guard !patches.isEmpty || !imageOps.isEmpty else {
+                    applyMetadataCompleted = index + 1
+                    continue
+                }
                 let operationID = UUID()
-                let operation = EditOperation(id: operationID, targetFiles: [fileURL], changes: patches)
                 operationFilesByID[operationID] = fileURL
 
                 do {
-                    let result = try await engine.apply(operation: operation)
-                    operationIDs.append(result.operationID)
-                    if firstBackupLocation == nil {
-                        firstBackupLocation = result.backupLocation
-                    }
-                    if result.failed.isEmpty {
-                        succeeded.append(fileURL)
-                        pendingEditsByFile[fileURL] = nil
-                        staleMetadataFiles.insert(fileURL)
+                    if imageOps.isEmpty {
+                        let operation = EditOperation(id: operationID, targetFiles: [fileURL], changes: patches)
+                        let result = try await engine.apply(operation: operation)
+                        operationIDs.append(result.operationID)
+                        if firstBackupLocation == nil {
+                            firstBackupLocation = result.backupLocation
+                        }
+                        if result.failed.isEmpty {
+                            succeeded.append(fileURL)
+                            pendingEditsByFile[fileURL] = nil
+                            staleMetadataFiles.insert(fileURL)
+                        } else {
+                            failed.append(contentsOf: result.failed)
+                        }
                     } else {
-                        failed.append(contentsOf: result.failed)
+                        var didApplyImageOps = false
+                        let backupLocation = try await engine.createBackup(operationID: operationID, files: [fileURL])
+                        if firstBackupLocation == nil {
+                            firstBackupLocation = backupLocation
+                        }
+
+                        try await Self.applyStagedImageOperations(imageOps, to: fileURL)
+                        didApplyImageOps = true
+
+                        if patches.isEmpty {
+                            operationIDs.append(operationID)
+                            succeeded.append(fileURL)
+                            pendingImageOpsByFile[fileURL] = nil
+                            staleMetadataFiles.insert(fileURL)
+                        } else {
+                            let metadataOperation = EditOperation(id: operationID, targetFiles: [fileURL], changes: patches)
+                            let metadataResult = try await engine.writeMetadataWithoutBackup(operation: metadataOperation)
+                            if metadataResult.failed.isEmpty {
+                                operationIDs.append(metadataResult.operationID)
+                                succeeded.append(fileURL)
+                                pendingEditsByFile[fileURL] = nil
+                                pendingImageOpsByFile[fileURL] = nil
+                                staleMetadataFiles.insert(fileURL)
+                            } else {
+                                if didApplyImageOps {
+                                    _ = try? await engine.restore(operationID: operationID)
+                                }
+                                failed.append(contentsOf: metadataResult.failed)
+                            }
+                        }
                     }
+                    removeStagedQuickLookPreviewFile(for: fileURL)
                 } catch {
+                    if !imageOps.isEmpty {
+                        _ = try? await engine.restore(operationID: operationID)
+                    }
                     failed.append(FileError(fileURL: fileURL, message: error.localizedDescription))
                 }
                 applyMetadataCompleted = index + 1
@@ -1303,6 +1351,14 @@ final class AppModel: ObservableObject {
                 duration: Date().timeIntervalSince(startedAt)
             )
             lastResult = summary
+            if !summary.succeeded.isEmpty {
+                for fileURL in summary.succeeded {
+                    pendingImageOpsByFile[fileURL] = nil
+                    removeStagedQuickLookPreviewFile(for: fileURL)
+                }
+                invalidateBrowserThumbnails(for: summary.succeeded)
+                invalidateInspectorPreviews(for: summary.succeeded)
+            }
             if summary.failed.isEmpty {
                 var message = "Restored \(summary.succeeded.count) file(s)."
                 if skippedCount > 0 {
@@ -1665,7 +1721,33 @@ final class AppModel: ObservableObject {
     }
 
     func hasPendingEdits(for fileURL: URL) -> Bool {
-        !(pendingEditsByFile[fileURL]?.isEmpty ?? true)
+        !(pendingEditsByFile[fileURL]?.isEmpty ?? true) || !effectiveImageOperations(for: fileURL).isEmpty
+    }
+
+    func hasPendingImageEdits(for fileURL: URL) -> Bool {
+        !effectiveImageOperations(for: fileURL).isEmpty
+    }
+
+    func displayImageForCurrentStagedState(_ image: NSImage, fileURL: URL) -> NSImage {
+        let ops = effectiveImageOperations(for: fileURL)
+        guard !ops.isEmpty else { return image }
+        return Self.applyImageOperations(ops, to: image) ?? image
+    }
+
+    func displayAspectRatioForCurrentStagedState(_ aspectRatio: CGFloat?, fileURL: URL) -> CGFloat? {
+        guard let aspectRatio, aspectRatio > 0 else { return aspectRatio }
+        let ops = effectiveImageOperations(for: fileURL)
+        guard !ops.isEmpty else { return aspectRatio }
+        let rotateCount = ops.reduce(0) { partial, op in
+            switch op {
+            case .rotateLeft90:
+                return partial + 1
+            case .flipHorizontal:
+                return partial
+            }
+        }
+        guard rotateCount % 2 != 0 else { return aspectRatio }
+        return 1.0 / aspectRatio
     }
 
     func listColumnValue(for fileURL: URL, columnID: String, fallbackItem: BrowserItem?) -> String {
@@ -1805,8 +1887,278 @@ final class AppModel: ObservableObject {
     var pendingEditedFileCount: Int {
         browserItems
             .map(\.url)
-            .filter { !(pendingEditsByFile[$0]?.isEmpty ?? true) }
+            .filter { hasPendingEdits(for: $0) }
             .count
+    }
+
+    private func stageImageOperation(_ operation: StagedImageOperation, for fileURL: URL) {
+        let previousState = currentPendingEditState()
+        var ops = pendingImageOpsByFile[fileURL] ?? []
+        ops.append(operation)
+        let normalized = Self.normalizeStagedImageOperations(ops)
+        if normalized.isEmpty {
+            pendingImageOpsByFile[fileURL] = nil
+        } else {
+            pendingImageOpsByFile[fileURL] = normalized
+        }
+
+        removeStagedQuickLookPreviewFile(for: fileURL)
+        invalidateBrowserThumbnails(for: [fileURL])
+        recalculateInspectorState(forceNotify: true)
+        registerMetadataUndoIfNeeded(previous: previousState)
+    }
+
+    private func startStagedQuickLookPreviewGeneration(for sourceURL: URL, operations: [StagedImageOperation]) {
+        guard !operations.isEmpty else { return }
+        guard !stagedQuickLookPreviewGenerationInFlight.contains(sourceURL) else { return }
+        stagedQuickLookPreviewGenerationInFlight.insert(sourceURL)
+        Task { [weak self] in
+            guard let self else { return }
+            let previewURL = await Task.detached(priority: .userInitiated) { [sourceURL] in
+                AppModel.generateStagedQuickLookPreviewFile(sourceURL: sourceURL, operations: operations)
+            }.value
+
+            stagedQuickLookPreviewGenerationInFlight.remove(sourceURL)
+            guard !effectiveImageOperations(for: sourceURL).isEmpty else {
+                if let previewURL {
+                    try? FileManager.default.removeItem(at: previewURL)
+                }
+                return
+            }
+            if let previewURL {
+                removeStagedQuickLookPreviewFile(for: sourceURL)
+                stagedQuickLookPreviewFiles[sourceURL] = previewURL
+                QuickLookPreviewController.shared.refreshIfVisible(model: self)
+            }
+        }
+    }
+
+    nonisolated private static func generateStagedQuickLookPreviewFile(sourceURL: URL, operations: [StagedImageOperation]) -> URL? {
+        let previewsDirectory = AppBrand.currentSupportDirectoryURL()
+            .appendingPathComponent("QuickLookPreviews", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: previewsDirectory, withIntermediateDirectories: true)
+            let ext = sourceURL.pathExtension.isEmpty ? "jpg" : sourceURL.pathExtension
+            let name = "\(UUID().uuidString).\(ext)"
+            let generatedURL = previewsDirectory.appendingPathComponent(name, isDirectory: false)
+            try FileManager.default.copyItem(at: sourceURL, to: generatedURL)
+
+            for operation in operations {
+                let arguments: [String]
+                switch operation {
+                case .rotateLeft90:
+                    arguments = ["-r", "-90", generatedURL.path]
+                case .flipHorizontal:
+                    arguments = ["--flip", "horizontal", generatedURL.path]
+                }
+                try runSipsSync(arguments: arguments)
+            }
+            return generatedURL
+        } catch {
+            return nil
+        }
+    }
+
+    nonisolated private static func runSipsSync(arguments: [String]) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/sips")
+        process.arguments = arguments
+        let stderrPipe = Pipe()
+        process.standardError = stderrPipe
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            let stderrText = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? "sips exited with code \(process.terminationStatus)"
+            throw NSError(
+                domain: "\(AppBrand.identifierPrefix).QuickLookPreview",
+                code: Int(process.terminationStatus),
+                userInfo: [NSLocalizedDescriptionKey: stderrText]
+            )
+        }
+    }
+
+    private func effectiveImageOperations(for fileURL: URL) -> [StagedImageOperation] {
+        Self.normalizeStagedImageOperations(pendingImageOpsByFile[fileURL] ?? [])
+    }
+
+    private static func normalizeStagedImageOperations(_ operations: [StagedImageOperation]) -> [StagedImageOperation] {
+        guard !operations.isEmpty else { return [] }
+        let transform = operations.reduce(ImageTransformMatrix.identity) { partial, op in
+            let opMatrix: ImageTransformMatrix = switch op {
+            case .rotateLeft90:
+                .rotateLeft90
+            case .flipHorizontal:
+                .flipHorizontal
+            }
+            // Operations are applied in-order to the image.
+            return opMatrix.multiplied(by: partial)
+        }
+        return canonicalImageOperationMap[transform] ?? operations
+    }
+
+    private static let canonicalImageOperationMap: [ImageTransformMatrix: [StagedImageOperation]] = {
+        let candidates: [StagedImageOperation] = [.rotateLeft90, .flipHorizontal]
+        var bestByTransform: [ImageTransformMatrix: [StagedImageOperation]] = [.identity: []]
+        var queue: [[StagedImageOperation]] = [[]]
+
+        while !queue.isEmpty {
+            let current = queue.removeFirst()
+            if current.count >= 4 { continue }
+
+            for op in candidates {
+                let next = current + [op]
+                let transform = next.reduce(ImageTransformMatrix.identity) { partial, step in
+                    let opMatrix: ImageTransformMatrix = switch step {
+                    case .rotateLeft90:
+                        .rotateLeft90
+                    case .flipHorizontal:
+                        .flipHorizontal
+                    }
+                    return opMatrix.multiplied(by: partial)
+                }
+                if bestByTransform[transform] == nil {
+                    bestByTransform[transform] = next
+                    queue.append(next)
+                }
+            }
+        }
+
+        return bestByTransform
+    }()
+
+    private static func applyStagedImageOperations(_ operations: [StagedImageOperation], to fileURL: URL) async throws {
+        guard !operations.isEmpty else { return }
+        for operation in operations {
+            switch operation {
+            case .rotateLeft90:
+                try await runSips(arguments: ["-r", "-90", fileURL.path], errorDomain: "\(AppBrand.identifierPrefix).Rotate")
+            case .flipHorizontal:
+                try await runSips(arguments: ["--flip", "horizontal", fileURL.path], errorDomain: "\(AppBrand.identifierPrefix).Flip")
+            }
+        }
+    }
+
+    nonisolated private static func applyImageOperations(_ operations: [StagedImageOperation], to image: NSImage) -> NSImage? {
+        var current = image
+        for operation in operations {
+            guard let next = transformedImage(current, operation: operation) else { return nil }
+            current = next
+        }
+        return current
+    }
+
+    nonisolated private static func transformedImage(_ image: NSImage, operation: StagedImageOperation) -> NSImage? {
+        let size = image.size
+        guard size.width > 0, size.height > 0 else { return nil }
+        let outputSize: NSSize
+        switch operation {
+        case .rotateLeft90:
+            outputSize = NSSize(width: size.height, height: size.width)
+        case .flipHorizontal:
+            outputSize = size
+        }
+
+        let output = NSImage(size: outputSize)
+        output.lockFocus()
+        guard let context = NSGraphicsContext.current?.cgContext else {
+            output.unlockFocus()
+            return nil
+        }
+        context.interpolationQuality = .high
+        switch operation {
+        case .rotateLeft90:
+            // Counterclockwise 90deg (true "Rotate Left")
+            context.translateBy(x: outputSize.width, y: 0)
+            context.rotate(by: .pi / 2)
+            image.draw(in: NSRect(origin: .zero, size: size), from: .zero, operation: .copy, fraction: 1.0)
+        case .flipHorizontal:
+            context.translateBy(x: outputSize.width, y: 0)
+            context.scaleBy(x: -1, y: 1)
+            image.draw(in: NSRect(origin: .zero, size: size), from: .zero, operation: .copy, fraction: 1.0)
+        }
+        output.unlockFocus()
+        return output
+    }
+
+    nonisolated private static func writeImage(_ image: NSImage, to fileURL: URL) throws {
+        guard let rep = NSBitmapImageRep(data: image.tiffRepresentation ?? Data()) else {
+            throw NSError(
+                domain: "\(AppBrand.identifierPrefix).ImageOps",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Could not render transformed image."]
+            )
+        }
+
+        let ext = fileURL.pathExtension.lowercased()
+        let type: NSBitmapImageRep.FileType = {
+            switch ext {
+            case "jpg", "jpeg":
+                return .jpeg
+            case "png":
+                return .png
+            case "tif", "tiff":
+                return .tiff
+            case "gif":
+                return .gif
+            case "bmp":
+                return .bmp
+            default:
+                return .jpeg
+            }
+        }()
+
+        var properties: [NSBitmapImageRep.PropertyKey: Any] = [:]
+        if type == .jpeg {
+            properties[.compressionFactor] = 0.98
+        }
+        guard let data = rep.representation(using: type, properties: properties) else {
+            throw NSError(
+                domain: "\(AppBrand.identifierPrefix).ImageOps",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "Could not encode transformed image."]
+            )
+        }
+        try data.write(to: fileURL, options: .atomic)
+    }
+
+    private static func runSips(arguments: [String], errorDomain: String) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/sips")
+            process.arguments = arguments
+
+            let stderrPipe = Pipe()
+            process.standardError = stderrPipe
+
+            process.terminationHandler = { proc in
+                let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+                let stderrText = String(data: data, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if proc.terminationStatus == 0 {
+                    continuation.resume()
+                } else if !stderrText.isEmpty {
+                    continuation.resume(throwing: NSError(
+                        domain: errorDomain,
+                        code: Int(proc.terminationStatus),
+                        userInfo: [NSLocalizedDescriptionKey: stderrText]
+                    ))
+                } else {
+                    continuation.resume(throwing: NSError(
+                        domain: errorDomain,
+                        code: Int(proc.terminationStatus),
+                        userInfo: [NSLocalizedDescriptionKey: "sips exited with code \(proc.terminationStatus)."]
+                    ))
+                }
+            }
+
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
     }
 
     private func trackPendingEdit(_ value: String, for tag: EditableTag, source: StagedEditSource) {
@@ -2222,11 +2574,23 @@ final class AppModel: ObservableObject {
         guard let canonical = canonicalSidebarURL(url) else {
             return nil
         }
+        if let sourceItem = sourceSidebarItem(forCanonicalURL: canonical) {
+            removeRecentLocation(forCanonicalURL: canonical)
+            persistRecentLocations()
+            refreshSidebarItems(preferredSelectionID: sourceItem.id)
+            return sourceItem
+        }
         if let pinnedItem = favoriteSidebarItem(forCanonicalURL: canonical) {
             removeRecentLocation(forCanonicalURL: canonical)
             persistRecentLocations()
             refreshSidebarItems(preferredSelectionID: pinnedItem.id)
             return pinnedItem
+        }
+        if let mountedItem = mountedVolumeSidebarItem(forCanonicalURL: canonical) {
+            removeRecentLocation(forCanonicalURL: canonical)
+            persistRecentLocations()
+            refreshSidebarItems(preferredSelectionID: mountedItem.id)
+            return mountedItem
         }
 
         let id = "folder::\(canonical.path)"
@@ -2529,6 +2893,8 @@ final class AppModel: ObservableObject {
             staleMetadataFiles = []
         }
         pendingEditsByFile = [:]
+        pendingImageOpsByFile = [:]
+        removeAllStagedQuickLookPreviewFiles()
         if !preserveSessionCaches {
             inspectorPreviewImages = [:]
             inspectorPreviewRenderedSide = [:]
@@ -2651,9 +3017,9 @@ final class AppModel: ObservableObject {
 
     private func baseSidebarItems() -> [SidebarItem] {
         var items: [SidebarItem] = [
-            SidebarItem(id: "source-pictures", title: "Pictures", section: "Sources", kind: .pictures),
             SidebarItem(id: "source-desktop", title: "Desktop", section: "Sources", kind: .desktop),
-            SidebarItem(id: "source-downloads", title: "Downloads", section: "Sources", kind: .downloads)
+            SidebarItem(id: "source-downloads", title: "Downloads", section: "Sources", kind: .downloads),
+            SidebarItem(id: "source-pictures", title: "Pictures", section: "Sources", kind: .pictures)
         ]
         items.append(contentsOf: mountedVolumeSidebarItems())
         return items
@@ -2950,6 +3316,32 @@ final class AppModel: ObservableObject {
     private func favoriteSidebarItem(forCanonicalURL canonical: URL) -> SidebarItem? {
         favoriteItems.first { item in
             guard case let .favorite(url) = item.kind else { return false }
+            return url.standardizedFileURL.resolvingSymlinksInPath().path == canonical.path
+        }
+    }
+
+    private func sourceSidebarItem(forCanonicalURL canonical: URL) -> SidebarItem? {
+        let pictures = picturesDirectoryURL().standardizedFileURL.resolvingSymlinksInPath().path
+        if canonical.path == pictures {
+            return SidebarItem(id: "source-pictures", title: "Pictures", section: "Sources", kind: .pictures)
+        }
+
+        let desktop = desktopDirectoryURL().standardizedFileURL.resolvingSymlinksInPath().path
+        if canonical.path == desktop {
+            return SidebarItem(id: "source-desktop", title: "Desktop", section: "Sources", kind: .desktop)
+        }
+
+        let downloads = downloadsDirectoryURL().standardizedFileURL.resolvingSymlinksInPath().path
+        if canonical.path == downloads {
+            return SidebarItem(id: "source-downloads", title: "Downloads", section: "Sources", kind: .downloads)
+        }
+
+        return nil
+    }
+
+    private func mountedVolumeSidebarItem(forCanonicalURL canonical: URL) -> SidebarItem? {
+        mountedVolumeSidebarItems().first { item in
+            guard case let .mountedVolume(url) = item.kind else { return false }
             return url.standardizedFileURL.resolvingSymlinksInPath().path == canonical.path
         }
     }
@@ -4051,82 +4443,6 @@ final class AppModel: ObservableObject {
         browserThumbnailInvalidationToken = UUID()
     }
 
-    private static func runSipsRotateLeft(fileURL: URL) async throws {
-        try await withCheckedThrowingContinuation { continuation in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/sips")
-            process.arguments = ["-r", "-90", fileURL.path]
-
-            let stderrPipe = Pipe()
-            process.standardError = stderrPipe
-
-            process.terminationHandler = { proc in
-                let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-                let stderrText = String(data: data, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                if proc.terminationStatus == 0 {
-                    continuation.resume()
-                } else if !stderrText.isEmpty {
-                    continuation.resume(throwing: NSError(
-                        domain: "\(AppBrand.identifierPrefix).Rotate",
-                        code: Int(proc.terminationStatus),
-                        userInfo: [NSLocalizedDescriptionKey: stderrText]
-                    ))
-                } else {
-                    continuation.resume(throwing: NSError(
-                        domain: "\(AppBrand.identifierPrefix).Rotate",
-                        code: Int(proc.terminationStatus),
-                        userInfo: [NSLocalizedDescriptionKey: "sips exited with code \(proc.terminationStatus)."]
-                    ))
-                }
-            }
-
-            do {
-                try process.run()
-            } catch {
-                continuation.resume(throwing: error)
-            }
-        }
-    }
-
-    private static func runSipsFlipHorizontal(fileURL: URL) async throws {
-        try await withCheckedThrowingContinuation { continuation in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/sips")
-            process.arguments = ["--flip", "horizontal", fileURL.path]
-
-            let stderrPipe = Pipe()
-            process.standardError = stderrPipe
-
-            process.terminationHandler = { proc in
-                let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-                let stderrText = String(data: data, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                if proc.terminationStatus == 0 {
-                    continuation.resume()
-                } else if !stderrText.isEmpty {
-                    continuation.resume(throwing: NSError(
-                        domain: "\(AppBrand.identifierPrefix).Flip",
-                        code: Int(proc.terminationStatus),
-                        userInfo: [NSLocalizedDescriptionKey: stderrText]
-                    ))
-                } else {
-                    continuation.resume(throwing: NSError(
-                        domain: "\(AppBrand.identifierPrefix).Flip",
-                        code: Int(proc.terminationStatus),
-                        userInfo: [NSLocalizedDescriptionKey: "sips exited with code \(proc.terminationStatus)."]
-                    ))
-                }
-            }
-
-            do {
-                try process.run()
-            } catch {
-                continuation.resume(throwing: error)
-            }
-        }
-    }
-
     private func loadInspectorPreview(for fileURL: URL, force: Bool, priority: TaskPriority? = nil) {
         let requestPriority = priority ?? (selectedFileURLs.contains(fileURL) ? .userInitiated : .utility)
         if !force, (inspectorPreviewRenderedSide[fileURL] ?? 0) >= Self.inspectorPreviewTargetSide {
@@ -4185,6 +4501,28 @@ final class AppModel: ObservableObject {
             inspectorPreviewRenderedSide[fileURL] = nil
         }
         inspectorPreviewRecency.removeAll(where: { targets.contains($0) })
+    }
+
+    private func makeStagedQuickLookPreviewFile(for sourceURL: URL) throws -> URL {
+        let previewsDirectory = AppBrand.currentSupportDirectoryURL()
+            .appendingPathComponent("QuickLookPreviews", isDirectory: true)
+        try FileManager.default.createDirectory(at: previewsDirectory, withIntermediateDirectories: true)
+        let ext = sourceURL.pathExtension.isEmpty ? "jpg" : sourceURL.pathExtension
+        let name = "\(UUID().uuidString).\(ext)"
+        return previewsDirectory.appendingPathComponent(name, isDirectory: false)
+    }
+
+    private func removeStagedQuickLookPreviewFile(for sourceURL: URL) {
+        stagedQuickLookPreviewGenerationInFlight.remove(sourceURL)
+        guard let previewURL = stagedQuickLookPreviewFiles.removeValue(forKey: sourceURL) else { return }
+        try? FileManager.default.removeItem(at: previewURL)
+    }
+
+    private func removeAllStagedQuickLookPreviewFiles() {
+        stagedQuickLookPreviewGenerationInFlight.removeAll()
+        for sourceURL in Array(stagedQuickLookPreviewFiles.keys) {
+            removeStagedQuickLookPreviewFile(for: sourceURL)
+        }
     }
 
     private func storeInspectorPreview(_ image: NSImage, for fileURL: URL, renderedSide: CGFloat) {
@@ -4314,7 +4652,10 @@ final class AppModel: ObservableObject {
     }
 
     private func currentPendingEditState() -> PendingEditState {
-        PendingEditState(pendingEditsByFile: pendingEditsByFile)
+        PendingEditState(
+            pendingEditsByFile: pendingEditsByFile,
+            pendingImageOpsByFile: pendingImageOpsByFile
+        )
     }
 
     private func registerMetadataUndoIfNeeded(previous: PendingEditState) {
@@ -4330,7 +4671,24 @@ final class AppModel: ObservableObject {
 
     private func applyPendingEditState(_ state: PendingEditState) {
         isApplyingMetadataUndoState = true
+        let previousPreviewSources = Set(pendingImageOpsByFile.keys)
         pendingEditsByFile = state.pendingEditsByFile
+        pendingImageOpsByFile = state.pendingImageOpsByFile.reduce(into: [:]) { partial, entry in
+            let normalized = Self.normalizeStagedImageOperations(entry.value)
+            if !normalized.isEmpty {
+                partial[entry.key] = normalized
+            }
+        }
+        let nextPreviewSources = Set(pendingImageOpsByFile.keys)
+        let removedSources = previousPreviewSources.subtracting(nextPreviewSources)
+        for sourceURL in removedSources {
+            removeStagedQuickLookPreviewFile(for: sourceURL)
+        }
+        let invalidated = Array(previousPreviewSources.union(nextPreviewSources))
+        if !invalidated.isEmpty {
+            invalidateBrowserThumbnails(for: invalidated)
+            invalidateInspectorPreviews(for: invalidated)
+        }
         recalculateInspectorState()
         isApplyingMetadataUndoState = false
     }
@@ -4341,7 +4699,8 @@ final class AppModel: ObservableObject {
     }
 
     private func availableSnapshot(for fileURL: URL) -> FileMetadataSnapshot? {
-        guard !staleMetadataFiles.contains(fileURL) else { return nil }
+        // Keep last-known metadata visible while a stale file is being refreshed.
+        // This avoids inspector fields collapsing to empty during rotate/refresh cycles.
         return metadataByFile[fileURL]
     }
 
@@ -4368,21 +4727,24 @@ final class AppModel: ObservableObject {
 private final class QuickLookPreviewController: NSObject, @preconcurrency QLPreviewPanelDataSource, @preconcurrency QLPreviewPanelDelegate {
     static let shared = QuickLookPreviewController()
 
-    private var items: [NSURL] = []
+    private var sourceItems: [URL] = []
+    private var displayItems: [NSURL] = []
+    private var displayToSource: [URL: URL] = [:]
     private weak var model: AppModel?
     private var panelObservation: NSKeyValueObservation?
 
     func present(urls: [URL], focusedURL: URL?, model: AppModel) {
-        items = urls.map { $0 as NSURL }
+        sourceItems = urls
         self.model = model
-        guard !items.isEmpty, let panel = QLPreviewPanel.shared() else { return }
+        guard !sourceItems.isEmpty, let panel = QLPreviewPanel.shared() else { return }
 
         panel.dataSource = self
         panel.delegate = self
+        rebuildDisplayItems(using: model)
         panel.reloadData()
 
         if let focusedURL,
-           let index = items.firstIndex(where: { ($0 as URL) == focusedURL }) {
+           let index = sourceItems.firstIndex(of: focusedURL) {
             panel.currentPreviewItemIndex = index
         } else {
             panel.currentPreviewItemIndex = 0
@@ -4400,31 +4762,34 @@ private final class QuickLookPreviewController: NSObject, @preconcurrency QLPrev
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    func refreshIfVisible(model: AppModel) {
+        guard let panel = QLPreviewPanel.shared() else { return }
+        guard self.model === model else { return }
+        let currentIndex = panel.currentPreviewItemIndex
+        rebuildDisplayItems(using: model)
+        panel.reloadData()
+        if currentIndex >= 0, currentIndex < displayItems.count {
+            panel.currentPreviewItemIndex = currentIndex
+        }
+        panel.refreshCurrentPreviewItem()
+    }
+
     func numberOfPreviewItems(in panel: QLPreviewPanel!) -> Int {
-        items.count
+        displayItems.count
     }
 
     func previewPanel(_ panel: QLPreviewPanel!, previewItemAt index: Int) -> QLPreviewItem! {
-        guard items.indices.contains(index) else { return nil }
-        return items[index]
+        guard displayItems.indices.contains(index) else { return nil }
+        return displayItems[index]
     }
 
     func previewPanel(_ panel: QLPreviewPanel!, sourceFrameOnScreenFor item: QLPreviewItem!) -> NSRect {
-        guard let url = (item as? NSURL) as URL? ?? (item as? URL),
-              let rect = model?.quickLookSourceFrame(for: url)
+        guard let sourceURL = sourceURL(for: item),
+              let rect = model?.quickLookSourceFrame(for: sourceURL)
         else {
             return .zero
         }
         return rect
-    }
-
-    func previewPanel(_ panel: QLPreviewPanel!, transitionImageFor item: QLPreviewItem!, contentRect: UnsafeMutablePointer<NSRect>) -> Any! {
-        guard let url = (item as? NSURL) as URL? ?? (item as? URL),
-              let image = model?.quickLookTransitionImage(for: url)
-        else {
-            return nil
-        }
-        return image
     }
 
     func previewPanelWillClose(_ panel: QLPreviewPanel!) {
@@ -4448,12 +4813,12 @@ private final class QuickLookPreviewController: NSObject, @preconcurrency QLPrev
     }
 
     private func syncSelection(forIndex index: Int) {
-        guard items.indices.contains(index) else { return }
-        model?.setSelectionFromQuickLook(items[index] as URL)
+        guard sourceItems.indices.contains(index) else { return }
+        model?.setSelectionFromQuickLook(sourceItems[index])
     }
 
     private func moveSelection(in panel: QLPreviewPanel, direction: MoveCommandDirection) -> Bool {
-        guard !items.isEmpty else { return false }
+        guard !sourceItems.isEmpty else { return false }
 
         if let model {
             switch model.browserViewMode {
@@ -4473,7 +4838,7 @@ private final class QuickLookPreviewController: NSObject, @preconcurrency QLPrev
             }
 
             if let selectedURL = model.primarySelectionURL,
-               let selectedIndex = items.firstIndex(where: { ($0 as URL) == selectedURL }) {
+               let selectedIndex = sourceItems.firstIndex(of: selectedURL) {
                 panel.currentPreviewItemIndex = selectedIndex
                 return true
             }
@@ -4486,11 +4851,25 @@ private final class QuickLookPreviewController: NSObject, @preconcurrency QLPrev
         let current = panel.currentPreviewItemIndex
         let fallback = current >= 0 ? current : 0
         let proposed = fallback + delta
-        let clamped = min(max(proposed, 0), items.count - 1)
+        let clamped = min(max(proposed, 0), sourceItems.count - 1)
         guard clamped != current else { return true }
         panel.currentPreviewItemIndex = clamped
         syncSelection(forIndex: clamped)
         return true
+    }
+
+    private func sourceURL(for item: QLPreviewItem?) -> URL? {
+        guard let url = (item as? NSURL) as URL? ?? (item as? URL) else { return nil }
+        return displayToSource[url.standardizedFileURL] ?? url
+    }
+
+    private func rebuildDisplayItems(using model: AppModel) {
+        displayToSource.removeAll(keepingCapacity: true)
+        displayItems = sourceItems.map { sourceURL in
+            let displayURL = model.quickLookDisplayURL(for: sourceURL)
+            displayToSource[displayURL.standardizedFileURL] = sourceURL
+            return displayURL as NSURL
+        }
     }
 }
 

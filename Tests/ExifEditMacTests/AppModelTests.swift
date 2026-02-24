@@ -1,5 +1,6 @@
 import ExifEditCore
 @testable import ExifEditMac
+import AppKit
 import Foundation
 import XCTest
 
@@ -199,6 +200,71 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedSidebarID, "favorite::\(b.path)")
     }
 
+    func testOpeningDownloadsDoesNotAppearInRecents() throws {
+        guard let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first else {
+            throw XCTSkip("No Downloads directory available in this environment")
+        }
+
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: downloads.path, isDirectory: &isDirectory),
+              isDirectory.boolValue,
+              FileManager.default.isReadableFile(atPath: downloads.path)
+        else {
+            throw XCTSkip("Downloads directory is not readable in this environment")
+        }
+
+        let recentStore = InMemoryRecentLocationsStore(locations: [
+            RecentLocation(path: downloads.path, displayName: "Downloads", order: 0, lastOpenedAt: Date())
+        ])
+
+        let model = makeModel(recentLocationsStore: recentStore)
+        model.openFolder(at: downloads)
+
+        let recents = model.sidebarItems.filter { $0.section == "Recents" }
+        XCTAssertFalse(recents.contains(where: { $0.id == "folder::\(downloads.standardizedFileURL.resolvingSymlinksInPath().path)" }))
+        XCTAssertEqual(model.selectedSidebarID, "source-downloads")
+    }
+
+    func testOpeningMountedVolumeDoesNotAppearInRecents() throws {
+        let keys: [URLResourceKey] = [
+            .volumeIsRemovableKey,
+            .volumeIsEjectableKey,
+            .volumeIsInternalKey,
+            .volumeIsRootFileSystemKey,
+            .volumeIsBrowsableKey
+        ]
+        let mounted = FileManager.default.mountedVolumeURLs(
+            includingResourceValuesForKeys: keys,
+            options: [.skipHiddenVolumes]
+        ) ?? []
+        let candidate = mounted.first { url in
+            guard let values = try? url.resourceValues(forKeys: Set(keys)),
+                  values.volumeIsRootFileSystem != true,
+                  values.volumeIsBrowsable != false
+            else {
+                return false
+            }
+            return values.volumeIsInternal == false
+                || values.volumeIsRemovable == true
+                || values.volumeIsEjectable == true
+        }
+
+        guard let mountedVolume = candidate else {
+            throw XCTSkip("No removable/ejectable mounted volume available in this environment")
+        }
+
+        let canonical = mountedVolume.standardizedFileURL.resolvingSymlinksInPath()
+        let recentStore = InMemoryRecentLocationsStore(locations: [
+            RecentLocation(path: canonical.path, displayName: canonical.lastPathComponent, order: 0, lastOpenedAt: Date())
+        ])
+        let model = makeModel(recentLocationsStore: recentStore)
+        model.openFolder(at: canonical)
+
+        let recents = model.sidebarItems.filter { $0.section == "Recents" }
+        XCTAssertFalse(recents.contains(where: { $0.id == "folder::\(canonical.path)" }))
+        XCTAssertEqual(model.selectedSidebarID, "volume::\(canonical.path)")
+    }
+
     func testFileActionStatesReflectPendingEdits() throws {
         let temp = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: temp) }
@@ -235,6 +301,64 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(applyAfterClear.isEnabled)
     }
 
+    func testRotateFourTimesNormalizesToNoPendingImageEdits() throws {
+        let fileURL = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        let model = makeModel()
+
+        model.rotateLeft(fileURL: fileURL)
+        model.rotateLeft(fileURL: fileURL)
+        model.rotateLeft(fileURL: fileURL)
+        model.rotateLeft(fileURL: fileURL)
+
+        XCTAssertFalse(model.hasPendingImageEdits(for: fileURL))
+        XCTAssertFalse(model.hasPendingEdits(for: fileURL))
+    }
+
+    func testApplyingRotatedImageKeepsLastKnownInspectorMetadataVisible() async throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let fileURL = temp.appendingPathComponent("sample.png")
+        try make1x1PNG().write(to: fileURL)
+
+        let model = makeModel()
+        let makeTag = AppModel.EditableTag.common.first(where: { $0.id == "exif-make" })
+        guard let makeTag else {
+            XCTFail("Missing exif-make editable tag")
+            return
+        }
+
+        model.metadataByFile = [
+            fileURL: FileMetadataSnapshot(
+                fileURL: fileURL,
+                fields: [
+                    MetadataField(key: "Make", namespace: .exif, value: "Canon")
+                ]
+            )
+        ]
+        model.setSelectionFromList([fileURL], focusedURL: fileURL)
+        XCTAssertEqual(model.valueForTag(makeTag), "Canon")
+
+        model.rotateLeft(fileURL: fileURL)
+        model.applyChanges(for: [fileURL])
+
+        for _ in 0..<300 {
+            if model.isApplyingMetadata == false {
+                break
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+
+        XCTAssertFalse(model.isApplyingMetadata)
+        XCTAssertTrue(model.lastResult?.failed.isEmpty ?? false)
+        XCTAssertTrue(model.lastResult?.succeeded.contains(fileURL) ?? false)
+
+        // Let post-apply metadata refresh settle.
+        try await Task.sleep(nanoseconds: 200_000_000)
+
+        XCTAssertEqual(model.valueForTag(makeTag), "Canon")
+    }
+
     private func makeModel(
         favoritesStore: InMemoryFavoritesStore = InMemoryFavoritesStore(),
         recentLocationsStore: InMemoryRecentLocationsStore = InMemoryRecentLocationsStore()
@@ -252,6 +376,20 @@ final class AppModelTests: XCTestCase {
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }
+}
+
+private func make1x1PNG() throws -> Data {
+    let image = NSImage(size: NSSize(width: 1, height: 1))
+    image.lockFocus()
+    NSColor.white.setFill()
+    NSBezierPath(rect: NSRect(x: 0, y: 0, width: 1, height: 1)).fill()
+    image.unlockFocus()
+    guard let tiff = image.tiffRepresentation,
+          let rep = NSBitmapImageRep(data: tiff),
+          let png = rep.representation(using: .png, properties: [:]) else {
+        throw NSError(domain: "AppModelTests", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to generate PNG test image"])
+    }
+    return png
 }
 
 private struct StubExifToolService: ExifToolServiceProtocol {

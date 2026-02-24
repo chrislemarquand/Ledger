@@ -69,33 +69,75 @@ struct ExifEditMacApp: App {
                 }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
                 .disabled((appDelegate.appModel?.selectedFileURLs.isEmpty ?? true))
+
+                Divider()
+
+                Button {
+                    guard let model = appDelegate.appModel else { return }
+                    model.performFileAction(.restoreFromLastBackup, targetURLs: Array(model.selectedFileURLs))
+                } label: {
+                    let model = appDelegate.appModel
+                    let state = model?.fileActionState(for: .restoreFromLastBackup, targetURLs: Array(model?.selectedFileURLs ?? []))
+                    Label(state?.title ?? "Restore from Last Backup", systemImage: state?.symbolName ?? "arrow.uturn.backward.circle")
+                }
+                .disabled({
+                    guard let model = appDelegate.appModel else { return true }
+                    return !model.fileActionState(for: .restoreFromLastBackup, targetURLs: Array(model.selectedFileURLs)).isEnabled
+                }())
             }
 
             CommandGroup(after: .pasteboard) {
-                Menu("Find") {
-                    Button {
-                        NSApp.sendAction(#selector(NativeThreePaneSplitViewController.focusSearchAction(_:)), to: nil, from: nil)
-                    } label: {
-                        Label("Find…", systemImage: "magnifyingglass")
-                    }
-                    .keyboardShortcut("f", modifiers: .command)
+                Button {
+                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.focusSearchAction(_:)), to: nil, from: nil)
+                } label: {
+                    Label("Find…", systemImage: "magnifyingglass")
                 }
+                .keyboardShortcut("f", modifiers: .command)
+            }
+
+            CommandGroup(after: .pasteboard) {
+                Button {
+                    rotateSelectionLeft()
+                } label: {
+                    Label("Rotate Left", systemImage: "rotate.left")
+                }
+                .disabled((appDelegate.appModel?.selectedFileURLs.isEmpty ?? true))
+
+                Button {
+                    rotateSelectionRight()
+                } label: {
+                    Label("Rotate Right", systemImage: "rotate.right")
+                }
+                .disabled((appDelegate.appModel?.selectedFileURLs.isEmpty ?? true))
+
+                Button {
+                    flipSelectionHorizontal()
+                } label: {
+                    Label("Flip", systemImage: "flip.horizontal")
+                }
+                .disabled((appDelegate.appModel?.selectedFileURLs.isEmpty ?? true))
             }
 
             CommandGroup(after: .toolbar) {
                 Button {
-                    NSApp.sendAction(#selector(NSSplitViewController.toggleSidebar(_:)), to: nil, from: nil)
+                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.toggleSidebarToolbarAction(_:)), to: nil, from: nil)
                 } label: {
                     Label(appDelegate.appModel?.isSidebarCollapsed == true ? "Show Sidebar" : "Hide Sidebar", systemImage: "sidebar.left")
                 }
                 .keyboardShortcut("s", modifiers: [.command, .option])
+
+                Button {
+                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.toggleInspectorAction(_:)), to: nil, from: nil)
+                } label: {
+                    Label(appDelegate.appModel?.isInspectorCollapsed == true ? "Show Inspector" : "Hide Inspector", systemImage: "sidebar.trailing")
+                }
 
                 Divider()
 
                 Button {
                     appDelegate.appModel?.browserViewMode = .gallery
                 } label: {
-                    Label("Gallery View", systemImage: "square.grid.3x2")
+                    Label("As Gallery", systemImage: "square.grid.3x2")
                 }
                 .keyboardShortcut("1", modifiers: .command)
                 .disabled((appDelegate.appModel?.browserViewMode ?? .gallery) == .gallery)
@@ -103,7 +145,7 @@ struct ExifEditMacApp: App {
                 Button {
                     appDelegate.appModel?.browserViewMode = .list
                 } label: {
-                    Label("List View", systemImage: "list.bullet")
+                    Label("As List", systemImage: "list.bullet")
                 }
                 .keyboardShortcut("2", modifiers: .command)
                 .disabled((appDelegate.appModel?.browserViewMode ?? .gallery) == .list)
@@ -144,7 +186,7 @@ struct ExifEditMacApp: App {
                     Label("Zoom In", systemImage: "plus.magnifyingglass")
                 }
                 .keyboardShortcut("+", modifiers: .command)
-                .disabled(!(appDelegate.appModel?.browserViewMode == .gallery && (appDelegate.appModel?.canIncreaseGalleryZoom ?? false)))
+                .disabled((appDelegate.appModel?.browserViewMode ?? .gallery) == .list)
 
                 Button {
                     NSApp.sendAction(#selector(NativeThreePaneSplitViewController.zoomOutAction(_:)), to: nil, from: nil)
@@ -152,10 +194,10 @@ struct ExifEditMacApp: App {
                     Label("Zoom Out", systemImage: "minus.magnifyingglass")
                 }
                 .keyboardShortcut("-", modifiers: .command)
-                .disabled(!(appDelegate.appModel?.browserViewMode == .gallery && (appDelegate.appModel?.canDecreaseGalleryZoom ?? false)))
+                .disabled((appDelegate.appModel?.browserViewMode ?? .gallery) == .list)
             }
 
-            CommandMenu("Metadata") {
+            CommandMenu("Folder") {
                 Button {
                     NSApp.sendAction(#selector(NativeThreePaneSplitViewController.refreshAction(_:)), to: nil, from: nil)
                 } label: {
@@ -295,6 +337,35 @@ struct ExifEditMacApp: App {
             return
         }
         _ = appDelegate.appModel?.redoLastMetadataEdit()
+    }
+
+    private func rotateSelectionLeft() {
+        guard let model = appDelegate.appModel else { return }
+        let files = Array(model.selectedFileURLs).sorted { $0.path < $1.path }
+        guard !files.isEmpty else { return }
+        for fileURL in files {
+            model.rotateLeft(fileURL: fileURL)
+        }
+    }
+
+    private func rotateSelectionRight() {
+        guard let model = appDelegate.appModel else { return }
+        let files = Array(model.selectedFileURLs).sorted { $0.path < $1.path }
+        guard !files.isEmpty else { return }
+        for fileURL in files {
+            model.rotateLeft(fileURL: fileURL)
+            model.rotateLeft(fileURL: fileURL)
+            model.rotateLeft(fileURL: fileURL)
+        }
+    }
+
+    private func flipSelectionHorizontal() {
+        guard let model = appDelegate.appModel else { return }
+        let files = Array(model.selectedFileURLs).sorted { $0.path < $1.path }
+        guard !files.isEmpty else { return }
+        for fileURL in files {
+            model.flipHorizontal(fileURL: fileURL)
+        }
     }
 }
 
