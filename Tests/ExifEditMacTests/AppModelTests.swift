@@ -359,6 +359,99 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.valueForTag(makeTag), "Canon")
     }
 
+    // MARK: - Modified-click selection sync
+
+    func testCommandClickAddsItemToSelection() {
+        let model = makeModel()
+        let items = makeBrowserItems(count: 3)
+        // Plain-click item 0 to set anchor.
+        model.selectFile(items[0].url, modifiers: [], in: items)
+        XCTAssertEqual(model.selectedFileURLs, [items[0].url])
+
+        // Cmd-click item 1 should add it without deselecting item 0.
+        model.selectFile(items[1].url, modifiers: .command, in: items)
+        XCTAssertEqual(model.selectedFileURLs, [items[0].url, items[1].url])
+    }
+
+    func testCommandClickDeselects() {
+        let model = makeModel()
+        let items = makeBrowserItems(count: 3)
+        model.selectFile(items[0].url, modifiers: [], in: items)
+        model.selectFile(items[1].url, modifiers: .command, in: items)
+        XCTAssertTrue(model.selectedFileURLs.contains(items[1].url))
+
+        // Cmd-click item 1 again removes it from selection.
+        model.selectFile(items[1].url, modifiers: .command, in: items)
+        XCTAssertFalse(model.selectedFileURLs.contains(items[1].url))
+        XCTAssertTrue(model.selectedFileURLs.contains(items[0].url))
+    }
+
+    func testShiftClickRangeSelectsFromAnchor() {
+        let model = makeModel()
+        let items = makeBrowserItems(count: 5)
+        // Plain-click item 1 sets the anchor.
+        model.selectFile(items[1].url, modifiers: [], in: items)
+
+        // Shift-click item 3 should produce items 1, 2, 3.
+        model.selectFile(items[3].url, modifiers: .shift, in: items)
+        XCTAssertEqual(
+            model.selectedFileURLs,
+            Set([items[1].url, items[2].url, items[3].url])
+        )
+    }
+
+    func testShiftClickFromEmptySelectionSelectsOnlyTarget() {
+        let model = makeModel()
+        let items = makeBrowserItems(count: 4)
+        // No prior selection; Shift-click with no anchor selects just that item.
+        model.selectFile(items[2].url, modifiers: .shift, in: items)
+        XCTAssertEqual(model.selectedFileURLs, [items[2].url])
+    }
+
+    func testCommandShiftClickAddsRangeToExistingSelection() {
+        let model = makeModel()
+        let items = makeBrowserItems(count: 6)
+        model.selectFile(items[0].url, modifiers: [], in: items)
+        // Cmd+Shift-click item 4 should add the range 0-4 without losing item 0.
+        model.selectFile(items[4].url, modifiers: [.command, .shift], in: items)
+        XCTAssertEqual(model.selectedFileURLs, Set(items[0...4].map(\.url)))
+    }
+
+    // Tests the list-selection adoption edge case: after setSelectionFromList syncs the
+    // same URL back into the model, a subsequent Shift-click still uses the correct anchor.
+    func testSetSelectionFromListPreservesAnchorForSubsequentRangeSelect() {
+        let model = makeModel()
+        let items = makeBrowserItems(count: 6)
+        // Establish anchor at item 2 via plain click.
+        model.selectFile(items[2].url, modifiers: [], in: items)
+
+        // Simulate the list view calling setSelectionFromList (normal sync path after reload).
+        // Using the same URL set: early-return guard should leave anchor intact.
+        model.setSelectionFromList([items[2].url], focusedURL: items[2].url)
+
+        // If the anchor was preserved at item 2, Shift-click item 4 → selects items 2, 3, 4.
+        model.selectFile(items[4].url, modifiers: .shift, in: items)
+        XCTAssertEqual(
+            model.selectedFileURLs,
+            Set([items[2].url, items[3].url, items[4].url])
+        )
+    }
+
+    // MARK: - Helpers
+
+    private func makeBrowserItems(count: Int) -> [AppModel.BrowserItem] {
+        (0 ..< count).map { i in
+            AppModel.BrowserItem(
+                url: URL(fileURLWithPath: "/tmp/seltest_\(i).jpg"),
+                name: "seltest_\(i).jpg",
+                modifiedAt: nil,
+                createdAt: nil,
+                sizeBytes: nil,
+                kind: nil
+            )
+        }
+    }
+
     private func makeModel(
         favoritesStore: InMemoryFavoritesStore = InMemoryFavoritesStore(),
         recentLocationsStore: InMemoryRecentLocationsStore = InMemoryRecentLocationsStore()
