@@ -1,8 +1,8 @@
 {
   "fill" : {
     "linear-gradient" : [
-      "extended-srgb:0.00000,0.78431,0.70196,1.00000",
-      "display-p3:0.50610,0.87462,0.93729,1.00000"
+      "display-p3:0.34912,0.67480,0.63916,1.00000",
+      "display-p3:0.46610,0.91010,0.86784,1.00000"
     ],
     "orientation" : {
       "start" : {
@@ -38,19 +38,6 @@
             "scale" : 0.64,
             "translation-in-points" : [
               0,
-              0
-            ]
-          }
-        },
-        {
-          "blend-mode" : "soft-light",
-          "image-name" : "squareshape.split.3x3 2.svg",
-          "name" : "squareshape.split.3x3 2",
-          "opacity" : 0.15,
-          "position" : {
-            "scale" : 1,
-            "translation-in-points" : [
-              -2.8799999999999955,
               0
             ]
           }
