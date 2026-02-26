@@ -55,7 +55,7 @@ private enum UIMetrics {
     enum Gallery {
         static let thumbnailCornerRadius: CGFloat = 8
         static let selectionCornerRadius: CGFloat = 8
-        static let selectionOutset: CGFloat = 4
+        static let selectionOutset: CGFloat = 6
         static let selectionBorderWidth: CGFloat = 3.5
         static let pendingDotCornerRadius: CGFloat = 4
         static let pendingDotSize: CGFloat = 8

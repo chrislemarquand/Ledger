@@ -6,6 +6,9 @@ All notable changes to Ledger are documented here.
 
 ## [Unreleased]
 
+### Changed
+- Gallery selection ring outset increased 4 → 6 pt to better match Photos.app selector gap (P9)
+
 ### Fixed
 - Sidebar context menu SF Symbol glyphs now render in label colour instead of accent colour; `.tint(Color.primary)` applied to context menu content, overriding the inherited accent tint (P1)
 - "Folder" menu bar menu renamed to "Image" (P16)
