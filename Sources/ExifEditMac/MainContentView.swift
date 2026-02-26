@@ -195,7 +195,7 @@ private struct InspectorPreviewActionLabel: View {
 }
 
 @MainActor
-final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuItemValidation {
+final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuItemValidation, NSMenuDelegate {
     private var model: AppModel
 
     private let sidebarController: NSHostingController<AnyView>
@@ -210,6 +210,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
     private var didConfigureWindow = false
     private var nativeToolbarDelegate: NativeToolbarDelegate?
+    private weak var viewMenuForSortInjection: NSMenu?
     private var modelObserver: AnyCancellable?
     private var statusObserver: AnyCancellable?
     private var spacebarMonitor: Any?
@@ -590,49 +591,42 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         nativeToolbarDelegate?.refreshFromModel()
     }
 
-    /// Injects a "Sort By" submenu using AppKit NSMenuItems so validateMenuItem can set
-    /// checkmarks dynamically. Searches all top-level menus for the "Zoom In" anchor item
-    /// (more robust than relying on the "View" menu title which may vary).
-    /// Called deferred (DispatchQueue.main.async) to ensure SwiftUI has fully built the menu.
+    /// Finds the View menu and registers self as its NSMenuDelegate.
+    /// Called deferred so SwiftUI has fully built the menu first.
+    /// The actual Sort By injection happens in menuWillOpen so it survives SwiftUI rebuilds.
     private func injectSortMenuIfNeeded() {
         guard let mainMenu = NSApp.mainMenu else { return }
-
-        // Temporary debug: print full menu tree so we can see exact item titles at injection time.
         for topItem in mainMenu.items {
-            print("MENU: '\(topItem.title)'")
-            for item in topItem.submenu?.items ?? [] {
-                print("  ITEM: '\(item.title)' key='\(item.keyEquivalent)'")
-            }
-        }
-
-        // Find whichever top-level submenu contains "Toggle Sidebar" (our own item —
-        // more reliable than "View" title or "Zoom In" which may differ).
-        var targetMenu: NSMenu?
-        var insertIndex = 0
-        outer: for topItem in mainMenu.items {
             guard let submenu = topItem.submenu else { continue }
             if submenu.items.contains(where: { $0.title == "Toggle Sidebar" }) {
-                // Found our menu. Now find "Zoom In" within it as the insertion anchor.
-                insertIndex = submenu.items.firstIndex(where: { $0.title == "Zoom In" })
-                    ?? submenu.numberOfItems
-                targetMenu = submenu
-                break outer
+                viewMenuForSortInjection = submenu
+                submenu.delegate = self
+                return
             }
         }
-        guard let menu = targetMenu else {
-            print("injectSortMenuIfNeeded: could not find target menu")
-            return
-        }
+    }
 
+    /// Builds and returns the Sort By NSMenuItem with submenu.
+    private func makeSortByMenuItem() -> NSMenuItem {
         let sortMenu = NSMenu(title: "Sort By")
         sortMenu.addItem(withTitle: "Name", action: #selector(sortByNameAction(_:)), keyEquivalent: "")
         sortMenu.addItem(withTitle: "Date Created", action: #selector(sortByCreatedAction(_:)), keyEquivalent: "")
         sortMenu.addItem(withTitle: "Size", action: #selector(sortBySizeAction(_:)), keyEquivalent: "")
         sortMenu.addItem(withTitle: "Kind", action: #selector(sortByKindAction(_:)), keyEquivalent: "")
+        let item = NSMenuItem(title: "Sort By", action: nil, keyEquivalent: "")
+        item.submenu = sortMenu
+        return item
+    }
 
-        let sortByItem = NSMenuItem(title: "Sort By", action: nil, keyEquivalent: "")
-        sortByItem.submenu = sortMenu
-        menu.insertItem(sortByItem, at: insertIndex)
+    // MARK: NSMenuDelegate
+
+    func menuWillOpen(_ menu: NSMenu) {
+        guard menu === viewMenuForSortInjection else { return }
+        if !menu.items.contains(where: { $0.title == "Sort By" }) {
+            let insertIndex = menu.items.firstIndex(where: { $0.title == "Zoom In" })
+                ?? menu.numberOfItems
+            menu.insertItem(makeSortByMenuItem(), at: insertIndex)
+        }
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
