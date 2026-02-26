@@ -404,13 +404,13 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             sidebarItem.isCollapsed = false
         }
         syncSidebarCollapsedState()
-        injectSortMenuIfNeeded()
         refreshWindowTitleSubtitleIfNeeded()
         installSpacebarQuickLookMonitorIfNeeded()
         installBrowserFocusRequestObserverIfNeeded()
         syncInspectorCollapsedState()
         DispatchQueue.main.async { [weak self] in
             self?.focusBrowserPane()
+            self?.injectSortMenuIfNeeded()
         }
     }
 
@@ -590,12 +590,27 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         nativeToolbarDelegate?.refreshFromModel()
     }
 
-    /// Injects a "Sort By" submenu into the View menu using real AppKit NSMenuItems so
-    /// validateMenuItem can set checkmarks dynamically on every menu open.
-    /// (The SwiftUI Picker in CommandGroup only evaluates its selection binding once.)
+    /// Injects a "Sort By" submenu using AppKit NSMenuItems so validateMenuItem can set
+    /// checkmarks dynamically. Searches all top-level menus for the "Zoom In" anchor item
+    /// (more robust than relying on the "View" menu title which may vary).
+    /// Called deferred (DispatchQueue.main.async) to ensure SwiftUI has fully built the menu.
     private func injectSortMenuIfNeeded() {
-        guard let viewMenu = NSApp.mainMenu?.item(withTitle: "View")?.submenu else { return }
-        guard let zoomInIndex = viewMenu.items.firstIndex(where: { $0.title == "Zoom In" }) else { return }
+        guard let mainMenu = NSApp.mainMenu else { return }
+
+        // Find whichever top-level submenu contains "Zoom In".
+        var targetMenu: NSMenu?
+        var insertIndex = 0
+        outer: for topItem in mainMenu.items {
+            guard let submenu = topItem.submenu else { continue }
+            for (idx, item) in submenu.items.enumerated() {
+                if item.title == "Zoom In" {
+                    targetMenu = submenu
+                    insertIndex = idx
+                    break outer
+                }
+            }
+        }
+        guard let menu = targetMenu else { return }
 
         let sortMenu = NSMenu(title: "Sort By")
         sortMenu.addItem(withTitle: "Name", action: #selector(sortByNameAction(_:)), keyEquivalent: "")
@@ -605,7 +620,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
         let sortByItem = NSMenuItem(title: "Sort By", action: nil, keyEquivalent: "")
         sortByItem.submenu = sortMenu
-        viewMenu.insertItem(sortByItem, at: zoomInIndex)
+        menu.insertItem(sortByItem, at: insertIndex)
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
