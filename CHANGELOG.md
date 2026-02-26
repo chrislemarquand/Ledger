@@ -4,6 +4,13 @@ All notable changes to Ledger are documented here.
 
 ---
 
+## [0.6.2] — build 62 — 2026-02-26
+
+### Fixed
+- Clicking the active list-view column header now reverses sort direction (ascending ↔ descending), matching Finder behaviour; nil values always sort last regardless of direction; `browserSortAscending` persists across launches (P7)
+
+---
+
 ## [0.6.2] — build 61 — 2026-02-26
 
 ### Fixed

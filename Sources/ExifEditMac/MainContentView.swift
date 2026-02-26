@@ -1956,7 +1956,7 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
     }
 
     private func syncSortIndicator() {
-        let expected = NSSortDescriptor(key: model.browserSort.rawValue, ascending: true)
+        let expected = NSSortDescriptor(key: model.browserSort.rawValue, ascending: model.browserSortAscending)
         guard tableView.sortDescriptors.first != expected else { return }
         isApplyingProgrammaticSort = true
         tableView.sortDescriptors = [expected]
@@ -2062,7 +2062,7 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         tableView.addTableColumn(kindColumn)
 
         // Set initial sort indicator to match persisted model state.
-        tableView.sortDescriptors = [NSSortDescriptor(key: model.browserSort.rawValue, ascending: true)]
+        tableView.sortDescriptors = [NSSortDescriptor(key: model.browserSort.rawValue, ascending: model.browserSortAscending)]
 
         scrollView.documentView = tableView
         view.addSubview(scrollView)
@@ -2207,9 +2207,10 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
 
     func tableView(_ tableView: NSTableView, sortDescriptorsDidChange _: [NSSortDescriptor]) {
         guard !isApplyingProgrammaticSort else { return }
-        guard let key = tableView.sortDescriptors.first?.key,
-              let sort = AppModel.BrowserSort(rawValue: key) else { return }
+        guard let descriptor = tableView.sortDescriptors.first,
+              let sort = AppModel.BrowserSort(rawValue: descriptor.key ?? "") else { return }
         model.browserSort = sort
+        model.browserSortAscending = descriptor.ascending
     }
 
     @objc

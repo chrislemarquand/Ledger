@@ -550,6 +550,12 @@ final class AppModel: ObservableObject {
             rebuildFilteredBrowserItems()
         }
     }
+    @Published var browserSortAscending: Bool {
+        didSet {
+            UserDefaults.standard.set(browserSortAscending, forKey: Self.browserSortAscendingKey)
+            rebuildFilteredBrowserItems()
+        }
+    }
     @Published var selectedFileURLs: Set<URL> = []
     @Published var browserViewMode: BrowserViewMode {
         didSet { UserDefaults.standard.set(browserViewMode.rawValue, forKey: Self.browserViewModeKey) }
@@ -576,6 +582,9 @@ final class AppModel: ObservableObject {
             notifyInspectorDidChange()
         }
     }
+    // Search UI removed for v1.0 (name-only, aesthetically wrong). Property kept
+    // so filteredBrowserItems/rebuildFilteredBrowserItems can be wired up for R14
+    // (metadata-aware search) without a data-model rewrite.
     @Published var searchQuery = "" {
         didSet { rebuildFilteredBrowserItems() }
     }
@@ -653,6 +662,7 @@ final class AppModel: ObservableObject {
 
     private static let browserViewModeKey = "ui.browser.view.mode"
     private static let browserSortKey = "ui.browser.sort"
+    private static let browserSortAscendingKey = "ui.browser.sort.ascending"
     private static let galleryGridLevelKey = "ui.gallery.grid.level"
     private static let galleryZoomKey = "ui.gallery.zoom"
     private static let collapsedInspectorSectionsKey = "ui.inspector.collapsed.sections"
@@ -721,6 +731,7 @@ final class AppModel: ObservableObject {
         browserSort = BrowserSort(
             rawValue: UserDefaults.standard.string(forKey: Self.browserSortKey) ?? ""
         ) ?? .name
+        browserSortAscending = UserDefaults.standard.object(forKey: Self.browserSortAscendingKey) as? Bool ?? true
         let storedLevel = UserDefaults.standard.integer(forKey: Self.galleryGridLevelKey)
         if storedLevel == 0 {
             // One-time fallback from legacy floating zoom persistence.
@@ -3046,41 +3057,39 @@ final class AppModel: ObservableObject {
     }
 
     private func sortBrowserItems(_ items: [BrowserItem]) -> [BrowserItem] {
-        items.sorted { lhs, rhs in
+        let asc = browserSortAscending
+        // cmp(before) returns true when lhs should precede rhs, flipping for descending.
+        // Nil values are always sorted last regardless of direction.
+        return items.sorted { lhs, rhs in
+            func cmp(_ before: Bool) -> Bool { asc ? before : !before }
             switch browserSort {
             case .name:
-                let byName = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
-                if byName != .orderedSame { return byName == .orderedAscending }
-                return lhs.url.path < rhs.url.path
+                let c = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
+                if c != .orderedSame { return cmp(c == .orderedAscending) }
+                return cmp(lhs.url.path < rhs.url.path)
             case .created:
                 switch (lhs.createdAt, rhs.createdAt) {
                 case let (l?, r?):
-                    if l != r { return l < r }
-                case (nil, nil):
-                    break
-                case (nil, _?):
-                    return false
-                case (_?, nil):
-                    return true
+                    if l != r { return cmp(l < r) }
+                case (nil, nil): break
+                case (nil, _?): return false  // nil always last
+                case (_?, nil): return true   // nil always last
                 }
                 return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             case .size:
                 switch (lhs.sizeBytes, rhs.sizeBytes) {
                 case let (l?, r?):
-                    if l != r { return l < r }
-                case (nil, nil):
-                    break
-                case (nil, _?):
-                    return false
-                case (_?, nil):
-                    return true
+                    if l != r { return cmp(l < r) }
+                case (nil, nil): break
+                case (nil, _?): return false  // nil always last
+                case (_?, nil): return true   // nil always last
                 }
                 return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             case .kind:
-                let leftKind = lhs.kind ?? ""
-                let rightKind = rhs.kind ?? ""
-                let byKind = leftKind.localizedCaseInsensitiveCompare(rightKind)
-                if byKind != .orderedSame { return byKind == .orderedAscending }
+                let lKind = lhs.kind ?? ""
+                let rKind = rhs.kind ?? ""
+                let c = lKind.localizedCaseInsensitiveCompare(rKind)
+                if c != .orderedSame { return cmp(c == .orderedAscending) }
                 return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             }
         }
