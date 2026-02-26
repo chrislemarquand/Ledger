@@ -4,7 +4,7 @@ All notable changes to Ledger are documented here.
 
 ---
 
-## [Unreleased]
+## [0.6.1] — build 15 — 2026-02-26
 
 ### Fixed
 - Inspector toolbar toggle label and tooltip now read "Show Inspector" or "Hide Inspector" based on current state (was always static "Hide Inspector")
