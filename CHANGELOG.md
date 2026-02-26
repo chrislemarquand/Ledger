@@ -4,6 +4,17 @@ All notable changes to Ledger are documented here.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- View → As Gallery / As List now show a checkmark on the active mode and are always enabled; broken SwiftUI `.disabled()` replaced with AppKit `NSMenuDelegate` injection
+- View → Sort By checkmark now survives SwiftUI menu rebuilds; injection moved to `menuWillOpen` via `NSMenuDelegate`
+- Folder menu Apply Metadata Changes (⌘S), Clear Metadata Changes (⌘⇧K), and Restore from Last Backup (⌘⇧B) now enable/disable correctly based on whether the selection has pending edits or a restorable backup
+- Context menu Apply, Clear, and Restore items now respect enabled state; `autoenablesItems = false` prevents AppKit from overriding manually set `isEnabled` values
+- Tab Bar menu items (Show/Hide Tab Bar, New Tab) removed from View menu
+
+---
+
 ## [0.6.1] — build 15 — 2026-02-26
 
 ### Fixed
