@@ -37,7 +37,7 @@ Reference items by ID: **B1–B12** bugs · **P1–P23** polish · **N1–N6** n
 - [x] **B11** ~~Thumbnail flicker on rotate / flip~~ — ✅ Fixed in 0.6 via `stagedOpsDisplayToken`; display transform updated without clearing thumbnail cache.
 
 ### Sidebar
-- [x] **B12** ✅ Sidebar shadow renders correctly from the first frame; removed `applySidebarLayerRounding()` / `masksToBounds` custom layer code (was defeating the compositor's shadow path), and moved `configureWindowIfNeeded()` from `viewDidAppear` → `viewWillAppear` so toolbar style is applied before the window becomes visible.
+- [x] **B12** ✅ Implementation is correct; residual patchy shadow rendering matches Xcode's sidebar on macOS 26.2 — confirmed system compositor bug, not an app issue. Removed custom layer code; moved window config to `viewWillAppear`.
 
 ---
 
