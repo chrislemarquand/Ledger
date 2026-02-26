@@ -54,8 +54,7 @@ private enum UIMetrics {
 
     enum Gallery {
         static let thumbnailCornerRadius: CGFloat = 8
-        static let selectionCornerRadius: CGFloat = 8
-        static let selectionOutset: CGFloat = 6
+        static let selectionOutset: CGFloat = 5
         static let selectionBorderWidth: CGFloat = 3.5
         static let pendingDotCornerRadius: CGFloat = 4
         static let pendingDotSize: CGFloat = 8
@@ -3279,8 +3278,6 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
     private var preferredAspectRatio: CGFloat?
     private var imageWidthConstraint: NSLayoutConstraint?
     private var imageHeightConstraint: NSLayoutConstraint?
-    private var overlayWidthConstraint: NSLayoutConstraint?
-    private var overlayHeightConstraint: NSLayoutConstraint?
 
     override func loadView() {
         view = NSView(frame: .zero)
@@ -3309,7 +3306,9 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
 
         selectionOverlay.translatesAutoresizingMaskIntoConstraints = false
         selectionOverlay.wantsLayer = true
-        selectionOverlay.layer?.cornerRadius = UIMetrics.Gallery.selectionCornerRadius + UIMetrics.Gallery.selectionOutset
+        // Derived from thumbnailCornerRadius + selectionOutset so the ring corners
+        // always track the thumbnail corners — one source of truth.
+        selectionOverlay.layer?.cornerRadius = UIMetrics.Gallery.thumbnailCornerRadius + UIMetrics.Gallery.selectionOutset
         selectionOverlay.layer?.masksToBounds = true
         selectionOverlay.layer?.borderWidth = UIMetrics.Gallery.selectionBorderWidth
         selectionOverlay.layer?.borderColor = NSColor.clear.cgColor
@@ -3338,8 +3337,10 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
             thumbnailImageView.centerXAnchor.constraint(equalTo: thumbnailContainer.centerXAnchor),
             thumbnailImageView.centerYAnchor.constraint(equalTo: thumbnailContainer.centerYAnchor),
 
-            selectionOverlay.centerXAnchor.constraint(equalTo: thumbnailContainer.centerXAnchor),
-            selectionOverlay.centerYAnchor.constraint(equalTo: thumbnailContainer.centerYAnchor),
+            // Anchor overlay directly to the image view so it is always
+            // definitionally concentric — no independent size calculation needed.
+            selectionOverlay.centerXAnchor.constraint(equalTo: thumbnailImageView.centerXAnchor),
+            selectionOverlay.centerYAnchor.constraint(equalTo: thumbnailImageView.centerYAnchor),
 
             pendingDot.widthAnchor.constraint(equalToConstant: UIMetrics.Gallery.pendingDotSize),
             pendingDot.heightAnchor.constraint(equalToConstant: UIMetrics.Gallery.pendingDotSize),
@@ -3354,12 +3355,15 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
 
         imageWidthConstraint = thumbnailImageView.widthAnchor.constraint(equalToConstant: 20)
         imageHeightConstraint = thumbnailImageView.heightAnchor.constraint(equalToConstant: 20)
-        overlayWidthConstraint = selectionOverlay.widthAnchor.constraint(equalToConstant: 20)
-        overlayHeightConstraint = selectionOverlay.heightAnchor.constraint(equalToConstant: 20)
+        // Overlay size is always imageView + outset on each side; auto-tracks during animation.
+        let overlayW = selectionOverlay.widthAnchor.constraint(
+            equalTo: thumbnailImageView.widthAnchor, constant: UIMetrics.Gallery.selectionOutset * 2)
+        let overlayH = selectionOverlay.heightAnchor.constraint(
+            equalTo: thumbnailImageView.heightAnchor, constant: UIMetrics.Gallery.selectionOutset * 2)
         imageWidthConstraint?.isActive = true
         imageHeightConstraint?.isActive = true
-        overlayWidthConstraint?.isActive = true
-        overlayHeightConstraint?.isActive = true
+        overlayW.isActive = true
+        overlayH.isActive = true
     }
 
     func configure(
@@ -3387,16 +3391,12 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         guard animated else {
             imageWidthConstraint?.constant = fitted.width
             imageHeightConstraint?.constant = fitted.height
-            overlayWidthConstraint?.constant = fitted.width + (UIMetrics.Gallery.selectionOutset * 2)
-            overlayHeightConstraint?.constant = fitted.height + (UIMetrics.Gallery.selectionOutset * 2)
             return
         }
 
         guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
             imageWidthConstraint?.constant = fitted.width
             imageHeightConstraint?.constant = fitted.height
-            overlayWidthConstraint?.constant = fitted.width + (UIMetrics.Gallery.selectionOutset * 2)
-            overlayHeightConstraint?.constant = fitted.height + (UIMetrics.Gallery.selectionOutset * 2)
             return
         }
         NSAnimationContext.runAnimationGroup { context in
@@ -3405,8 +3405,6 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
             context.allowsImplicitAnimation = true
             imageWidthConstraint?.animator().constant = fitted.width
             imageHeightConstraint?.animator().constant = fitted.height
-            overlayWidthConstraint?.animator().constant = fitted.width + (UIMetrics.Gallery.selectionOutset * 2)
-            overlayHeightConstraint?.animator().constant = fitted.height + (UIMetrics.Gallery.selectionOutset * 2)
         }
     }
 

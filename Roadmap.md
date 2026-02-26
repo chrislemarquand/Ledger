@@ -56,7 +56,7 @@ Reference items by ID: **B1–B12** bugs · **P1–P23** polish · **N1–N6** n
 - [ ] **P8** `Should` **Selection out of view when switching gallery ↔ list** — should scroll-to-selection on mode switch so the selected item is always visible. (QA log #4)
 
 ### Browser gallery
-- [x] **P9** ✅ Gallery selection ring outset increased 4 → 6 pt to match Photos.app selector gap.
+- [x] **P9** ✅ Gallery selection ring outset tuned to 5 pt; overlay anchored directly to image view (definitionally concentric, no independent size calculation); `selectionCornerRadius` removed — overlay radius derived as `thumbnailCornerRadius + selectionOutset`.
 
 ### QuickLook
 - [ ] **P10** `Should` **QuickLook position inconsistent** — window position changes per file. Should always open centred on screen, matching Finder. (QA log #5)

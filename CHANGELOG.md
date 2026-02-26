@@ -7,7 +7,7 @@ All notable changes to Ledger are documented here.
 ## [Unreleased]
 
 ### Changed
-- Gallery selection ring outset increased 4 → 6 pt to better match Photos.app selector gap (P9)
+- Gallery selection ring outset tuned to 5 pt (P9); overlay now anchored directly to the image view rather than the container so it is definitionally concentric; `selectionCornerRadius` constant removed — overlay corner radius derived as `thumbnailCornerRadius + selectionOutset` (single source of truth)
 
 ### Fixed
 - Sidebar context menu SF Symbol glyphs now render in label colour instead of accent colour; `.tint(Color.primary)` applied to context menu content, overriding the inherited accent tint (P1)
