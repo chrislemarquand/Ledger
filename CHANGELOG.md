@@ -8,7 +8,7 @@ All notable changes to Ledger are documented here.
 
 ---
 
-## [0.6.4] — build TBD — 2026-02-26
+## [0.6.4] — build 71 — 2026-02-26
 
 ### Changed
 - **P18/P19** Window subtitle now shows contextual state at all times: `"Applying X of Y…"` during apply, `"Loading X of Y…"` during metadata load, transient status messages on action, `"X of N images"` when a subset is selected, `"N images"` at idle; preview-preload progress removed (silent background work). Partial-failure messages for apply and restore now use the concise format `"Applied X of N — Y failed"` / `"Restored X of N — Y failed"` instead of appending the raw error string.
