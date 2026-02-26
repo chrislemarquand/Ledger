@@ -9,7 +9,7 @@ All notable changes to Ledger are documented here.
 ### Fixed
 - Sidebar context menu SF Symbol glyphs now render in label colour instead of accent colour; `.tint(Color.primary)` applied to context menu content, overriding the inherited accent tint (P1)
 - "Folder" menu bar menu renamed to "Image" (P16)
-- Sidebar panel shadow: removed `applySidebarLayerRounding()` / `masksToBounds` custom layer code that was preventing the macOS 26 compositor from rendering the sidebar shadow correctly; system now handles shadow and rounded corners natively (B12)
+- Sidebar panel shadow now renders correctly from the first frame; removed custom `applySidebarLayerRounding()` / `masksToBounds` layer code (was defeating the compositor's shadow path), and moved window configuration from `viewDidAppear` to `viewWillAppear` so the toolbar style is set before the window becomes visible (B12)
 - View → As Gallery / As List now show a checkmark on the active mode and are always enabled; broken SwiftUI `.disabled()` replaced with AppKit `NSMenuDelegate` injection
 - View → Sort By checkmark now survives SwiftUI menu rebuilds; injection moved to `menuWillOpen` via `NSMenuDelegate`
 - Folder menu Apply Metadata Changes (⌘S), Clear Metadata Changes (⌘⇧K), and Restore from Last Backup (⌘⇧B) now enable/disable correctly based on whether the selection has pending edits or a restorable backup

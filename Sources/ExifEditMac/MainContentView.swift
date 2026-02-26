@@ -291,6 +291,15 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func viewWillAppear() {
+        super.viewWillAppear()
+        // Configure the window before it becomes visible so the macOS 26
+        // compositor can apply the correct floating-sidebar shadow from the
+        // first frame. Calling this in viewDidAppear causes a brief flash of
+        // sharp-cornered shadow before the toolbar style triggers a re-composite.
+        configureWindowIfNeeded()
+    }
+
     override func viewWillDisappear() {
         super.viewWillDisappear()
         teardownObserversAndMonitors()
@@ -339,7 +348,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     override func viewDidAppear() {
         super.viewDidAppear()
         ensureInitialInspectorVisibilityIfNeeded()
-        configureWindowIfNeeded()
     }
 
     override func viewDidLayout() {
