@@ -597,20 +597,32 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     private func injectSortMenuIfNeeded() {
         guard let mainMenu = NSApp.mainMenu else { return }
 
-        // Find whichever top-level submenu contains "Zoom In".
+        // Temporary debug: print full menu tree so we can see exact item titles at injection time.
+        for topItem in mainMenu.items {
+            print("MENU: '\(topItem.title)'")
+            for item in topItem.submenu?.items ?? [] {
+                print("  ITEM: '\(item.title)' key='\(item.keyEquivalent)'")
+            }
+        }
+
+        // Find whichever top-level submenu contains "Toggle Sidebar" (our own item —
+        // more reliable than "View" title or "Zoom In" which may differ).
         var targetMenu: NSMenu?
         var insertIndex = 0
         outer: for topItem in mainMenu.items {
             guard let submenu = topItem.submenu else { continue }
-            for (idx, item) in submenu.items.enumerated() {
-                if item.title == "Zoom In" {
-                    targetMenu = submenu
-                    insertIndex = idx
-                    break outer
-                }
+            if submenu.items.contains(where: { $0.title == "Toggle Sidebar" }) {
+                // Found our menu. Now find "Zoom In" within it as the insertion anchor.
+                insertIndex = submenu.items.firstIndex(where: { $0.title == "Zoom In" })
+                    ?? submenu.numberOfItems
+                targetMenu = submenu
+                break outer
             }
         }
-        guard let menu = targetMenu else { return }
+        guard let menu = targetMenu else {
+            print("injectSortMenuIfNeeded: could not find target menu")
+            return
+        }
 
         let sortMenu = NSMenu(title: "Sort By")
         sortMenu.addItem(withTitle: "Name", action: #selector(sortByNameAction(_:)), keyEquivalent: "")
