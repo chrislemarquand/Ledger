@@ -1406,6 +1406,7 @@ struct NavigationSidebarView: View {
     @State private var collapsedSections: Set<String> = []
     @State private var hoveredSection: String?
     @Environment(\.controlActiveState) private var controlActiveState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var isSidebarFocused: Bool
 
     var body: some View {
@@ -1550,7 +1551,9 @@ struct NavigationSidebarView: View {
     }
 
     private func toggleSection(_ section: String) {
-        withAnimation(appAnimation()) {
+        var t = Transaction(animation: appAnimation())
+        if reduceMotion { t.disablesAnimations = true }
+        withTransaction(t) {
             if collapsedSections.contains(section) {
                 collapsedSections.remove(section)
             } else {

@@ -4,6 +4,13 @@ All notable changes to Ledger are documented here.
 
 ---
 
+## [0.6.2] — build 63 — 2026-02-26
+
+### Fixed
+- Sidebar section collapse/expand is now instant under Reduce Motion; `NavigationSidebarView` reads `@Environment(\.accessibilityReduceMotion)` and `toggleSection` uses `Transaction` with `disablesAnimations = true` when set, matching the pattern already used by inspector sections (P4, P13)
+
+---
+
 ## [0.6.2] — build 62 — 2026-02-26
 
 ### Fixed
