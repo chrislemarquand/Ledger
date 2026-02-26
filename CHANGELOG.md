@@ -8,6 +8,7 @@ All notable changes to Ledger are documented here.
 
 ### Fixed
 - Inspector toolbar toggle label and tooltip now read "Show Inspector" or "Hide Inspector" based on current state (was always static "Hide Inspector")
+- "Show/Hide Inspector" and "Show/Hide Sidebar" menu bar items now update dynamically when panels are toggled (was always "Hide …")
 
 ---
 

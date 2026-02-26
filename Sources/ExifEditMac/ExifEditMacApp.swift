@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 @main
@@ -120,14 +121,14 @@ struct ExifEditMacApp: App {
                 Button {
                     NSApp.sendAction(#selector(NSSplitViewController.toggleSidebar(_:)), to: nil, from: nil)
                 } label: {
-                    Label(appDelegate.appModel?.isSidebarCollapsed == true ? "Show Sidebar" : "Hide Sidebar", systemImage: "sidebar.left")
+                    Label(appDelegate.isSidebarCollapsed ? "Show Sidebar" : "Hide Sidebar", systemImage: "sidebar.left")
                 }
                 .keyboardShortcut("s", modifiers: [.command, .option])
 
                 Button {
                     NSApp.sendAction(#selector(NativeThreePaneSplitViewController.toggleInspectorAction(_:)), to: nil, from: nil)
                 } label: {
-                    Label(appDelegate.appModel?.isInspectorCollapsed == true ? "Show Inspector" : "Hide Inspector", systemImage: "sidebar.trailing")
+                    Label(appDelegate.isInspectorCollapsed ? "Show Inspector" : "Hide Inspector", systemImage: "sidebar.trailing")
                 }
 
                 Divider()
@@ -347,11 +348,16 @@ struct ExifEditMacApp: App {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var mainWindowController: MainWindowController?
     private var isShowingTerminateConfirmation = false
     private var allowImmediateTermination = false
+    private var modelObservers: Set<AnyCancellable> = []
     var appModel: AppModel? { mainWindowController?.appModel }
+
+    // Mirrored @Published properties so SwiftUI CommandGroup labels re-evaluate on change.
+    @Published private(set) var isSidebarCollapsed = false
+    @Published private(set) var isInspectorCollapsed = false
 
     func showAboutPanel() {
         let bundle = Bundle.main
@@ -430,6 +436,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let model = AppModel()
         let windowController = MainWindowController(model: model)
         mainWindowController = windowController
+        model.$isSidebarCollapsed
+            .receive(on: DispatchQueue.main)
+            .assign(to: \.isSidebarCollapsed, on: self)
+            .store(in: &modelObservers)
+        model.$isInspectorCollapsed
+            .receive(on: DispatchQueue.main)
+            .assign(to: \.isInspectorCollapsed, on: self)
+            .store(in: &modelObservers)
         windowController.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
