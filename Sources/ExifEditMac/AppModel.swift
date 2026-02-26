@@ -4822,6 +4822,10 @@ private final class QuickLookPreviewController: NSObject, @preconcurrency QLPrev
     private var displayToSource: [URL: URL] = [:]
     private weak var model: AppModel?
     private var panelObservation: NSKeyValueObservation?
+    // Height locked to the first image's natural QL height for the session.
+    // All subsequent images use this height; width varies by aspect ratio.
+    // Mirrors Finder's QuickLook behaviour. Cleared on panel close.
+    private var lockedHeight: CGFloat?
 
     func present(urls: [URL], focusedURL: URL?, model: AppModel) {
         sourceItems = urls
@@ -4848,12 +4852,54 @@ private final class QuickLookPreviewController: NSObject, @preconcurrency QLPrev
             }
         }
 
-        // Centre on screen the first time; if already visible, leave at user's position.
+        // Register the resize observer exactly once per panel instance.
+        NotificationCenter.default.removeObserver(self, name: NSWindow.didResizeNotification, object: panel)
+        NotificationCenter.default.addObserver(self, selector: #selector(panelDidResize(_:)),
+                                               name: NSWindow.didResizeNotification, object: panel)
+
         if !panel.isVisible {
-            panel.center()
+            lockedHeight = nil // Fresh open — capture height from the first image.
         }
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    // Called whenever QL resizes the panel (new image, user drag, etc.).
+    // On first call: locks the height to QL's natural choice for the first image.
+    // On subsequent calls: maintains that height, deriving width from QL's own
+    // aspect ratio for the new image (QL already accounts for EXIF rotation).
+    // Fires before the display refresh, so corrections are invisible.
+    @objc private func panelDidResize(_ notification: Notification) {
+        guard let panel = notification.object as? NSPanel else { return }
+        let size = panel.frame.size
+        guard size.width > 1, size.height > 1 else { return }
+
+        if lockedHeight == nil {
+            lockedHeight = size.height
+        }
+        let targetHeight = lockedHeight!
+        let aspectRatio = size.width / size.height
+        let targetWidth = (targetHeight * aspectRatio).rounded()
+
+        let screenFrame = (panel.screen ?? NSScreen.main)?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
+
+        // Constrain to screen; if width would overflow, scale both dimensions down.
+        let finalWidth = min(targetWidth, screenFrame.width - 40)
+        let finalHeight = finalWidth < targetWidth
+            ? (finalWidth / aspectRatio).rounded()
+            : targetHeight
+
+        let origin = NSPoint(
+            x: (screenFrame.minX + (screenFrame.width - finalWidth)  / 2).rounded(),
+            y: (screenFrame.minY + (screenFrame.height - finalHeight) / 2).rounded()
+        )
+        let targetFrame = NSRect(origin: origin, size: NSSize(width: finalWidth, height: finalHeight))
+
+        // Guard prevents a loop: our own setFrame triggers a second notification,
+        // but the frame is already at target so we return immediately.
+        guard panel.frame != targetFrame else { return }
+        panel.setFrame(targetFrame, display: true)
     }
 
     func refreshIfVisible(model: AppModel) {
@@ -4888,6 +4934,8 @@ private final class QuickLookPreviewController: NSObject, @preconcurrency QLPrev
 
     func previewPanelWillClose(_ panel: QLPreviewPanel!) {
         panelObservation = nil
+        lockedHeight = nil
+        NotificationCenter.default.removeObserver(self, name: NSWindow.didResizeNotification, object: panel)
     }
 
     func previewPanel(_ panel: QLPreviewPanel!, handle event: NSEvent!) -> Bool {

@@ -2,7 +2,7 @@
 
 Current version: **0.6.2** (build 46). Target: **v1.0**.
 
-Reference items by ID: **B1–B12** bugs · **P1–P23** polish · **N1–N6** native rewrites · **R1–R8** post-v1.0 roadmap.
+Reference items by ID: **B1–B16** bugs · **P1–P24** polish · **N1–N6** native rewrites · **A1–A2** architecture · **R1–R13** post-v1.0 roadmap.
 
 ---
 
@@ -42,6 +42,13 @@ Reference items by ID: **B1–B12** bugs · **P1–P23** polish · **N1–N6** n
 ### About panel
 - [x] **B13** ✅ About panel showed version 0.5 (1) instead of current version; `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` were hardcoded in target build settings, silently overriding Base.xcconfig. Removed from project.pbxproj — xcconfig is now sole source of truth.
 
+### SwiftUI rendering
+- [ ] **B14** `Must` **`@Published` mutated during view update** — two occurrences of "Publishing changes from within view updates is not allowed" at startup. A `@Published` property is being set inside a SwiftUI view update cycle (likely inspector state recalculation or selection sync). Causes undefined behaviour; fix requires deferring the mutation via `Task { @MainActor in … }` or `DispatchQueue.main.async`. (Debug console, lines 1–2)
+- [ ] **B15** `Should` **NSHostingView reentrant layout** — six occurrences of "NSHostingView is being laid out reentrantly while rendering its SwiftUI content. This is not supported and the current layout pass will be skipped." Causes skipped layout passes and visible glitches; likely triggered by the same in-update state mutation as B14. Also produces "CAMetalLayer ignoring invalid setDrawableSize width=0.000000 height=0.000000" from the zero-sized view during the skipped pass. (Debug console)
+
+### Resources
+- [ ] **B16** `Should` **Missing bundle resource "default.csv"** — "Failed to locate resource named 'default.csv'" logged at runtime. Something (possibly a preset or export path) looks up a CSV in the app bundle that does not exist. Investigate the call site and either bundle the resource or guard the lookup. (Debug console, line 343)
+
 ---
 
 ## v1.0 — Outstanding polish
@@ -62,7 +69,7 @@ Reference items by ID: **B1–B12** bugs · **P1–P23** polish · **N1–N6** n
 - [x] **P9** ✅ Gallery selection ring outset tuned to 5 pt; overlay anchored directly to image view (definitionally concentric, no independent size calculation); `selectionCornerRadius` removed — overlay radius derived as `thumbnailCornerRadius + selectionOutset`.
 
 ### QuickLook
-- [ ] **P10** `Should` **QuickLook position inconsistent** — window position changes per file. Should always open centred on screen, matching Finder. (QA log #5)
+- [x] **P10** ✅ **QuickLook position inconsistent** — `QLPreviewPanel.center()` called before `makeKeyAndOrderFront` for first open; `NSWindow.didResizeNotification` observer locks panel height to QL's natural choice for the first image and derives width from QL's own aspect ratio for each subsequent image (mirrors Finder's behaviour); panel stays centred on screen across all navigation; if the panel is already open and the user has dragged it, size/position are still corrected on image change.
 
 ### Inspector
 - [x] **P11** ~~Inspector toggle label static~~ — ✅ toolbar label and tooltip now dynamic via `updateInspectorToggle(with:)`. (QA log #6 was stale)
@@ -70,6 +77,7 @@ Reference items by ID: **B1–B12** bugs · **P1–P23** polish · **N1–N6** n
 - [ ] **P13** `Should` **Inspector section collapse not instant under Reduce Motion** — same as P4 but for inspector sections. (QA checklist #56)
 - [ ] **P14** `Should` **Inspector dropdown widths inconsistent** — Exposure Program, Flash, and Metering Mode pickers are three different widths. Should all be full-width like the text fields. (QA log #20)
 - [ ] **P15** `Should` **Date / time picker layout** — when a date is set, the picker fills only half the inspector width with a clear button to the right. Needs a more elegant full-width layout. (QA log #21)
+- [ ] **P24** `Should` **Inspector picker sends invalid tag `""`** — three occurrences of "Picker: the selection `""` is invalid and does not have an associated tag, this will give undefined results." Likely a multi-selection or empty-field picker using `""` as a placeholder instead of an `Optional` binding or nil-coalescing sentinel. Check Exposure Program, Flash, Metering Mode, and any other `String`-bound pickers. (Debug console, lines 891–893)
 
 ### Menus
 - [x] **P16** ~~"Folder" menu item should say "Image"~~ — ✅ `CommandMenu("Folder")` renamed to `CommandMenu("Image")`.

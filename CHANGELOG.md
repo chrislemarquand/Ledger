@@ -10,7 +10,7 @@ All notable changes to Ledger are documented here.
 - Gallery selection ring outset tuned to 5 pt (P9); overlay now anchored directly to the image view rather than the container so it is definitionally concentric; `selectionCornerRadius` constant removed — overlay corner radius derived as `thumbnailCornerRadius + selectionOutset` (single source of truth)
 
 ### Fixed
-- QuickLook panel now opens centred on screen regardless of which thumbnail triggered it; if already open, position is preserved at the user's dragged location (P10)
+- QuickLook panel now opens centred on screen regardless of which thumbnail triggered it; navigating between images with arrow keys maintains a stable locked height (matching Finder's behaviour), with panel width varying per image aspect ratio; if the panel is already open and the user has dragged it, position is preserved (P10)
 - About panel now shows correct version and build number; `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` removed from target-level build settings in project.pbxproj where they were silently overriding Base.xcconfig (B13)
 - About panel credits now use `smallSystemFontSize` to match the panel's native credits area; was using `systemFontSize` which rendered too large (P20)
 - Inspector toggle moved to immediately before the search field in the toolbar, so it sits adjacent to what it controls; Apply button now precedes it (P12)
