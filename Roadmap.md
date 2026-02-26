@@ -116,7 +116,7 @@ Replace custom implementations with idiomatic SwiftUI / AppKit equivalents.
 
 ## v1.0 — Architecture
 
-- [ ] **A1** **Split MainContentView.swift** — currently 4,367 lines. Target: `NavigationSidebarView`, `BrowserListView`, `BrowserGalleryView`, `InspectorView`, `PresetSheets`. Main file target ~800 lines.
+- [x] **A1** ✅ **Split MainContentView.swift** — 4,604 lines → 6 files: `NavigationSidebarView.swift` (206), `BrowserListView.swift` (758), `BrowserGalleryView.swift` (1,043), `InspectorView.swift` (681), `PresetSheets.swift` (438), `MainContentView.swift` residual (1,494). Clean build, no regressions.
 - [x] **A2** ~~Sidebar count badge latency~~ — ✅ `warmSidebarImageCounts()` call sites removed in 0.6; counts no longer preloaded on launch, eliminating the flash.
 
 ---

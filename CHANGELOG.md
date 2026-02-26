@@ -4,6 +4,13 @@ All notable changes to Ledger are documented here.
 
 ---
 
+## [Unreleased]
+
+### Changed
+- **A1** Split `MainContentView.swift` (4,604 lines) into five focused files: `NavigationSidebarView.swift`, `BrowserListView.swift`, `BrowserGalleryView.swift`, `InspectorView.swift`, `PresetSheets.swift`. Residual `MainContentView.swift` is 1,494 lines. Pure reorganisation — no behaviour changes.
+
+---
+
 ## [0.6.2] — build 71 — 2026-02-26
 
 ### Changed

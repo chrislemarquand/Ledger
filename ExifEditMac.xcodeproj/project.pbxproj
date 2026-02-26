@@ -24,6 +24,11 @@
 		A10000280000000000000001 /* libExifEditCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000370000000000000001 /* libExifEditCore.a */; };
 		A10000290000000000000001 /* libExifEditCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000370000000000000001 /* libExifEditCore.a */; };
 		A10001420000000000000001 /* Sources/ExifEditMac/Presets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001410000000000000001 /* Sources/ExifEditMac/Presets.swift */; };
+		A10001440000000000000001 /* Sources/ExifEditMac/BrowserGalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001430000000000000001 /* Sources/ExifEditMac/BrowserGalleryView.swift */; };
+		A10001460000000000000001 /* Sources/ExifEditMac/BrowserListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001450000000000000001 /* Sources/ExifEditMac/BrowserListView.swift */; };
+		A10001480000000000000001 /* Sources/ExifEditMac/InspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001470000000000000001 /* Sources/ExifEditMac/InspectorView.swift */; };
+		A100014A0000000000000001 /* Sources/ExifEditMac/NavigationSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001490000000000000001 /* Sources/ExifEditMac/NavigationSidebarView.swift */; };
+		A100014C0000000000000001 /* Sources/ExifEditMac/PresetSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014B0000000000000001 /* Sources/ExifEditMac/PresetSheets.swift */; };
 		B100001D0000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000D0000000000000001 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -71,6 +76,11 @@
 		A10000370000000000000001 /* libExifEditCore.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libExifEditCore.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		A100003A0000000000000001 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
 		A10001410000000000000001 /* Sources/ExifEditMac/Presets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditMac/Presets.swift; sourceTree = SOURCE_ROOT; };
+		A10001430000000000000001 /* Sources/ExifEditMac/BrowserGalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditMac/BrowserGalleryView.swift; sourceTree = SOURCE_ROOT; };
+		A10001450000000000000001 /* Sources/ExifEditMac/BrowserListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditMac/BrowserListView.swift; sourceTree = SOURCE_ROOT; };
+		A10001470000000000000001 /* Sources/ExifEditMac/InspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditMac/InspectorView.swift; sourceTree = SOURCE_ROOT; };
+		A10001490000000000000001 /* Sources/ExifEditMac/NavigationSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditMac/NavigationSidebarView.swift; sourceTree = SOURCE_ROOT; };
+		A100014B0000000000000001 /* Sources/ExifEditMac/PresetSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditMac/PresetSheets.swift; sourceTree = SOURCE_ROOT; };
 		B100000D0000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
@@ -181,6 +191,11 @@
 				A100000C0000000000000001 /* Sources/ExifEditMac/ExifEditMacApp.swift */,
 				A100000D0000000000000001 /* Sources/ExifEditMac/MainContentView.swift */,
 				A10001410000000000000001 /* Sources/ExifEditMac/Presets.swift */,
+				A10001430000000000000001 /* Sources/ExifEditMac/BrowserGalleryView.swift */,
+				A10001450000000000000001 /* Sources/ExifEditMac/BrowserListView.swift */,
+				A10001470000000000000001 /* Sources/ExifEditMac/InspectorView.swift */,
+				A10001490000000000000001 /* Sources/ExifEditMac/NavigationSidebarView.swift */,
+				A100014B0000000000000001 /* Sources/ExifEditMac/PresetSheets.swift */,
 			);
 			path = Sources/ExifEditMac;
 			sourceTree = SOURCE_ROOT;
@@ -338,6 +353,11 @@
 				A100001C0000000000000001 /* Sources/ExifEditMac/ExifEditMacApp.swift in Sources */,
 				A100001D0000000000000001 /* Sources/ExifEditMac/MainContentView.swift in Sources */,
 				A10001420000000000000001 /* Sources/ExifEditMac/Presets.swift in Sources */,
+				A10001440000000000000001 /* Sources/ExifEditMac/BrowserGalleryView.swift in Sources */,
+				A10001460000000000000001 /* Sources/ExifEditMac/BrowserListView.swift in Sources */,
+				A10001480000000000000001 /* Sources/ExifEditMac/InspectorView.swift in Sources */,
+				A100014A0000000000000001 /* Sources/ExifEditMac/NavigationSidebarView.swift in Sources */,
+				A100014C0000000000000001 /* Sources/ExifEditMac/PresetSheets.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
