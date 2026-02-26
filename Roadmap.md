@@ -44,7 +44,7 @@ Reference items by ID: **B1–B12** bugs · **P1–P23** polish · **N1–N6** n
 ## v1.0 — Outstanding polish
 
 ### Sidebar
-- [ ] **P1** `Should` **SF Symbol accentcolor in context menus** — sidebar context menu glyphs take on accent colour. Should be monochrome like all other context menus. (QA log #1)
+- [x] **P1** ~~SF Symbol accentcolor in context menus~~ — ✅ `.tint(Color.primary)` applied to context menu content, overriding the inherited accent tint; per-item `symbolRenderingMode`/`foregroundStyle` overrides removed.
 - [ ] **P2** `Should` **Sidebar resize broken** — resize handle appears but dragging cuts the sidebar directly between expanded and collapsed states rather than resizing smoothly. Should behave like Finder's sidebar. (QA log #2/#24)
 - [ ] **P3** `Should` **Sidebar toggle animation drops frames** — toggling sidebar causes dropped frames; should animate as smoothly as the inspector toggle.
 - [ ] **P4** `Should` **Sidebar section collapse not instant under Reduce Motion** — sections should collapse/expand instantly with Reduce Motion enabled. (QA checklist #55)

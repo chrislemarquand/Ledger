@@ -1449,7 +1449,10 @@ struct NavigationSidebarView: View {
                                     if hasSidebarActions(item) {
                                         sidebarRow(item)
                                             .contextMenu {
+                                                // Reset tint so SF Symbol images render in label
+                                                // colour, not the inherited accent tint.
                                                 sidebarContextMenu(for: item)
+                                                    .tint(Color.primary)
                                             }
                                     } else {
                                         sidebarRow(item)
@@ -1586,8 +1589,6 @@ struct NavigationSidebarView: View {
                 model.openSidebarItemInFinder(item)
             } label: {
                 Label("Open in Finder", systemImage: "folder")
-                    .symbolRenderingMode(.monochrome)
-                    .foregroundStyle(.primary)
             }
         }
 
@@ -1599,8 +1600,6 @@ struct NavigationSidebarView: View {
                 model.pinSidebarItem(item)
             } label: {
                 Label("Pin", systemImage: "pin")
-                    .symbolRenderingMode(.monochrome)
-                    .foregroundStyle(.primary)
             }
         }
 
@@ -1609,8 +1608,6 @@ struct NavigationSidebarView: View {
                 model.unpinSidebarItem(item)
             } label: {
                 Label("Unpin Pinned", systemImage: "pin.slash")
-                    .symbolRenderingMode(.monochrome)
-                    .foregroundStyle(.primary)
             }
 
             if model.canMoveFavoriteUp(item) || model.canMoveFavoriteDown(item) {
@@ -1621,8 +1618,6 @@ struct NavigationSidebarView: View {
                 model.moveFavoriteUp(item)
             } label: {
                 Label("Move Pinned Up", systemImage: "arrow.up")
-                    .symbolRenderingMode(.monochrome)
-                    .foregroundStyle(.primary)
             }
             .disabled(!model.canMoveFavoriteUp(item))
 
@@ -1630,8 +1625,6 @@ struct NavigationSidebarView: View {
                 model.moveFavoriteDown(item)
             } label: {
                 Label("Move Pinned Down", systemImage: "arrow.down")
-                    .symbolRenderingMode(.monochrome)
-                    .foregroundStyle(.primary)
             }
             .disabled(!model.canMoveFavoriteDown(item))
         }
