@@ -3,6 +3,7 @@ import Foundation
 public protocol BackupManaging: Sendable {
     func createBackup(operationID: UUID, files: [URL]) throws -> URL
     func restoreBackup(operationID: UUID) throws -> OperationResult
+    func pruneOperations(keepLast count: Int) throws
 }
 
 public struct BackupManager: BackupManaging {
@@ -92,5 +93,28 @@ public struct BackupManager: BackupManaging {
             backupLocation: folder,
             duration: Date().timeIntervalSince(startedAt)
         )
+    }
+
+    public func pruneOperations(keepLast count: Int) throws {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: baseDirectory.path) else { return }
+
+        let contents = try fileManager.contentsOfDirectory(
+            at: baseDirectory,
+            includingPropertiesForKeys: [.creationDateKey],
+            options: [.skipsHiddenFiles]
+        )
+
+        let operationFolders = contents
+            .filter { UUID(uuidString: $0.lastPathComponent) != nil }
+            .sorted { a, b in
+                let dateA = (try? a.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+                let dateB = (try? b.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+                return dateA > dateB
+            }
+
+        for folder in operationFolders.dropFirst(max(0, count)) {
+            try fileManager.removeItem(at: folder)
+        }
     }
 }

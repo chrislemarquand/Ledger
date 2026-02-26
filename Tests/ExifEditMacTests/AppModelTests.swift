@@ -359,6 +359,86 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.valueForTag(makeTag), "Canon")
     }
 
+    // MARK: - Empty state and enumeration
+
+    func testEmptyFolderBrowserItemsAreEmpty() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let model = makeModel()
+        model.openFolder(at: temp)
+
+        XCTAssertTrue(model.browserItems.isEmpty)
+        XCTAssertNil(model.browserEnumerationError)
+    }
+
+    func testInaccessibleFolderSetsEnumerationError() throws {
+        // Non-existent paths trigger a FileManager error.
+        let nonExistent = URL(fileURLWithPath: "/tmp/__lattice_nonexistent_\(UUID().uuidString)")
+        let model = makeModel()
+        model.openFolder(at: nonExistent)
+
+        XCTAssertNotNil(model.browserEnumerationError)
+        XCTAssertTrue(model.browserItems.isEmpty)
+    }
+
+    func testPresetSchemaVersionMismatchThrows() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        // Write a preset file with a future schema version.
+        let presetFile = temp.appendingPathComponent("presets.json")
+        let futurePayload = """
+        {"schemaVersion":9999,"presets":[]}
+        """
+        try futurePayload.write(to: presetFile, atomically: true, encoding: .utf8)
+
+        let store = FilePresetStore(fileURL: presetFile)
+        XCTAssertThrowsError(try store.loadPresets()) { error in
+            guard let editError = error as? ExifEditError,
+                  case .presetSchemaVersionTooNew = editError else {
+                XCTFail("Expected ExifEditError.presetSchemaVersionTooNew, got \(error)")
+                return
+            }
+        }
+    }
+
+    // MARK: - filteredBrowserItems caching
+
+    func testFilteredBrowserItemsUpdatesWhenBrowserItemsChange() {
+        let model = makeModel()
+        XCTAssertTrue(model.filteredBrowserItems.isEmpty)
+
+        let items = makeBrowserItems(count: 3)
+        model.browserItems = items
+
+        XCTAssertEqual(model.filteredBrowserItems.count, 3)
+    }
+
+    func testSearchQueryFiltersFilteredBrowserItems() {
+        let model = makeModel()
+        model.browserItems = [
+            makeBrowserItem(name: "alpha.jpg"),
+            makeBrowserItem(name: "beta.jpg"),
+            makeBrowserItem(name: "alpha_2.jpg")
+        ]
+
+        model.searchQuery = "alpha"
+
+        XCTAssertEqual(model.filteredBrowserItems.count, 2)
+        XCTAssertTrue(model.filteredBrowserItems.allSatisfy { $0.name.lowercased().contains("alpha") })
+    }
+
+    func testFilteredBrowserItemsClearsWhenSearchQueryClears() {
+        let model = makeModel()
+        model.browserItems = makeBrowserItems(count: 5)
+        model.searchQuery = "zzz_no_match"
+        XCTAssertTrue(model.filteredBrowserItems.isEmpty)
+
+        model.searchQuery = ""
+        XCTAssertEqual(model.filteredBrowserItems.count, 5)
+    }
+
     // MARK: - Modified-click selection sync
 
     func testCommandClickAddsItemToSelection() {
@@ -441,15 +521,19 @@ final class AppModelTests: XCTestCase {
 
     private func makeBrowserItems(count: Int) -> [AppModel.BrowserItem] {
         (0 ..< count).map { i in
-            AppModel.BrowserItem(
-                url: URL(fileURLWithPath: "/tmp/seltest_\(i).jpg"),
-                name: "seltest_\(i).jpg",
-                modifiedAt: nil,
-                createdAt: nil,
-                sizeBytes: nil,
-                kind: nil
-            )
+            makeBrowserItem(name: "seltest_\(i).jpg")
         }
+    }
+
+    private func makeBrowserItem(name: String) -> AppModel.BrowserItem {
+        AppModel.BrowserItem(
+            url: URL(fileURLWithPath: "/tmp/\(name)"),
+            name: name,
+            modifiedAt: nil,
+            createdAt: nil,
+            sizeBytes: nil,
+            kind: nil
+        )
     }
 
     private func makeModel(

@@ -34,7 +34,7 @@ export NOTARY_PROFILE="EXIFEDIT_NOTARY"
 
 The final artifact is produced at:
 
-- `build/dmg/Lattice.dmg` (or `build/dmg/<AppName>.dmg` when `APP_NAME` is overridden)
+- `build/dmg/Ledger.dmg` (or `build/dmg/<AppName>.dmg` when `APP_NAME` is overridden)
 
 ## Script breakdown
 

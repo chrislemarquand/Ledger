@@ -16,6 +16,18 @@ private enum Motion {
     static var timingFunction: CAMediaTimingFunction { CAMediaTimingFunction(name: .easeInEaseOut) }
 }
 
+private enum KeyCode {
+    static let tab: UInt16 = 48
+    static let space: UInt16 = 49
+    static let escape: UInt16 = 53
+    static let `return`: UInt16 = 36
+    static let numpadReturn: UInt16 = 76
+    static let leftArrow: UInt16 = 123
+    static let rightArrow: UInt16 = 124
+    static let downArrow: UInt16 = 125
+    static let upArrow: UInt16 = 126
+}
+
 private enum UIMetrics {
     enum Sidebar {
         static let sectionItemIndent: CGFloat = 11
@@ -242,7 +254,9 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
         inspectorItem.canCollapse = true
         inspectorItem.holdingPriority = .defaultLow
 
-        // Prevent inspector content from forcing pane expansion during metadata/view updates.
+        // Prevent inspector or sidebar content from forcing pane expansion during view updates.
+        sidebarController.view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        sidebarController.view.setContentHuggingPriority(.defaultLow, for: .horizontal)
         inspectorController.view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         inspectorController.view.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
@@ -418,14 +432,14 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
         spacebarMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
             let modifiers = event.modifierFlags.intersection([.command, .shift, .control, .option, .function])
-            let isTabWithoutCommand = event.keyCode == 48 && (modifiers.isEmpty || modifiers == [.shift])
+            let isTabWithoutCommand = event.keyCode == KeyCode.tab && (modifiers.isEmpty || modifiers == [.shift])
 
             if isTabWithoutCommand && shouldHandlePaneTabSwitchCommands() {
                 togglePaneFocusBetweenSidebarAndBrowser()
                 return nil
             }
 
-            if shouldHandleInspectorTabCommands() && event.keyCode == 48 { // Tab
+            if shouldHandleInspectorTabCommands() && event.keyCode == KeyCode.tab {
                 if modifiers.isEmpty {
                     NotificationCenter.default.post(
                         name: .inspectorDidRequestFieldNavigation,
@@ -447,23 +461,23 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
             guard shouldHandleBrowserKeyCommands() else { return event }
 
             switch event.keyCode {
-            case 53: // Escape
+            case KeyCode.escape:
                 guard modifiers.isEmpty else { return event }
                 model.clearSelection()
                 return nil
-            case 49: // Space
+            case KeyCode.space:
                 guard modifiers.intersection([.command, .control, .option, .function]).isEmpty else { return event }
                 model.quickLookSelection()
                 return nil
-            case 0: // A
+            case _ where event.characters == "a":
                 guard modifiers == [.command] else { return event }
                 model.selectAllFilteredFiles()
                 return nil
-            case 2: // D
+            case _ where event.characters == "d":
                 guard modifiers == [.command] else { return event }
                 model.clearSelection()
                 return nil
-            case 123, 124, 125, 126: // Arrow keys
+            case KeyCode.leftArrow, KeyCode.rightArrow, KeyCode.downArrow, KeyCode.upArrow: // Arrow keys
                 guard let direction = moveDirection(forKeyCode: event.keyCode) else { return event }
                 if modifiers.isEmpty {
                     if model.browserViewMode == .gallery {
@@ -651,10 +665,10 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
 
     private func moveDirection(forKeyCode keyCode: UInt16) -> MoveCommandDirection? {
         switch keyCode {
-        case 123: return .left
-        case 124: return .right
-        case 125: return .down
-        case 126: return .up
+        case KeyCode.leftArrow: return .left
+        case KeyCode.rightArrow: return .right
+        case KeyCode.downArrow: return .down
+        case KeyCode.upArrow: return .up
         default: return nil
         }
     }
@@ -1226,6 +1240,12 @@ struct NavigationSidebarView: View {
                                         sidebarRow(item)
                                     }
                                 }
+                                .task(id: item.id) {
+                                    switch item.kind {
+                                    case .desktop, .downloads: break
+                                    default: model.ensureSidebarImageCount(for: item)
+                                    }
+                                }
                             }
                         }
                     } header: {
@@ -1410,6 +1430,7 @@ struct BrowserView: View {
         case none
         case noSelection
         case loading
+        case enumerationError(String)
         case emptyFolder
         case noResults
     }
@@ -1417,6 +1438,9 @@ struct BrowserView: View {
     private var overlayState: OverlayState {
         if model.selectedSidebarID == nil {
             return .noSelection
+        }
+        if let error = model.browserEnumerationError {
+            return .enumerationError(error.localizedDescription)
         }
         if model.isFolderMetadataLoading, model.browserItems.isEmpty {
             return .loading
@@ -1458,6 +1482,12 @@ struct BrowserView: View {
                 "No Folder Selected",
                 systemImage: "folder",
                 description: Text("Open a folder from the toolbar to start browsing metadata.")
+            )
+        case let .enumerationError(message):
+            ContentUnavailableView(
+                "Folder Unavailable",
+                systemImage: "lock.fill",
+                description: Text(message)
             )
         case .emptyFolder:
             ContentUnavailableView(
@@ -2163,11 +2193,13 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
             return
         }
 
-        let transition = CATransition()
-        transition.type = .fade
-        transition.duration = Motion.duration
-        transition.timingFunction = Motion.timingFunction
-        currentIcon.layer?.add(transition, forKey: "listThumbnailSwapFade")
+        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            let transition = CATransition()
+            transition.type = .fade
+            transition.duration = Motion.duration
+            transition.timingFunction = Motion.timingFunction
+            currentIcon.layer?.add(transition, forKey: "listThumbnailSwapFade")
+        }
         currentIcon.alphaValue = 1
         currentIcon.image = model.displayImageForCurrentStagedState(image, fileURL: url)
     }
@@ -2213,7 +2245,7 @@ private final class BrowserListTableView: NSTableView {
             return
         }
 
-        if event.keyCode == 36 || event.keyCode == 76 {
+        if event.keyCode == KeyCode.return || event.keyCode == KeyCode.numpadReturn {
             onActivateSelection?()
             return
         }
@@ -2265,6 +2297,7 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
     private var lastRenderedSelected: Set<URL> = []
     private var lastRenderedPending: Set<URL> = []
     private var lastRenderedPrimarySelectionURL: URL?
+    private var lastStagedOpsDisplayToken: UInt64 = 0
     private var thumbnailRequestVersion: [URL: Int] = [:]
     private var thumbnailVersionCounter = 0
     private var lastThumbnailInvalidationToken = UUID()
@@ -2439,6 +2472,8 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
         let selectionChanged = selectedURLs != lastRenderedSelected
         let pendingChanged = pendingURLs != lastRenderedPending
         let primaryChanged = model.primarySelectionURL != lastRenderedPrimarySelectionURL
+        let stagedOpsChanged = lastStagedOpsDisplayToken != model.stagedOpsDisplayToken
+        if stagedOpsChanged { lastStagedOpsDisplayToken = model.stagedOpsDisplayToken }
 
         if columnsChanged {
             applyColumnCount(targetColumnCount, animated: true)
@@ -2455,11 +2490,11 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
             lastRenderedPrimarySelectionURL = model.primarySelectionURL
         }
 
-        if listChanged || columnsChanged || selectionChanged || pendingChanged {
+        if listChanged || columnsChanged || selectionChanged || pendingChanged || stagedOpsChanged {
             refreshVisibleCellState(
                 pendingURLs: pendingURLs,
                 selectedURLs: selectedURLs,
-                needsFullReconfigure: listChanged || columnsChanged || pendingChanged
+                needsFullReconfigure: listChanged || columnsChanged || pendingChanged || stagedOpsChanged
             )
             lastRenderedPending = pendingURLs
         }
@@ -2509,6 +2544,7 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
     private func applyFadeTransition(to view: NSView) {
         guard let layer = view.layer else { return }
         layer.removeAnimation(forKey: "galleryZoomFade")
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
         let transition = CATransition()
         transition.type = .fade
         transition.duration = Motion.duration
@@ -2573,7 +2609,11 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
             guard indexPath.item >= 0, indexPath.item < items.count else { continue }
             guard let cell = collectionView.item(at: indexPath) as? AppKitGalleryItem else { continue }
             let item = items[indexPath.item]
-            if needsFullReconfigure {
+            // Skip full reconfigure for items whose thumbnail is already being refreshed via
+            // reloadItems — reconfiguring here would show the fallback icon since the pipeline
+            // cache has already been cleared, causing a visible flash.
+            let awaitingRefresh = pendingThumbnailRefreshURLs.contains(item.url)
+            if needsFullReconfigure && !awaitingRefresh {
                 let baseImage = ThumbnailPipeline.cachedImage(for: item.url, minRenderedSide: 1)
                     ?? ThumbnailPipeline.fallbackIcon(for: item.url, side: 128)
                 let displayImage = model.displayImageForCurrentStagedState(baseImage, fileURL: item.url)
@@ -2927,23 +2967,23 @@ private final class AppKitGalleryCollectionView: NSCollectionView {
             return
         }
 
-        if event.keyCode == 53 {
+        if event.keyCode == KeyCode.escape {
             deselectAll(nil)
             onBackgroundClick?()
             return
         }
 
-        if event.keyCode == 36 || event.keyCode == 76 {
+        if event.keyCode == KeyCode.return || event.keyCode == KeyCode.numpadReturn {
             onActivateSelection?()
             return
         }
 
         let direction: MoveCommandDirection?
         switch event.keyCode {
-        case 123: direction = .left
-        case 124: direction = .right
-        case 125: direction = .down
-        case 126: direction = .up
+        case KeyCode.leftArrow: direction = .left
+        case KeyCode.rightArrow: direction = .right
+        case KeyCode.downArrow: direction = .down
+        case KeyCode.upArrow: direction = .up
         default: direction = nil
         }
 
@@ -3134,6 +3174,13 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
             return
         }
 
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            imageWidthConstraint?.constant = fitted.width
+            imageHeightConstraint?.constant = fitted.height
+            overlayWidthConstraint?.constant = fitted.width + (UIMetrics.Gallery.selectionOutset * 2)
+            overlayHeightConstraint?.constant = fitted.height + (UIMetrics.Gallery.selectionOutset * 2)
+            return
+        }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = Motion.duration
             context.timingFunction = Motion.timingFunction
@@ -3228,6 +3275,7 @@ struct InspectorView: View {
         formatter.countStyle = .file
         return formatter
     }()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var focusedTagID: String?
     @State private var editSessionSnapshots: [String: AppModel.EditSessionSnapshot] = [:]
     @State private var activeEditTagID: String?
@@ -3280,29 +3328,17 @@ struct InspectorView: View {
                     .padding(.horizontal, contentHorizontalInset)
 
                     if model.selectedFileURLs.count == 1 {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Button {
-                                withAnimation(appAnimation()) {
-                                    model.toggleInspectorSection("Preview")
+                        DisclosureGroup(
+                            isExpanded: Binding(
+                                get: { !model.isInspectorSectionCollapsed("Preview") },
+                                set: { _ in
+                                    var t = Transaction(animation: appAnimation())
+                                    if reduceMotion { t.disablesAnimations = true }
+                                    withTransaction(t) { model.toggleInspectorSection("Preview") }
                                 }
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: model.isInspectorSectionCollapsed("Preview") ? "chevron.right" : "chevron.down")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.secondary)
-                                        .frame(width: 10, alignment: .center)
-                                    Text("PREVIEW")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(AppTheme.accentColor)
-                                        .tracking(0.4)
-                                    Spacer(minLength: 0)
-                                }
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-
-                            if !model.isInspectorSectionCollapsed("Preview"),
-                               let previewURL = primarySelectedFileURL {
+                            )
+                        ) {
+                            if let previewURL = primarySelectedFileURL {
                                 VStack(spacing: 10) {
                                     InspectorPreviewImageView(model: model, fileURL: previewURL)
                                         .frame(maxWidth: .infinity)
@@ -3350,34 +3386,27 @@ struct InspectorView: View {
                                         .fill(.quaternary.opacity(0.35))
                                 )
                             }
+                        } label: {
+                            Text("PREVIEW")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(AppTheme.accentColor)
+                                .tracking(0.4)
                         }
                         .padding(.horizontal, contentHorizontalInset)
                     }
 
                     ForEach(model.groupedEditableTags, id: \.section) { grouped in
-                        VStack(alignment: .leading, spacing: 8) {
-                            Button {
-                                withAnimation(appAnimation()) {
-                                    model.toggleInspectorSection(grouped.section)
+                        DisclosureGroup(
+                            isExpanded: Binding(
+                                get: { !model.isInspectorSectionCollapsed(grouped.section) },
+                                set: { _ in
+                                    var t = Transaction(animation: appAnimation())
+                                    if reduceMotion { t.disablesAnimations = true }
+                                    withTransaction(t) { model.toggleInspectorSection(grouped.section) }
                                 }
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: model.isInspectorSectionCollapsed(grouped.section) ? "chevron.right" : "chevron.down")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.secondary)
-                                        .frame(width: 10, alignment: .center)
-                                    Text(grouped.section.uppercased())
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(AppTheme.accentColor)
-                                        .tracking(0.4)
-                                    Spacer(minLength: 0)
-                                }
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-
-                            if !model.isInspectorSectionCollapsed(grouped.section) {
-                                VStack(alignment: .leading, spacing: 10) {
+                            )
+                        ) {
+                            VStack(alignment: .leading, spacing: 10) {
                                     ForEach(grouped.tags) { tag in
                                         VStack(alignment: .leading, spacing: 4) {
                                             HStack(spacing: 6) {
@@ -3393,15 +3422,19 @@ struct InspectorView: View {
                                             if model.isDateTimeTag(tag) {
                                                 if let date = model.dateValueForTag(tag) {
                                                     HStack(spacing: 6) {
-                                                        FullWidthDateTimePicker(
+                                                        DatePicker(
+                                                            "",
                                                             selection: Binding(
                                                                 get: { model.dateValueForTag(tag) ?? date },
                                                                 set: {
                                                                     beginEditSessionIfNeeded(for: tag)
                                                                     model.updateDateValue($0, for: tag)
                                                                 }
-                                                            )
+                                                            ),
+                                                            displayedComponents: [.date, .hourAndMinute]
                                                         )
+                                                        .labelsHidden()
+                                                        .datePickerStyle(.stepperField)
                                                         .frame(maxWidth: .infinity, alignment: .leading)
 
                                                         Button {
@@ -3445,16 +3478,19 @@ struct InspectorView: View {
                                                     }
                                                 }
                                             } else if let options = model.pickerOptions(for: tag) {
-                                                FullWidthPopupPicker(
-                                                    options: options,
-                                                    selection: Binding(
-                                                        get: { model.valueForTag(tag) },
-                                                        set: {
-                                                            beginEditSessionIfNeeded(for: tag)
-                                                            model.updateValue($0, for: tag)
-                                                        }
-                                                    )
-                                                )
+                                                Picker("", selection: Binding(
+                                                    get: { model.valueForTag(tag) },
+                                                    set: {
+                                                        beginEditSessionIfNeeded(for: tag)
+                                                        model.updateValue($0, for: tag)
+                                                    }
+                                                )) {
+                                                    ForEach(options, id: \.value) { option in
+                                                        Text(option.label).tag(option.value)
+                                                    }
+                                                }
+                                                .labelsHidden()
+                                                .pickerStyle(.menu)
                                                 .frame(maxWidth: .infinity, alignment: .leading)
                                             } else {
                                                 TextField(
@@ -3487,7 +3523,11 @@ struct InspectorView: View {
                                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                                         .fill(.quaternary.opacity(0.35))
                                 )
-                            }
+                        } label: {
+                            Text(grouped.section.uppercased())
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(AppTheme.accentColor)
+                                .tracking(0.4)
                         }
                         .padding(.horizontal, contentHorizontalInset)
                     }
@@ -4225,96 +4265,6 @@ private struct InspectorPreviewImageView: View {
     }
 }
 
-private struct FullWidthPopupPicker: NSViewRepresentable {
-    let options: [AppModel.PickerOption]
-    @Binding var selection: String
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(selection: $selection)
-    }
-
-    func makeNSView(context: Context) -> NSPopUpButton {
-        let popup = NSPopUpButton(frame: .zero, pullsDown: false)
-        popup.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        popup.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        popup.target = context.coordinator
-        popup.action = #selector(Coordinator.selectionChanged(_:))
-        return popup
-    }
-
-    func updateNSView(_ popup: NSPopUpButton, context: Context) {
-        let currentTitles = popup.itemTitles
-        let nextTitles = options.map(\.label)
-        if currentTitles != nextTitles || popup.numberOfItems != options.count {
-            popup.removeAllItems()
-            popup.addItems(withTitles: nextTitles)
-        }
-
-        context.coordinator.options = options
-        let selectedIndex = options.firstIndex(where: { $0.value == selection }) ?? 0
-        if popup.indexOfSelectedItem != selectedIndex, selectedIndex < popup.numberOfItems {
-            popup.selectItem(at: selectedIndex)
-        }
-    }
-
-    final class Coordinator: NSObject {
-        @Binding var selection: String
-        var options: [AppModel.PickerOption] = []
-
-        init(selection: Binding<String>) {
-            _selection = selection
-        }
-
-        @MainActor @objc
-        func selectionChanged(_ sender: NSPopUpButton) {
-            let index = sender.indexOfSelectedItem
-            guard options.indices.contains(index) else { return }
-            selection = options[index].value
-        }
-    }
-}
-
-private struct FullWidthDateTimePicker: NSViewRepresentable {
-    @Binding var selection: Date
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(selection: $selection)
-    }
-
-    func makeNSView(context: Context) -> NSDatePicker {
-        let picker = NSDatePicker(frame: .zero)
-        picker.datePickerStyle = .textField
-        picker.datePickerElements = [.yearMonthDay, .hourMinute]
-        picker.datePickerMode = .single
-        picker.isBordered = true
-        picker.isBezeled = true
-        picker.drawsBackground = true
-        picker.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        picker.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        picker.target = context.coordinator
-        picker.action = #selector(Coordinator.selectionChanged(_:))
-        return picker
-    }
-
-    func updateNSView(_ picker: NSDatePicker, context: Context) {
-        if abs(picker.dateValue.timeIntervalSince(selection)) > 0.5 {
-            picker.dateValue = selection
-        }
-    }
-
-    final class Coordinator: NSObject {
-        @Binding var selection: Date
-
-        init(selection: Binding<Date>) {
-            _selection = selection
-        }
-
-        @MainActor @objc
-        func selectionChanged(_ sender: NSDatePicker) {
-            selection = sender.dateValue
-        }
-    }
-}
 
 private struct InspectorLocationMapView: NSViewRepresentable {
     let coordinate: CLLocationCoordinate2D

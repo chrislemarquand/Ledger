@@ -1,4 +1,4 @@
-# Lattice v1.0.0 (Draft)
+# Ledger v1.0.0 (Draft)
 
 ## Highlights
 - Added persistent sidebar favorites with pin, unpin, and simple reordering.

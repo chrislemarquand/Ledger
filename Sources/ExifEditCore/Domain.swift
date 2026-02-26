@@ -141,6 +141,7 @@ public enum ExifEditError: Error, LocalizedError {
     case invalidExifToolJSON
     case backupNotFound
     case invalidOperation(String)
+    case presetSchemaVersionTooNew
 
     public var errorDescription: String? {
         switch self {
@@ -154,6 +155,8 @@ public enum ExifEditError: Error, LocalizedError {
             return "Backup for this operation was not found."
         case let .invalidOperation(reason):
             return reason
+        case .presetSchemaVersionTooNew:
+        return "Your presets were saved by a newer version of Ledger and can't be read. Update Ledger to access them."
         }
     }
 }

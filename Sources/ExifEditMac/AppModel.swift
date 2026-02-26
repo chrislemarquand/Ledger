@@ -2,9 +2,12 @@ import AppKit
 import ExifEditCore
 import Foundation
 import ImageIO
+import OSLog
 import QuickLookThumbnailing
 import Quartz
 import SwiftUI
+
+private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "ExifEdit", category: "AppModel")
 
 final class SharedBrowserThumbnailCache: @unchecked Sendable {
     static let shared = SharedBrowserThumbnailCache(maxEntries: 3_000)
@@ -176,7 +179,7 @@ enum ThumbnailPipeline {
 }
 
 enum AppBrand {
-    static let fallbackDisplayName = "Lattice"
+    static let fallbackDisplayName = "Ledger"
     static let legacyDisplayNames = ["Logbook", "ExifEditMac"]
 
     static var displayName: String {
@@ -538,9 +541,14 @@ final class AppModel: ObservableObject {
     @Published var selectedSidebarID: String?
     @Published var isSidebarCollapsed = false
     @Published var isInspectorCollapsed = false
-    @Published var browserItems: [BrowserItem] = []
+    @Published var browserItems: [BrowserItem] = [] {
+        didSet { rebuildFilteredBrowserItems() }
+    }
     @Published var browserSort: BrowserSort {
-        didSet { UserDefaults.standard.set(browserSort.rawValue, forKey: Self.browserSortKey) }
+        didSet {
+            UserDefaults.standard.set(browserSort.rawValue, forKey: Self.browserSortKey)
+            rebuildFilteredBrowserItems()
+        }
     }
     @Published var selectedFileURLs: Set<URL> = []
     @Published var browserViewMode: BrowserViewMode {
@@ -568,10 +576,15 @@ final class AppModel: ObservableObject {
             notifyInspectorDidChange()
         }
     }
-    @Published var searchQuery = ""
+    @Published var searchQuery = "" {
+        didSet { rebuildFilteredBrowserItems() }
+    }
     @Published var statusMessage = "Ready"
     @Published var browserThumbnailInvalidationToken = UUID()
     @Published var browserThumbnailInvalidatedURLs: Set<URL> = []
+    /// Bumped on every staged image operation so the gallery can refresh display transforms
+    /// without clearing the thumbnail pipeline cache (no async re-fetch needed).
+    @Published var stagedOpsDisplayToken: UInt64 = 0
     @Published var lastResult: OperationResult? {
         didSet {
             notifyInspectorDidChange()
@@ -580,6 +593,7 @@ final class AppModel: ObservableObject {
     @Published var isFolderMetadataLoading = false
     @Published var folderMetadataLoadCompleted = 0
     @Published var folderMetadataLoadTotal = 0
+    @Published var browserEnumerationError: Error? = nil
     @Published var isApplyingMetadata = false
     @Published var applyMetadataCompleted = 0
     @Published var applyMetadataTotal = 0
@@ -629,6 +643,7 @@ final class AppModel: ObservableObject {
     private var lastOperationIDs: [UUID] = []
     private var lastOperationFilesByID: [UUID: URL] = [:]
     private var statusResetTask: Task<Void, Never>?
+    private var inspectorDebounceTask: Task<Void, Never>?
     private var metadataUndoStack: [PendingEditState] = []
     private var metadataRedoStack: [PendingEditState] = []
     private var isApplyingMetadataUndoState = false
@@ -728,7 +743,15 @@ final class AppModel: ObservableObject {
             statusMessage = "Ready"
         } else {
             service = UnavailableExifToolService()
-            statusMessage = "exiftool not found. Install exiftool to edit metadata."
+            statusMessage = "Ledger requires exiftool to function. The app bundle may be corrupted."
+            Task { @MainActor in
+                let alert = NSAlert()
+                alert.messageText = "Ledger requires exiftool"
+                alert.informativeText = "The exiftool executable could not be found. The app bundle may be corrupted. Please reinstall Ledger."
+                alert.alertStyle = .critical
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
+            }
         }
 
         engine = ExifEditEngine(exifToolService: service)
@@ -747,7 +770,9 @@ final class AppModel: ObservableObject {
             selectedPresetID = selectedPresetUUID
         }
         loadPresets()
-        warmSidebarImageCounts()
+        Task.detached(priority: .background) {
+            try? BackupManager().pruneOperations(keepLast: 20)
+        }
 
     }
 
@@ -1239,7 +1264,8 @@ final class AppModel: ObservableObject {
                                 staleMetadataFiles.insert(fileURL)
                             } else {
                                 if didApplyImageOps {
-                                    _ = try? await engine.restore(operationID: operationID)
+                                    do { _ = try await engine.restore(operationID: operationID) }
+                                    catch { logger.error("Fallback restore after metadata write failed: \(error)") }
                                 }
                                 failed.append(contentsOf: metadataResult.failed)
                             }
@@ -1248,7 +1274,8 @@ final class AppModel: ObservableObject {
                     removeStagedQuickLookPreviewFile(for: fileURL)
                 } catch {
                     if !imageOps.isEmpty {
-                        _ = try? await engine.restore(operationID: operationID)
+                        do { _ = try await engine.restore(operationID: operationID) }
+                        catch { logger.error("Fallback restore after apply error: \(error)") }
                     }
                     failed.append(FileError(fileURL: fileURL, message: error.localizedDescription))
                 }
@@ -1275,16 +1302,25 @@ final class AppModel: ObservableObject {
             } else if result.succeeded.isEmpty {
                 let firstError = result.failed.first?.message ?? "Unknown write error."
                 statusMessage = "Failed to apply metadata changes. \(firstError)"
+                let failedNames = result.failed.prefix(5).map { $0.fileURL.lastPathComponent }.joined(separator: "\n")
+                Task { @MainActor in
+                    let alert = NSAlert()
+                    alert.messageText = "Apply failed"
+                    alert.informativeText = "Could not write metadata to \(result.failed.count) file(s):\n\(failedNames)\n\n\(firstError)"
+                    alert.alertStyle = .warning
+                    alert.addButton(withTitle: "OK")
+                    alert.runModal()
+                }
             } else {
-                    let firstError = result.failed.first?.message ?? "Unknown write error."
-                    statusMessage = "Applied to \(result.succeeded.count) file(s), failed on \(result.failed.count). \(firstError)"
+                let firstError = result.failed.first?.message ?? "Unknown write error."
+                statusMessage = "Applied to \(result.succeeded.count) file(s), failed on \(result.failed.count). \(firstError)"
             }
             applyMetadataCompleted = applyMetadataTotal
-            isApplyingMetadata = false
             clearMetadataUndoHistory()
 
             Task { @MainActor [weak self] in
                 await self?.loadMetadataForSelection()
+                self?.isApplyingMetadata = false
             }
         }
     }
@@ -1338,8 +1374,8 @@ final class AppModel: ObservableObject {
                     succeeded.append(contentsOf: result.succeeded)
                     failed.append(contentsOf: result.failed)
                 } catch {
-                    let fallbackURL = operationFilesByID[operationID] ?? URL(fileURLWithPath: "/")
-                    failed.append(FileError(fileURL: fallbackURL, message: error.localizedDescription))
+                    guard let fileURL = operationFilesByID[operationID] else { continue }
+                    failed.append(FileError(fileURL: fileURL, message: error.localizedDescription))
                 }
             }
 
@@ -1353,8 +1389,13 @@ final class AppModel: ObservableObject {
             lastResult = summary
             if !summary.succeeded.isEmpty {
                 for fileURL in summary.succeeded {
+                    pendingEditsByFile[fileURL] = nil
                     pendingImageOpsByFile[fileURL] = nil
                     removeStagedQuickLookPreviewFile(for: fileURL)
+                    // Mark stale so loadMetadataForSelection re-reads from disk.
+                    // Without this, metadataByFile retains the applied values and
+                    // the inspector continues to show the pre-restore metadata.
+                    staleMetadataFiles.insert(fileURL)
                 }
                 invalidateBrowserThumbnails(for: summary.succeeded)
                 invalidateInspectorPreviews(for: summary.succeeded)
@@ -1368,6 +1409,15 @@ final class AppModel: ObservableObject {
             } else if summary.succeeded.isEmpty {
                 let firstError = summary.failed.first?.message ?? "Unknown restore error."
                 statusMessage = "Failed to restore metadata. \(firstError)"
+                let failedNames = summary.failed.prefix(5).map { $0.fileURL.lastPathComponent }.joined(separator: "\n")
+                Task { @MainActor in
+                    let alert = NSAlert()
+                    alert.messageText = "Restore failed"
+                    alert.informativeText = "Could not restore \(summary.failed.count) file(s):\n\(failedNames)\n\n\(firstError)"
+                    alert.alertStyle = .warning
+                    alert.addButton(withTitle: "OK")
+                    alert.runModal()
+                }
             } else {
                 let firstError = summary.failed.first?.message ?? "Unknown restore error."
                 statusMessage = "Restored \(summary.succeeded.count) file(s), failed on \(summary.failed.count). \(firstError)"
@@ -1384,6 +1434,17 @@ final class AppModel: ObservableObject {
             if let selectedPresetID,
                !presets.contains(where: { $0.id == selectedPresetID }) {
                 self.selectedPresetID = nil
+            }
+        } catch ExifEditError.presetSchemaVersionTooNew {
+            presets = []
+            selectedPresetID = nil
+            Task { @MainActor in
+                let alert = NSAlert()
+                alert.messageText = "Presets saved by a newer version"
+                alert.informativeText = "Your presets were saved by a newer version of Ledger and can't be read. Update Ledger to access them."
+                alert.alertStyle = .warning
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
             }
         } catch {
             presets = []
@@ -1903,7 +1964,10 @@ final class AppModel: ObservableObject {
         }
 
         removeStagedQuickLookPreviewFile(for: fileURL)
-        invalidateBrowserThumbnails(for: [fileURL])
+        // Bump the display token so the gallery reconfigures visible cells with the updated
+        // software transform, without clearing the thumbnail pipeline cache or triggering an
+        // async re-fetch. The cache is invalidated after the operation is applied to disk.
+        stagedOpsDisplayToken &+= 1
         recalculateInspectorState(forceNotify: true)
         registerMetadataUndoIfNeeded(previous: previousState)
     }
@@ -2497,7 +2561,9 @@ final class AppModel: ObservableObject {
         return ""
     }
 
-    var filteredBrowserItems: [BrowserItem] {
+    @Published private(set) var filteredBrowserItems: [BrowserItem] = []
+
+    private func rebuildFilteredBrowserItems() {
         let baseItems: [BrowserItem]
         if searchQuery.isEmpty {
             baseItems = browserItems
@@ -2505,7 +2571,7 @@ final class AppModel: ObservableObject {
             let query = searchQuery.lowercased()
             baseItems = browserItems.filter { $0.name.lowercased().contains(query) }
         }
-        return sortBrowserItems(baseItems)
+        filteredBrowserItems = sortBrowserItems(baseItems)
     }
 
     var selectedSnapshots: [FileMetadataSnapshot] {
@@ -2534,10 +2600,8 @@ final class AppModel: ObservableObject {
     }
 
     func sidebarImageCountText(for item: SidebarItem) -> String? {
-        if let count = sidebarImageCounts[item.id] {
-            return "\(count)"
-        }
-        return isPrivacySensitiveSidebarKind(item.kind) ? nil : "0"
+        guard let count = sidebarImageCounts[item.id] else { return nil }
+        return "\(count)"
     }
 
     func ensureSidebarImageCount(for item: SidebarItem) {
@@ -2829,19 +2893,25 @@ final class AppModel: ObservableObject {
 
         let urls: [URL]
 
-        switch kind {
-        case .pictures:
-            urls = enumerateImages(in: picturesDirectoryURL())
-        case .desktop:
-            urls = enumerateImages(in: desktopDirectoryURL())
-        case .downloads:
-            urls = enumerateImages(in: downloadsDirectoryURL())
-        case let .mountedVolume(volumeURL):
-            urls = enumerateImages(in: volumeURL)
-        case let .favorite(favoriteURL):
-            urls = enumerateImages(in: favoriteURL)
-        case let .folder(folder):
-            urls = enumerateImages(in: folder)
+        do {
+            switch kind {
+            case .pictures:
+                urls = try enumerateImages(in: picturesDirectoryURL())
+            case .desktop:
+                urls = try enumerateImages(in: desktopDirectoryURL())
+            case .downloads:
+                urls = try enumerateImages(in: downloadsDirectoryURL())
+            case let .mountedVolume(volumeURL):
+                urls = try enumerateImages(in: volumeURL)
+            case let .favorite(favoriteURL):
+                urls = try enumerateImages(in: favoriteURL)
+            case let .folder(folder):
+                urls = try enumerateImages(in: folder)
+            }
+            browserEnumerationError = nil
+        } catch {
+            browserEnumerationError = error
+            urls = []
         }
 
         clearLoadedContentState(preserveSessionCaches: true)
@@ -2874,6 +2944,7 @@ final class AppModel: ObservableObject {
         isFolderMetadataLoading = false
         folderMetadataLoadCompleted = 0
         folderMetadataLoadTotal = 0
+        browserEnumerationError = nil
 
         previewPreloadTask?.cancel()
         previewPreloadTask = nil
@@ -3042,7 +3113,6 @@ final class AppModel: ObservableObject {
         } else {
             selectedSidebarID = nil
         }
-        warmSidebarImageCounts()
     }
 
     private func warmSidebarImageCounts(includePrivacySensitive: Bool = false) {
@@ -3504,12 +3574,12 @@ final class AppModel: ObservableObject {
             ?? URL(fileURLWithPath: NSHomeDirectory())
     }
 
-    private func enumerateImages(in folder: URL) -> [URL] {
-        let urls = (try? FileManager.default.contentsOfDirectory(
+    private func enumerateImages(in folder: URL) throws -> [URL] {
+        let urls = try FileManager.default.contentsOfDirectory(
             at: folder,
             includingPropertiesForKeys: [.isRegularFileKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
-        )) ?? []
+        )
 
         return urls.filter { url in
             guard Self.supportedImageExtensions.contains(url.pathExtension.lowercased()) else { return false }
@@ -3521,7 +3591,7 @@ final class AppModel: ObservableObject {
     private func enumerateImagesRecursively(in folder: URL) -> [URL] {
         guard let enumerator = FileManager.default.enumerator(
             at: folder,
-            includingPropertiesForKeys: [.isRegularFileKey],
+            includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         ) else {
             return []
@@ -3530,6 +3600,11 @@ final class AppModel: ObservableObject {
         var files: [URL] = []
 
         for case let url as URL in enumerator {
+            // Skip symbolic links to prevent potential cycles.
+            if (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true {
+                enumerator.skipDescendants()
+                continue
+            }
             let ext = url.pathExtension.lowercased()
             guard Self.supportedImageExtensions.contains(ext) else { continue }
             files.append(url)
@@ -3539,11 +3614,17 @@ final class AppModel: ObservableObject {
     }
 
     nonisolated private static func countSupportedImages(in folder: URL) -> Int {
-        let urls = (try? FileManager.default.contentsOfDirectory(
-            at: folder,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles, .skipsPackageDescendants]
-        )) ?? []
+        let urls: [URL]
+        do {
+            urls = try FileManager.default.contentsOfDirectory(
+                at: folder,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants]
+            )
+        } catch {
+            logger.error("countSupportedImages: failed to enumerate \(folder.path): \(error)")
+            return 0
+        }
 
         return urls.reduce(into: 0) { total, url in
             guard supportedImageExtensions.contains(url.pathExtension.lowercased()) else { return }
@@ -3843,6 +3924,15 @@ final class AppModel: ObservableObject {
     }
 
     private func recalculateInspectorState(forceNotify: Bool = false) {
+        inspectorDebounceTask?.cancel()
+        inspectorDebounceTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            guard !Task.isCancelled, let self else { return }
+            self.performRecalculateInspectorState(forceNotify: forceNotify)
+        }
+    }
+
+    private func performRecalculateInspectorState(forceNotify: Bool = false) {
         let selectedURLs = Array(selectedFileURLs)
         var didChange = false
         guard !selectedURLs.isEmpty else {
@@ -4848,6 +4938,7 @@ private final class QuickLookPreviewController: NSObject, @preconcurrency QLPrev
     }
 
     private func moveLinearly(in panel: QLPreviewPanel, delta: Int) -> Bool {
+        guard !sourceItems.isEmpty else { return true }
         let current = panel.currentPreviewItemIndex
         let fallback = current >= 0 ? current : 0
         let proposed = fallback + delta

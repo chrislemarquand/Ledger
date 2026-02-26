@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "A10000600000000000000001"
-               BuildableName = "Lattice.app"
+               BuildableName = "Ledger.app"
                BlueprintName = "ExifEditMac"
                ReferencedContainer = "container:ExifEditMac.xcodeproj">
             </BuildableReference>
@@ -55,13 +55,13 @@
       allowLocationSimulation = "YES">
       <BuildableProductRunnable
          runnableDebuggingMode = "0">
-         <BuildableReference
-            BuildableIdentifier = "primary"
-            BlueprintIdentifier = "A10000600000000000000001"
-            BuildableName = "Lattice.app"
-            BlueprintName = "ExifEditMac"
-            ReferencedContainer = "container:ExifEditMac.xcodeproj">
-         </BuildableReference>
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "A10000600000000000000001"
+               BuildableName = "Ledger.app"
+               BlueprintName = "ExifEditMac"
+               ReferencedContainer = "container:ExifEditMac.xcodeproj">
+            </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
    <ProfileAction
@@ -72,13 +72,13 @@
       debugDocumentVersioning = "YES">
       <BuildableProductRunnable
          runnableDebuggingMode = "0">
-         <BuildableReference
-            BuildableIdentifier = "primary"
-            BlueprintIdentifier = "A10000600000000000000001"
-            BuildableName = "Lattice.app"
-            BlueprintName = "ExifEditMac"
-            ReferencedContainer = "container:ExifEditMac.xcodeproj">
-         </BuildableReference>
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "A10000600000000000000001"
+               BuildableName = "Ledger.app"
+               BlueprintName = "ExifEditMac"
+               ReferencedContainer = "container:ExifEditMac.xcodeproj">
+            </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>
    <AnalyzeAction

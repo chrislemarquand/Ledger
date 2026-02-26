@@ -41,6 +41,19 @@
               0
             ]
           }
+        },
+        {
+          "blend-mode" : "soft-light",
+          "image-name" : "squareshape.split.3x3 2.svg",
+          "name" : "squareshape.split.3x3 2",
+          "opacity" : 0.15,
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -2.8799999999999955,
+              0
+            ]
+          }
         }
       ],
       "shadow" : {

@@ -46,7 +46,7 @@
 
 /* Begin PBXFileReference section */
 		469CE1902F4B7DE400D51BC9 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
-		A10000010000000000000001 /* Lattice.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Lattice.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000010000000000000001 /* Ledger.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Ledger.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000020000000000000001 /* ExifEditCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ExifEditCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000030000000000000001 /* Config/ExifEditMac-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Config/ExifEditMac-Info.plist"; sourceTree = SOURCE_ROOT; };
 		A10000040000000000000001 /* Config/ExifEditMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Config/ExifEditMac.entitlements; sourceTree = SOURCE_ROOT; };
@@ -105,7 +105,7 @@
 		A10000360000000000000001 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A10000010000000000000001 /* Lattice.app */,
+				A10000010000000000000001 /* Ledger.app */,
 				A10000370000000000000001 /* libExifEditCore.a */,
 				A10000020000000000000001 /* ExifEditCoreTests.xctest */,
 			);
@@ -217,7 +217,7 @@
 			);
 			name = ExifEditMac;
 			productName = ExifEditMac;
-			productReference = A10000010000000000000001 /* Lattice.app */;
+			productReference = A10000010000000000000001 /* Ledger.app */;
 			productType = "com.apple.product-type.application";
 		};
 		A10000610000000000000001 /* ExifEditCore */ = {

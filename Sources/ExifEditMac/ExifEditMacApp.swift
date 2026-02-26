@@ -52,8 +52,7 @@ struct ExifEditMacApp: App {
                     guard let model = appDelegate.appModel else { return }
                     model.performFileAction(.openInDefaultApp, targetURLs: Array(model.selectedFileURLs))
                 } label: {
-                    let model = appDelegate.appModel
-                    let state = model?.fileActionState(for: .openInDefaultApp, targetURLs: Array(model?.selectedFileURLs ?? []))
+                    let state = appDelegate.appModel?.fileActionState(for: .openInDefaultApp, targetURLs: Array(appDelegate.appModel?.selectedFileURLs ?? []))
                     Label(state?.title ?? "Open in Default App", systemImage: state?.symbolName ?? "arrow.up.forward.app")
                 }
                 .keyboardShortcut(.return, modifiers: .command)
@@ -68,7 +67,7 @@ struct ExifEditMacApp: App {
                     Label("Reveal in Finder", systemImage: "folder")
                 }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
-                .disabled((appDelegate.appModel?.selectedFileURLs.isEmpty ?? true))
+                .disabled(appDelegate.appModel?.selectedFileURLs.isEmpty ?? true)
 
                 Divider()
 
@@ -76,8 +75,7 @@ struct ExifEditMacApp: App {
                     guard let model = appDelegate.appModel else { return }
                     model.performFileAction(.restoreFromLastBackup, targetURLs: Array(model.selectedFileURLs))
                 } label: {
-                    let model = appDelegate.appModel
-                    let state = model?.fileActionState(for: .restoreFromLastBackup, targetURLs: Array(model?.selectedFileURLs ?? []))
+                    let state = appDelegate.appModel?.fileActionState(for: .restoreFromLastBackup, targetURLs: Array(appDelegate.appModel?.selectedFileURLs ?? []))
                     Label(state?.title ?? "Restore from Last Backup", systemImage: state?.symbolName ?? "arrow.uturn.backward.circle")
                 }
                 .disabled({
@@ -101,21 +99,21 @@ struct ExifEditMacApp: App {
                 } label: {
                     Label("Rotate Left", systemImage: "rotate.left")
                 }
-                .disabled((appDelegate.appModel?.selectedFileURLs.isEmpty ?? true))
+                .disabled(appDelegate.appModel?.selectedFileURLs.isEmpty ?? true)
 
                 Button {
                     rotateSelectionRight()
                 } label: {
                     Label("Rotate Right", systemImage: "rotate.right")
                 }
-                .disabled((appDelegate.appModel?.selectedFileURLs.isEmpty ?? true))
+                .disabled(appDelegate.appModel?.selectedFileURLs.isEmpty ?? true)
 
                 Button {
                     flipSelectionHorizontal()
                 } label: {
                     Label("Flip", systemImage: "flip.horizontal")
                 }
-                .disabled((appDelegate.appModel?.selectedFileURLs.isEmpty ?? true))
+                .disabled(appDelegate.appModel?.selectedFileURLs.isEmpty ?? true)
             }
 
             CommandGroup(after: .toolbar) {
@@ -152,32 +150,14 @@ struct ExifEditMacApp: App {
 
                 Divider()
 
-                Menu("Sort By") {
-                    let sort = appDelegate.appModel?.browserSort ?? .name
-
-                    Button {
-                        appDelegate.appModel?.browserSort = .name
-                    } label: {
-                        if sort == .name { Label("Name", systemImage: "checkmark") } else { Text("Name") }
-                    }
-
-                    Button {
-                        appDelegate.appModel?.browserSort = .created
-                    } label: {
-                        if sort == .created { Label("Date Created", systemImage: "checkmark") } else { Text("Date Created") }
-                    }
-
-                    Button {
-                        appDelegate.appModel?.browserSort = .size
-                    } label: {
-                        if sort == .size { Label("Size", systemImage: "checkmark") } else { Text("Size") }
-                    }
-
-                    Button {
-                        appDelegate.appModel?.browserSort = .kind
-                    } label: {
-                        if sort == .kind { Label("Kind", systemImage: "checkmark") } else { Text("Kind") }
-                    }
+                Picker("Sort By", selection: Binding(
+                    get: { appDelegate.appModel?.browserSort ?? .name },
+                    set: { appDelegate.appModel?.browserSort = $0 }
+                )) {
+                    Text("Name").tag(AppModel.BrowserSort.name)
+                    Text("Date Created").tag(AppModel.BrowserSort.created)
+                    Text("Size").tag(AppModel.BrowserSort.size)
+                    Text("Kind").tag(AppModel.BrowserSort.kind)
                 }
 
                 Button {
@@ -209,8 +189,7 @@ struct ExifEditMacApp: App {
                     guard let model = appDelegate.appModel else { return }
                     model.performFileAction(.applyMetadataChanges, targetURLs: Array(model.selectedFileURLs))
                 } label: {
-                    let model = appDelegate.appModel
-                    let state = model?.fileActionState(for: .applyMetadataChanges, targetURLs: Array(model?.selectedFileURLs ?? []))
+                    let state = appDelegate.appModel?.fileActionState(for: .applyMetadataChanges, targetURLs: Array(appDelegate.appModel?.selectedFileURLs ?? []))
                     Label(state?.title ?? "Apply Metadata Changes", systemImage: state?.symbolName ?? "square.and.arrow.down")
                 }
                 .keyboardShortcut("s", modifiers: .command)
@@ -223,8 +202,7 @@ struct ExifEditMacApp: App {
                     guard let model = appDelegate.appModel else { return }
                     model.performFileAction(.clearMetadataChanges, targetURLs: Array(model.selectedFileURLs))
                 } label: {
-                    let model = appDelegate.appModel
-                    let state = model?.fileActionState(for: .clearMetadataChanges, targetURLs: Array(model?.selectedFileURLs ?? []))
+                    let state = appDelegate.appModel?.fileActionState(for: .clearMetadataChanges, targetURLs: Array(appDelegate.appModel?.selectedFileURLs ?? []))
                     Label(state?.title ?? "Clear Metadata Changes", systemImage: state?.symbolName ?? "xmark.circle")
                 }
                 .keyboardShortcut("k", modifiers: [.command, .shift])
@@ -237,8 +215,7 @@ struct ExifEditMacApp: App {
                     guard let model = appDelegate.appModel else { return }
                     model.performFileAction(.restoreFromLastBackup, targetURLs: Array(model.selectedFileURLs))
                 } label: {
-                    let model = appDelegate.appModel
-                    let state = model?.fileActionState(for: .restoreFromLastBackup, targetURLs: Array(model?.selectedFileURLs ?? []))
+                    let state = appDelegate.appModel?.fileActionState(for: .restoreFromLastBackup, targetURLs: Array(appDelegate.appModel?.selectedFileURLs ?? []))
                     Label(state?.title ?? "Restore from Last Backup", systemImage: state?.symbolName ?? "arrow.uturn.backward.circle")
                 }
                 .keyboardShortcut("b", modifiers: [.command, .shift])
@@ -279,7 +256,7 @@ struct ExifEditMacApp: App {
 
                 Menu("Presets") {
                     Menu("Apply Preset") {
-                        if (appDelegate.appModel?.presets.isEmpty ?? true) {
+                        if appDelegate.appModel?.presets.isEmpty ?? true {
                             Text("No Presets")
                         } else {
                             ForEach(appDelegate.appModel?.presets ?? []) { preset in
@@ -288,7 +265,7 @@ struct ExifEditMacApp: App {
                                 } label: {
                                     Label(preset.name, systemImage: "slider.horizontal.3")
                                 }
-                                .disabled((appDelegate.appModel?.selectedFileURLs.isEmpty ?? true))
+                                .disabled(appDelegate.appModel?.selectedFileURLs.isEmpty ?? true)
                             }
                         }
                     }
@@ -300,7 +277,7 @@ struct ExifEditMacApp: App {
                     } label: {
                         Label("Save Current as Preset…", systemImage: "square.and.arrow.down.on.square")
                     }
-                    .disabled((appDelegate.appModel?.selectedFileURLs.isEmpty ?? true))
+                    .disabled(appDelegate.appModel?.selectedFileURLs.isEmpty ?? true)
 
                     Button {
                         NSApp.sendAction(#selector(NativeThreePaneSplitViewController.managePresetsAction(_:)), to: nil, from: nil)
