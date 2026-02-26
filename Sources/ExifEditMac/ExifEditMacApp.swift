@@ -130,23 +130,6 @@ struct ExifEditMacApp: App {
                     Label("Toggle Inspector", systemImage: "sidebar.trailing")
                 }
 
-                Divider()
-
-                Button {
-                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.zoomInAction(_:)), to: nil, from: nil)
-                } label: {
-                    Label("Zoom In", systemImage: "plus.magnifyingglass")
-                }
-                .keyboardShortcut("+", modifiers: .command)
-                .disabled((appDelegate.appModel?.browserViewMode ?? .gallery) == .list)
-
-                Button {
-                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.zoomOutAction(_:)), to: nil, from: nil)
-                } label: {
-                    Label("Zoom Out", systemImage: "minus.magnifyingglass")
-                }
-                .keyboardShortcut("-", modifiers: .command)
-                .disabled((appDelegate.appModel?.browserViewMode ?? .gallery) == .list)
             }
 
             CommandMenu("Folder") {

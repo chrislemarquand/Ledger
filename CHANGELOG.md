@@ -12,6 +12,7 @@ All notable changes to Ledger are documented here.
 - Folder menu Apply Metadata Changes (⌘S), Clear Metadata Changes (⌘⇧K), and Restore from Last Backup (⌘⇧B) now enable/disable correctly based on whether the selection has pending edits or a restorable backup
 - Context menu Apply, Clear, and Restore items now respect enabled state; `autoenablesItems = false` prevents AppKit from overriding manually set `isEnabled` values
 - Tab Bar menu items (Show/Hide Tab Bar, New Tab) removed from View menu
+- View → Zoom In / Zoom Out now disabled in list mode and at min/max zoom; broken SwiftUI `.disabled()` replaced with AppKit injection and `validateMenuItem`
 
 ---
 

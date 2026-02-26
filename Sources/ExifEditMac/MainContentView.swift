@@ -653,6 +653,17 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 galleryItem.keyEquivalentModifierMask = .command
                 menu.insertItem(galleryItem, at: sortByIndex)
             }
+            if !menu.items.contains(where: { $0.title == "Zoom In" }) {
+                // Append at end: separator, Zoom In, Zoom Out
+                let insertIndex = menu.numberOfItems
+                let zoomOutItem = NSMenuItem(title: "Zoom Out", action: #selector(zoomOutAction(_:)), keyEquivalent: "-")
+                zoomOutItem.keyEquivalentModifierMask = .command
+                let zoomInItem = NSMenuItem(title: "Zoom In", action: #selector(zoomInAction(_:)), keyEquivalent: "+")
+                zoomInItem.keyEquivalentModifierMask = .command
+                menu.insertItem(zoomOutItem, at: insertIndex)
+                menu.insertItem(zoomInItem, at: insertIndex)
+                menu.insertItem(.separator(), at: insertIndex)
+            }
         } else if menu === folderMenuForInjection {
             if !menu.items.contains(where: { $0.title == "Apply Metadata Changes" }) {
                 let anchor = (menu.items.firstIndex(where: { $0.title == "Refresh Files and Metadata" }) ?? -1) + 1
@@ -684,6 +695,10 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             return model.fileActionState(for: .clearMetadataChanges, targetURLs: selection).isEnabled
         } else if menuItem.action == #selector(restoreFromBackupAction(_:)) {
             return model.fileActionState(for: .restoreFromLastBackup, targetURLs: selection).isEnabled
+        } else if menuItem.action == #selector(zoomInAction(_:)) {
+            return model.browserViewMode == .gallery && model.canIncreaseGalleryZoom
+        } else if menuItem.action == #selector(zoomOutAction(_:)) {
+            return model.browserViewMode == .gallery && model.canDecreaseGalleryZoom
         } else if menuItem.action == #selector(sortByNameAction(_:)) {
             menuItem.state = model.browserSort == .name ? .on : .off
         } else if menuItem.action == #selector(sortByCreatedAction(_:)) {
