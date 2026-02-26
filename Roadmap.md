@@ -51,7 +51,7 @@ Reference items by ID: **B1–B12** bugs · **P1–P23** polish · **N1–N6** n
 - [x] **P2** ❌ **Sidebar resize** — snap-to-collapse on drag is intentional macOS 26 Liquid Glass sidebar design (matches Finder and Xcode on 26.2); not an app bug. Three earlier attempts to override this behaviour reverted.
 - [ ] **P3** `Should` **Sidebar toggle animation drops frames** — toggling sidebar causes dropped frames; should animate as smoothly as the inspector toggle.
 - [ ] **P4** `Should` **Sidebar section collapse not instant under Reduce Motion** — sections should collapse/expand instantly with Reduce Motion enabled. (QA checklist #55)
-- [x] **P5** ✅ All sections including Recents now animate on collapse/expand; replaced `Section { if !collapsed ForEach }` with `DisclosureGroup(isExpanded:)` which animates relative to its own header regardless of list position.
+- [ ] **P5** `Should` **Recents section does not animate on collapse/expand** ❌ `DisclosureGroup` approach tried and reverted: SwiftUI renders `DisclosureGroup` in a `.listStyle(.sidebar)` List with a left-side chevron (tree-view style), not the right-side chevron used by native macOS sidebar section headers. No SwiftUI API to move the indicator without a fully custom `DisclosureGroupStyle`. Reverting preserves correct right-side chevron on all sections; Recents animation remains broken.
 - [ ] **P6** `Should` **Favourites flows after relaunch** — verify pin/unpin/reorder survives a relaunch; stale (deleted folder) favourites should be cleaned up.
 
 ### Browser list

@@ -1440,6 +1440,7 @@ private extension NSToolbarItem.Identifier {
 struct NavigationSidebarView: View {
     @ObservedObject var model: AppModel
     @State private var collapsedSections: Set<String> = []
+    @State private var hoveredSection: String?
     @Environment(\.controlActiveState) private var controlActiveState
     @FocusState private var isSidebarFocused: Bool
 
@@ -1448,47 +1449,32 @@ struct NavigationSidebarView: View {
             ForEach(model.sidebarSectionOrder, id: \.self) { section in
                 let sectionItems = model.sidebarItems.filter { $0.section == section }
                 if !sectionItems.isEmpty {
-                    // DisclosureGroup animates collapse/expand relative to its own
-                    // header, so the bottommost section (Recents) animates correctly
-                    // — unlike the previous Section + conditional ForEach approach
-                    // which had no lower layout anchor for the last section (P5).
-                    DisclosureGroup(
-                        isExpanded: Binding(
-                            get: { !collapsedSections.contains(section) },
-                            set: { isExpanded in
-                                withAnimation(appAnimation()) {
-                                    if isExpanded {
-                                        collapsedSections.remove(section)
+                    Section {
+                        if !collapsedSections.contains(section) {
+                            ForEach(sectionItems) { item in
+                                Group {
+                                    if hasSidebarActions(item) {
+                                        sidebarRow(item)
+                                            .contextMenu {
+                                                // Reset tint so SF Symbol images render in label
+                                                // colour, not the inherited accent tint.
+                                                sidebarContextMenu(for: item)
+                                                    .tint(Color.primary)
+                                            }
                                     } else {
-                                        collapsedSections.insert(section)
+                                        sidebarRow(item)
+                                    }
+                                }
+                                .task(id: item.id) {
+                                    switch item.kind {
+                                    case .desktop, .downloads: break
+                                    default: model.ensureSidebarImageCount(for: item)
                                     }
                                 }
                             }
-                        )
-                    ) {
-                        ForEach(sectionItems) { item in
-                            Group {
-                                if hasSidebarActions(item) {
-                                    sidebarRow(item)
-                                        .contextMenu {
-                                            // Reset tint so SF Symbol images render in label
-                                            // colour, not the inherited accent tint.
-                                            sidebarContextMenu(for: item)
-                                                .tint(Color.primary)
-                                        }
-                                } else {
-                                    sidebarRow(item)
-                                }
-                            }
-                            .task(id: item.id) {
-                                switch item.kind {
-                                case .desktop, .downloads: break
-                                default: model.ensureSidebarImageCount(for: item)
-                                }
-                            }
                         }
-                    } label: {
-                        sidebarSectionLabel(section)
+                    } header: {
+                        sidebarSectionHeader(section)
                     }
                 }
             }
@@ -1562,10 +1548,39 @@ struct NavigationSidebarView: View {
         }
     }
 
-    private func sidebarSectionLabel(_ section: String) -> some View {
-        Text(section)
-            .font(.system(size: UIMetrics.Sidebar.headerFontSize, weight: .semibold))
-            .foregroundStyle(sidebarHeaderColor)
+    private func sidebarSectionHeader(_ section: String) -> some View {
+        Button {
+            toggleSection(section)
+        } label: {
+            Text(section)
+                .font(.system(size: UIMetrics.Sidebar.headerFontSize, weight: .semibold))
+                .foregroundStyle(sidebarHeaderColor)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .trailing) {
+                    Image(systemName: collapsedSections.contains(section) ? "chevron.right" : "chevron.down")
+                        .font(.system(size: UIMetrics.Sidebar.headerFontSize, weight: .semibold))
+                        .foregroundStyle(sidebarHeaderColor)
+                        .opacity(hoveredSection == section ? 1 : 0)
+                        .frame(width: UIMetrics.Sidebar.trailingColumnWidth, height: UIMetrics.Sidebar.headerChevronFrameHeight, alignment: .trailing)
+                        .contentShape(Rectangle())
+                        .padding(.trailing, UIMetrics.Sidebar.trailingColumnInset)
+                }
+        }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+        .onHover { isHovering in
+            hoveredSection = isHovering ? section : nil
+        }
+    }
+
+    private func toggleSection(_ section: String) {
+        withAnimation(appAnimation()) {
+            if collapsedSections.contains(section) {
+                collapsedSections.remove(section)
+            } else {
+                collapsedSections.insert(section)
+            }
+        }
     }
 
     private var sidebarHeaderColor: Color {
