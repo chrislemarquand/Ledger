@@ -86,15 +86,6 @@ struct ExifEditMacApp: App {
 
             CommandGroup(after: .pasteboard) {
                 Button {
-                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.focusSearchAction(_:)), to: nil, from: nil)
-                } label: {
-                    Label("Find…", systemImage: "magnifyingglass")
-                }
-                .keyboardShortcut("f", modifiers: .command)
-            }
-
-            CommandGroup(after: .pasteboard) {
-                Button {
                     rotateSelectionLeft()
                 } label: {
                     Label("Rotate Left", systemImage: "rotate.left")

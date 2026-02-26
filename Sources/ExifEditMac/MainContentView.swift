@@ -902,11 +902,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     }
 
     @objc
-    func focusSearchAction(_: Any?) {
-        nativeToolbarDelegate?.focusSearchField()
-    }
-
-    @objc
     func focusInspectorEntryAction(_: Any?) {
         guard !model.selectedFileURLs.isEmpty else { return }
         NotificationCenter.default.post(
@@ -1048,11 +1043,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         }
     }
 
-    @objc
-    private func searchChanged(_ sender: NSSearchField) {
-        model.searchQuery = sender.stringValue
-    }
-
     private func confirmAndApplyPreset(preset: MetadataPreset) {
         let fileCount = model.selectedFileURLs.count
         guard fileCount > 0 else {
@@ -1086,7 +1076,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         private var zoomInItem: NSToolbarItem?
         private var applyChangesItem: NSToolbarItem?
         private var inspectorToggleItem: NSToolbarItem?
-        private var searchItem: NSSearchToolbarItem?
+
         private var sortItem: NSToolbarItem?
         private var presetsItem: NSToolbarItem?
         private var sortMenu: NSMenu?
@@ -1108,8 +1098,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 .presetTools,
                 .openFolder,
                 .applyChanges,
-                .toggleInspector,
-                .search
+                .toggleInspector
             ]
         }
 
@@ -1125,8 +1114,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 .openFolder,
                 .toggleInspector,
                 .flexibleSpace,
-                .applyChanges,
-                .search
+                .applyChanges
             ]
         }
 
@@ -1242,17 +1230,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 item.toolTip = label
                 inspectorToggleItem = item
                 return item
-            case .search:
-                let item = NSSearchToolbarItem(itemIdentifier: itemIdentifier)
-                item.label = "Search"
-                item.paletteLabel = "Search"
-                item.searchField.placeholderString = "Search files"
-                item.searchField.sendsSearchStringImmediately = true
-                item.searchField.target = controller
-                item.searchField.action = #selector(NativeThreePaneSplitViewController.searchChanged(_:))
-                item.toolTip = "Search files"
-                searchItem = item
-                return item
             default:
                 return nil
             }
@@ -1265,7 +1242,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             updateZoom(with: model)
             updateSortMenu(with: model)
             updatePresetsMenu(with: model)
-            updateSearch(with: model)
             updateApplyEnabled(with: model)
             updateInspectorToggle(with: model)
         }
@@ -1301,11 +1277,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             presetsMenu = makePresetsMenu(model: model)
         }
 
-        private func updateSearch(with model: AppModel) {
-            guard let searchField = searchItem?.searchField, searchField.stringValue != model.searchQuery else { return }
-            searchField.stringValue = model.searchQuery
-        }
-
         private func updateApplyEnabled(with model: AppModel) {
             applyChangesItem?.isEnabled = model.canApplyMetadataChanges
         }
@@ -1314,13 +1285,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             let label = model.isInspectorCollapsed ? "Show Inspector" : "Hide Inspector"
             inspectorToggleItem?.label = label
             inspectorToggleItem?.toolTip = label
-        }
-
-        func focusSearchField() {
-            guard let window = controller?.view.window,
-                  let searchField = searchItem?.searchField else { return }
-            window.makeFirstResponder(searchField)
-            searchField.selectText(nil)
         }
 
         @objc
@@ -1434,7 +1398,7 @@ private extension NSToolbarItem.Identifier {
     static let openFolder = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.OpenFolder")
     static let applyChanges = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ApplyChanges")
     static let toggleInspector = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ToggleInspector")
-    static let search = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.Search")
+
 }
 
 struct NavigationSidebarView: View {
