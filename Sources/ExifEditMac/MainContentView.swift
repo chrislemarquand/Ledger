@@ -645,40 +645,79 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         sortMenu.addItem(withTitle: "Size", action: #selector(sortBySizeAction(_:)), keyEquivalent: "")
         sortMenu.addItem(withTitle: "Kind", action: #selector(sortByKindAction(_:)), keyEquivalent: "")
         let item = NSMenuItem(title: "Sort By", action: nil, keyEquivalent: "")
+        item.image = NSImage(systemSymbolName: "arrow.up.arrow.down", accessibilityDescription: nil)
         item.submenu = sortMenu
         return item
+    }
+
+    /// Rebuilds the View menu in the desired order with SF Symbol images.
+    /// Collects SwiftUI-managed items (Toggle Sidebar, Toggle Inspector) and any
+    /// unrecognised AppKit items (Enter Full Screen), clears the menu, then re-adds
+    /// everything in order: As Gallery, As List, Sort By, Zoom In/Out,
+    /// Toggle Sidebar, Toggle Inspector, other (Enter Full Screen).
+    private func rebuildViewMenu(_ menu: NSMenu) {
+        // Early exit if already in the correct order.
+        guard menu.items.first?.title != "As Gallery" else { return }
+
+        // Collect items we don't own so we can keep them.
+        var sidebarMenuItem: NSMenuItem?
+        var inspectorMenuItem: NSMenuItem?
+        var extraItems: [NSMenuItem] = []
+        let ownedTitles: Set<String> = ["As Gallery", "As List", "Sort By", "Zoom In", "Zoom Out"]
+
+        for item in menu.items where !item.isSeparatorItem {
+            switch item.title {
+            case "Toggle Sidebar":  sidebarMenuItem = item
+            case "Toggle Inspector": inspectorMenuItem = item
+            case _ where ownedTitles.contains(item.title): break  // will be recreated
+            default: extraItems.append(item)
+            }
+        }
+
+        // Build fresh injected items with images.
+        let galleryItem = NSMenuItem(title: "As Gallery", action: #selector(switchToGalleryAction(_:)), keyEquivalent: "1")
+        galleryItem.keyEquivalentModifierMask = .command
+        galleryItem.image = NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: nil)
+
+        let listItem = NSMenuItem(title: "As List", action: #selector(switchToListAction(_:)), keyEquivalent: "2")
+        listItem.keyEquivalentModifierMask = .command
+        listItem.image = NSImage(systemSymbolName: "list.bullet", accessibilityDescription: nil)
+
+        let zoomInItem = NSMenuItem(title: "Zoom In", action: #selector(zoomInAction(_:)), keyEquivalent: "+")
+        zoomInItem.keyEquivalentModifierMask = .command
+        zoomInItem.image = NSImage(systemSymbolName: "plus.magnifyingglass", accessibilityDescription: nil)
+
+        let zoomOutItem = NSMenuItem(title: "Zoom Out", action: #selector(zoomOutAction(_:)), keyEquivalent: "-")
+        zoomOutItem.keyEquivalentModifierMask = .command
+        zoomOutItem.image = NSImage(systemSymbolName: "minus.magnifyingglass", accessibilityDescription: nil)
+
+        // Stamp images onto SwiftUI-managed items.
+        sidebarMenuItem?.image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: nil)
+        inspectorMenuItem?.image = NSImage(systemSymbolName: "sidebar.trailing", accessibilityDescription: nil)
+
+        // Rebuild in desired order.
+        menu.removeAllItems()
+        menu.addItem(galleryItem)
+        menu.addItem(listItem)
+        menu.addItem(.separator())
+        menu.addItem(makeSortByMenuItem())
+        menu.addItem(.separator())
+        menu.addItem(zoomInItem)
+        menu.addItem(zoomOutItem)
+        menu.addItem(.separator())
+        if let sidebarMenuItem  { menu.addItem(sidebarMenuItem) }
+        if let inspectorMenuItem { menu.addItem(inspectorMenuItem) }
+        if !extraItems.isEmpty {
+            menu.addItem(.separator())
+            extraItems.forEach { menu.addItem($0) }
+        }
     }
 
     // MARK: NSMenuDelegate
 
     func menuWillOpen(_ menu: NSMenu) {
         if menu === viewMenuForSortInjection {
-            if !menu.items.contains(where: { $0.title == "Sort By" }) {
-                let insertIndex = menu.items.firstIndex(where: { $0.title == "Zoom In" }) ?? menu.numberOfItems
-                menu.insertItem(makeSortByMenuItem(), at: insertIndex)
-            }
-            if !menu.items.contains(where: { $0.title == "As Gallery" }) {
-                let sortByIndex = menu.items.firstIndex(where: { $0.title == "Sort By" }) ?? menu.numberOfItems
-                // Insert in reverse so final order is: As Gallery, As List, separator, Sort By
-                menu.insertItem(.separator(), at: sortByIndex)
-                let listItem = NSMenuItem(title: "As List", action: #selector(switchToListAction(_:)), keyEquivalent: "2")
-                listItem.keyEquivalentModifierMask = .command
-                menu.insertItem(listItem, at: sortByIndex)
-                let galleryItem = NSMenuItem(title: "As Gallery", action: #selector(switchToGalleryAction(_:)), keyEquivalent: "1")
-                galleryItem.keyEquivalentModifierMask = .command
-                menu.insertItem(galleryItem, at: sortByIndex)
-            }
-            if !menu.items.contains(where: { $0.title == "Zoom In" }) {
-                // Append at end: separator, Zoom In, Zoom Out
-                let insertIndex = menu.numberOfItems
-                let zoomOutItem = NSMenuItem(title: "Zoom Out", action: #selector(zoomOutAction(_:)), keyEquivalent: "-")
-                zoomOutItem.keyEquivalentModifierMask = .command
-                let zoomInItem = NSMenuItem(title: "Zoom In", action: #selector(zoomInAction(_:)), keyEquivalent: "+")
-                zoomInItem.keyEquivalentModifierMask = .command
-                menu.insertItem(zoomOutItem, at: insertIndex)
-                menu.insertItem(zoomInItem, at: insertIndex)
-                menu.insertItem(.separator(), at: insertIndex)
-            }
+            rebuildViewMenu(menu)
         } else if menu === folderMenuForInjection {
             if !menu.items.contains(where: { $0.title == "Apply Metadata Changes" }) {
                 let anchor = (menu.items.firstIndex(where: { $0.title == "Refresh Files and Metadata" }) ?? -1) + 1
