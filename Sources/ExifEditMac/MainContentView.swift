@@ -340,20 +340,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         super.viewDidAppear()
         ensureInitialInspectorVisibilityIfNeeded()
         configureWindowIfNeeded()
-        applySidebarLayerRounding()
-    }
-
-    /// macOS 26 Liquid Glass draws a window-compositor shadow for the sidebar panel
-    /// based on the layer's declared shape. Without a corner radius the shadow path is
-    /// rectangular, giving sharp right-angle corners at the bottom of the panel (B12).
-    /// Setting cornerRadius here makes the shadow follow the rounded panel shape.
-    private func applySidebarLayerRounding() {
-        let v = sidebarController.view
-        v.wantsLayer = true
-        v.layer?.cornerRadius = 10
-        v.layer?.cornerCurve = .continuous
-        // Only round the bottom two corners — the top sits behind the title bar.
-        v.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
     }
 
     override func viewDidLayout() {

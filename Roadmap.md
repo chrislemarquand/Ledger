@@ -37,7 +37,7 @@ Reference items by ID: **B1–B12** bugs · **P1–P23** polish · **N1–N6** n
 - [x] **B11** ~~Thumbnail flicker on rotate / flip~~ — ✅ Fixed in 0.6 via `stagedOpsDisplayToken`; display transform updated without clearing thumbnail cache.
 
 ### Sidebar
-- [ ] **B12** `Should` **Sidebar shadow rendering** — shadow has sharp right-angle corners at bottom-left and bottom-right of the sidebar panel; should blend correctly. (QA log #25) — `cornerRadius = 10` + `cornerCurve = .continuous` + `maskedCorners` set on sidebar layer in `viewDidAppear`; needs visual QA to confirm correct corners masked.
+- [ ] **B12** `Should` **Sidebar shadow rendering** — shadow has sharp right-angle corners at bottom-left and bottom-right of the sidebar panel; should blend correctly. (QA log #25) ❌ Two failed attempts (`cornerRadius`/`masksToBounds` on `sidebarController.view.layer` then on `splitView.subviews.first`) — both reverted. `masksToBounds = true` was defeating the compositor's own shadow path. Removed all custom layer code; system should now render natively — needs visual QA.
 
 ---
 
