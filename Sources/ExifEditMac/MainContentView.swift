@@ -1487,13 +1487,18 @@ struct NavigationSidebarView: View {
             isSidebarFocused = true
         }
         .onChange(of: model.selectedSidebarID) { oldValue, newValue in
+            // Capture the triggering event synchronously while it is still current.
+            // NSApp.currentEvent will be nil or stale by the time the deferred Task runs,
+            // breaking the isLikelyUserInitiatedSidebarChange() check (causes Desktop /
+            // Downloads to flicker and revert on user click).
+            let triggerEvent = NSApp.currentEvent
             // Defer out of the SwiftUI update cycle. Calling handleSidebarSelectionChange
             // synchronously here causes B14: clearLoadedContentState + loadFiles mutate
             // @Published properties (browserItems → filteredBrowserItems) from within
             // the SwiftUI transaction, which triggers "Publishing changes from within
             // view updates is not allowed" and downstream NSHostingView reentrant layout.
             Task { @MainActor in
-                model.handleSidebarSelectionChange(from: oldValue, to: newValue)
+                model.handleSidebarSelectionChange(from: oldValue, to: newValue, triggerEvent: triggerEvent)
             }
         }
     }

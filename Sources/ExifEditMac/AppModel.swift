@@ -1099,7 +1099,7 @@ final class AppModel: ObservableObject {
         loadFiles(for: itemToLoad.kind)
     }
 
-    func handleSidebarSelectionChange(from oldID: String?, to newID: String?) {
+    func handleSidebarSelectionChange(from oldID: String?, to newID: String?, triggerEvent: NSEvent? = nil) {
         if suppressNextSidebarSelectionChange {
             suppressNextSidebarSelectionChange = false
             return
@@ -1110,7 +1110,7 @@ final class AppModel: ObservableObject {
         }
         guard newID != oldID else { return }
 
-        if shouldSuppressPrivacySensitiveAutoSelection(from: oldID, to: newID) {
+        if shouldSuppressPrivacySensitiveAutoSelection(from: oldID, to: newID, triggerEvent: triggerEvent) {
             isRevertingSidebarSelection = true
             selectedSidebarID = oldID
             return
@@ -3143,15 +3143,15 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func shouldSuppressPrivacySensitiveAutoSelection(from oldID: String?, to newID: String?) -> Bool {
+    private func shouldSuppressPrivacySensitiveAutoSelection(from oldID: String?, to newID: String?, triggerEvent: NSEvent?) -> Bool {
         guard oldID == nil, let newID else { return false }
         guard let candidate = sidebarItems.first(where: { $0.id == newID }) else { return false }
         guard isPrivacySensitiveSidebarKind(candidate.kind) else { return false }
-        return !isLikelyUserInitiatedSidebarChange()
+        return !isLikelyUserInitiatedSidebarChange(event: triggerEvent)
     }
 
-    private func isLikelyUserInitiatedSidebarChange() -> Bool {
-        guard let event = NSApp.currentEvent else { return false }
+    private func isLikelyUserInitiatedSidebarChange(event: NSEvent?) -> Bool {
+        guard let event else { return false }
         switch event.type {
         case .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp,
              .otherMouseDown, .otherMouseUp, .keyDown, .keyUp:
