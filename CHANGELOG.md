@@ -12,6 +12,7 @@ All notable changes to Ledger are documented here.
 ### Fixed
 - About panel now shows correct version and build number; `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` removed from target-level build settings in project.pbxproj where they were silently overriding Base.xcconfig (B13)
 - About panel credits now use `smallSystemFontSize` to match the panel's native credits area; was using `systemFontSize` which rendered too large (P20)
+- Sidebar sections now animate correctly on collapse/expand including Recents (the bottommost section); replaced custom `Section { if !collapsed ForEach }` with native `DisclosureGroup(isExpanded:)` which animates relative to its own header regardless of list position (P5)
 - Sidebar context menu SF Symbol glyphs now render in label colour instead of accent colour; `.tint(Color.primary)` applied to context menu content, overriding the inherited accent tint (P1)
 - "Folder" menu bar menu renamed to "Image" (P16)
 - Sidebar folder-organisation items (Pin, Unpin, Move Up, Move Down) moved from Image menu into a new dedicated "Folder" menu to its right
