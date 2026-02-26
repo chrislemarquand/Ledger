@@ -118,19 +118,6 @@ struct ExifEditMacApp: App {
             }
 
             CommandGroup(after: .toolbar) {
-                Button {
-                    NSApp.sendAction(#selector(NSSplitViewController.toggleSidebar(_:)), to: nil, from: nil)
-                } label: {
-                    Label(appDelegate.isSidebarCollapsed ? "Show Sidebar" : "Hide Sidebar", systemImage: "sidebar.left")
-                }
-                .keyboardShortcut("s", modifiers: [.command, .option])
-
-                Button {
-                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.toggleInspectorAction(_:)), to: nil, from: nil)
-                } label: {
-                    Label(appDelegate.isInspectorCollapsed ? "Show Inspector" : "Hide Inspector", systemImage: "sidebar.trailing")
-                }
-
                 Divider()
 
                 Button {
