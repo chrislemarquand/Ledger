@@ -4,6 +4,13 @@ All notable changes to Ledger are documented here.
 
 ---
 
+## [0.6.2] — build 59 — 2026-02-26
+
+### Fixed
+- "Publishing changes from within view updates is not allowed" eliminated on every sidebar folder selection; root cause was `BrowserListViewController.update()` (called from SwiftUI's `updateNSViewController`) calling `model.setSelectionFromList()` synchronously when `shouldAdoptTableSelectionIntoModel()` returned true — this happened because NSTableView preserves selection by row index across `reloadData()`, so a prior row-0 selection survived into the new folder's data while `selectedFileURLs` had already been cleared; fixed by clearing the table selection before `reloadData()` when items change, and additionally deferring `setSelectionFromList` via `Task { @MainActor in }` in the adoption path for robustness (B14)
+
+---
+
 ## [0.6.2] — build 58 — 2026-02-26
 
 ### Changed

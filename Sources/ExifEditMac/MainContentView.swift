@@ -1919,6 +1919,15 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         applyInitialColumnFitIfNeeded()
         updateListPresentationState(hasItems: !items.isEmpty)
         if hasListChanged() {
+            // Clear stale row selection before reloading. NSTableView preserves
+            // selection by row index across reloadData(), so a prior row 0 selection
+            // survives into the new folder's data. Combined with selectedFileURLs
+            // being empty (cleared by clearLoadedContentState), this causes
+            // shouldAdoptTableSelectionIntoModel() to return true and call
+            // setSelectionFromList() synchronously inside updateNSViewController — B14.
+            isApplyingProgrammaticSelection = true
+            tableView.selectRowIndexes([], byExtendingSelection: false)
+            isApplyingProgrammaticSelection = false
             tableView.reloadData()
         } else {
             if pendingInvalidatedThumbnailURLs.isEmpty {
@@ -1955,8 +1964,14 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
                 } else {
                     focusedURL = nil
                 }
-                model.setSelectionFromList(urls, focusedURL: focusedURL)
-                updateQuickLookSourceFrameFromCurrentSelection()
+                // Defer out of the SwiftUI update cycle. setSelectionFromList mutates
+                // @Published selectedFileURLs which causes B14 when called synchronously
+                // from updateNSViewController (inside SwiftUI's render pass).
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.model.setSelectionFromList(urls, focusedURL: focusedURL)
+                    self.updateQuickLookSourceFrameFromCurrentSelection()
+                }
             }
             return
         }
