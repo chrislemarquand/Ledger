@@ -4848,6 +4848,10 @@ private final class QuickLookPreviewController: NSObject, @preconcurrency QLPrev
             }
         }
 
+        // Centre on screen the first time; if already visible, leave at user's position.
+        if !panel.isVisible {
+            panel.center()
+        }
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
