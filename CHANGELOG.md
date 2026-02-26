@@ -4,6 +4,74 @@ All notable changes to Ledger are documented here.
 
 ---
 
+## [0.6.2] — build 71 — 2026-02-26
+
+### Changed
+- Copy-editing pass across all user-facing text in line with Apple HIG and Apple Style Guide; 101 strings updated across ExifEditMacApp.swift, AppModel.swift, and MainContentView.swift. Key changes:
+  - Contractions throughout: "Could not" / "Failed to" → "Couldn't" (HIG friendly tone)
+  - "file(s)" / "files" / "photos" → "images" (consistent with app's domain)
+  - Status messages: "Pinned {x} to Pinned" → "{x} added to Pinned"; partial results now show "N of M images" fraction
+  - Menu items: "Flip" → "Flip Horizontal"; "Refresh Files and Metadata" → "Refresh"; "Save Current as Preset…" → "Save as Preset…"; Pinned sidebar menu items simplified ("Pin to Sidebar", "Unpin from Sidebar", "Move Up in Sidebar", "Move Down in Sidebar"); "Restore from Last Backup" → "Restore from Backup"
+  - Toolbar: Apply label shortened to "Apply Changes"; zoom tooltips drop "thumbnails"; inspector tooltip → "Show or hide the inspector"
+  - Inspector: ALL CAPS section headers ("PREVIEW", "LAST OPERATION") → title case; "Shutter (Exposure Time)" → "Shutter Speed"; "Modified" / "Created" → "Date Modified" / "Date Created"; "Digitised" → "Digitized"; "GPS Latitude" / "GPS Longitude" → "Latitude" / "Longitude"; "Serial" → "Serial Number"
+  - Picker values: Exposure Program options de-jargonised ("Aperture Priority", "Shutter Priority" etc.); Flash picker capitalised ("Red-Eye") and shortened; Metering Mode capitalised ("Center-Weighted", "Multi-Spot", "Multi-Segment")
+  - Alerts: quit alert button → "Quit and Discard"; apply-folder alert reworded to state consequence; preset name-conflict "Duplicate" button → "Keep Both"; delete preset alert now shows preset name; "This cannot be undone" → "This action can't be undone"
+  - Preset editor: "Add Preset" → "New Preset"; "Add…" → "New Preset…"; "Save Preset" / "Update Preset" → "Save"; "Close" → "Done"; placeholder text rewritten as prompts
+  - About panel description rewritten verb-first; ExifTool capitalised correctly in error message
+  - Empty states: "No Images" → "No Supported Images"; inspector empty state more descriptive
+
+---
+
+## [0.6.2] — build 70 — 2026-02-26
+
+### Fixed
+- Selecting a TCC-gated folder (Downloads, Desktop) no longer leaves the browser permanently empty after the user approves the permission prompt; `applicationDidBecomeActive` now calls `reloadFilesIfBrowserEmpty()` so the file enumeration is retried the moment the app regains focus (B17)
+- "Folder Unavailable" error state is now actually shown when folder enumeration fails; previously `clearLoadedContentState` reset `browserEnumerationError` to nil immediately after the catch block set it, silently degrading all enumeration errors to the "No Images" empty state (B17)
+
+---
+
+## [0.6.2] — build 69 — 2026-02-26
+
+### Changed
+- Sidebar folder/location rows now use SwiftUI `.badge(Text?)` for image counts; custom `Spacer` + fixed-width `Text` label + `Color.clear` placeholder removed; nil count → no badge, consistent with Mail and Reminders (N3)
+
+---
+
+## [0.6.2] — build 68 — 2026-02-26
+
+### Changed
+- Pending-edit indicator dots replaced with SF Symbol `circle.fill` at all four sites: inspector field labels and inspector preview (SwiftUI `Image(systemName:).foregroundStyle(.orange)`), list cell and gallery cell (AppKit `NSImageView` with `NSImage(systemSymbolName:)` and `contentTintColor`); manual `wantsLayer`/`cornerRadius`/`backgroundColor` layer setup removed (N5)
+
+---
+
+## [0.6.2] — build 67 — 2026-02-26
+
+### Changed
+- Toolbar now has three pane-tracking zones: sidebar toggle above the sidebar, browser controls (Open Folder, View Mode, Sort, Zoom, Presets, Apply) above the browser, inspector toggle above the inspector; each zone tracks its pane divider on resize via a second `NSTrackingSeparatorToolbarItem` bound to the inner browser/inspector split (P25)
+
+---
+
+## [0.6.2] — build 66 — 2026-02-26
+
+### Fixed
+- Inspector no longer flashes stale (pre-apply) values after applying metadata; root cause was `pendingEditsByFile` being cleared before the exiftool re-read completed, leaving the inspector with only the old on-disk snapshot; fix adds `pendingCommitsByFile` to capture the written values, which the inspector uses as a fallback until the fresh disk snapshot arrives (B9)
+
+---
+
+## [0.6.2] — build 65 — 2026-02-26
+
+### Fixed
+- Inspector date/time field: when a date is set, the stepper picker now sits at its natural size left-aligned with the clear button pinned to the right edge; previously the picker's allocated frame ran to full width but the control only rendered at half of it, leaving a visible gap (P15)
+
+---
+
+## [0.6.2] — build 64 — 2026-02-26
+
+### Fixed
+- Switching from list → gallery (or vice versa) now scrolls to the selected item; list view uses `browserDidSwitchViewMode` notification → `scrollRowToVisible`; gallery view detects mode switch in `renderState()` via `lastRenderedViewMode`, then defers `layoutSubtreeIfNeeded()` + `scrollToVisible(attrs.frame)` one run loop after the opacity transition; synchronous scroll in `syncSelection` is suppressed during mode switches to avoid conflicting with the deferred path (P8)
+
+---
+
 ## [0.6.2] — build 63 — 2026-02-26
 
 ### Fixed

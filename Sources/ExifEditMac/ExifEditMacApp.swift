@@ -76,7 +76,7 @@ struct ExifEditMacApp: App {
                     model.performFileAction(.restoreFromLastBackup, targetURLs: Array(model.selectedFileURLs))
                 } label: {
                     let state = appDelegate.appModel?.fileActionState(for: .restoreFromLastBackup, targetURLs: Array(appDelegate.appModel?.selectedFileURLs ?? []))
-                    Label(state?.title ?? "Restore from Last Backup", systemImage: state?.symbolName ?? "arrow.uturn.backward.circle")
+                    Label(state?.title ?? "Restore from Backup", systemImage: state?.symbolName ?? "arrow.uturn.backward.circle")
                 }
                 .disabled({
                     guard let model = appDelegate.appModel else { return true }
@@ -102,7 +102,7 @@ struct ExifEditMacApp: App {
                 Button {
                     flipSelectionHorizontal()
                 } label: {
-                    Label("Flip", systemImage: "flip.horizontal")
+                    Label("Flip Horizontal", systemImage: "flip.horizontal")
                 }
                 .disabled(appDelegate.appModel?.selectedFileURLs.isEmpty ?? true)
             }
@@ -127,7 +127,7 @@ struct ExifEditMacApp: App {
                 Button {
                     NSApp.sendAction(#selector(NativeThreePaneSplitViewController.refreshAction(_:)), to: nil, from: nil)
                 } label: {
-                    Label("Refresh Files and Metadata", systemImage: "arrow.clockwise")
+                    Label("Refresh", systemImage: "arrow.clockwise")
                 }
                 .keyboardShortcut("r", modifiers: .command)
 
@@ -154,7 +154,7 @@ struct ExifEditMacApp: App {
                     Button {
                         NSApp.sendAction(#selector(NativeThreePaneSplitViewController.saveCurrentAsPresetAction(_:)), to: nil, from: nil)
                     } label: {
-                        Label("Save Current as Preset…", systemImage: "square.and.arrow.down.on.square")
+                        Label("Save as Preset…", systemImage: "square.and.arrow.down.on.square")
                     }
                     .disabled(appDelegate.appModel?.selectedFileURLs.isEmpty ?? true)
 
@@ -170,28 +170,28 @@ struct ExifEditMacApp: App {
                 Button {
                     appDelegate.appModel?.pinSelectedSidebarLocationToFavorites()
                 } label: {
-                    Label("Pin Location to Pinned", systemImage: "pin")
+                    Label("Pin to Sidebar", systemImage: "pin")
                 }
                 .disabled(!(appDelegate.appModel?.canPinSelectedSidebarLocation ?? false))
 
                 Button {
                     appDelegate.appModel?.unpinSelectedSidebarFavorite()
                 } label: {
-                    Label("Unpin Pinned", systemImage: "pin.slash")
+                    Label("Unpin from Sidebar", systemImage: "pin.slash")
                 }
                 .disabled(!(appDelegate.appModel?.canUnpinSelectedSidebarLocation ?? false))
 
                 Button {
                     appDelegate.appModel?.moveSelectedFavoriteUp()
                 } label: {
-                    Label("Move Pinned Up", systemImage: "arrow.up")
+                    Label("Move Up in Sidebar", systemImage: "arrow.up")
                 }
                 .disabled(!(appDelegate.appModel?.canMoveSelectedFavoriteUp ?? false))
 
                 Button {
                     appDelegate.appModel?.moveSelectedFavoriteDown()
                 } label: {
-                    Label("Move Pinned Down", systemImage: "arrow.down")
+                    Label("Move Down in Sidebar", systemImage: "arrow.down")
                 }
                 .disabled(!(appDelegate.appModel?.canMoveSelectedFavoriteDown ?? false))
             }
@@ -272,7 +272,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let combinedVersion = "\(shortVersion) (\(buildVersion))"
         let exifToolVersion = bundledExifToolVersion() ?? "Unknown"
 
-        let purpose = "A local EXIF/IPTC/XMP editor powered by ExifTool."
+        let purpose = "Edit photo metadata — EXIF, IPTC, and XMP — powered by ExifTool."
         let nativeFont = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
         let nativeColor = NSColor.secondaryLabelColor
         let credits = NSMutableAttributedString(
@@ -335,6 +335,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applicationDidBecomeActive(_ notification: Notification) {
+        // If a folder is selected but the browser is empty (e.g. a TCC permission
+        // prompt blocked the initial enumeration), retry now that the app is active
+        // and the user may have just approved access.
+        appModel?.reloadFilesIfBrowserEmpty()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSWindow.allowsAutomaticWindowTabbing = false
         let model = AppModel()
@@ -365,9 +372,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "You have unsaved metadata changes."
-        alert.informativeText = "Quit and discard unsaved edits?"
-        alert.addButton(withTitle: "Quit")
+        alert.messageText = "You have unsaved changes."
+        alert.informativeText = "Do you want to quit and discard your changes?"
+        alert.addButton(withTitle: "Quit and Discard")
         alert.addButton(withTitle: "Cancel")
 
         let keyWindow = NSApp.keyWindow ?? mainWindowController?.window

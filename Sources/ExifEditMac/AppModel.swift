@@ -457,20 +457,20 @@ final class AppModel: ObservableObject {
         static let common: [EditableTag] = [
             .init(id: "exif-make", namespace: .exif, key: "Make", label: "Make", section: "Camera"),
             .init(id: "exif-model", namespace: .exif, key: "Model", label: "Model", section: "Camera"),
-            .init(id: "exif-serial", namespace: .exif, key: "SerialNumber", label: "Serial", section: "Camera"),
+            .init(id: "exif-serial", namespace: .exif, key: "SerialNumber", label: "Serial Number", section: "Camera"),
             .init(id: "exif-lens", namespace: .exif, key: "LensModel", label: "Lens", section: "Camera"),
             .init(id: "exif-aperture", namespace: .exif, key: "FNumber", label: "Aperture", section: "Capture"),
-            .init(id: "exif-shutter", namespace: .exif, key: "ExposureTime", label: "Shutter (Exposure Time)", section: "Capture"),
+            .init(id: "exif-shutter", namespace: .exif, key: "ExposureTime", label: "Shutter Speed", section: "Capture"),
             .init(id: "exif-iso", namespace: .exif, key: "ISO", label: "ISO", section: "Capture"),
             .init(id: "exif-focal", namespace: .exif, key: "FocalLength", label: "Focal Length", section: "Capture"),
             .init(id: "exif-exposure-program", namespace: .exif, key: "ExposureProgram", label: "Exposure Program", section: "Capture"),
             .init(id: "exif-flash", namespace: .exif, key: "Flash", label: "Flash", section: "Capture"),
             .init(id: "exif-metering-mode", namespace: .exif, key: "MeteringMode", label: "Metering Mode", section: "Capture"),
-            .init(id: "datetime-modified", namespace: .exif, key: "ModifyDate", label: "Modified", section: "Date and Time"),
-            .init(id: "datetime-digitized", namespace: .exif, key: "DateTimeDigitized", label: "Digitised", section: "Date and Time"),
-            .init(id: "datetime-created", namespace: .exif, key: "DateTimeOriginal", label: "Created", section: "Date and Time"),
-            .init(id: "exif-gps-lat", namespace: .exif, key: "GPSLatitude", label: "GPS Latitude", section: "Location"),
-            .init(id: "exif-gps-lon", namespace: .exif, key: "GPSLongitude", label: "GPS Longitude", section: "Location"),
+            .init(id: "datetime-modified", namespace: .exif, key: "ModifyDate", label: "Date Modified", section: "Date and Time"),
+            .init(id: "datetime-digitized", namespace: .exif, key: "DateTimeDigitized", label: "Digitized", section: "Date and Time"),
+            .init(id: "datetime-created", namespace: .exif, key: "DateTimeOriginal", label: "Date Created", section: "Date and Time"),
+            .init(id: "exif-gps-lat", namespace: .exif, key: "GPSLatitude", label: "Latitude", section: "Location"),
+            .init(id: "exif-gps-lon", namespace: .exif, key: "GPSLongitude", label: "Longitude", section: "Location"),
             .init(id: "exif-gps-alt", namespace: .exif, key: "GPSAltitude", label: "Altitude", section: "Location"),
             .init(id: "exif-gps-direction", namespace: .exif, key: "GPSImgDirection", label: "Direction", section: "Location"),
             .init(id: "xmp-title", namespace: .xmp, key: "Title", label: "Title", section: "Descriptive"),
@@ -619,6 +619,10 @@ final class AppModel: ObservableObject {
 
     @Published private var pendingEditsByFile: [URL: [EditableTag: StagedEditRecord]] = [:]
     @Published private var pendingImageOpsByFile: [URL: [StagedImageOperation]] = [:]
+    /// Values written to disk but not yet confirmed by an exiftool re-read.
+    /// Sits between pendingEditsByFile and availableSnapshot in the inspector priority order
+    /// so the inspector shows the applied value during the reload gap rather than the old on-disk snapshot.
+    private var pendingCommitsByFile: [URL: [EditableTag: String]] = [:]
     @Published private var inspectorPreviewImages: [URL: NSImage] = [:]
     @Published private var inspectorPreviewRenderedSide: [URL: CGFloat] = [:]
     private var mixedTags: Set<EditableTag> = []
@@ -754,7 +758,7 @@ final class AppModel: ObservableObject {
             statusMessage = "Ready"
         } else {
             service = UnavailableExifToolService()
-            statusMessage = "Ledger requires exiftool to function. The app bundle may be corrupted."
+            statusMessage = "Ledger requires ExifTool to work. Try reinstalling the app."
             Task { @MainActor in
                 let alert = NSAlert()
                 alert.messageText = "Ledger requires exiftool"
@@ -804,7 +808,7 @@ final class AppModel: ObservableObject {
     func openInDefaultApp(_ fileURL: URL) {
         let didOpen = NSWorkspace.shared.open(fileURL)
         if !didOpen {
-            statusMessage = "Could not open \(fileURL.lastPathComponent) in the default app."
+            statusMessage = "Couldn’t open “\(fileURL.lastPathComponent)” in the default app."
         }
     }
 
@@ -818,7 +822,7 @@ final class AppModel: ObservableObject {
             }
         }
         if failedCount > 0 {
-            statusMessage = "Could not open \(failedCount) file(s) in the default app."
+            statusMessage = "Couldn’t open \(failedCount) images in the default app."
         }
     }
 
@@ -844,7 +848,7 @@ final class AppModel: ObservableObject {
 
     func openSelectedInDefaultApp() {
         guard let url = selectedFileURLs.sorted(by: { $0.path < $1.path }).first else {
-            statusMessage = "Select a file to open in the default app."
+            statusMessage = "Select an image to open in the default app."
             return
         }
         openInDefaultApp(url)
@@ -889,7 +893,7 @@ final class AppModel: ObservableObject {
         case .restoreFromLastBackup:
             return FileActionState(
                 id: id,
-                title: "Restore from Last Backup",
+                title: "Restore from Backup",
                 symbolName: "arrow.uturn.backward.circle",
                 isEnabled: hasRestorable
             )
@@ -926,7 +930,7 @@ final class AppModel: ObservableObject {
         let orderedItems = visibleItems.map(\.url)
 
         guard !orderedItems.isEmpty else {
-            statusMessage = "No files available to preview."
+            statusMessage = "No images to preview."
             return
         }
 
@@ -983,7 +987,7 @@ final class AppModel: ObservableObject {
     func revealSelectionInFinder() {
         let urls = selectedFileURLs.sorted(by: { $0.path < $1.path })
         guard !urls.isEmpty else {
-            statusMessage = "Select one or more files to reveal in Finder."
+            statusMessage = "Select images to reveal in Finder."
             return
         }
         NSWorkspace.shared.activateFileViewerSelecting(urls)
@@ -992,7 +996,7 @@ final class AppModel: ObservableObject {
     func revealInFinder(_ fileURLs: [URL]) {
         let urls = Array(Set(fileURLs)).sorted(by: { $0.path < $1.path })
         guard !urls.isEmpty else {
-            statusMessage = "Select one or more files to reveal in Finder."
+            statusMessage = "Select images to reveal in Finder."
             return
         }
         NSWorkspace.shared.activateFileViewerSelecting(urls)
@@ -1005,7 +1009,7 @@ final class AppModel: ObservableObject {
     func openSidebarItemInFinder(_ item: SidebarItem) {
         guard let url = sidebarOpenURL(for: item.kind) else { return }
         if !NSWorkspace.shared.open(url) {
-            statusMessage = "Could not open \(item.title) in Finder."
+            statusMessage = "Couldn’t open “\(item.title)” in Finder."
         }
     }
 
@@ -1065,6 +1069,14 @@ final class AppModel: ObservableObject {
         Task {
             await loadMetadataForSelection()
         }
+    }
+
+    /// Called when the app becomes active. If a folder is selected but the browser
+    /// is empty — e.g. because a TCC permission prompt blocked the initial enumeration
+    /// — silently retry the file load now that permission may have been granted.
+    func reloadFilesIfBrowserEmpty() {
+        guard let item = selectedSidebarItem, browserItems.isEmpty else { return }
+        loadFiles(for: item.kind)
     }
 
     func refreshMetadata(for fileURLs: [URL]) {
@@ -1244,6 +1256,7 @@ final class AppModel: ObservableObject {
                         }
                         if result.failed.isEmpty {
                             succeeded.append(fileURL)
+                            pendingCommitsByFile[fileURL] = pendingEditsByFile[fileURL]?.mapValues(\.value)
                             pendingEditsByFile[fileURL] = nil
                             staleMetadataFiles.insert(fileURL)
                         } else {
@@ -1270,6 +1283,7 @@ final class AppModel: ObservableObject {
                             if metadataResult.failed.isEmpty {
                                 operationIDs.append(metadataResult.operationID)
                                 succeeded.append(fileURL)
+                                pendingCommitsByFile[fileURL] = pendingEditsByFile[fileURL]?.mapValues(\.value)
                                 pendingEditsByFile[fileURL] = nil
                                 pendingImageOpsByFile[fileURL] = nil
                                 staleMetadataFiles.insert(fileURL)
@@ -1312,7 +1326,7 @@ final class AppModel: ObservableObject {
                 )
             } else if result.succeeded.isEmpty {
                 let firstError = result.failed.first?.message ?? "Unknown write error."
-                statusMessage = "Failed to apply metadata changes. \(firstError)"
+                statusMessage = "Couldn’t apply changes. \(firstError)"
                 let failedNames = result.failed.prefix(5).map { $0.fileURL.lastPathComponent }.joined(separator: "\n")
                 Task { @MainActor in
                     let alert = NSAlert()
@@ -1324,7 +1338,7 @@ final class AppModel: ObservableObject {
                 }
             } else {
                 let firstError = result.failed.first?.message ?? "Unknown write error."
-                statusMessage = "Applied to \(result.succeeded.count) file(s), failed on \(result.failed.count). \(firstError)"
+                statusMessage = "Applied to \(result.succeeded.count) of \(result.succeeded.count + result.failed.count) images. \(firstError)"
             }
             applyMetadataCompleted = applyMetadataTotal
             clearMetadataUndoHistory()
@@ -1342,7 +1356,7 @@ final class AppModel: ObservableObject {
 
     func restoreLastOperation() {
         guard !lastOperationIDs.isEmpty else {
-            statusMessage = "No previous operation to restore."
+            statusMessage = "No backup to restore."
             return
         }
         let files = lastOperationIDs.compactMap { lastOperationFilesByID[$0] }
@@ -1352,7 +1366,7 @@ final class AppModel: ObservableObject {
     func restoreLastOperation(for fileURLs: [URL]) {
         let requestedFiles = Array(Set(fileURLs))
         guard !requestedFiles.isEmpty else {
-            statusMessage = "Select one or more files to restore."
+            statusMessage = "Select images to restore from backup."
             return
         }
 
@@ -1364,7 +1378,7 @@ final class AppModel: ObservableObject {
 
         let skippedCount = requestedFiles.count - operationIDsToRestore.count
         guard !operationIDsToRestore.isEmpty else {
-            statusMessage = "No backup available for the selected file(s)."
+            statusMessage = "No backup available for the selected images."
             return
         }
 
@@ -1419,7 +1433,7 @@ final class AppModel: ObservableObject {
                 setStatusMessage(message, autoClearAfterSuccess: true)
             } else if summary.succeeded.isEmpty {
                 let firstError = summary.failed.first?.message ?? "Unknown restore error."
-                statusMessage = "Failed to restore metadata. \(firstError)"
+                statusMessage = "Couldn’t restore metadata. \(firstError)"
                 let failedNames = summary.failed.prefix(5).map { $0.fileURL.lastPathComponent }.joined(separator: "\n")
                 Task { @MainActor in
                     let alert = NSAlert()
@@ -1431,7 +1445,7 @@ final class AppModel: ObservableObject {
                 }
             } else {
                 let firstError = summary.failed.first?.message ?? "Unknown restore error."
-                statusMessage = "Restored \(summary.succeeded.count) file(s), failed on \(summary.failed.count). \(firstError)"
+                statusMessage = "Restored \(summary.succeeded.count) of \(summary.succeeded.count + summary.failed.count) images. \(firstError)"
             }
             await loadMetadataForSelection()
         }
@@ -1460,7 +1474,7 @@ final class AppModel: ObservableObject {
         } catch {
             presets = []
             selectedPresetID = nil
-            statusMessage = "Could not load presets. \(error.localizedDescription)"
+            statusMessage = "Couldn’t load presets. \(error.localizedDescription)"
         }
     }
 
@@ -1604,7 +1618,7 @@ final class AppModel: ObservableObject {
 
         let files = Array(selectedFileURLs)
         guard !files.isEmpty else {
-            statusMessage = "Select at least one file to apply a preset."
+            statusMessage = "Select images to apply a preset."
             return
         }
 
@@ -1890,49 +1904,49 @@ final class AppModel: ObservableObject {
         switch tag.id {
         case "exif-exposure-program":
             base = [
-                .init(value: "0", label: "Not Defined"),
+                .init(value: "0", label: "Unknown"),
                 .init(value: "1", label: "Manual"),
                 .init(value: "2", label: "Program AE"),
-                .init(value: "3", label: "Aperture-priority AE"),
-                .init(value: "4", label: "Shutter-priority AE"),
-                .init(value: "5", label: "Creative Program"),
-                .init(value: "6", label: "Action Program"),
-                .init(value: "7", label: "Portrait Mode"),
-                .init(value: "8", label: "Landscape Mode")
+                .init(value: "3", label: "Aperture Priority"),
+                .init(value: "4", label: "Shutter Priority"),
+                .init(value: "5", label: "Creative"),
+                .init(value: "6", label: "Action"),
+                .init(value: "7", label: "Portrait"),
+                .init(value: "8", label: "Landscape")
             ]
         case "exif-flash":
             base = [
                 .init(value: "0", label: "No Flash"),
                 .init(value: "1", label: "Fired"),
-                .init(value: "5", label: "Fired, Return Not Detected"),
+                .init(value: "5", label: "Fired, No Return"),
                 .init(value: "7", label: "Fired, Return Detected"),
                 .init(value: "9", label: "On, Did Not Fire"),
-                .init(value: "13", label: "On, Return Not Detected"),
+                .init(value: "13", label: "On, No Return"),
                 .init(value: "15", label: "On, Return Detected"),
-                .init(value: "16", label: "Off, Did Not Fire"),
+                .init(value: "16", label: "Off"),
                 .init(value: "24", label: "Auto, Did Not Fire"),
                 .init(value: "25", label: "Auto, Fired"),
-                .init(value: "29", label: "Auto, Fired, Return Not Detected"),
+                .init(value: "29", label: "Auto, Fired, No Return"),
                 .init(value: "31", label: "Auto, Fired, Return Detected"),
-                .init(value: "32", label: "No Flash Function"),
-                .init(value: "65", label: "Fired, Red-eye Reduction"),
-                .init(value: "69", label: "Fired, Red-eye, Return Not Detected"),
-                .init(value: "71", label: "Fired, Red-eye, Return Detected"),
-                .init(value: "73", label: "On, Red-eye, Did Not Fire"),
-                .init(value: "77", label: "On, Red-eye, Return Not Detected"),
-                .init(value: "79", label: "On, Red-eye, Return Detected"),
-                .init(value: "89", label: "Auto, Fired, Red-eye"),
-                .init(value: "93", label: "Auto, Fired, Red-eye, Return Not Detected"),
-                .init(value: "95", label: "Auto, Fired, Red-eye, Return Detected")
+                .init(value: "32", label: "No Flash"),
+                .init(value: "65", label: "Fired, Red-Eye Reduction"),
+                .init(value: "69", label: "Fired, Red-Eye, No Return"),
+                .init(value: "71", label: "Fired, Red-Eye, Return Detected"),
+                .init(value: "73", label: "On, Red-Eye, Did Not Fire"),
+                .init(value: "77", label: "On, Red-Eye, No Return"),
+                .init(value: "79", label: "On, Red-Eye, Return Detected"),
+                .init(value: "89", label: "Auto, Fired, Red-Eye"),
+                .init(value: "93", label: "Auto, Fired, Red-Eye, No Return"),
+                .init(value: "95", label: "Auto, Fired, Red-Eye, Return Detected")
             ]
         case "exif-metering-mode":
             base = [
                 .init(value: "0", label: "Unknown"),
                 .init(value: "1", label: "Average"),
-                .init(value: "2", label: "Center-weighted Average"),
+                .init(value: "2", label: "Center-Weighted Average"),
                 .init(value: "3", label: "Spot"),
-                .init(value: "4", label: "Multi-spot"),
-                .init(value: "5", label: "Multi-segment"),
+                .init(value: "4", label: "Multi-Spot"),
+                .init(value: "5", label: "Multi-Segment"),
                 .init(value: "6", label: "Partial"),
                 .init(value: "255", label: "Other")
             ]
@@ -2873,7 +2887,7 @@ final class AppModel: ObservableObject {
 
     private func didChooseFolder(_ folderURL: URL) {
         guard let item = noteRecentLocation(folderURL, promoteToTopIfExisting: false) else {
-            statusMessage = "Could not open location."
+            statusMessage = "Couldn’t open this location."
             return
         }
         if selectedSidebarID != item.id {
@@ -2903,6 +2917,7 @@ final class AppModel: ObservableObject {
         previewPreloadID = UUID()
 
         let urls: [URL]
+        var enumerationError: Error?
 
         do {
             switch kind {
@@ -2919,13 +2934,15 @@ final class AppModel: ObservableObject {
             case let .folder(folder):
                 urls = try enumerateImages(in: folder)
             }
-            browserEnumerationError = nil
         } catch {
-            browserEnumerationError = error
+            enumerationError = error
             urls = []
         }
 
+        // clearLoadedContentState resets browserEnumerationError to nil;
+        // re-apply it afterwards so the error state is actually visible to the view.
         clearLoadedContentState(preserveSessionCaches: true)
+        browserEnumerationError = enumerationError
         let hydrationID = UUID()
         browserItemHydrationID = hydrationID
         browserItems = urls.map {
@@ -3194,12 +3211,12 @@ final class AppModel: ObservableObject {
 
     private func pinFavorite(url: URL, title: String) {
         guard let canonical = canonicalSidebarURL(url) else {
-            statusMessage = "Could not pin location."
+            statusMessage = "Couldn’t pin this location."
             return
         }
         let id = "favorite::\(canonical.path)"
         guard !favoriteItems.contains(where: { $0.id == id }) else {
-            statusMessage = "Location is already pinned."
+            statusMessage = "This location is already pinned."
             return
         }
 
@@ -3215,7 +3232,7 @@ final class AppModel: ObservableObject {
         persistFavorites()
         persistRecentLocations()
         refreshSidebarItems(preferredSelectionID: id)
-        statusMessage = "Pinned \(title) to Pinned."
+        statusMessage = "“\(title)” added to Pinned."
     }
 
     private func moveSelectedFavorite(offset: Int) {
@@ -3305,7 +3322,7 @@ final class AppModel: ObservableObject {
             persistFavorites()
         } catch {
             favoriteItems = []
-            statusMessage = "Could not load favorites. \(error.localizedDescription)"
+            statusMessage = "Couldn’t load pinned locations. \(error.localizedDescription)"
         }
     }
 
@@ -3317,7 +3334,7 @@ final class AppModel: ObservableObject {
         do {
             try favoritesStore.saveFavorites(records)
         } catch {
-            statusMessage = "Could not save favorites. \(error.localizedDescription)"
+            statusMessage = "Couldn’t save pinned locations. \(error.localizedDescription)"
         }
     }
 
@@ -3362,7 +3379,7 @@ final class AppModel: ObservableObject {
         } catch {
             locationItems = []
             recentLocationLastOpenedAtByID = [:]
-            statusMessage = "Could not load recent locations. \(error.localizedDescription)"
+            statusMessage = "Couldn’t load recent locations. \(error.localizedDescription)"
         }
     }
 
@@ -3379,7 +3396,7 @@ final class AppModel: ObservableObject {
         do {
             try recentLocationsStore.saveRecentLocations(records)
         } catch {
-            statusMessage = "Could not save recent locations. \(error.localizedDescription)"
+            statusMessage = "Couldn’t save recent locations. \(error.localizedDescription)"
         }
     }
 
@@ -3985,6 +4002,12 @@ final class AppModel: ObservableObject {
                     draftValuesForTag.append(pendingValue)
                     continue
                 }
+                // Show the value that was just written during the reload gap so the
+                // inspector never flashes back to the pre-apply on-disk snapshot.
+                if let committedValue = pendingCommitsByFile[url]?[tag] {
+                    draftValuesForTag.append(committedValue)
+                    continue
+                }
                 guard let snapshot = availableSnapshot(for: url) else {
                     continue
                 }
@@ -4209,7 +4232,7 @@ final class AppModel: ObservableObject {
         do {
             try presetStore.savePresets(presets)
         } catch {
-            statusMessage = "Could not save presets. \(error.localizedDescription)"
+            statusMessage = "Couldn’t save presets. \(error.localizedDescription)"
         }
     }
 
@@ -4288,6 +4311,7 @@ final class AppModel: ObservableObject {
             for snapshot in snapshots {
                 map[snapshot.fileURL] = snapshot
                 staleMetadataFiles.remove(snapshot.fileURL)
+                pendingCommitsByFile.removeValue(forKey: snapshot.fileURL)
             }
         }
 

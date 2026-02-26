@@ -9,6 +9,7 @@ private extension Notification.Name {
     static let inspectorDidRequestFieldNavigation = Notification.Name("\(AppBrand.identifierPrefix).InspectorDidRequestFieldNavigation")
     static let sidebarDidRequestFocus = Notification.Name("\(AppBrand.identifierPrefix).SidebarDidRequestFocus")
     static let browserDidRequestFocus = Notification.Name("\(AppBrand.identifierPrefix).BrowserDidRequestFocus")
+    static let browserDidSwitchViewMode = Notification.Name("\(AppBrand.identifierPrefix).BrowserDidSwitchViewMode")
 }
 
 private enum Motion {
@@ -49,14 +50,12 @@ private enum UIMetrics {
         static let iconSize: CGFloat = 16
         static let iconGap: CGFloat = 6
         static let pendingDotSize: CGFloat = 6
-        static let pendingDotCornerRadius: CGFloat = 3
     }
 
     enum Gallery {
         static let thumbnailCornerRadius: CGFloat = 8
         static let selectionOutset: CGFloat = 5
         static let selectionBorderWidth: CGFloat = 3.5
-        static let pendingDotCornerRadius: CGFloat = 4
         static let pendingDotSize: CGFloat = 8
         static let pendingDotInset: CGFloat = 6
         static let titleGap: CGFloat = 6
@@ -729,7 +728,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             if !menu.items.contains(where: { $0.title == "Apply Metadata Changes" }) {
                 let anchor = (menu.items.firstIndex(where: { $0.title == "Refresh Files and Metadata" }) ?? -1) + 1
                 // Insert in reverse so final order is: Apply, Clear, Restore
-                let restoreItem = NSMenuItem(title: "Restore from Last Backup", action: #selector(restoreFromBackupAction(_:)), keyEquivalent: "b")
+                let restoreItem = NSMenuItem(title: "Restore from Backup", action: #selector(restoreFromBackupAction(_:)), keyEquivalent: "b")
                 restoreItem.keyEquivalentModifierMask = [.command, .shift]
                 let clearItem = NSMenuItem(title: "Clear Metadata Changes", action: #selector(clearChangesAction(_:)), keyEquivalent: "k")
                 clearItem.keyEquivalentModifierMask = [.command, .shift]
@@ -917,8 +916,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             let alert = NSAlert()
             alert.alertStyle = .warning
             let pendingCount = model.pendingEditedFileCount
-            alert.messageText = "Apply pending changes?"
-            alert.informativeText = "This will apply metadata edits to \(pendingCount) file(s) with pending changes in the current folder."
+            alert.messageText = "Apply Metadata Changes?"
+            alert.informativeText = "Metadata changes for \(pendingCount) image(s) in this folder will be written to disk. This can’t be undone."
             alert.addButton(withTitle: "Apply")
             alert.addButton(withTitle: "Cancel")
             if let window = view.window {
@@ -967,12 +966,14 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     func switchToGalleryAction(_: Any?) {
         model.browserViewMode = .gallery
         nativeToolbarDelegate?.refreshFromModel()
+        NotificationCenter.default.post(name: .browserDidSwitchViewMode, object: nil)
     }
 
     @objc
     func switchToListAction(_: Any?) {
         model.browserViewMode = .list
         nativeToolbarDelegate?.refreshFromModel()
+        NotificationCenter.default.post(name: .browserDidSwitchViewMode, object: nil)
     }
 
     @objc
@@ -1038,6 +1039,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     private func viewModeChanged(_ sender: NSSegmentedControl) {
         model.browserViewMode = sender.selectedSegment == 1 ? .list : .gallery
         nativeToolbarDelegate?.refreshFromModel()
+        NotificationCenter.default.post(name: .browserDidSwitchViewMode, object: nil)
         DispatchQueue.main.async { [weak self] in
             self?.focusBrowserPane()
         }
@@ -1052,9 +1054,9 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Apply preset “\(preset.name)” to \(fileCount) files?"
-        alert.informativeText = "Included preset fields will overwrite existing values."
-        alert.addButton(withTitle: "Apply Preset")
+        alert.messageText = "Apply “\(preset.name)”?"
+        alert.informativeText = "This will update metadata for \(fileCount) image(s). Preset fields will overwrite existing values."
+        alert.addButton(withTitle: "Apply")
         alert.addButton(withTitle: "Cancel")
 
         if let window = view.window {
@@ -1090,14 +1092,15 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             return [
                 .toggleSidebar,
                 .sidebarTrackingSeparator,
-                .flexibleSpace,
+                .openFolder,
                 .viewMode,
                 .sort,
                 .zoomOut,
                 .zoomIn,
+                .flexibleSpace,
                 .presetTools,
-                .openFolder,
                 .applyChanges,
+                .inspectorTrackingSeparator,
                 .toggleInspector
             ]
         }
@@ -1106,15 +1109,16 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             return [
                 .toggleSidebar,
                 .sidebarTrackingSeparator,
+                .openFolder,
                 .viewMode,
                 .sort,
                 .zoomOut,
                 .zoomIn,
-                .presetTools,
-                .openFolder,
-                .toggleInspector,
                 .flexibleSpace,
-                .applyChanges
+                .presetTools,
+                .applyChanges,
+                .inspectorTrackingSeparator,
+                .toggleInspector
             ]
         }
 
@@ -1134,6 +1138,13 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 return NSTrackingSeparatorToolbarItem(
                     identifier: .sidebarTrackingSeparator,
                     splitView: controller.splitView,
+                    dividerIndex: 0
+                )
+            case .inspectorTrackingSeparator:
+                // Bind tracking to the inner browser/inspector divider.
+                return NSTrackingSeparatorToolbarItem(
+                    identifier: .inspectorTrackingSeparator,
+                    splitView: controller.contentSplitController.splitView,
                     dividerIndex: 0
                 )
             case .viewMode:
@@ -1164,7 +1175,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 item.autovalidates = false
                 item.target = controller
                 item.action = #selector(NativeThreePaneSplitViewController.zoomOutAction(_:))
-                item.toolTip = "Zoom out thumbnails"
+                item.toolTip = "Zoom out"
                 zoomOutItem = item
                 return item
             case .zoomIn:
@@ -1175,7 +1186,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 item.autovalidates = false
                 item.target = controller
                 item.action = #selector(NativeThreePaneSplitViewController.zoomInAction(_:))
-                item.toolTip = "Zoom in thumbnails"
+                item.toolTip = "Zoom in"
                 zoomInItem = item
                 return item
             case .sort:
@@ -1185,7 +1196,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 item.image = NSImage(systemSymbolName: "arrow.up.arrow.down", accessibilityDescription: "Sort")
                 item.target = self
                 item.action = #selector(showSortMenu(_:))
-                item.toolTip = "Sort files"
+                item.toolTip = "Sort images"
                 sortItem = item
                 return item
             case .presetTools:
@@ -1209,8 +1220,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 return item
             case .applyChanges:
                 let item = NSToolbarItem(itemIdentifier: itemIdentifier)
-                item.label = "Apply Metadata Changes"
-                item.paletteLabel = "Apply Metadata Changes"
+                item.label = "Apply Changes"
+                item.paletteLabel = "Apply Changes"
                 item.image = NSImage(systemSymbolName: "square.and.arrow.down", accessibilityDescription: "Save and apply")
                 item.autovalidates = false
                 item.target = controller
@@ -1224,7 +1235,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 let label = collapsed ? "Show Inspector" : "Hide Inspector"
                 item.label = label
                 item.paletteLabel = "Toggle Inspector"
-                item.image = NSImage(systemSymbolName: "sidebar.trailing", accessibilityDescription: "Toggle inspector")
+                item.image = NSImage(systemSymbolName: "sidebar.trailing", accessibilityDescription: "Show or hide the inspector")
                 item.target = controller
                 item.action = #selector(NativeThreePaneSplitViewController.toggleInspectorAction(_:))
                 item.toolTip = label
@@ -1398,7 +1409,7 @@ private extension NSToolbarItem.Identifier {
     static let openFolder = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.OpenFolder")
     static let applyChanges = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ApplyChanges")
     static let toggleInspector = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ToggleInspector")
-
+    static let inspectorTrackingSeparator = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.InspectorTrackingSeparator")
 }
 
 struct NavigationSidebarView: View {
@@ -1501,22 +1512,10 @@ struct NavigationSidebarView: View {
                 .font(.system(size: UIMetrics.Sidebar.rowIconSize))
                 .frame(width: UIMetrics.Sidebar.rowLeadingIconFrame, alignment: .center)
             Text(item.title)
-            Spacer(minLength: 8)
-            if let countText = model.sidebarImageCountText(for: item) {
-                Text(countText)
-                    .font(.system(size: 14))
-                    .monospacedDigit()
-                    .animation(nil, value: model.selectedSidebarID)
-                    .frame(width: UIMetrics.Sidebar.trailingColumnWidth, alignment: .trailing)
-                    .padding(.trailing, UIMetrics.Sidebar.trailingColumnInset)
-            } else {
-                Color.clear
-                    .frame(width: UIMetrics.Sidebar.trailingColumnWidth, height: 1, alignment: .trailing)
-                    .padding(.trailing, UIMetrics.Sidebar.trailingColumnInset)
-            }
         }
         .padding(.leading, UIMetrics.Sidebar.sectionItemIndent)
         .tag(item.id)
+        .badge(model.sidebarImageCountText(for: item).map { Text($0) })
 
         if isInactiveSelected {
             row.foregroundStyle(Color.accentColor)
@@ -1675,7 +1674,7 @@ struct BrowserView: View {
             ContentUnavailableView(
                 "No Folder Selected",
                 systemImage: "folder",
-                description: Text("Open a folder from the toolbar to start browsing metadata.")
+                description: Text("Open a folder from the toolbar to browse and edit image metadata.")
             )
         case let .enumerationError(message):
             ContentUnavailableView(
@@ -1685,9 +1684,9 @@ struct BrowserView: View {
             )
         case .emptyFolder:
             ContentUnavailableView(
-                "No Images",
+                "No Supported Images",
                 systemImage: "photo.on.rectangle.angled",
-                description: Text("This folder has no supported image files.")
+                description: Text("This folder contains no image files supported by Ledger.")
             )
         case .noResults:
             ContentUnavailableView(
@@ -1800,6 +1799,7 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
     private var contextMenuTargetURLs: [URL] = []
     private var didApplyInitialColumnFit = false
     private var browserFocusObserver: NSObjectProtocol?
+    private var viewModeObserver: NSObjectProtocol?
 
     init(model: AppModel, items: [AppModel.BrowserItem]) {
         self.model = model
@@ -1830,6 +1830,15 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
                 self?.focusListForKeyboardNavigation()
             }
         }
+        viewModeObserver = NotificationCenter.default.addObserver(
+            forName: .browserDidSwitchViewMode,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.scrollSelectionIntoView()
+            }
+        }
     }
 
     override func viewWillDisappear() {
@@ -1841,6 +1850,10 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         if let browserFocusObserver {
             NotificationCenter.default.removeObserver(browserFocusObserver)
             self.browserFocusObserver = nil
+        }
+        if let viewModeObserver {
+            NotificationCenter.default.removeObserver(viewModeObserver)
+            self.viewModeObserver = nil
         }
     }
 
@@ -1978,6 +1991,13 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         guard model.browserViewMode == .list else { return }
         guard let window = view.window else { return }
         window.makeFirstResponder(tableView)
+    }
+
+    private func scrollSelectionIntoView() {
+        guard model.browserViewMode == .list else { return }
+        guard let primary = model.primarySelectionURL,
+              let row = items.firstIndex(where: { $0.url == primary }) else { return }
+        tableView.scrollRowToVisible(row)
     }
 
     private func focusInspectorFromBrowser() {
@@ -2133,12 +2153,11 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
             view.textField = textField
 
             if columnID == "name" {
-                let pendingDot = NSView(frame: .zero)
+                let pendingDot = NSImageView(frame: .zero)
                 pendingDot.identifier = NSUserInterfaceItemIdentifier("pending-dot")
                 pendingDot.translatesAutoresizingMaskIntoConstraints = false
-                pendingDot.wantsLayer = true
-                pendingDot.layer?.cornerRadius = UIMetrics.List.pendingDotCornerRadius
-                pendingDot.layer?.backgroundColor = NSColor.systemOrange.cgColor
+                pendingDot.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: nil)
+                pendingDot.contentTintColor = .systemOrange
                 view.addSubview(pendingDot)
 
                 let iconView = NSImageView(frame: .zero)
@@ -2544,6 +2563,7 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
     private var lastMagnification: CGFloat = 0
     private let pinchThreshold: CGFloat = 0.14
     private var browserFocusObserver: NSObjectProtocol?
+    private var lastRenderedViewMode: AppModel.BrowserViewMode?
 
     init(model: AppModel, items: [AppModel.BrowserItem]) {
         self.model = model
@@ -2654,6 +2674,23 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
         window.makeFirstResponder(collectionView)
     }
 
+    private func scrollSelectionIntoView() {
+        guard model.browserViewMode == .gallery else { return }
+        guard let primary = model.primarySelectionURL,
+              let row = items.firstIndex(where: { $0.url == primary }) else { return }
+        let indexPath = IndexPath(item: row, section: 0)
+        // Defer one run loop so the collection view's layout is committed after the
+        // opacity transition. Use layoutSubtreeIfNeeded + scrollRectToVisible rather
+        // than scrollToItems — the latter is unreliable when the view is just becoming
+        // visible (it silently no-ops if the layout pass hasn't been committed yet).
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.model.browserViewMode == .gallery else { return }
+            self.collectionView.layoutSubtreeIfNeeded()
+            guard let attrs = self.collectionView.collectionViewLayout?.layoutAttributesForItem(at: indexPath) else { return }
+            self.collectionView.scrollToVisible(attrs.frame)
+        }
+    }
+
     private func focusInspectorFromBrowser() {
         guard model.browserViewMode == .gallery else { return }
         guard !model.selectedFileURLs.isEmpty else { return }
@@ -2719,8 +2756,14 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
             lastRenderedURLs = currentURLs
         }
 
+        // Compute before syncSelection so we can suppress the synchronous scrollToItems
+        // call inside syncSelection when the gallery is just becoming visible — the
+        // deferred scrollSelectionIntoView() handles that case more reliably.
+        let justBecameActive = model.browserViewMode == .gallery && lastRenderedViewMode != .gallery
+        lastRenderedViewMode = model.browserViewMode
+
         if listChanged || columnsChanged || selectionChanged {
-            syncSelection(selectedURLs: selectedURLs, scrollPrimaryIntoView: primaryChanged)
+            syncSelection(selectedURLs: selectedURLs, scrollPrimaryIntoView: primaryChanged && !justBecameActive)
             lastRenderedSelected = selectedURLs
             lastRenderedPrimarySelectionURL = model.primarySelectionURL
         }
@@ -2732,6 +2775,13 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
                 needsFullReconfigure: listChanged || columnsChanged || pendingChanged || stagedOpsChanged
             )
             lastRenderedPending = pendingURLs
+        }
+
+        // When switching from list → gallery the view just became visible.
+        // scrollSelectionIntoView defers via DispatchQueue.main.async so the
+        // collection view's layout is fully committed before the scroll fires.
+        if justBecameActive {
+            scrollSelectionIntoView()
         }
     }
 
@@ -3292,7 +3342,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
     let thumbnailImageView = NSImageView(frame: .zero)
     private let thumbnailContainer = NSView(frame: .zero)
     private let selectionOverlay = NSView(frame: .zero)
-    private let pendingDot = NSView(frame: .zero)
+    private let pendingDot = NSImageView(frame: .zero)
     private let titleField = NSTextField(labelWithString: "")
     private var preferredAspectRatio: CGFloat?
     private var imageWidthConstraint: NSLayoutConstraint?
@@ -3334,9 +3384,8 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         thumbnailContainer.addSubview(selectionOverlay)
 
         pendingDot.translatesAutoresizingMaskIntoConstraints = false
-        pendingDot.wantsLayer = true
-        pendingDot.layer?.cornerRadius = UIMetrics.Gallery.pendingDotCornerRadius
-        pendingDot.layer?.backgroundColor = NSColor.systemOrange.cgColor
+        pendingDot.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: nil)
+        pendingDot.contentTintColor = .systemOrange
         pendingDot.isHidden = true
         thumbnailContainer.addSubview(pendingDot)
 
@@ -3525,7 +3574,7 @@ struct InspectorView: View {
                     ContentUnavailableView(
                         "No Selection",
                         systemImage: "slider.horizontal.3",
-                        description: Text("Select one or more files in the browser.")
+                        description: Text("Select one or more images to view and edit their metadata.")
                     )
                     .frame(maxWidth: .infinity)
                     .containerRelativeFrame(.vertical, alignment: .center)
@@ -3546,7 +3595,7 @@ struct InspectorView: View {
                                     .truncationMode(.tail)
                             }
                         } else {
-                            Text("\(model.selectedFileURLs.count) photos selected")
+                            Text("\(model.selectedFileURLs.count) images selected")
                                 .font(.title3.weight(.semibold))
                                 .lineLimit(1)
                                 .truncationMode(.tail)
@@ -3622,7 +3671,7 @@ struct InspectorView: View {
                                 )
                             }
                         } label: {
-                            Text("PREVIEW")
+                            Text("Preview")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(AppTheme.accentColor)
                                 .tracking(0.4)
@@ -3646,9 +3695,9 @@ struct InspectorView: View {
                                         VStack(alignment: .leading, spacing: 4) {
                                             HStack(spacing: 6) {
                                                 if model.hasPendingChange(for: tag) {
-                                                    Circle()
-                                                        .fill(.orange)
-                                                        .frame(width: 6, height: 6)
+                                                    Image(systemName: "circle.fill")
+                                                        .font(.system(size: 6))
+                                                        .foregroundStyle(.orange)
                                                 }
                                                 Text(tag.label)
                                                     .font(.caption)
@@ -3670,7 +3719,8 @@ struct InspectorView: View {
                                                         )
                                                         .labelsHidden()
                                                         .datePickerStyle(.stepperField)
-                                                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                                                        Spacer()
 
                                                         Button {
                                                             beginEditSessionIfNeeded(for: tag)
@@ -3680,7 +3730,7 @@ struct InspectorView: View {
                                                                 .foregroundStyle(.secondary)
                                                         }
                                                         .buttonStyle(.plain)
-                                                        .help("Clear date/time")
+                                                        .help("Clear date and time")
                                                     }
                                                 } else {
                                                     HStack(spacing: 6) {
@@ -3769,7 +3819,7 @@ struct InspectorView: View {
 
                     if let lastResult = model.lastResult {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("LAST OPERATION")
+                            Text("Last Operation")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                                 .tracking(0.4)
@@ -4046,7 +4096,7 @@ private struct PresetEditorSheet: View {
             HStack {
                 Text("Name")
                     .frame(width: 70, alignment: .leading)
-                TextField("Preset name", text: $editor.name)
+                TextField("Enter a name", text: $editor.name)
                     .textFieldStyle(.roundedBorder)
             }
 
@@ -4054,7 +4104,7 @@ private struct PresetEditorSheet: View {
                 Text("Notes")
                     .frame(width: 70, alignment: .leading)
                     .padding(.top, 6)
-                TextField("Optional notes", text: $editor.notes, axis: .vertical)
+                TextField("Add notes (optional)", text: $editor.notes, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1 ... 3)
             }
@@ -4125,19 +4175,19 @@ private struct PresetEditorSheet: View {
         }
         .padding(16)
         .frame(width: 760, height: 520)
-        .alert("Preset name already exists", isPresented: duplicateAlertBinding) {
+        .alert("A preset with this name already exists.", isPresented: duplicateAlertBinding) {
             Button("Replace") {
                 replaceExistingPreset()
             }
-            Button("Duplicate") {
+            Button("Keep Both") {
                 saveAsDuplicate()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             if let duplicateConflict {
-                Text("A preset named “\(duplicateConflict.name)” already exists.")
+                Text("Choose a different name, or replace the existing preset.")
             } else {
-                Text("A preset with this name already exists.")
+                Text("Choose a different name, or replace the existing preset.")
             }
         }
     }
@@ -4145,9 +4195,9 @@ private struct PresetEditorSheet: View {
     private var editorTitle: String {
         switch editor.mode {
         case .createFromCurrent:
-            return "Save Current as Preset"
+            return "Save as Preset"
         case .createBlank:
-            return "Add Preset"
+            return "New Preset"
         case .edit:
             return "Edit Preset"
         }
@@ -4156,9 +4206,9 @@ private struct PresetEditorSheet: View {
     private var editorPrimaryButtonTitle: String {
         switch editor.mode {
         case .createFromCurrent, .createBlank:
-            return "Save Preset"
+            return "Save"
         case .edit:
-            return "Update Preset"
+            return "Save"
         }
     }
 
@@ -4402,7 +4452,7 @@ private struct PresetManagerSheet: View {
             .frame(minHeight: 280)
 
             HStack {
-                Button("Add…") {
+                Button("New Preset…") {
                     model.beginCreateBlankPreset()
                     model.isManagePresetsPresented = false
                 }
@@ -4427,7 +4477,7 @@ private struct PresetManagerSheet: View {
 
                 Spacer()
 
-                Button("Close") {
+                Button("Done") {
                     model.isManagePresetsPresented = false
                 }
                 .keyboardShortcut(.cancelAction)
@@ -4440,7 +4490,9 @@ private struct PresetManagerSheet: View {
                 selectedPresetID = model.selectedPresetID ?? model.presets.first?.id
             }
         }
-        .alert("Delete preset?", isPresented: Binding(
+        .alert(
+            pendingDeletePresetID.flatMap { id in model.presets.first { $0.id == id }?.name }.map { "Delete “\($0)”?" } ?? "Delete Preset?",
+            isPresented: Binding(
             get: { pendingDeletePresetID != nil },
             set: { newValue in
                 if !newValue { pendingDeletePresetID = nil }
@@ -4456,7 +4508,7 @@ private struct PresetManagerSheet: View {
                 pendingDeletePresetID = nil
             }
         } message: {
-            Text("This cannot be undone.")
+            Text("This action can’t be undone.")
         }
     }
 }
@@ -4482,9 +4534,9 @@ private struct InspectorPreviewImageView: View {
             }
 
             if model.hasPendingImageEdits(for: fileURL) {
-                Circle()
-                    .fill(Color.orange)
-                    .frame(width: 9, height: 9)
+                Image(systemName: "circle.fill")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.orange)
                     .padding(8)
             }
         }
