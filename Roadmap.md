@@ -81,7 +81,7 @@ Reference items by ID: **B1–B12** bugs · **P1–P23** polish · **N1–N6** n
 
 ### Other
 - [x] **P20** ✅ Credits now use `smallSystemFontSize` matching the About panel's native credits area. Also fixed B13: `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` removed from target-level project.pbxproj settings that were overriding Base.xcconfig, so version and build now read correctly from the bundle.
-- [x] **P21** ❌ **Desktop TCC prompt not appearing** — not fixable without sandboxing. The app is non-sandboxed (`com.apple.security.app-sandbox = false`); macOS only shows TCC consent prompts for Desktop/Documents/Downloads for sandboxed apps. Silently granting access is correct behaviour for a non-sandboxed app. Will resolve automatically when the app is sandboxed for App Store submission (R11).
+- [x] **P21** ❌ **Desktop TCC prompt not appearing** — not fixable without sandboxing. TCC prompts appear for all apps (sandboxed or not) for hardware/system data (Camera, Mic, Photos Library, etc.), but file-system location prompts (Desktop, Documents, Downloads) are only enforced for sandboxed apps on macOS 13+. Silent access to Desktop for a non-sandboxed app is correct macOS behaviour. Will resolve automatically when sandboxed for App Store submission (R11).
 - [ ] **P22** `Nice` **Search button should expand to field** — like Liquid Glass apps (Notes.app), the search control should be a button that expands into a text field on click. (QA log #22)
 - [ ] **P23** `Nice` **Sidebar toggle right-aligned when expanded** — sidebar toggle should be right-aligned within the sidebar panel when expanded, consistent with Liquid Glass apps. (QA log #23)
 
