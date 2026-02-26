@@ -33,8 +33,8 @@ Reference items by ID: **B1–B11** bugs · **P1–P21** polish · **N1–N6** n
 - [ ] **B9** `Must` **Stale metadata shown after Apply** — inspector briefly shows old values before updating after an apply. Should show current values immediately.
 
 ### Browser gallery
-- [ ] **B10** `Must` **Gallery selector changes colour on rotate** — the selection ring changes to a lighter accent colour when rotating an image. Should stay consistent.
-- [ ] **B11** `Must` **Thumbnail flicker on rotate / flip** — the placeholder file-type icon flashes during thumbnail redraw after a rotate or flip. Should be instant.
+- [x] **B10** ~~Gallery selector changes colour on rotate~~ — ✅ Fixed in 0.6 via `stagedOpsDisplayToken`; cell no longer fully redraws on rotate.
+- [x] **B11** ~~Thumbnail flicker on rotate / flip~~ — ✅ Fixed in 0.6 via `stagedOpsDisplayToken`; display transform updated without clearing thumbnail cache.
 
 ---
 
