@@ -628,6 +628,13 @@ final class AppModel: ObservableObject {
     private var mixedTags: Set<EditableTag> = []
     private var isRevertingSidebarSelection = false
     private var suppressNextSidebarSelectionChange = false
+    /// Set to true the first time selectSidebar(id:) is called, meaning the user
+    /// has explicitly chosen a sidebar item (vs. SwiftUI auto-selecting at startup).
+    private var hasHadExplicitSidebarSelection = false
+    /// System uptime (seconds since boot) recorded at init. Used to reject stale
+    /// pre-launch events (Dock click, Finder double-click) that are still set as
+    /// NSApp.currentEvent when the SwiftUI List performs its first-render auto-selection.
+    private let initializationUptime = ProcessInfo.processInfo.systemUptime
     private var favoriteItems: [SidebarItem] = []
     private var locationItems: [SidebarItem] = []
     private var recentLocationLastOpenedAtByID: [String: Date] = [:]
@@ -1074,8 +1081,14 @@ final class AppModel: ObservableObject {
     /// Called when the app becomes active. If a folder is selected but the browser
     /// is empty — e.g. because a TCC permission prompt blocked the initial enumeration
     /// — silently retry the file load now that permission may have been granted.
+    ///
+    /// Privacy-gated locations (Desktop, Downloads) are skipped until the user has
+    /// explicitly clicked a sidebar item; this prevents a startup race where SwiftUI's
+    /// List auto-selection transiently sets selectedSidebarID before
+    /// handleSidebarSelectionChange can suppress and revert it.
     func reloadFilesIfBrowserEmpty() {
         guard let item = selectedSidebarItem, browserItems.isEmpty else { return }
+        guard !isPrivacySensitiveSidebarKind(item.kind) || hasHadExplicitSidebarSelection else { return }
         loadFiles(for: item.kind)
     }
 
@@ -1110,6 +1123,7 @@ final class AppModel: ObservableObject {
     }
 
     func selectSidebar(id: String?) {
+        hasHadExplicitSidebarSelection = true
         selectedSidebarID = id
         if let id {
             backgroundWarmTasksBySelectionID[id]?.cancel()
@@ -1337,8 +1351,7 @@ final class AppModel: ObservableObject {
                     alert.runModal()
                 }
             } else {
-                let firstError = result.failed.first?.message ?? "Unknown write error."
-                statusMessage = "Applied to \(result.succeeded.count) of \(result.succeeded.count + result.failed.count) images. \(firstError)"
+                statusMessage = "Applied \(result.succeeded.count) of \(result.succeeded.count + result.failed.count) — \(result.failed.count) failed"
             }
             applyMetadataCompleted = applyMetadataTotal
             clearMetadataUndoHistory()
@@ -1444,8 +1457,7 @@ final class AppModel: ObservableObject {
                     alert.runModal()
                 }
             } else {
-                let firstError = summary.failed.first?.message ?? "Unknown restore error."
-                statusMessage = "Restored \(summary.succeeded.count) of \(summary.succeeded.count + summary.failed.count) images. \(firstError)"
+                statusMessage = "Restored \(summary.succeeded.count) of \(summary.succeeded.count + summary.failed.count) — \(summary.failed.count) failed"
             }
             await loadMetadataForSelection()
         }
@@ -3173,7 +3185,15 @@ final class AppModel: ObservableObject {
         guard oldID == nil, let newID else { return false }
         guard let candidate = sidebarItems.first(where: { $0.id == newID }) else { return false }
         guard isPrivacySensitiveSidebarKind(candidate.kind) else { return false }
-        return !isLikelyUserInitiatedSidebarChange(event: triggerEvent)
+        // Reject events that predate app launch (Dock click / Finder double-click that
+        // launched the app). NSEvent.timestamp is seconds since last system boot, as is
+        // ProcessInfo.systemUptime, so they are directly comparable. A stale launch event
+        // will always have timestamp < initializationUptime; a genuine sidebar click will
+        // always have timestamp > initializationUptime.
+        guard let event = triggerEvent, event.timestamp > initializationUptime else {
+            return true
+        }
+        return !isLikelyUserInitiatedSidebarChange(event: event)
     }
 
     private func isLikelyUserInitiatedSidebarChange(event: NSEvent?) -> Bool {
@@ -4461,7 +4481,7 @@ final class AppModel: ObservableObject {
             self.previewPreloadTask = nil
             self.isPreviewPreloading = false
             self.previewPreloadCompleted = self.previewPreloadTotal
-            self.setStatusMessage("Metadata and previews loaded", autoClearAfterSuccess: true)
+            self.setStatusMessage("Metadata loaded", autoClearAfterSuccess: true)
         }
     }
 

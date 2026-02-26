@@ -6,7 +6,19 @@ All notable changes to Ledger are documented here.
 
 ## [Unreleased]
 
+---
+
+## [0.6.4] — build TBD — 2026-02-26
+
 ### Changed
+- **P18/P19** Window subtitle now shows contextual state at all times: `"Applying X of Y…"` during apply, `"Loading X of Y…"` during metadata load, transient status messages on action, `"X of N images"` when a subset is selected, `"N images"` at idle; preview-preload progress removed (silent background work). Partial-failure messages for apply and restore now use the concise format `"Applied X of N — Y failed"` / `"Restored X of N — Y failed"` instead of appending the raw error string.
+
+### Fixed
+- **B19** 🟡 Desktop and Downloads no longer trigger a TCC permission prompt on app startup (cannot reproduce — fix applied defensively; reopen if it resurfaces). Root cause: SwiftUI's `List(selection:)` auto-selects the first sidebar item during its initial render; when the app was launched via a Dock or Finder click, `NSApp.currentEvent` at that moment is the pre-launch mouse event, so `isLikelyUserInitiatedSidebarChange` returned true, the suppress-and-revert check was bypassed, and `selectSidebar` called `loadFiles(for: .desktop)`. Fix: `AppModel` records `ProcessInfo.processInfo.systemUptime` at init (`initializationUptime`); `shouldSuppressPrivacySensitiveAutoSelection` now rejects any event whose `timestamp` predates `initializationUptime` (a pre-launch event by definition), always suppressing TCC-gated auto-selections at startup while still allowing genuine user clicks after launch. The earlier `hasHadExplicitSidebarSelection` guard on `reloadFilesIfBrowserEmpty` is retained as a secondary defence.
+- **B18** Zoom In (`⌘+`) and Zoom Out (`⌘−`) keyboard shortcuts had no effect until the user had opened the View menu at least once. Root cause: the menu items carrying the key equivalents were only injected in `menuWillOpen`; AppKit cannot match a shortcut to an item that doesn't yet exist in the menu bar. Fix: `injectSortMenuIfNeeded` now calls `rebuildViewMenu` immediately after finding the View menu, so the items — and their shortcuts — are registered from launch.
+
+### Changed
+- **N6** Open Folder toolbar button repositioned to match SF Symbols: moved before the sidebar toggle (index 0 in the sidebar zone, left of `NSTrackingSeparatorToolbarItem`), right-aligned within the sidebar column via a leading `flexibleSpace`; icon changed from `folder` to `folder.badge.plus`.
 - **A1** Split `MainContentView.swift` (4,604 lines) into five focused files: `NavigationSidebarView.swift`, `BrowserListView.swift`, `BrowserGalleryView.swift`, `InspectorView.swift`, `PresetSheets.swift`. Residual `MainContentView.swift` is 1,494 lines. Pure reorganisation — no behaviour changes.
 
 ---

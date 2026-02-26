@@ -342,7 +342,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
         let delegate = NativeToolbarDelegate(controller: self)
         // Bump toolbar identifier so AppKit rebuilds default item layout.
-        let toolbar = NSToolbar(identifier: "\(AppBrand.identifierPrefix).MainToolbar.v2")
+        let toolbar = NSToolbar(identifier: "\(AppBrand.identifierPrefix).MainToolbar.v4")
         toolbar.delegate = delegate
         toolbar.displayMode = .iconOnly
         toolbar.allowsUserCustomization = false
@@ -557,7 +557,9 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
     /// Finds the View menu and registers self as its NSMenuDelegate.
     /// Called deferred so SwiftUI has fully built the menu first.
-    /// The actual Sort By injection happens in menuWillOpen so it survives SwiftUI rebuilds.
+    /// Also calls rebuildViewMenu immediately so Zoom In/Out keyboard shortcuts
+    /// are registered from launch — not only after the user first opens the menu.
+    /// menuWillOpen re-runs the rebuild after SwiftUI rebuilds wipe injected items.
     private func injectSortMenuIfNeeded() {
         guard let mainMenu = NSApp.mainMenu else { return }
         for topItem in mainMenu.items {
@@ -565,6 +567,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             if submenu.items.contains(where: { $0.title == "Toggle Sidebar" }) {
                 viewMenuForSortInjection = submenu
                 submenu.delegate = self
+                rebuildViewMenu(submenu)
                 return
             }
         }
@@ -808,27 +811,27 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     }
 
     private func toolbarSubtitleText() -> String {
-        if model.isFolderMetadataLoading {
-            let total = max(model.folderMetadataLoadTotal, 0)
-            let done = min(max(model.folderMetadataLoadCompleted, 0), total)
-            return "Loading metadata \(done) of \(total)"
-        }
-        if model.isPreviewPreloading {
-            let total = max(model.previewPreloadTotal, 0)
-            let done = min(max(model.previewPreloadCompleted, 0), total)
-            return "Loading previews \(done) of \(total)"
-        }
         if model.isApplyingMetadata {
             let total = max(model.applyMetadataTotal, 0)
             let done = min(max(model.applyMetadataCompleted, 0), total)
-            return "Applying metadata \(done) of \(total)"
+            return "Applying \(done) of \(total)…"
+        }
+        if model.isFolderMetadataLoading {
+            let total = max(model.folderMetadataLoadTotal, 0)
+            let done = min(max(model.folderMetadataLoadCompleted, 0), total)
+            return total > 0 ? "Loading \(done) of \(total)…" : "Loading…"
         }
         let status = model.statusMessage.trimmingCharacters(in: .whitespacesAndNewlines)
         if !status.isEmpty, status != "Ready" {
             return status
         }
-        let count = model.browserItems.count
-        return count == 1 ? "1 file" : "\(count) files"
+        let total = model.browserItems.count
+        guard total > 0 else { return "" }
+        let selected = model.selectedFileURLs.count
+        if selected > 0, selected < total {
+            return "\(selected) of \(total) images"
+        }
+        return total == 1 ? "1 image" : "\(total) images"
     }
 
     @objc
@@ -1031,9 +1034,10 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
         func toolbarDefaultItemIdentifiers(_: NSToolbar) -> [NSToolbarItem.Identifier] {
             return [
+                .flexibleSpace,
+                .openFolder,
                 .toggleSidebar,
                 .sidebarTrackingSeparator,
-                .openFolder,
                 .viewMode,
                 .sort,
                 .zoomOut,
@@ -1048,9 +1052,10 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
         func toolbarAllowedItemIdentifiers(_: NSToolbar) -> [NSToolbarItem.Identifier] {
             return [
+                .flexibleSpace,
+                .openFolder,
                 .toggleSidebar,
                 .sidebarTrackingSeparator,
-                .openFolder,
                 .viewMode,
                 .sort,
                 .zoomOut,
@@ -1154,7 +1159,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 let item = NSToolbarItem(itemIdentifier: itemIdentifier)
                 item.label = "Open Folder"
                 item.paletteLabel = "Open Folder"
-                item.image = NSImage(systemSymbolName: "folder", accessibilityDescription: "Open Folder")
+                item.image = NSImage(systemSymbolName: "folder.badge.plus", accessibilityDescription: "Open Folder")
                 item.target = controller
                 item.action = #selector(NativeThreePaneSplitViewController.openFolderAction(_:))
                 item.toolTip = "Open a folder"

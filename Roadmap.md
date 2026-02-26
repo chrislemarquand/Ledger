@@ -1,6 +1,6 @@
 # Roadmap
 
-Current version: **0.6.2** (build 46). Target: **v1.0**.
+Current version: **0.6.4** (build TBD). Target: **v1.0**.
 
 Reference items by ID: **B1–B16** bugs · **P1–P24** polish · **N1–N8** native rewrites · **A1–A2** architecture · **R1–R13** post-v1.0 roadmap.
 
@@ -38,6 +38,7 @@ Reference items by ID: **B1–B16** bugs · **P1–P24** polish · **N1–N8** n
 - [x] **B11** ~~Thumbnail flicker on rotate / flip~~ — ✅ Fixed in 0.6 via `stagedOpsDisplayToken`; display transform updated without clearing thumbnail cache.
 
 ### Sidebar
+- [x] **B19** 🟡 **Cannot reproduce** — Desktop and Downloads were reported to trigger a TCC permission prompt on app startup. Two-layer fix applied: (1) `reloadFilesIfBrowserEmpty` guarded by `hasHadExplicitSidebarSelection` so it never retries privacy-sensitive folders before the user has explicitly clicked them; (2) `shouldSuppressPrivacySensitiveAutoSelection` rejects trigger events predating `initializationUptime` to handle stale Dock/Finder-click events still set as `NSApp.currentEvent` during SwiftUI's first-render auto-selection. Cannot reproduce in the debug build — no TCC prompt triggered at startup or on folder click. Reopen if it resurfaces.
 - [x] **B12** ✅ Implementation is correct; residual patchy shadow rendering matches Xcode's sidebar on macOS 26.2 — confirmed system compositor bug, not an app issue. Removed custom layer code; moved window config to `viewWillAppear`.
 
 ### About panel
@@ -86,8 +87,8 @@ Reference items by ID: **B1–B16** bugs · **P1–P24** polish · **N1–N8** n
 
 ### Status / toolbar
 - [x] **P25** ✅ **Toolbar pane grouping** — added `inspectorTrackingSeparator` (`NSTrackingSeparatorToolbarItem` bound to `contentSplitController.splitView` divider 0); toolbar now has three zones: sidebar (`toggleSidebar`), browser (`openFolder`, `viewMode`, `sort`, `zoomOut`, `zoomIn`, `flexibleSpace`, `presetTools`, `applyChanges`), inspector (`toggleInspector`); each zone tracks its pane on resize. Hard line at toolbar bottom on inspector collapse is expected macOS Liquid Glass behaviour.
-- [ ] **P18** `Should` **Subtitle / status area** — window subtitle and status bar should always show the most useful context: loading progress, selection count, apply progress, partial failure count, error, or "Ready" at idle.
-- [ ] **P19** `Should` **Apply button partial failure count** — status should read e.g. "Applied 47/50 — 3 failed" rather than a generic message.
+- [x] **P18** ✅ **Subtitle / status area** — subtitle priority stack: applying → loading → transient status message → `"X of N images"` (partial selection) → `"N images"` (idle); preview-preload progress removed (not user-meaningful). Wording uses "images" throughout.
+- [x] **P19** ✅ **Apply partial failure count** — `"Applied X of N — Y failed"` / `"Restored X of N — Y failed"`; raw error string no longer appended inline.
 
 ### Other
 - [x] **P20** ✅ Credits now use `smallSystemFontSize` matching the About panel's native credits area. Also fixed B13: `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` removed from target-level project.pbxproj settings that were overriding Base.xcconfig, so version and build now read correctly from the bundle.
@@ -104,7 +105,7 @@ Replace custom implementations with idiomatic SwiftUI / AppKit equivalents.
 | ID | Item | Location | Target |
 |----|------|----------|--------|
 | N1 | Sort / Presets toolbar items | Toolbar | `NSMenuToolbarItem` — decide at implementation time |
-| N2 | `BrowserLoadingPlaceholderView` | ~line 1500 | `ProgressView` or `.redacted(reason: .placeholder)` |
+| N2 | ~~`BrowserLoadingPlaceholderView`~~ | ~~line 1500~~ | ❌ No change — custom skeleton UI (shimmer rows + tile grid) is better than `ProgressView` (too generic) or `.redacted` (incompatible with `NSViewRepresentable`); existing implementation is correct SwiftUI. |
 | N3 | ~~Sidebar count label~~ | ~~line 1294~~ | ✅ `.badge(model.sidebarImageCountText(for: item).map { Text($0) })` — custom `Spacer` + fixed-width `Text` + `Color.clear` placeholder removed; consistent with Mail and Reminders |
 | N4 | Focus ring on scroll views (2 sites) | ~lines 1785, 2367 | `.focusRingType(.exterior)` |
 | N5 | ~~Pending-edit dot (4 sites)~~ | ~~inspector label, inspector preview, list cell, gallery cell~~ | ✅ `Image(systemName: "circle.fill").foregroundStyle(.orange)` (SwiftUI sites); `NSImageView` + `NSImage(systemSymbolName:)` + `contentTintColor` (AppKit sites); `pendingDotCornerRadius` constants removed |
