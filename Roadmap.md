@@ -47,7 +47,7 @@ Reference items by ID: **B1–B16** bugs · **P1–P24** polish · **N1–N6** n
 - [ ] **B15** ❌ `Should` **NSHostingView reentrant layout** — partially resolved: the B14 fix eliminated most instances. One remaining instance fires when QuickLook opens via spacebar: `makeKeyAndOrderFront` + `NSApp.activate` in `present()` trigger `windowDidResignKey` on the main window, which fires SwiftUI's `controlActiveState` update mid-keyDown event. Deferring these calls via `Task` fixes the warning but corrupts QL's opening animation (wrong source frame for `sourceFrameOnScreenFor`) and breaks the locked-height logic. Not fixable without a deeper architectural change; the skipped layout pass on QL open has no visible user impact.
 
 ### Resources
-- [ ] **B16** `Should` **Missing bundle resource "default.csv"** — "Failed to locate resource named 'default.csv'" logged at runtime. Something (possibly a preset or export path) looks up a CSV in the app bundle that does not exist. Investigate the call site and either bundle the resource or guard the lookup. (Debug console, line 343)
+- [ ] **B16** ❌ **Missing bundle resource "default.csv"** — investigated: no CSV code or references exist anywhere in the app sources. Message originates from a system framework (likely the image thumbnail pipeline or QuickLook generator) that looks for an optional `default.csv` in the app bundle and falls back gracefully when absent. No visible user impact; not actionable without a stack trace identifying the call site.
 
 ---
 
