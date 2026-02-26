@@ -4,12 +4,13 @@ All notable changes to Ledger are documented here.
 
 ---
 
-## [0.6.2] — build 57 — 2026-02-26
+## [0.6.2] — build 58 — 2026-02-26
 
 ### Changed
 - Gallery selection ring outset tuned to 5 pt (P9); overlay now anchored directly to the image view rather than the container so it is definitionally concentric; `selectionCornerRadius` constant removed — overlay corner radius derived as `thumbnailCornerRadius + selectionOutset` (single source of truth)
 
 ### Fixed
+- Desktop and Downloads sidebar items no longer flicker and revert on click; the B14 `Task` deferral caused `NSApp.currentEvent` to be nil by the time `handleSidebarSelectionChange` ran, making user clicks appear as auto-selections and triggering the privacy-sensitive suppression logic; fixed by capturing the event synchronously in `.onChange` and passing it through the deferred call
 - "Publishing changes from within view updates is not allowed" eliminated at startup; root cause was `.onChange(of: selectedSidebarID)` synchronously calling `handleSidebarSelectionChange` → `loadFiles` → `clearLoadedContentState`, which mutated `browserItems` and `filteredBrowserItems` inside the SwiftUI update cycle; deferred with `Task { @MainActor in … }` (B14)
 - NSHostingView reentrant layout warnings eliminated; were a direct downstream consequence of B14 (B15)
 - Inspector Picker invalid-tag `""` warnings eliminated; were a race symptom of B14 where `draftValues` could be mutated mid-render, making Picker selection inconsistent with its options (P24)
