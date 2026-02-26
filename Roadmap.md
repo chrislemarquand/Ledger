@@ -81,7 +81,7 @@ Reference items by ID: **B1–B12** bugs · **P1–P23** polish · **N1–N6** n
 
 ### Other
 - [x] **P20** ✅ Credits now use `smallSystemFontSize` matching the About panel's native credits area. Also fixed B13: `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` removed from target-level project.pbxproj settings that were overriding Base.xcconfig, so version and build now read correctly from the bundle.
-- [ ] **P21** `Nice` **Desktop TCC prompt not appearing** — clicking Desktop in the sidebar grants access silently without a TCC privacy prompt. Expected: prompt on first access. (QA checklist #8)
+- [x] **P21** ❌ **Desktop TCC prompt not appearing** — not fixable without sandboxing. The app is non-sandboxed (`com.apple.security.app-sandbox = false`); macOS only shows TCC consent prompts for Desktop/Documents/Downloads for sandboxed apps. Silently granting access is correct behaviour for a non-sandboxed app. Will resolve automatically when the app is sandboxed for App Store submission (R11).
 - [ ] **P22** `Nice` **Search button should expand to field** — like Liquid Glass apps (Notes.app), the search control should be a button that expands into a text field on click. (QA log #22)
 - [ ] **P23** `Nice` **Sidebar toggle right-aligned when expanded** — sidebar toggle should be right-aligned within the sidebar panel when expanded, consistent with Liquid Glass apps. (QA log #23)
 
@@ -130,3 +130,4 @@ Full blueprint: `output/BRANDING_NAMING_REFRESH_IMPLEMENTATION.md`. User-facing 
 - [ ] **R10** Large-folder performance pass (1,000+ RAW files — scrolling, thumbnail loading, apply speed).
 - [ ] **R11** App Store submission track.
 - [ ] **R12** Drag-and-drop metadata export / batch rename.
+- [ ] **R13** AppKit `NSOutlineView`-based sidebar rewrite — would give correct right-side section chevrons with proper collapse/expand animation for all sections (resolves P5), native drag-to-resize, and full macOS sidebar behaviour for free from the API.
