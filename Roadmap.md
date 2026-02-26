@@ -39,6 +39,9 @@ Reference items by ID: **B1–B12** bugs · **P1–P23** polish · **N1–N6** n
 ### Sidebar
 - [x] **B12** ✅ Implementation is correct; residual patchy shadow rendering matches Xcode's sidebar on macOS 26.2 — confirmed system compositor bug, not an app issue. Removed custom layer code; moved window config to `viewWillAppear`.
 
+### About panel
+- [x] **B13** ✅ About panel showed version 0.5 (1) instead of current version; `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` were hardcoded in target build settings, silently overriding Base.xcconfig. Removed from project.pbxproj — xcconfig is now sole source of truth.
+
 ---
 
 ## v1.0 — Outstanding polish
@@ -77,7 +80,7 @@ Reference items by ID: **B1–B12** bugs · **P1–P23** polish · **N1–N6** n
 - [ ] **P19** `Should` **Apply button partial failure count** — status should read e.g. "Applied 47/50 — 3 failed" rather than a generic message.
 
 ### Other
-- [ ] **P20** `Nice` **About screen font inconsistency** — exiftool credit renders in a different font using an unnecessary scrolling embedded view. Should use the system font throughout. (QA log #19)
+- [x] **P20** ✅ Credits now use `smallSystemFontSize` matching the About panel's native credits area. Also fixed B13: `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` removed from target-level project.pbxproj settings that were overriding Base.xcconfig, so version and build now read correctly from the bundle.
 - [ ] **P21** `Nice` **Desktop TCC prompt not appearing** — clicking Desktop in the sidebar grants access silently without a TCC privacy prompt. Expected: prompt on first access. (QA checklist #8)
 - [ ] **P22** `Nice` **Search button should expand to field** — like Liquid Glass apps (Notes.app), the search control should be a button that expands into a text field on click. (QA log #22)
 - [ ] **P23** `Nice` **Sidebar toggle right-aligned when expanded** — sidebar toggle should be right-aligned within the sidebar panel when expanded, consistent with Liquid Glass apps. (QA log #23)

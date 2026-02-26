@@ -10,6 +10,8 @@ All notable changes to Ledger are documented here.
 - Gallery selection ring outset tuned to 5 pt (P9); overlay now anchored directly to the image view rather than the container so it is definitionally concentric; `selectionCornerRadius` constant removed — overlay corner radius derived as `thumbnailCornerRadius + selectionOutset` (single source of truth)
 
 ### Fixed
+- About panel now shows correct version and build number; `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` removed from target-level build settings in project.pbxproj where they were silently overriding Base.xcconfig (B13)
+- About panel credits now use `smallSystemFontSize` to match the panel's native credits area; was using `systemFontSize` which rendered too large (P20)
 - Sidebar context menu SF Symbol glyphs now render in label colour instead of accent colour; `.tint(Color.primary)` applied to context menu content, overriding the inherited accent tint (P1)
 - "Folder" menu bar menu renamed to "Image" (P16)
 - Sidebar folder-organisation items (Pin, Unpin, Move Up, Move Down) moved from Image menu into a new dedicated "Folder" menu to its right

@@ -282,7 +282,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let exifToolVersion = bundledExifToolVersion() ?? "Unknown"
 
         let purpose = "A local EXIF/IPTC/XMP editor powered by ExifTool."
-        let nativeFont = NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        let nativeFont = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
         let nativeColor = NSColor.secondaryLabelColor
         let credits = NSMutableAttributedString(
             string: "\(purpose)\n\nUses ExifTool \(exifToolVersion) by Phil Harvey\n",
