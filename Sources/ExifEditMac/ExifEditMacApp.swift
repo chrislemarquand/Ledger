@@ -132,7 +132,7 @@ struct ExifEditMacApp: App {
 
             }
 
-            CommandMenu("Folder") {
+            CommandMenu("Image") {
                 Button {
                     NSApp.sendAction(#selector(NativeThreePaneSplitViewController.refreshAction(_:)), to: nil, from: nil)
                 } label: {

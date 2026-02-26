@@ -69,7 +69,7 @@ Reference items by ID: **B1–B12** bugs · **P1–P23** polish · **N1–N6** n
 - [ ] **P15** `Should` **Date / time picker layout** — when a date is set, the picker fills only half the inspector width with a clear button to the right. Needs a more elegant full-width layout. (QA log #21)
 
 ### Menus
-- [ ] **P16** `Nice` **"Folder" menu item should say "Image"** — the menu item labelled "Folder" should be renamed to "Image". (QA log #12)
+- [x] **P16** ~~"Folder" menu item should say "Image"~~ — ✅ `CommandMenu("Folder")` renamed to `CommandMenu("Image")`.
 - [ ] **P17** `Should` **Apply metadata: split into two actions** — replace the single Apply item with: "Apply Metadata Changes to [N Image(s)]" (current selection, dynamic label) and "Apply Metadata Changes to Folder" (mirrors toolbar Apply). (QA log #13)
 
 ### Status / toolbar

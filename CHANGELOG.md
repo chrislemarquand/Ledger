@@ -8,6 +8,7 @@ All notable changes to Ledger are documented here.
 
 ### Fixed
 - Sidebar context menu SF Symbol glyphs now render in label colour instead of accent colour; `.tint(Color.primary)` applied to context menu content, overriding the inherited accent tint (P1)
+- "Folder" menu bar menu renamed to "Image" (P16)
 - View → As Gallery / As List now show a checkmark on the active mode and are always enabled; broken SwiftUI `.disabled()` replaced with AppKit `NSMenuDelegate` injection
 - View → Sort By checkmark now survives SwiftUI menu rebuilds; injection moved to `menuWillOpen` via `NSMenuDelegate`
 - Folder menu Apply Metadata Changes (⌘S), Clear Metadata Changes (⌘⇧K), and Restore from Last Backup (⌘⇧B) now enable/disable correctly based on whether the selection has pending edits or a restorable backup
