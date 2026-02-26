@@ -1,6 +1,6 @@
 # Roadmap
 
-Current version: **0.6** (build 12). Target: **v1.0**.
+Current version: **0.6.1** (build 19). Target: **v1.0**.
 
 Reference items by ID: **B1–B11** bugs · **P1–P21** polish · **N1–N6** native rewrites · **R1–R8** post-v1.0 roadmap.
 
@@ -25,7 +25,7 @@ Reference items by ID: **B1–B11** bugs · **P1–P21** polish · **N1–N6** n
 - [ ] **B3** `Must` **Restore from backup menu state** — context menu always on, menu bar always off. Should reflect whether a backup exists for the current selection.
 - [ ] **B4** `Must` **Restore from backup partially failing** — restoring does not succeed for all files in a folder; some retain edited metadata after restore.
 - [ ] **B5** `Must` **View → As Gallery / As List broken** — switching back to Gallery from the menu bar does not work; "As List" stays checked, "As Gallery" stays greyed.
-- [ ] **B6** `Must` **View → Sort By checkmark stuck on Name** — checkmark stays on Name in the submenu even when a different sort is active.
+- [x] **B6** ~~View → Sort By checkmark stuck on Name~~ — ✅ SwiftUI Picker removed; AppKit NSMenu injected with `validateMenuItem` setting checkmarks on every menu open.
 - [ ] **B7** `Must` **View → Zoom In / Zoom Out not disabled in list mode** — both should be disabled when list view is active.
 - [x] **B8** ~~Inspector / sidebar menu labels always say "Hide"~~ — ✅ Static "Toggle Sidebar" / "Toggle Inspector" labels; always correct regardless of state.
 
@@ -97,7 +97,7 @@ Replace custom implementations with idiomatic SwiftUI / AppKit equivalents.
 ## v1.0 — Architecture
 
 - [ ] **A1** **Split MainContentView.swift** — currently 4,367 lines. Target: `NavigationSidebarView`, `BrowserListView`, `BrowserGalleryView`, `InspectorView`, `PresetSheets`. Main file target ~800 lines.
-- [ ] **A2** **Sidebar count badge latency** — profile whether `Task.detached` sidebar image counts cause a visible 0→N flash on launch; consider deferring until row is visible.
+- [x] **A2** ~~Sidebar count badge latency~~ — ✅ `warmSidebarImageCounts()` call sites removed in 0.6; counts no longer preloaded on launch, eliminating the flash.
 
 ---
 
@@ -107,14 +107,14 @@ Replace custom implementations with idiomatic SwiftUI / AppKit equivalents.
 - [ ] **R1** Full sidebar organiser — drag-and-drop group creation, import/export of favourite sets.
 - [ ] **R2** Final branding consolidation — all user-facing labels, titles, and support paths consistent under the chosen app name.
 
-### Branding rename (Lattice)
-Full blueprint: `output/BRANDING_NAMING_REFRESH_IMPLEMENTATION.md`.
+### Branding rename (Ledger)
+Full blueprint: `output/BRANDING_NAMING_REFRESH_IMPLEMENTATION.md`. User-facing name is **Ledger** — partially applied. Remaining work:
 
-- [ ] **R3** **A — Identity + build settings** — `project.pbxproj`, `.xcscheme`, `Info.plist`, `Base.xcconfig` bundle ID → `com.chrislemarquand.Lattice`.
-- [ ] **R4** **B — Runtime strings + UI labels** — `ExifEditMacApp.swift` and any remaining hardcoded app-name strings.
-- [ ] **R5** **C — Persistent domains** — UserDefaults migration: read old `Logbook.*` keys as fallback; write sentinel `Lattice.Migration.v1Completed`.
-- [ ] **R6** **D — App Support directory** — atomic move `~/Library/Application Support/Logbook` → `Lattice`; fallback read from old path if move fails.
-- [ ] **R7** **E — Release + distribution artifacts** — update `scripts/release/*.sh` and DMG name to `Lattice.dmg`.
+- [ ] **R3** **A — Identity + build settings** — verify `project.pbxproj`, `.xcscheme`, `Info.plist`, `Base.xcconfig` are all consistent for Ledger.
+- [ ] **R4** **B — Runtime strings + UI labels** — audit `ExifEditMacApp.swift` and any remaining hardcoded app-name strings for consistency.
+- [ ] **R5** **C — Persistent domains** — UserDefaults migration: read old `Logbook.*` keys as fallback; write sentinel `Ledger.Migration.v1Completed`.
+- [ ] **R6** **D — App Support directory** — atomic move `~/Library/Application Support/Logbook` → `Ledger`; fallback read from old path if move fails.
+- [ ] **R7** **E — Release + distribution artifacts** — verify `scripts/release/*.sh` and DMG name output as `Ledger.dmg`.
 
 ### Future features
 - [ ] **R8** GPX import and conflict-resolution UI (in QA matrix; currently untested).

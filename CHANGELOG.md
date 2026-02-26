@@ -9,6 +9,7 @@ All notable changes to Ledger are documented here.
 ### Fixed
 - Inspector toolbar toggle label and tooltip now read "Show Inspector" or "Hide Inspector" based on current state (was always static "Hide Inspector")
 - Sidebar and Inspector menu bar items now labelled "Toggle Sidebar" / "Toggle Inspector" (static labels are always correct regardless of panel state)
+- View → Sort By checkmark now reflects the active sort on every menu open; SwiftUI Picker replaced with AppKit NSMenu validated via `NSMenuItemValidation`
 
 ---
 

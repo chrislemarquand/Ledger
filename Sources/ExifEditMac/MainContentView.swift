@@ -195,7 +195,7 @@ private struct InspectorPreviewActionLabel: View {
 }
 
 @MainActor
-final class NativeThreePaneSplitViewController: NSSplitViewController {
+final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuItemValidation {
     private var model: AppModel
 
     private let sidebarController: NSHostingController<AnyView>
@@ -404,6 +404,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
             sidebarItem.isCollapsed = false
         }
         syncSidebarCollapsedState()
+        injectSortMenuIfNeeded()
         refreshWindowTitleSubtitleIfNeeded()
         installSpacebarQuickLookMonitorIfNeeded()
         installBrowserFocusRequestObserverIfNeeded()
@@ -587,6 +588,39 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
     private func syncInspectorCollapsedState() {
         model.isInspectorCollapsed = inspectorItem.isCollapsed
         nativeToolbarDelegate?.refreshFromModel()
+    }
+
+    /// Injects a "Sort By" submenu into the View menu using real AppKit NSMenuItems so
+    /// validateMenuItem can set checkmarks dynamically on every menu open.
+    /// (The SwiftUI Picker in CommandGroup only evaluates its selection binding once.)
+    private func injectSortMenuIfNeeded() {
+        guard let viewMenu = NSApp.mainMenu?.item(withTitle: "View")?.submenu else { return }
+        guard let zoomInIndex = viewMenu.items.firstIndex(where: { $0.title == "Zoom In" }) else { return }
+
+        let sortMenu = NSMenu(title: "Sort By")
+        sortMenu.addItem(withTitle: "Name", action: #selector(sortByNameAction(_:)), keyEquivalent: "")
+        sortMenu.addItem(withTitle: "Date Created", action: #selector(sortByCreatedAction(_:)), keyEquivalent: "")
+        sortMenu.addItem(withTitle: "Size", action: #selector(sortBySizeAction(_:)), keyEquivalent: "")
+        sortMenu.addItem(withTitle: "Kind", action: #selector(sortByKindAction(_:)), keyEquivalent: "")
+
+        let sortByItem = NSMenuItem(title: "Sort By", action: nil, keyEquivalent: "")
+        sortByItem.submenu = sortMenu
+        viewMenu.insertItem(sortByItem, at: zoomInIndex)
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(toggleInspectorAction(_:)) {
+            menuItem.title = inspectorItem.isCollapsed ? "Show Inspector" : "Hide Inspector"
+        } else if menuItem.action == #selector(sortByNameAction(_:)) {
+            menuItem.state = model.browserSort == .name ? .on : .off
+        } else if menuItem.action == #selector(sortByCreatedAction(_:)) {
+            menuItem.state = model.browserSort == .created ? .on : .off
+        } else if menuItem.action == #selector(sortBySizeAction(_:)) {
+            menuItem.state = model.browserSort == .size ? .on : .off
+        } else if menuItem.action == #selector(sortByKindAction(_:)) {
+            menuItem.state = model.browserSort == .kind ? .on : .off
+        }
+        return true
     }
 
     private func shouldHandleBrowserKeyCommands() -> Bool {

@@ -150,16 +150,6 @@ struct ExifEditMacApp: App {
 
                 Divider()
 
-                Picker("Sort By", selection: Binding(
-                    get: { appDelegate.appModel?.browserSort ?? .name },
-                    set: { appDelegate.appModel?.browserSort = $0 }
-                )) {
-                    Text("Name").tag(AppModel.BrowserSort.name)
-                    Text("Date Created").tag(AppModel.BrowserSort.created)
-                    Text("Size").tag(AppModel.BrowserSort.size)
-                    Text("Kind").tag(AppModel.BrowserSort.kind)
-                }
-
                 Button {
                     NSApp.sendAction(#selector(NativeThreePaneSplitViewController.zoomInAction(_:)), to: nil, from: nil)
                 } label: {
