@@ -1,5 +1,4 @@
 import AppKit
-import Combine
 import SwiftUI
 
 @main
@@ -118,6 +117,19 @@ struct ExifEditMacApp: App {
             }
 
             CommandGroup(after: .toolbar) {
+                Button {
+                    NSApp.sendAction(#selector(NSSplitViewController.toggleSidebar(_:)), to: nil, from: nil)
+                } label: {
+                    Label("Toggle Sidebar", systemImage: "sidebar.left")
+                }
+                .keyboardShortcut("s", modifiers: [.command, .option])
+
+                Button {
+                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.toggleInspectorAction(_:)), to: nil, from: nil)
+                } label: {
+                    Label("Toggle Inspector", systemImage: "sidebar.trailing")
+                }
+
                 Divider()
 
                 Button {
@@ -335,16 +347,11 @@ struct ExifEditMacApp: App {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindowController: MainWindowController?
     private var isShowingTerminateConfirmation = false
     private var allowImmediateTermination = false
-    private var modelObservers: Set<AnyCancellable> = []
     var appModel: AppModel? { mainWindowController?.appModel }
-
-    // Mirrored @Published properties so SwiftUI CommandGroup labels re-evaluate on change.
-    @Published private(set) var isSidebarCollapsed = false
-    @Published private(set) var isInspectorCollapsed = false
 
     func showAboutPanel() {
         let bundle = Bundle.main
@@ -423,14 +430,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         let model = AppModel()
         let windowController = MainWindowController(model: model)
         mainWindowController = windowController
-        model.$isSidebarCollapsed
-            .receive(on: DispatchQueue.main)
-            .assign(to: \.isSidebarCollapsed, on: self)
-            .store(in: &modelObservers)
-        model.$isInspectorCollapsed
-            .receive(on: DispatchQueue.main)
-            .assign(to: \.isInspectorCollapsed, on: self)
-            .store(in: &modelObservers)
         windowController.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
     }

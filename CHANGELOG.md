@@ -8,7 +8,7 @@ All notable changes to Ledger are documented here.
 
 ### Fixed
 - Inspector toolbar toggle label and tooltip now read "Show Inspector" or "Hide Inspector" based on current state (was always static "Hide Inspector")
-- "Show/Hide Inspector" and "Show/Hide Sidebar" menu bar items now update dynamically when panels are toggled — replaced SwiftUI `Button` entries (which can't update labels after initial render) with AppKit `NSMenuItem`s validated via `NSMenuItemValidation`; sidebar title handled natively by `NSSplitViewController.toggleSidebar`, inspector title set in `validateMenuItem`
+- Sidebar and Inspector menu bar items now labelled "Toggle Sidebar" / "Toggle Inspector" (static labels are always correct regardless of panel state)
 
 ---
 

@@ -27,7 +27,7 @@ Reference items by ID: **B1–B11** bugs · **P1–P21** polish · **N1–N6** n
 - [ ] **B5** `Must` **View → As Gallery / As List broken** — switching back to Gallery from the menu bar does not work; "As List" stays checked, "As Gallery" stays greyed.
 - [ ] **B6** `Must` **View → Sort By checkmark stuck on Name** — checkmark stays on Name in the submenu even when a different sort is active.
 - [ ] **B7** `Must` **View → Zoom In / Zoom Out not disabled in list mode** — both should be disabled when list view is active.
-- [x] **B8** ~~Inspector / sidebar menu labels always say "Hide"~~ — ✅ `AppDelegate` now `ObservableObject` with `@Published` mirror properties subscribed to model; command labels re-evaluate reactively.
+- [x] **B8** ~~Inspector / sidebar menu labels always say "Hide"~~ — ✅ Static "Toggle Sidebar" / "Toggle Inspector" labels; always correct regardless of state.
 
 ### Inspector
 - [ ] **B9** `Must` **Stale metadata shown after Apply** — inspector briefly shows old values before updating after an apply. Should show current values immediately.

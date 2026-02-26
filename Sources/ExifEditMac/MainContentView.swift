@@ -195,7 +195,7 @@ private struct InspectorPreviewActionLabel: View {
 }
 
 @MainActor
-final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuItemValidation {
+final class NativeThreePaneSplitViewController: NSSplitViewController {
     private var model: AppModel
 
     private let sidebarController: NSHostingController<AnyView>
@@ -404,7 +404,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             sidebarItem.isCollapsed = false
         }
         syncSidebarCollapsedState()
-        injectViewMenuToggleItems()
         refreshWindowTitleSubtitleIfNeeded()
         installSpacebarQuickLookMonitorIfNeeded()
         installBrowserFocusRequestObserverIfNeeded()
@@ -588,41 +587,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     private func syncInspectorCollapsedState() {
         model.isInspectorCollapsed = inspectorItem.isCollapsed
         nativeToolbarDelegate?.refreshFromModel()
-    }
-
-    /// Injects sidebar and inspector toggle items into the View menu using AppKit NSMenuItems,
-    /// so validateMenuItem can set their titles dynamically on every menu open.
-    private func injectViewMenuToggleItems() {
-        guard let viewMenu = NSApp.mainMenu?.item(withTitle: "View")?.submenu else { return }
-        // Anchor on As Gallery (⌘1) — insert the two toggles + separator before it.
-        guard let galleryIndex = viewMenu.items.firstIndex(where: {
-            $0.keyEquivalent == "1" && $0.keyEquivalentModifierMask == .command
-        }) else { return }
-
-        let sep = NSMenuItem.separator()
-        viewMenu.insertItem(sep, at: galleryIndex)
-
-        let inspectorToggle = NSMenuItem(
-            title: "Hide Inspector",
-            action: #selector(toggleInspectorAction(_:)),
-            keyEquivalent: ""
-        )
-        viewMenu.insertItem(inspectorToggle, at: galleryIndex)
-
-        let sidebarToggle = NSMenuItem(
-            title: "Hide Sidebar",
-            action: #selector(NSSplitViewController.toggleSidebar(_:)),
-            keyEquivalent: "s"
-        )
-        sidebarToggle.keyEquivalentModifierMask = [.command, .option]
-        viewMenu.insertItem(sidebarToggle, at: galleryIndex)
-    }
-
-    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-        if menuItem.action == #selector(toggleInspectorAction(_:)) {
-            menuItem.title = inspectorItem.isCollapsed ? "Show Inspector" : "Hide Inspector"
-        }
-        return true
     }
 
     private func shouldHandleBrowserKeyCommands() -> Bool {
