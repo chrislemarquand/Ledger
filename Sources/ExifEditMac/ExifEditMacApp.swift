@@ -142,34 +142,6 @@ struct ExifEditMacApp: App {
 
                 Divider()
 
-                Button {
-                    appDelegate.appModel?.pinSelectedSidebarLocationToFavorites()
-                } label: {
-                    Label("Pin Location to Pinned", systemImage: "pin")
-                }
-                .disabled(!(appDelegate.appModel?.canPinSelectedSidebarLocation ?? false))
-
-                Button {
-                    appDelegate.appModel?.unpinSelectedSidebarFavorite()
-                } label: {
-                    Label("Unpin Pinned", systemImage: "pin.slash")
-                }
-                .disabled(!(appDelegate.appModel?.canUnpinSelectedSidebarLocation ?? false))
-
-                Button {
-                    appDelegate.appModel?.moveSelectedFavoriteUp()
-                } label: {
-                    Label("Move Pinned Up", systemImage: "arrow.up")
-                }
-                .disabled(!(appDelegate.appModel?.canMoveSelectedFavoriteUp ?? false))
-
-                Button {
-                    appDelegate.appModel?.moveSelectedFavoriteDown()
-                } label: {
-                    Label("Move Pinned Down", systemImage: "arrow.down")
-                }
-                .disabled(!(appDelegate.appModel?.canMoveSelectedFavoriteDown ?? false))
-
                 Menu("Presets") {
                     Menu("Apply Preset") {
                         if appDelegate.appModel?.presets.isEmpty ?? true {
@@ -201,6 +173,36 @@ struct ExifEditMacApp: App {
                         Label("Manage Presets…", systemImage: "slider.horizontal.below.square.filled.and.square")
                     }
                 }
+            }
+
+            CommandMenu("Folder") {
+                Button {
+                    appDelegate.appModel?.pinSelectedSidebarLocationToFavorites()
+                } label: {
+                    Label("Pin Location to Pinned", systemImage: "pin")
+                }
+                .disabled(!(appDelegate.appModel?.canPinSelectedSidebarLocation ?? false))
+
+                Button {
+                    appDelegate.appModel?.unpinSelectedSidebarFavorite()
+                } label: {
+                    Label("Unpin Pinned", systemImage: "pin.slash")
+                }
+                .disabled(!(appDelegate.appModel?.canUnpinSelectedSidebarLocation ?? false))
+
+                Button {
+                    appDelegate.appModel?.moveSelectedFavoriteUp()
+                } label: {
+                    Label("Move Pinned Up", systemImage: "arrow.up")
+                }
+                .disabled(!(appDelegate.appModel?.canMoveSelectedFavoriteUp ?? false))
+
+                Button {
+                    appDelegate.appModel?.moveSelectedFavoriteDown()
+                } label: {
+                    Label("Move Pinned Down", systemImage: "arrow.down")
+                }
+                .disabled(!(appDelegate.appModel?.canMoveSelectedFavoriteDown ?? false))
             }
 
             CommandGroup(after: .help) {
