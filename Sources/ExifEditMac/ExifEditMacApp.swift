@@ -417,6 +417,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSWindow.allowsAutomaticWindowTabbing = false
         let model = AppModel()
         let windowController = MainWindowController(model: model)
         mainWindowController = windowController
