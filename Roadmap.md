@@ -62,7 +62,7 @@ Reference items by ID: **B1–B12** bugs · **P1–P23** polish · **N1–N6** n
 - [ ] **P10** `Should` **QuickLook position inconsistent** — window position changes per file. Should always open centred on screen, matching Finder. (QA log #5)
 
 ### Inspector
-- [ ] **P11** `Should` **Inspector toolbar toggle popover text static** — toolbar label and toolTip are now dynamic (N6), but the macOS 26 toolbar popover still shows "Show or hide inspector" unconditionally. Needs further investigation. (QA log #6, checklist #41)
+- [x] **P11** ~~Inspector toggle label static~~ — ✅ toolbar label and tooltip now dynamic via `updateInspectorToggle(with:)`. (QA log #6 was stale)
 - [ ] **P12** `Should` **Inspector toggle location in toolbar** — should be the last item before the search field so it sits adjacent to what it controls. Currently the Apply button sits between them. (QA log #17)
 - [ ] **P13** `Should` **Inspector section collapse not instant under Reduce Motion** — same as P4 but for inspector sections. (QA checklist #56)
 - [ ] **P14** `Should` **Inspector dropdown widths inconsistent** — Exposure Program, Flash, and Metering Mode pickers are three different widths. Should all be full-width like the text fields. (QA log #20)
@@ -95,7 +95,7 @@ Replace custom implementations with idiomatic SwiftUI / AppKit equivalents.
 | N3 | Sidebar count label | ~line 1294 | `.badge(_:)` modifier |
 | N4 | Focus ring on scroll views (2 sites) | ~lines 1785, 2367 | `.focusRingType(.exterior)` |
 | N5 | Pending-edit dot (3 sites) | ~lines 1902, 3085, 3410 | SF Symbol `circle.fill` with semantic colour |
-| N6 | ~~`toggleInspector` label (static "Hide Inspector")~~ | ~~line 1021~~ | ✅ Done — dynamic label+toolTip via `updateInspectorToggle(with:)`; macOS 26 popover text tracked under P11 |
+| N6 | ~~`toggleInspector` label (static "Hide Inspector")~~ | ~~line 1021~~ | ✅ Done — dynamic label via `updateInspectorToggle(with:)` |
 
 ---
 
