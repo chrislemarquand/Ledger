@@ -211,6 +211,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     private var didConfigureWindow = false
     private var nativeToolbarDelegate: NativeToolbarDelegate?
     private weak var viewMenuForSortInjection: NSMenu?
+    private weak var folderMenuForInjection: NSMenu?
     private var modelObserver: AnyCancellable?
     private var statusObserver: AnyCancellable?
     private var spacebarMonitor: Any?
@@ -412,6 +413,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         DispatchQueue.main.async { [weak self] in
             self?.focusBrowserPane()
             self?.injectSortMenuIfNeeded()
+            self?.injectFolderMenuIfNeeded()
         }
     }
 
@@ -606,6 +608,20 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         }
     }
 
+    /// Finds the Folder menu and registers self as its NSMenuDelegate.
+    /// Apply / Clear / Restore injection happens in menuWillOpen so it survives SwiftUI rebuilds.
+    private func injectFolderMenuIfNeeded() {
+        guard let mainMenu = NSApp.mainMenu else { return }
+        for topItem in mainMenu.items {
+            guard let submenu = topItem.submenu else { continue }
+            if submenu.items.contains(where: { $0.title == "Refresh Files and Metadata" }) {
+                folderMenuForInjection = submenu
+                submenu.delegate = self
+                return
+            }
+        }
+    }
+
     /// Builds and returns the Sort By NSMenuItem with submenu.
     private func makeSortByMenuItem() -> NSMenuItem {
         let sortMenu = NSMenu(title: "Sort By")
@@ -621,33 +637,53 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     // MARK: NSMenuDelegate
 
     func menuWillOpen(_ menu: NSMenu) {
-        guard menu === viewMenuForSortInjection else { return }
-
-        if !menu.items.contains(where: { $0.title == "Sort By" }) {
-            let insertIndex = menu.items.firstIndex(where: { $0.title == "Zoom In" }) ?? menu.numberOfItems
-            menu.insertItem(makeSortByMenuItem(), at: insertIndex)
-        }
-
-        if !menu.items.contains(where: { $0.title == "As Gallery" }) {
-            let sortByIndex = menu.items.firstIndex(where: { $0.title == "Sort By" }) ?? menu.numberOfItems
-            // Insert in reverse so final order is: As Gallery, As List, separator, Sort By
-            menu.insertItem(.separator(), at: sortByIndex)
-            let listItem = NSMenuItem(title: "As List", action: #selector(switchToListAction(_:)), keyEquivalent: "2")
-            listItem.keyEquivalentModifierMask = .command
-            menu.insertItem(listItem, at: sortByIndex)
-            let galleryItem = NSMenuItem(title: "As Gallery", action: #selector(switchToGalleryAction(_:)), keyEquivalent: "1")
-            galleryItem.keyEquivalentModifierMask = .command
-            menu.insertItem(galleryItem, at: sortByIndex)
+        if menu === viewMenuForSortInjection {
+            if !menu.items.contains(where: { $0.title == "Sort By" }) {
+                let insertIndex = menu.items.firstIndex(where: { $0.title == "Zoom In" }) ?? menu.numberOfItems
+                menu.insertItem(makeSortByMenuItem(), at: insertIndex)
+            }
+            if !menu.items.contains(where: { $0.title == "As Gallery" }) {
+                let sortByIndex = menu.items.firstIndex(where: { $0.title == "Sort By" }) ?? menu.numberOfItems
+                // Insert in reverse so final order is: As Gallery, As List, separator, Sort By
+                menu.insertItem(.separator(), at: sortByIndex)
+                let listItem = NSMenuItem(title: "As List", action: #selector(switchToListAction(_:)), keyEquivalent: "2")
+                listItem.keyEquivalentModifierMask = .command
+                menu.insertItem(listItem, at: sortByIndex)
+                let galleryItem = NSMenuItem(title: "As Gallery", action: #selector(switchToGalleryAction(_:)), keyEquivalent: "1")
+                galleryItem.keyEquivalentModifierMask = .command
+                menu.insertItem(galleryItem, at: sortByIndex)
+            }
+        } else if menu === folderMenuForInjection {
+            if !menu.items.contains(where: { $0.title == "Apply Metadata Changes" }) {
+                let anchor = (menu.items.firstIndex(where: { $0.title == "Refresh Files and Metadata" }) ?? -1) + 1
+                // Insert in reverse so final order is: Apply, Clear, Restore
+                let restoreItem = NSMenuItem(title: "Restore from Last Backup", action: #selector(restoreFromBackupAction(_:)), keyEquivalent: "b")
+                restoreItem.keyEquivalentModifierMask = [.command, .shift]
+                let clearItem = NSMenuItem(title: "Clear Metadata Changes", action: #selector(clearChangesAction(_:)), keyEquivalent: "k")
+                clearItem.keyEquivalentModifierMask = [.command, .shift]
+                let applyItem = NSMenuItem(title: "Apply Metadata Changes", action: #selector(applySelectionAction(_:)), keyEquivalent: "s")
+                applyItem.keyEquivalentModifierMask = .command
+                menu.insertItem(restoreItem, at: anchor)
+                menu.insertItem(clearItem, at: anchor)
+                menu.insertItem(applyItem, at: anchor)
+            }
         }
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        let selection = Array(model.selectedFileURLs)
         if menuItem.action == #selector(toggleInspectorAction(_:)) {
             menuItem.title = inspectorItem.isCollapsed ? "Show Inspector" : "Hide Inspector"
         } else if menuItem.action == #selector(switchToGalleryAction(_:)) {
             menuItem.state = model.browserViewMode == .gallery ? .on : .off
         } else if menuItem.action == #selector(switchToListAction(_:)) {
             menuItem.state = model.browserViewMode == .list ? .on : .off
+        } else if menuItem.action == #selector(applySelectionAction(_:)) {
+            return model.fileActionState(for: .applyMetadataChanges, targetURLs: selection).isEnabled
+        } else if menuItem.action == #selector(clearChangesAction(_:)) {
+            return model.fileActionState(for: .clearMetadataChanges, targetURLs: selection).isEnabled
+        } else if menuItem.action == #selector(restoreFromBackupAction(_:)) {
+            return model.fileActionState(for: .restoreFromLastBackup, targetURLs: selection).isEnabled
         } else if menuItem.action == #selector(sortByNameAction(_:)) {
             menuItem.state = model.browserSort == .name ? .on : .off
         } else if menuItem.action == #selector(sortByCreatedAction(_:)) {
@@ -825,6 +861,21 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             return
         }
         model.applyChanges()
+    }
+
+    @objc
+    func applySelectionAction(_: Any?) {
+        model.performFileAction(.applyMetadataChanges, targetURLs: Array(model.selectedFileURLs))
+    }
+
+    @objc
+    func clearChangesAction(_: Any?) {
+        model.performFileAction(.clearMetadataChanges, targetURLs: Array(model.selectedFileURLs))
+    }
+
+    @objc
+    func restoreFromBackupAction(_: Any?) {
+        model.performFileAction(.restoreFromLastBackup, targetURLs: Array(model.selectedFileURLs))
     }
 
     @objc

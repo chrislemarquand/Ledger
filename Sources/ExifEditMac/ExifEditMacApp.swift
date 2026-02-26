@@ -157,45 +157,6 @@ struct ExifEditMacApp: App {
                 }
                 .keyboardShortcut("r", modifiers: .command)
 
-                Button {
-                    guard let model = appDelegate.appModel else { return }
-                    model.performFileAction(.applyMetadataChanges, targetURLs: Array(model.selectedFileURLs))
-                } label: {
-                    let state = appDelegate.appModel?.fileActionState(for: .applyMetadataChanges, targetURLs: Array(appDelegate.appModel?.selectedFileURLs ?? []))
-                    Label(state?.title ?? "Apply Metadata Changes", systemImage: state?.symbolName ?? "square.and.arrow.down")
-                }
-                .keyboardShortcut("s", modifiers: .command)
-                .disabled({
-                    guard let model = appDelegate.appModel else { return true }
-                    return !model.fileActionState(for: .applyMetadataChanges, targetURLs: Array(model.selectedFileURLs)).isEnabled
-                }())
-
-                Button {
-                    guard let model = appDelegate.appModel else { return }
-                    model.performFileAction(.clearMetadataChanges, targetURLs: Array(model.selectedFileURLs))
-                } label: {
-                    let state = appDelegate.appModel?.fileActionState(for: .clearMetadataChanges, targetURLs: Array(appDelegate.appModel?.selectedFileURLs ?? []))
-                    Label(state?.title ?? "Clear Metadata Changes", systemImage: state?.symbolName ?? "xmark.circle")
-                }
-                .keyboardShortcut("k", modifiers: [.command, .shift])
-                .disabled({
-                    guard let model = appDelegate.appModel else { return true }
-                    return !model.fileActionState(for: .clearMetadataChanges, targetURLs: Array(model.selectedFileURLs)).isEnabled
-                }())
-
-                Button {
-                    guard let model = appDelegate.appModel else { return }
-                    model.performFileAction(.restoreFromLastBackup, targetURLs: Array(model.selectedFileURLs))
-                } label: {
-                    let state = appDelegate.appModel?.fileActionState(for: .restoreFromLastBackup, targetURLs: Array(appDelegate.appModel?.selectedFileURLs ?? []))
-                    Label(state?.title ?? "Restore from Last Backup", systemImage: state?.symbolName ?? "arrow.uturn.backward.circle")
-                }
-                .keyboardShortcut("b", modifiers: [.command, .shift])
-                .disabled({
-                    guard let model = appDelegate.appModel else { return true }
-                    return !model.fileActionState(for: .restoreFromLastBackup, targetURLs: Array(model.selectedFileURLs)).isEnabled
-                }())
-
                 Divider()
 
                 Button {
