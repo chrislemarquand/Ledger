@@ -45,7 +45,7 @@ Reference items by ID: **B1–B12** bugs · **P1–P23** polish · **N1–N6** n
 
 ### Sidebar
 - [x] **P1** ~~SF Symbol accentcolor in context menus~~ — ✅ `.tint(Color.primary)` applied to context menu content, overriding the inherited accent tint; per-item `symbolRenderingMode`/`foregroundStyle` overrides removed.
-- [ ] **P2** `Should` **Sidebar resize broken** — resize handle appears but dragging cuts the sidebar directly between expanded and collapsed states rather than resizing smoothly. Should behave like Finder's sidebar. (QA log #2/#24) ❌ Three attempts reverted: `constrainMinCoordinate` override crashed (incompatible with autolayout NSSplitViewController); `minimumThickness` reduction alone didn't fix snap; switching to `NSSplitViewItem(viewController:)` fixed the snap but broke visual appearance.
+- [x] **P2** ❌ **Sidebar resize** — snap-to-collapse on drag is intentional macOS 26 Liquid Glass sidebar design (matches Finder and Xcode on 26.2); not an app bug. Three earlier attempts to override this behaviour reverted.
 - [ ] **P3** `Should` **Sidebar toggle animation drops frames** — toggling sidebar causes dropped frames; should animate as smoothly as the inspector toggle.
 - [ ] **P4** `Should` **Sidebar section collapse not instant under Reduce Motion** — sections should collapse/expand instantly with Reduce Motion enabled. (QA checklist #55)
 - [ ] **P5** `Should` **Recents section does not animate on collapse/expand** — other sections animate; Recents does not. Possibly a SwiftUI bug with the bottommost section. (QA checklist #9)
