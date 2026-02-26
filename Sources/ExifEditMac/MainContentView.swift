@@ -622,16 +622,32 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
     func menuWillOpen(_ menu: NSMenu) {
         guard menu === viewMenuForSortInjection else { return }
+
         if !menu.items.contains(where: { $0.title == "Sort By" }) {
-            let insertIndex = menu.items.firstIndex(where: { $0.title == "Zoom In" })
-                ?? menu.numberOfItems
+            let insertIndex = menu.items.firstIndex(where: { $0.title == "Zoom In" }) ?? menu.numberOfItems
             menu.insertItem(makeSortByMenuItem(), at: insertIndex)
+        }
+
+        if !menu.items.contains(where: { $0.title == "As Gallery" }) {
+            let sortByIndex = menu.items.firstIndex(where: { $0.title == "Sort By" }) ?? menu.numberOfItems
+            // Insert in reverse so final order is: As Gallery, As List, separator, Sort By
+            menu.insertItem(.separator(), at: sortByIndex)
+            let listItem = NSMenuItem(title: "As List", action: #selector(switchToListAction(_:)), keyEquivalent: "2")
+            listItem.keyEquivalentModifierMask = .command
+            menu.insertItem(listItem, at: sortByIndex)
+            let galleryItem = NSMenuItem(title: "As Gallery", action: #selector(switchToGalleryAction(_:)), keyEquivalent: "1")
+            galleryItem.keyEquivalentModifierMask = .command
+            menu.insertItem(galleryItem, at: sortByIndex)
         }
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(toggleInspectorAction(_:)) {
             menuItem.title = inspectorItem.isCollapsed ? "Show Inspector" : "Hide Inspector"
+        } else if menuItem.action == #selector(switchToGalleryAction(_:)) {
+            menuItem.state = model.browserViewMode == .gallery ? .on : .off
+        } else if menuItem.action == #selector(switchToListAction(_:)) {
+            menuItem.state = model.browserViewMode == .list ? .on : .off
         } else if menuItem.action == #selector(sortByNameAction(_:)) {
             menuItem.state = model.browserSort == .name ? .on : .off
         } else if menuItem.action == #selector(sortByCreatedAction(_:)) {
@@ -822,6 +838,18 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     func zoomInAction(_: Any?) {
         guard model.browserViewMode == .gallery else { return }
         model.increaseGalleryZoom()
+        nativeToolbarDelegate?.refreshFromModel()
+    }
+
+    @objc
+    func switchToGalleryAction(_: Any?) {
+        model.browserViewMode = .gallery
+        nativeToolbarDelegate?.refreshFromModel()
+    }
+
+    @objc
+    func switchToListAction(_: Any?) {
+        model.browserViewMode = .list
         nativeToolbarDelegate?.refreshFromModel()
     }
 

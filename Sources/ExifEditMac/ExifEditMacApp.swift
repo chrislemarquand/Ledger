@@ -133,24 +133,6 @@ struct ExifEditMacApp: App {
                 Divider()
 
                 Button {
-                    appDelegate.appModel?.browserViewMode = .gallery
-                } label: {
-                    Label("As Gallery", systemImage: "square.grid.3x2")
-                }
-                .keyboardShortcut("1", modifiers: .command)
-                .disabled((appDelegate.appModel?.browserViewMode ?? .gallery) == .gallery)
-
-                Button {
-                    appDelegate.appModel?.browserViewMode = .list
-                } label: {
-                    Label("As List", systemImage: "list.bullet")
-                }
-                .keyboardShortcut("2", modifiers: .command)
-                .disabled((appDelegate.appModel?.browserViewMode ?? .gallery) == .list)
-
-                Divider()
-
-                Button {
                     NSApp.sendAction(#selector(NativeThreePaneSplitViewController.zoomInAction(_:)), to: nil, from: nil)
                 } label: {
                     Label("Zoom In", systemImage: "plus.magnifyingglass")
