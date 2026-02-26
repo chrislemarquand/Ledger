@@ -20,9 +20,9 @@ Reference items by ID: **B1–B11** bugs · **P1–P21** polish · **N1–N6** n
 ## v1.0 — Outstanding bugs
 
 ### Menus & state
-- [ ] **B1** `Must` **Apply metadata menu state** — context menu item always enabled; menu bar item always greyed. Should reflect whether the current selection has staged edits.
-- [ ] **B2** `Must` **Clear metadata menu state** — same problem as B1: context menu always on, menu bar always off.
-- [ ] **B3** `Must` **Restore from backup menu state** — context menu always on, menu bar always off. Should reflect whether a backup exists for the current selection.
+- [x] **B1** ~~Apply metadata menu state~~ — ✅ SwiftUI Button removed; AppKit NSMenuItem injected in Folder menu; `validateMenuItem` enables only when selection has pending edits.
+- [x] **B2** ~~Clear metadata menu state~~ — ✅ Same fix as B1.
+- [x] **B3** ~~Restore from backup menu state~~ — ✅ Same fix as B1; enabled only when selection has a restorable backup.
 - [ ] **B4** `Must` **Restore from backup partially failing** — restoring does not succeed for all files in a folder; some retain edited metadata after restore.
 - [x] **B5** ~~View → As Gallery / As List broken~~ — ✅ SwiftUI Buttons removed; AppKit NSMenuItems injected with `validateMenuItem` setting checkmarks; Cmd+1 / Cmd+2 key equivalents preserved.
 - [x] **B6** ~~View → Sort By checkmark stuck on Name~~ — ✅ SwiftUI Picker removed; AppKit NSMenu injected with `validateMenuItem` setting checkmarks on every menu open.
