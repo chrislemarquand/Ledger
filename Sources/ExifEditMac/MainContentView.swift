@@ -212,6 +212,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     private var nativeToolbarDelegate: NativeToolbarDelegate?
     private weak var viewMenuForSortInjection: NSMenu?
     private weak var folderMenuForInjection: NSMenu?
+    private var menuTrackingObserver: NSObjectProtocol?
     private var modelObserver: AnyCancellable?
     private var statusObserver: AnyCancellable?
     private var spacebarMonitor: Any?
@@ -414,6 +415,20 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             self?.focusBrowserPane()
             self?.injectSortMenuIfNeeded()
             self?.injectFolderMenuIfNeeded()
+        }
+        // Re-register menu delegates every time the user clicks the menu bar.
+        // SwiftUI may rebuild NSMenu objects after our initial async setup, invalidating
+        // the weak references. didBeginTrackingNotification fires before menuWillOpen,
+        // so delegates are always current by the time injection is needed.
+        menuTrackingObserver = NotificationCenter.default.addObserver(
+            forName: NSMenu.didBeginTrackingNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.injectSortMenuIfNeeded()
+                self?.injectFolderMenuIfNeeded()
+            }
         }
     }
 
