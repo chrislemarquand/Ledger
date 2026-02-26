@@ -4,7 +4,10 @@ All notable changes to Ledger are documented here.
 
 ---
 
-## [0.6.2] — build 60 — 2026-02-26
+## [0.6.2] — build 61 — 2026-02-26
+
+### Fixed
+- Clicking a list-view column header now sorts by that column; `NSSortDescriptor` prototypes added to all four columns (Name, Date Created, Size, Kind); `tableView(_:sortDescriptorsDidChange:)` translates the header click to `model.browserSort`; column arrow indicator stays in sync when sort is changed via View → Sort By menu (P7)
 
 ### Removed
 - Search bar removed from toolbar and ⌘F "Find…" removed from the Edit menu; name-only search is too limited for a metadata editor and the toolbar aesthetic was wrong; `searchQuery`/`filteredBrowserItems` backend infrastructure preserved for post-v1.0 metadata-aware search (R14)

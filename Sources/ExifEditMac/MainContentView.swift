@@ -1785,6 +1785,7 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
     private let tableView = BrowserListTableView(frame: .zero)
 
     private var isApplyingProgrammaticSelection = false
+    private var isApplyingProgrammaticSort = false
     private var listThumbnailRequestVersion: [URL: Int] = [:]
     private var listThumbnailVersionCounter = 0
     private var lastThumbnailInvalidationToken = UUID()
@@ -1950,7 +1951,16 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
             tableView.selectRowIndexes(selectedIndexes, byExtendingSelection: false)
             isApplyingProgrammaticSelection = false
         }
+        syncSortIndicator()
         updateQuickLookSourceFrameFromCurrentSelection()
+    }
+
+    private func syncSortIndicator() {
+        let expected = NSSortDescriptor(key: model.browserSort.rawValue, ascending: true)
+        guard tableView.sortDescriptors.first != expected else { return }
+        isApplyingProgrammaticSort = true
+        tableView.sortDescriptors = [expected]
+        isApplyingProgrammaticSort = false
     }
 
     private func shouldAdoptTableSelectionIntoModel() -> Bool {
@@ -2023,29 +2033,36 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         nameColumn.minWidth = 60
         nameColumn.width = 300
         nameColumn.resizingMask = [.autoresizingMask, .userResizingMask]
+        nameColumn.sortDescriptorPrototype = NSSortDescriptor(key: AppModel.BrowserSort.name.rawValue, ascending: true)
 
         let createdColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("created"))
         createdColumn.title = "Date Created"
         createdColumn.minWidth = 84
         createdColumn.width = 160
         createdColumn.resizingMask = .userResizingMask
+        createdColumn.sortDescriptorPrototype = NSSortDescriptor(key: AppModel.BrowserSort.created.rawValue, ascending: true)
 
         let sizeColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("size"))
         sizeColumn.title = "Size"
         sizeColumn.minWidth = 64
         sizeColumn.width = 90
         sizeColumn.resizingMask = .userResizingMask
+        sizeColumn.sortDescriptorPrototype = NSSortDescriptor(key: AppModel.BrowserSort.size.rawValue, ascending: true)
 
         let kindColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("kind"))
         kindColumn.title = "Kind"
         kindColumn.minWidth = 84
         kindColumn.width = 120
         kindColumn.resizingMask = .userResizingMask
+        kindColumn.sortDescriptorPrototype = NSSortDescriptor(key: AppModel.BrowserSort.kind.rawValue, ascending: true)
 
         tableView.addTableColumn(nameColumn)
         tableView.addTableColumn(createdColumn)
         tableView.addTableColumn(sizeColumn)
         tableView.addTableColumn(kindColumn)
+
+        // Set initial sort indicator to match persisted model state.
+        tableView.sortDescriptors = [NSSortDescriptor(key: model.browserSort.rawValue, ascending: true)]
 
         scrollView.documentView = tableView
         view.addSubview(scrollView)
@@ -2186,6 +2203,13 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         }
         model.setSelectionFromList(urls, focusedURL: focusedURL)
         updateQuickLookSourceFrameFromCurrentSelection()
+    }
+
+    func tableView(_ tableView: NSTableView, sortDescriptorsDidChange _: [NSSortDescriptor]) {
+        guard !isApplyingProgrammaticSort else { return }
+        guard let key = tableView.sortDescriptors.first?.key,
+              let sort = AppModel.BrowserSort(rawValue: key) else { return }
+        model.browserSort = sort
     }
 
     @objc
