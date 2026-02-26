@@ -4,12 +4,15 @@ All notable changes to Ledger are documented here.
 
 ---
 
-## [0.6.2] — build 55 — 2026-02-26
+## [0.6.2] — build 57 — 2026-02-26
 
 ### Changed
 - Gallery selection ring outset tuned to 5 pt (P9); overlay now anchored directly to the image view rather than the container so it is definitionally concentric; `selectionCornerRadius` constant removed — overlay corner radius derived as `thumbnailCornerRadius + selectionOutset` (single source of truth)
 
 ### Fixed
+- "Publishing changes from within view updates is not allowed" eliminated at startup; root cause was `.onChange(of: selectedSidebarID)` synchronously calling `handleSidebarSelectionChange` → `loadFiles` → `clearLoadedContentState`, which mutated `browserItems` and `filteredBrowserItems` inside the SwiftUI update cycle; deferred with `Task { @MainActor in … }` (B14)
+- NSHostingView reentrant layout warnings eliminated; were a direct downstream consequence of B14 (B15)
+- Inspector Picker invalid-tag `""` warnings eliminated; were a race symptom of B14 where `draftValues` could be mutated mid-render, making Picker selection inconsistent with its options (P24)
 - QuickLook panel now opens centred on screen regardless of which thumbnail triggered it; navigating between images with arrow keys maintains a stable locked height (matching Finder's behaviour), with panel width varying per image aspect ratio; if the panel is already open and the user has dragged it, position is preserved (P10)
 - About panel now shows correct version and build number; `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` removed from target-level build settings in project.pbxproj where they were silently overriding Base.xcconfig (B13)
 - About panel credits now use `smallSystemFontSize` to match the panel's native credits area; was using `systemFontSize` which rendered too large (P20)

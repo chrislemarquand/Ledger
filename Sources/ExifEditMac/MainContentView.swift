@@ -1487,7 +1487,14 @@ struct NavigationSidebarView: View {
             isSidebarFocused = true
         }
         .onChange(of: model.selectedSidebarID) { oldValue, newValue in
-            model.handleSidebarSelectionChange(from: oldValue, to: newValue)
+            // Defer out of the SwiftUI update cycle. Calling handleSidebarSelectionChange
+            // synchronously here causes B14: clearLoadedContentState + loadFiles mutate
+            // @Published properties (browserItems → filteredBrowserItems) from within
+            // the SwiftUI transaction, which triggers "Publishing changes from within
+            // view updates is not allowed" and downstream NSHostingView reentrant layout.
+            Task { @MainActor in
+                model.handleSidebarSelectionChange(from: oldValue, to: newValue)
+            }
         }
     }
 
