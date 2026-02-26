@@ -586,6 +586,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
 
     private func syncInspectorCollapsedState() {
         model.isInspectorCollapsed = inspectorItem.isCollapsed
+        nativeToolbarDelegate?.refreshFromModel()
     }
 
     private func shouldHandleBrowserKeyCommands() -> Bool {
@@ -874,6 +875,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
         private var zoomOutItem: NSToolbarItem?
         private var zoomInItem: NSToolbarItem?
         private var applyChangesItem: NSToolbarItem?
+        private var inspectorToggleItem: NSToolbarItem?
         private var searchItem: NSSearchToolbarItem?
         private var sortItem: NSToolbarItem?
         private var presetsItem: NSToolbarItem?
@@ -1020,12 +1022,15 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
                 return item
             case .toggleInspector:
                 let item = NSToolbarItem(itemIdentifier: itemIdentifier)
-                item.label = "Hide Inspector"
-                item.paletteLabel = "Hide Inspector"
-                item.image = NSImage(systemSymbolName: "sidebar.trailing", accessibilityDescription: "Show or hide inspector")
+                let collapsed = controller.inspectorItem.isCollapsed
+                let label = collapsed ? "Show Inspector" : "Hide Inspector"
+                item.label = label
+                item.paletteLabel = "Toggle Inspector"
+                item.image = NSImage(systemSymbolName: "sidebar.trailing", accessibilityDescription: "Toggle inspector")
                 item.target = controller
                 item.action = #selector(NativeThreePaneSplitViewController.toggleInspectorAction(_:))
-                item.toolTip = "Show or hide inspector"
+                item.toolTip = label
+                inspectorToggleItem = item
                 return item
             case .search:
                 let item = NSSearchToolbarItem(itemIdentifier: itemIdentifier)
@@ -1052,6 +1057,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
             updatePresetsMenu(with: model)
             updateSearch(with: model)
             updateApplyEnabled(with: model)
+            updateInspectorToggle(with: model)
         }
 
         private func updateViewMode(with model: AppModel) {
@@ -1092,6 +1098,12 @@ final class NativeThreePaneSplitViewController: NSSplitViewController {
 
         private func updateApplyEnabled(with model: AppModel) {
             applyChangesItem?.isEnabled = model.canApplyMetadataChanges
+        }
+
+        private func updateInspectorToggle(with model: AppModel) {
+            let label = model.isInspectorCollapsed ? "Show Inspector" : "Hide Inspector"
+            inspectorToggleItem?.label = label
+            inspectorToggleItem?.toolTip = label
         }
 
         func focusSearchField() {
