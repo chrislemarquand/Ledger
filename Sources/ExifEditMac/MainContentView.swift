@@ -2155,6 +2155,7 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
 
         contextMenuTargetURLs = targetURLs
         let menu = NSMenu()
+        menu.autoenablesItems = false
         let openState = model.fileActionState(for: .openInDefaultApp, targetURLs: targetURLs)
         let refreshState = model.fileActionState(for: .refreshMetadata, targetURLs: targetURLs)
         let applyState = model.fileActionState(for: .applyMetadataChanges, targetURLs: targetURLs)
@@ -2884,6 +2885,7 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
         }
 
         let menu = NSMenu()
+        menu.autoenablesItems = false
         menu.addItem(makeItem(openState.title, action: #selector(openFromContextMenu(_:)), symbolName: openState.symbolName, enabled: openState.isEnabled))
         menu.addItem(makeItem("Reveal in Finder", action: #selector(revealInFinderFromContextMenu(_:)), symbolName: "folder", enabled: !contextMenuTargetURLs.isEmpty))
         menu.addItem(.separator())
