@@ -1107,8 +1107,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 .zoomIn,
                 .presetTools,
                 .openFolder,
-                .toggleInspector,
                 .applyChanges,
+                .toggleInspector,
                 .search
             ]
         }

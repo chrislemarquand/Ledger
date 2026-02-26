@@ -66,7 +66,7 @@ Reference items by ID: **B1–B12** bugs · **P1–P23** polish · **N1–N6** n
 
 ### Inspector
 - [x] **P11** ~~Inspector toggle label static~~ — ✅ toolbar label and tooltip now dynamic via `updateInspectorToggle(with:)`. (QA log #6 was stale)
-- [ ] **P12** `Should` **Inspector toggle location in toolbar** — should be the last item before the search field so it sits adjacent to what it controls. Currently the Apply button sits between them. (QA log #17)
+- [x] **P12** ✅ Inspector toggle moved to immediately before the search field; Apply button now precedes it.
 - [ ] **P13** `Should` **Inspector section collapse not instant under Reduce Motion** — same as P4 but for inspector sections. (QA checklist #56)
 - [ ] **P14** `Should` **Inspector dropdown widths inconsistent** — Exposure Program, Flash, and Metering Mode pickers are three different widths. Should all be full-width like the text fields. (QA log #20)
 - [ ] **P15** `Should` **Date / time picker layout** — when a date is set, the picker fills only half the inspector width with a clear button to the right. Needs a more elegant full-width layout. (QA log #21)
