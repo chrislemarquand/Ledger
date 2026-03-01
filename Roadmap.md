@@ -1,6 +1,6 @@
 # Roadmap
 
-Current version: **0.7** (build 103). Target: **v1.0**.
+Current version: **0.7** (build 104). Target: **v1.0**.
 
 Reference items by ID: **B1–B20** bugs · **P1–P24** polish · **N1–N8** native rewrites · **A1–A2** architecture · **R1–R19** post-v1.0 roadmap.
 
@@ -39,7 +39,7 @@ Reference items by ID: **B1–B20** bugs · **P1–P24** polish · **N1–N8** n
 - [ ] **B20** `Blocker` **Gallery thumbnails glitch/reload repeatedly after folder open** — attempted thumbnail pipeline refactor/regression work (commits `3ca1e25` through `888698b`) was fully reverted on 2026-03-01 after introducing beachball/hitching and repeated thumbnail redraw in gallery. Issue remains open and intentionally deferred for a clean native-first redesign (no patch layering).
 - [x] **B20a** `Must` **Thumbnail rewrite Step 1 — baseline commit** — completed in commit `26536c5` (`Baseline: track thumbnail rewrite plan and deferred UX list`) as the branchpoint before rewrite work.
 - [x] **B20b** `Must` **Thumbnail rewrite Step 2 — single native thumbnail service** — completed: extracted thumbnail cache/request broker/generation strategy into `ThumbnailService` and switched existing list/gallery wrappers to delegate to the shared service.
-- [ ] **B20c** `Must` **Thumbnail rewrite Step 3 — AppKit cell-owned lifecycle** — move thumbnail request ownership to `NSCollectionViewItem` / `NSTableCellView` reuse lifecycle (`prepareForReuse` cancellation) to eliminate controller-level reload loops.
+- [ ] **B20c** `Must` **Thumbnail rewrite Step 3 — AppKit cell-owned lifecycle** — in progress: gallery side migrated so `AppKitGalleryItem` now owns thumbnail request/cancel lifecycle with `prepareForReuse` cancellation; list-side lifecycle alignment remains.
 - [ ] **B20d** `Should` **Thumbnail rewrite Step 4 — native selection baseline** — start with Finder-like tile-level selection highlight in gallery (no custom image-hugging ring in v1 rewrite baseline).
 - [ ] **B20e** `Must` **Thumbnail rewrite Step 5 — unify inspector preview pipeline** — route inspector preview loads through the same thumbnail service with policy-based sizing/priority.
 
