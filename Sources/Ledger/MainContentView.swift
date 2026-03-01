@@ -1306,6 +1306,9 @@ struct BrowserView: View {
         if model.selectedSidebarID == nil {
             return .noSelection
         }
+        if model.isFolderContentLoading {
+            return .loading
+        }
         if let error = model.browserEnumerationError {
             return .enumerationError(error.localizedDescription)
         }
