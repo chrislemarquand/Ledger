@@ -8,7 +8,7 @@ All notable changes to Ledger are documented here.
 
 ---
 
-## [0.6.5] — build 75 — 2026-03-01
+## [0.6.5] — build 77 — 2026-03-01
 
 ### Changed
 - **P17** Image menu metadata apply flow split into two actions: selection-scoped apply now shows a dynamic title (`"Apply Metadata Changes to N Image(s)"`) and folder-wide apply is exposed as `"Apply Metadata Changes to Folder"` (mirrors toolbar Apply behavior).
