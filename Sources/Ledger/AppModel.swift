@@ -492,15 +492,9 @@ final class AppModel: ObservableObject {
     @Published private var inspectorPreviewImages: [URL: NSImage] = [:]
     @Published private var inspectorPreviewRenderedSide: [URL: CGFloat] = [:]
     private var mixedTags: Set<EditableTag> = []
-    private var isRevertingSidebarSelection = false
-    private var suppressNextSidebarSelectionChange = false
     /// Set to true the first time selectSidebar(id:) is called, meaning the user
     /// has explicitly chosen a sidebar item (vs. SwiftUI auto-selecting at startup).
     private var hasHadExplicitSidebarSelection = false
-    /// System uptime (seconds since boot) recorded at init. Used to reject stale
-    /// pre-launch events (Dock click, Finder double-click) that are still set as
-    /// NSApp.currentEvent when the SwiftUI List performs its first-render auto-selection.
-    private let initializationUptime = ProcessInfo.processInfo.systemUptime
     private var favoriteItems: [SidebarItem] = []
     private var locationItems: [SidebarItem] = []
     private var recentLocationLastOpenedAtByID: [String: Date] = [:]
@@ -969,9 +963,8 @@ final class AppModel: ObservableObject {
     /// — silently retry the file load now that permission may have been granted.
     ///
     /// Privacy-gated locations (Desktop, Downloads) are skipped until the user has
-    /// explicitly clicked a sidebar item; this prevents a startup race where SwiftUI's
-    /// List auto-selection transiently sets selectedSidebarID before
-    /// handleSidebarSelectionChange can suppress and revert it.
+    /// explicitly clicked a sidebar item; startup/background retries should not probe
+    /// privacy-sensitive locations before explicit user intent.
     func reloadFilesIfBrowserEmpty() {
         guard let item = selectedSidebarItem, browserItems.isEmpty else { return }
         guard !isPrivacySensitiveSidebarKind(item.kind) || hasHadExplicitSidebarSelection else { return }
@@ -1031,27 +1024,16 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func handleSidebarSelectionChange(from oldID: String?, to newID: String?, triggerEvent: NSEvent? = nil) {
-        if suppressNextSidebarSelectionChange {
-            suppressNextSidebarSelectionChange = false
-            return
-        }
-        if isRevertingSidebarSelection {
-            isRevertingSidebarSelection = false
-            return
-        }
+    /// Explicit user-initiated sidebar selection path from the SwiftUI sidebar.
+    /// This bypasses auto-selection suppression heuristics and treats the change
+    /// as intentional click/keyboard navigation.
+    func handleExplicitSidebarSelectionChange(to newID: String?) {
+        let oldID = selectedSidebarID
         guard newID != oldID else { return }
-
-        if shouldSuppressPrivacySensitiveAutoSelection(from: oldID, to: newID, triggerEvent: triggerEvent) {
-            isRevertingSidebarSelection = true
-            selectedSidebarID = oldID
-            return
-        }
 
         if hasUnsavedEdits {
             let shouldDiscard = confirmDiscardUnsavedChanges(for: "switching folders")
             guard shouldDiscard else {
-                isRevertingSidebarSelection = true
                 selectedSidebarID = oldID
                 return
             }
@@ -2809,7 +2791,6 @@ final class AppModel: ObservableObject {
     private func didChooseFolder(_ folderURL: URL) {
         if let item = noteRecentLocation(folderURL, promoteToTopIfExisting: false) {
             if selectedSidebarID != item.id {
-                suppressNextSidebarSelectionChange = true
                 selectedSidebarID = item.id
             }
             loadFiles(for: item.kind)
@@ -3132,32 +3113,6 @@ final class AppModel: ObservableObject {
         case let .favorite(url), let .folder(url), let .mountedVolume(url):
             return isPrivacySensitiveFileSystemURL(url)
         case .pictures:
-            return false
-        }
-    }
-
-    private func shouldSuppressPrivacySensitiveAutoSelection(from oldID: String?, to newID: String?, triggerEvent: NSEvent?) -> Bool {
-        guard oldID == nil, let newID else { return false }
-        guard let candidate = sidebarItems.first(where: { $0.id == newID }) else { return false }
-        guard isPrivacySensitiveSidebarKind(candidate.kind) else { return false }
-        // Reject events that predate app launch (Dock click / Finder double-click that
-        // launched the app). NSEvent.timestamp is seconds since last system boot, as is
-        // ProcessInfo.systemUptime, so they are directly comparable. A stale launch event
-        // will always have timestamp < initializationUptime; a genuine sidebar click will
-        // always have timestamp > initializationUptime.
-        guard let event = triggerEvent, event.timestamp > initializationUptime else {
-            return true
-        }
-        return !isLikelyUserInitiatedSidebarChange(event: event)
-    }
-
-    private func isLikelyUserInitiatedSidebarChange(event: NSEvent?) -> Bool {
-        guard let event else { return false }
-        switch event.type {
-        case .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp,
-             .otherMouseDown, .otherMouseUp, .keyDown, .keyUp:
-            return true
-        default:
             return false
         }
     }

@@ -1,8 +1,8 @@
 # Roadmap
 
-Current version: **0.7.2** (build in `Config/Base.xcconfig`). Target: **v1.0**.
+Current version: **0.7.3** (build in `Config/Base.xcconfig`). Target: **v1.0**.
 
-Reference items by ID: **B1–B23** bugs · **P1–P24** polish · **N1–N11** native rewrites · **A1–A3** architecture · **R1–R20** post-v1.0 roadmap.
+Reference items by ID: **B1–B23** bugs · **P1–P24** polish · **N1–N11** native rewrites · **A1–A10** architecture/stability · **R1–R21** post-v1.0 roadmap.
 
 ID convention: `B#`/`P#`/`N#`/`A#`/`R#` are roadmap item IDs. Backlog severity labels use `S0`/`S1`/`S2` in `v1-bug-backlog.md` to avoid collision with roadmap `P#` polish IDs.
 
@@ -137,6 +137,61 @@ Replace custom implementations with idiomatic SwiftUI / AppKit equivalents.
 - [x] **A2** ~~Sidebar count badge latency~~ — ✅ `warmSidebarImageCounts()` call sites removed in 0.6; counts no longer preloaded on launch, eliminating the flash.
 - [x] **A3** ✅ **Browser center-pane container moved from SwiftUI wrapper to AppKit controller** — replaced `BrowserView` overlay-state wrapper with `BrowserContainerViewController` (`NSViewController`) that owns gallery/list child hosts and loading/empty/error overlays directly in AppKit, removing the SwiftUI structural-identity dependency in the center pane while preserving existing browser behavior.
 
+### Pre-v1.0 SwiftUI/AppKit stabilization plan (authoritative)
+
+Goal: keep SwiftUI sidebar + inspector for v1.0, but make the hybrid shell stable and predictable (no re-entrant update loops, no selection snap-back regressions).
+
+- [x] **A4** ✅ **Boundary ownership contract**
+  - AppKit owns: window/split views, menu validation/injection, pane sizing/collapse, first-responder routing.
+  - SwiftUI owns: sidebar/inspector content rendering only.
+  - AppModel is the sole mutable state authority.
+  - **Acceptance:** contract documented in `Architecture.md` under **Hybrid contract (A4, pre-v1.0 source of truth)** and referenced by this roadmap section.
+
+- [x] **A5** ✅ **One-way state flow at SwiftUI boundaries**
+  - Replace remaining two-way direct bridges that can write back during render.
+  - SwiftUI emits explicit user intent methods to `AppModel`; model pushes state down.
+  - **Acceptance:** no sidebar click/selection snap-back; folder activation stable under rapid repeated clicks.
+  - Implemented: `NavigationSidebarView` now uses local `sidebarSelection` state and forwards user changes through `handleExplicitSidebarSelectionChange(to:)`; legacy two-way sidebar suppression/revert path and stale event heuristics were removed from `AppModel`.
+
+- [x] **A6** ✅ **No synchronous model mutation in SwiftUI update cycle**
+  - Audit `onChange`, `DisclosureGroup` setters, focus callbacks, picker callbacks.
+  - Defer boundary writes (`DispatchQueue.main.async` / `Task { @MainActor ... }`) where required.
+  - **Acceptance:** must-fix warning `Publishing changes from within view updates is not allowed` no longer appears during normal smoke path.
+  - Implemented: sidebar selection intent dispatch deferred from `NavigationSidebarView.onChange`; inspector `DisclosureGroup` section-toggle writes deferred; preset-sheet model presentation bindings (`activePresetEditor`, `isManagePresetsPresented`) deferred through main-actor tasks.
+
+- [x] **A7** ✅ **Remove user-path auto-selection suppression**
+  - Keep privacy/startup auto-selection guards only for non-user/background paths.
+  - Explicit user selection paths must not be reverted by heuristics.
+  - **Acceptance:** selecting Desktop/Downloads/favorites/recents behaves deterministically, including after folder switches.
+  - Implemented: user-driven sidebar path now routes only through `handleExplicitSidebarSelectionChange(to:)`; legacy suppress/revert heuristics were removed from `AppModel`. Privacy-sensitive gating is retained only in startup/background flows (`reloadFilesIfBrowserEmpty`, sidebar count warm policy).
+
+- [x] **A8** ✅ **Targeted observation only in AppKit hosts**
+  - No broad `objectWillChange` observers in split/container hosts.
+  - Use explicit `@Published` subscriptions for toolbar/title/render triggers.
+  - **Acceptance:** no host-wide render storms attributable to broad observation.
+  - Implemented: `NativeThreePaneSplitViewController` now uses explicit `uiRefreshObservers`; `BrowserContainerViewController` now uses explicit `renderObservers`; both pipelines use targeted publishers with `removeDuplicates`.
+
+- [x] **A9** ✅ **No layout-time publish from AppKit callbacks**
+  - Split resize/layout notifications must not synchronously mutate SwiftUI-bound `@Published` state.
+  - Use deferred/coalesced pane-state sync.
+  - **Acceptance:** must-fix warning `NSHostingView is being laid out reentrantly while rendering its SwiftUI content` no longer appears on normal pane resize/toggle flows.
+  - Implemented: all AppKit pane-collapse state publication now routes through deferred/coalesced `schedulePaneStateSync()` (including startup and window-configuration paths); direct `syncSidebarCollapsedState()` / `syncInspectorCollapsedState()` calls were removed from `viewDidLoad`, initial inspector setup, and `configureWindowIfNeeded`, leaving split-resize/toggle flows on the same deferred path.
+
+- [x] **A10** ✅ **Warning gate + smoke checklist freeze**
+  - Add a compact smoke checklist and classify logs:
+    - Must-fix before v1.0:  
+      `Publishing changes from within view updates is not allowed`  
+      `NSHostingView is being laid out reentrantly while rendering its SwiftUI content`
+    - Observe only / framework noise unless user-visible breakage:
+      ICC/profile decode warnings, `CMPhotoJFIFUtilities`, `IOSurface` decode spam.
+  - Add and enforce the **PR architecture checklist** + **Hybrid release smoke checklist** in `Architecture.md`.
+  - **Acceptance:** checklist committed and used as release gate for v1.0 candidates.
+  - Implemented: `Architecture.md` now contains the frozen **Hybrid contract**, explicit **Warning gate**, required **PR architecture checklist**, and **Hybrid release smoke checklist** with must-fail conditions matching the two must-fix warnings above.
+
+Execution rule: complete A4→A10 in order; no sidebar/inspector visual rewrites during this track unless required to satisfy a must-fix warning or broken interaction.
+
+Pre-v1.0 scope guard: **do not** perform large AppKit rewrites of `NavigationSidebarView` or `InspectorView` before v1.0. Priority is hybrid stability (SwiftUI content + AppKit shell working correctly together).
+
 ---
 
 ## Post-v1.0 roadmap
@@ -164,11 +219,12 @@ Current status: repo/project folder rename to `Ledger` is complete, display/bund
 - [ ] **R12** Drag-and-drop metadata export / batch rename.
 ### AppKit migration (iPad target dropped — pure macOS)
 
-- [ ] **R13** **NavigationSidebarView → AppKit** (`NSTableView` flat sidebar) — current SwiftUI `List` has scroll-position instability, unreliable selection binding, and requires notification hacks for focus routing. AppKit would give: stable scroll position, reliable first-responder routing, correct right-side section chevrons with proper collapse/expand animation (resolves P5), and native badge rendering. High value.
-- [ ] **R16** **InspectorView → AppKit** (`NSViewController` + `NSScrollView` + stacked field controls) — the highest-friction SwiftUI component in the app. Current workarounds to eliminate: `inspectorRefreshRevision` UInt64 forced-refresh hack, `suppressNextFocusScrollAnimation` flag, manual edit-session `@State` snapshots (replace with `UndoManager`), per-tag `Binding` creation on every render, and `@FocusState` fighting the AppKit responder chain. High value.
+- [ ] **R13** **NavigationSidebarView → AppKit** (`NSTableView` flat sidebar) — explicitly deferred to post-v1.0 by pre-v1.0 scope guard; keep current SwiftUI sidebar and stabilize hybrid boundary first (A4–A10).
+- [ ] **R16** **InspectorView → AppKit** (`NSViewController` + `NSScrollView` + stacked field controls) — explicitly deferred to post-v1.0 by pre-v1.0 scope guard; keep current SwiftUI inspector and stabilize hybrid boundary first (A4–A10).
 - [ ] **R17** **PresetManagerSheet → AppKit** (`NSTableView` in `NSPanel`) — small SwiftUI `List` with same scroll/selection instability as the sidebar. Natural follow-on after R13; low implementation effort. Medium value.
 - [ ] **R18** **PresetEditorSheet → AppKit** (optional) — modal sheet; scroll stability matters less here. Main benefit would be DatePicker style consistency with Inspector (`.stepperField`), and removing the per-tag `valueBinding(for:)` pattern. Low priority.
 - [ ] **R14** **Search** — expand-to-field toolbar button (like Notes.app on macOS 26) with metadata-aware search: filename, date range, camera/lens, rating, keyword. `searchQuery`/`filteredBrowserItems` infrastructure already in place.
 - [ ] **R15** **Configurable list columns** — show/hide and reorder columns; add EXIF-backed columns (date modified, camera make/model, lens, focal length, ISO, aperture, shutter speed, pixel dimensions). Each new column gets a `BrowserSort` case and `NSSortDescriptor` prototype; sort and header infrastructure from P7 carries forward directly.
 - [ ] **R19** **Optional gallery UX reintroduction pack (post-v1.0)** — reintroduce non-baseline gallery polish one feature at a time: image-hugging selector ring, ring-anchored pending-dot positioning, ring geometry continuity during staged rotate/flip, tile/image transition polish beyond native defaults, and aggressive gallery prefetch heuristics.
 - [ ] **R20** **Toolbar customization/editing support** — support user-configurable toolbar composition/reordering in a future pass (while preserving native AppKit toolbar behavior and validation).
+- [ ] **R21** **Permanent architecture principle: AppKit shell + SwiftUI islands** — keep AppKit as the long-term owner of window/split/menu/focus lifecycle, with SwiftUI used selectively for contained content surfaces. Require explicit model-driven bridges and clear ownership boundaries for any new UI work.

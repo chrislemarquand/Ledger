@@ -105,8 +105,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     private weak var imageMenuForInjection: NSMenu?
     private weak var helpMenuForInjection: NSMenu?
     private var menuTrackingObserver: NSObjectProtocol?
-    private var modelObserver: AnyCancellable?
-    private var statusObserver: AnyCancellable?
+    private var uiRefreshObservers: [AnyCancellable] = []
     private var spacebarMonitor: Any?
     private var browserFocusRequestObserver: NSObjectProtocol?
     private var splitResizeObserver: NSObjectProtocol?
@@ -114,6 +113,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     private var didApplyInitialInspectorVisibility = false
     private var lastWindowTitleText = ""
     private var lastWindowSubtitleText = ""
+    private var isPaneStateSyncScheduled = false
 
     init(model: AppModel) {
         self.model = model
@@ -160,21 +160,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         addSplitViewItem(sidebarItem)
         addSplitViewItem(contentItem)
 
-        modelObserver = model.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                DispatchQueue.main.async {
-                    self?.nativeToolbarDelegate?.refreshFromModel()
-                    self?.refreshWindowTitleSubtitleIfNeeded()
-                }
-            }
-
-        statusObserver = model.$statusMessage
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.nativeToolbarDelegate?.refreshFromModel()
-                self?.refreshWindowTitleSubtitleIfNeeded()
-            }
+        installUIRefreshObservers()
     }
 
     @available(*, unavailable)
@@ -197,6 +183,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     }
 
     private func teardownObserversAndMonitors() {
+        uiRefreshObservers.removeAll()
         if let spacebarMonitor {
             NSEvent.removeMonitor(spacebarMonitor)
             self.spacebarMonitor = nil
@@ -211,6 +198,38 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         }
     }
 
+    private func installUIRefreshObservers() {
+        func observe<Value: Equatable>(_ publisher: Published<Value>.Publisher) {
+            publisher
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in
+                    DispatchQueue.main.async { [weak self] in
+                        self?.nativeToolbarDelegate?.refreshFromModel()
+                        self?.refreshWindowTitleSubtitleIfNeeded()
+                    }
+                }
+                .store(in: &uiRefreshObservers)
+        }
+
+        observe(model.$selectedSidebarID)
+        observe(model.$selectedFileURLs)
+        observe(model.$browserItems)
+        observe(model.$browserViewMode)
+        observe(model.$browserSort)
+        observe(model.$browserSortAscending)
+        observe(model.$galleryGridLevel)
+        observe(model.$isApplyingMetadata)
+        observe(model.$applyMetadataCompleted)
+        observe(model.$applyMetadataTotal)
+        observe(model.$isFolderMetadataLoading)
+        observe(model.$folderMetadataLoadCompleted)
+        observe(model.$folderMetadataLoadTotal)
+        observe(model.$statusMessage)
+        observe(model.$isSidebarCollapsed)
+        observe(model.$isInspectorCollapsed)
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         resetSplitAutosaveStateIfNeeded()
@@ -220,7 +239,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         contentSplitController.splitView.isVertical = true
         contentSplitController.splitView.dividerStyle = .thin
         contentSplitController.splitView.autosaveName = NSSplitView.AutosaveName(Self.contentSplitAutosaveName)
-        syncSidebarCollapsedState()
+        schedulePaneStateSync()
         installSplitResizeObserverIfNeeded()
     }
 
@@ -274,7 +293,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         guard !didApplyInitialInspectorVisibility else { return }
         didApplyInitialInspectorVisibility = true
         inspectorItem.isCollapsed = false
-        syncInspectorCollapsedState()
+        schedulePaneStateSync()
     }
 
     private func hasPersistedContentSplitLayout() -> Bool {
@@ -305,11 +324,10 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         if sidebarItem.isCollapsed {
             sidebarItem.isCollapsed = false
         }
-        syncSidebarCollapsedState()
+        schedulePaneStateSync()
         refreshWindowTitleSubtitleIfNeeded()
         installSpacebarQuickLookMonitorIfNeeded()
         installBrowserFocusRequestObserverIfNeeded()
-        syncInspectorCollapsedState()
         DispatchQueue.main.async { [weak self] in
             self?.focusBrowserPane()
             self?.injectAppMenuIfNeeded()
@@ -500,8 +518,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.syncSidebarCollapsedState()
-                self?.syncInspectorCollapsedState()
+                self?.schedulePaneStateSync()
             }
         }
     }
@@ -518,7 +535,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     func toggleInspectorAction(_: Any?) {
         let previousResponder = view.window?.firstResponder
         inspectorItem.animator().isCollapsed.toggle()
-        syncInspectorCollapsedState()
+        schedulePaneStateSync()
 
         DispatchQueue.main.async { [weak self] in
             guard let self, let window = self.view.window else { return }
@@ -529,13 +546,30 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     }
 
     private func syncSidebarCollapsedState() {
-        model.isSidebarCollapsed = sidebarItem.isCollapsed
+        let collapsed = sidebarItem.isCollapsed
+        if model.isSidebarCollapsed != collapsed {
+            model.isSidebarCollapsed = collapsed
+        }
         nativeToolbarDelegate?.refreshFromModel()
     }
 
     private func syncInspectorCollapsedState() {
-        model.isInspectorCollapsed = inspectorItem.isCollapsed
+        let collapsed = inspectorItem.isCollapsed
+        if model.isInspectorCollapsed != collapsed {
+            model.isInspectorCollapsed = collapsed
+        }
         nativeToolbarDelegate?.refreshFromModel()
+    }
+
+    private func schedulePaneStateSync() {
+        guard !isPaneStateSyncScheduled else { return }
+        isPaneStateSyncScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isPaneStateSyncScheduled = false
+            self.syncSidebarCollapsedState()
+            self.syncInspectorCollapsedState()
+        }
     }
 
     private enum MenuTag {
@@ -931,6 +965,9 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             let item = NSMenuItem(title: app.name, action: #selector(openSelectionWithSpecificAppAction(_:)), keyEquivalent: "")
             item.representedObject = app.url
             item.target = self
+            let appIcon = NSWorkspace.shared.icon(forFile: app.url.path)
+            appIcon.size = NSSize(width: 16, height: 16)
+            item.image = appIcon
             submenu.addItem(item)
         }
         return submenu
@@ -939,16 +976,25 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     private func rebuildEditMenu(_ menu: NSMenu) {
         ensureEditMenuBaseline(in: menu)
 
+        menu.items.first(where: { $0.action == #selector(UndoManager.undo) })?.image =
+            NSImage(systemSymbolName: "arrow.uturn.backward", accessibilityDescription: nil)
+        menu.items.first(where: { $0.action == #selector(UndoManager.redo) })?.image =
+            NSImage(systemSymbolName: "arrow.uturn.forward", accessibilityDescription: nil)
+
         for item in menu.items where item.tag == MenuTag.editRotate || item.tag == MenuTag.editFlip {
             menu.removeItem(item)
         }
-        while let duplicateSeparator = menu.items.first(where: { $0.isSeparatorItem }) {
-            let index = menu.index(of: duplicateSeparator)
-            if index + 1 < menu.items.count, menu.items[index + 1].isSeparatorItem {
+        // Keep separator structure stable across repeated menuWillOpen rebuilds.
+        for index in stride(from: menu.items.count - 1, through: 1, by: -1) {
+            if menu.items[index].isSeparatorItem && menu.items[index - 1].isSeparatorItem {
                 menu.removeItem(at: index)
-            } else {
-                break
             }
+        }
+        while let first = menu.items.first, first.isSeparatorItem {
+            menu.removeItem(at: 0)
+        }
+        while let last = menu.items.last, last.isSeparatorItem {
+            menu.removeItem(at: menu.items.count - 1)
         }
 
         let rotateItem = NSMenuItem(title: "Rotate", action: #selector(rotateSelectionMenuAction(_:)), keyEquivalent: "r")
@@ -969,6 +1015,11 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         menu.insertItem(rotateItem, at: insertIndex)
         insertIndex += 1
         menu.insertItem(flipItem, at: insertIndex)
+
+        // Ensure no accidental trailing divider remains at the bottom.
+        while let last = menu.items.last, last.isSeparatorItem {
+            menu.removeItem(at: menu.items.count - 1)
+        }
     }
 
     private func ensureEditMenuBaseline(in menu: NSMenu) {
@@ -1072,6 +1123,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         menu.addItem(.separator())
 
         let presetsItem = NSMenuItem(title: "Presets", action: nil, keyEquivalent: "")
+        presetsItem.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: nil)
         presetsItem.submenu = makePresetsSubmenu()
         menu.addItem(presetsItem)
     }
@@ -1986,7 +2038,7 @@ final class BrowserContainerViewController: NSViewController {
     private let galleryController: BrowserGalleryViewController
     private let listController: BrowserListViewController
     private var overlayView: NSView?
-    private var modelObserver: AnyCancellable?
+    private var renderObservers: [AnyCancellable] = []
     private var lastOverlayState: OverlayState = .none
     private var lastRenderedMode: AppModel.BrowserViewMode?
 
@@ -2011,14 +2063,40 @@ final class BrowserContainerViewController: NSViewController {
         installChild(galleryController)
         installChild(listController)
         applyBrowserModeIfNeeded(force: true)
-        modelObserver = model.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                DispatchQueue.main.async { [weak self] in
-                    self?.render()
-                }
-            }
+        installRenderObservers()
         render()
+    }
+
+    private func installRenderObservers() {
+        func observe<P: Publisher>(_ publisher: P) where P.Output: Equatable, P.Failure == Never {
+            publisher
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in
+                    DispatchQueue.main.async { [weak self] in
+                        self?.render()
+                    }
+                }
+                .store(in: &renderObservers)
+        }
+
+        observe(model.$browserViewMode)
+        observe(model.$filteredBrowserItems)
+        observe(model.$browserItems)
+        observe(model.$selectedFileURLs)
+        observe(model.$selectedSidebarID)
+        observe(model.$browserEnumerationError.map { $0?.localizedDescription ?? "" }.eraseToAnyPublisher())
+        observe(model.$isFolderContentLoading)
+        observe(model.$isFolderMetadataLoading)
+        observe(model.$browserThumbnailInvalidationToken)
+        observe(model.$stagedOpsDisplayToken)
+        observe(model.$browserSort)
+        observe(model.$browserSortAscending)
+    }
+
+    override func viewWillDisappear() {
+        super.viewWillDisappear()
+        renderObservers.removeAll()
     }
 
     private func installChild(_ child: NSViewController) {

@@ -11,6 +11,20 @@ All notable changes to Ledger are documented here.
 
 ---
 
+## [0.7.3] — build 141 — 2026-03-01
+
+### Fixed
+- Completed pre-v1.0 hybrid stabilization track **A4–A10**: explicit AppKit/SwiftUI ownership contract, one-way boundary flow, deferred boundary writes, user-selection path cleanup, targeted AppKit observation, deferred/coalesced pane-state publication, and warning-gate smoke-checklist freeze.
+- Edit menu now applies SF Symbols to **Undo** (`arrow.uturn.backward`) and **Redo** (`arrow.uturn.forward`) for visual consistency with other menu commands.
+- Edit-menu rebuild no longer accumulates trailing separator lines when the menu is opened repeatedly; separator normalization is now idempotent.
+
+### Changed
+- Image menu **Presets** item now uses the same symbol as the presets toolbar control (`slider.horizontal.3`) for consistent command identity across surfaces.
+- File > Open With submenu now shows each app's native icon next to its menu item.
+- Marketing version bumped from `0.7.2` to `0.7.3`.
+
+---
+
 ## [0.7.2] — build 131 — 2026-03-01
 
 ### Fixed

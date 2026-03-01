@@ -71,7 +71,6 @@ struct InspectorView: View {
         formatter.countStyle = .file
         return formatter
     }()
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var focusedTagID: String?
     @State private var editSessionSnapshots: [String: AppModel.EditSessionSnapshot] = [:]
     @State private var activeEditTagID: String?
@@ -128,9 +127,9 @@ struct InspectorView: View {
                             isExpanded: Binding(
                                 get: { !model.isInspectorSectionCollapsed("Preview") },
                                 set: { _ in
-                                    var t = Transaction(animation: appAnimation())
-                                    if reduceMotion { t.disablesAnimations = true }
-                                    withTransaction(t) { model.toggleInspectorSection("Preview") }
+                                    DispatchQueue.main.async {
+                                        model.toggleInspectorSection("Preview")
+                                    }
                                 }
                             )
                         ) {
@@ -196,9 +195,9 @@ struct InspectorView: View {
                             isExpanded: Binding(
                                 get: { !model.isInspectorSectionCollapsed(grouped.section) },
                                 set: { _ in
-                                    var t = Transaction(animation: appAnimation())
-                                    if reduceMotion { t.disablesAnimations = true }
-                                    withTransaction(t) { model.toggleInspectorSection(grouped.section) }
+                                    DispatchQueue.main.async {
+                                        model.toggleInspectorSection(grouped.section)
+                                    }
                                 }
                             )
                         ) {

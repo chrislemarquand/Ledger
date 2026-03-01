@@ -167,6 +167,95 @@ The browser views (`BrowserListView`, `BrowserGalleryView`) are `NSViewControlle
 
 The purely SwiftUI views (sidebar, inspector, preset sheets) are hosted in `NSHostingController` instances. They observe `AppModel` via `@ObservedObject`.
 
+### Permanent design principle (post-v1.0)
+
+Ledger follows an **AppKit shell + SwiftUI islands** architecture.
+
+- AppKit remains the owner of:
+  - window lifecycle/state restoration policy
+  - split layout and pane geometry/collapse
+  - menu and toolbar command lifecycle/validation
+  - responder chain and keyboard focus routing
+- SwiftUI is used selectively for contained feature surfaces (for example sidebar/inspector content), hosted inside AppKit.
+- `AppModel` remains the single state authority across both layers.
+- Cross-layer interactions must use explicit intent methods and targeted state observation, not broad invalidation or implicit ownership overlap.
+
+### Hybrid contract (A4, pre-v1.0 source of truth)
+
+This section is the authoritative contract for the v1.0 hybrid architecture (Roadmap A4–A10). New UI work must follow these rules.
+
+#### Ownership
+
+- AppKit owns:
+  - window lifecycle and restoration policy
+  - split-view geometry/collapse state
+  - menu construction/injection/validation
+  - first-responder routing and keyboard command dispatch
+- SwiftUI owns:
+  - sidebar and inspector content rendering only
+  - local view interaction state that does not define app truth
+- `AppModel` owns:
+  - all mutable app state (`@Published`) and side-effecting operations
+
+#### State-flow rules
+
+- Boundary direction is one-way by default: `AppModel` -> SwiftUI/AppKit render state.
+- User intents from SwiftUI/AppKit call explicit `AppModel` methods.
+- Do not rely on implicit two-way bindings for cross-boundary app state when a direct intent method exists.
+
+#### Update-cycle safety rules
+
+- Never synchronously mutate `@Published` from SwiftUI update callbacks that can run inside render/layout (`onChange`, `DisclosureGroup` setters, focus callbacks, picker callbacks).
+- When a boundary callback must update model state, defer to next runloop (`DispatchQueue.main.async` or `Task { @MainActor ... }`).
+- AppKit layout/resize notifications must not synchronously write SwiftUI-observed model state; use deferred/coalesced sync.
+
+#### Observation rules
+
+- AppKit host/controllers must not subscribe to broad `model.objectWillChange`.
+- Observe only specific `@Published` properties required by that controller.
+- Coalesce redundant updates (`removeDuplicates`) before triggering render/title/toolbar refresh work.
+
+#### Warning gate (must-fix pre-v1.0)
+
+- Must not occur on normal smoke path:
+  - `Publishing changes from within view updates is not allowed`
+  - `NSHostingView is being laid out reentrantly while rendering its SwiftUI content`
+- Framework-noise warnings (ICC/CMPhoto/IOSurface) are tracked separately unless tied to user-visible breakage.
+
+#### PR architecture checklist (required for UI changes)
+
+Before merging any UI-facing change, verify and record:
+
+- Shell ownership unchanged:
+  - no new SwiftUI ownership of window/split/menu/focus concerns
+- Boundary flow is explicit:
+  - user action -> explicit `AppModel` intent method
+  - no new implicit two-way cross-layer binding loops
+- Update-cycle safety:
+  - no synchronous `@Published` writes from SwiftUI update/layout callbacks
+  - layout/resize notifications do not synchronously publish SwiftUI-observed state
+- Observation scope:
+  - no new broad `objectWillChange` subscriptions in AppKit hosts
+  - targeted publishers with `removeDuplicates` where appropriate
+- Warning gate check:
+  - normal smoke path does not emit must-fix warnings listed above
+
+#### Hybrid release smoke checklist (v1.0 gate)
+
+Run this path on release candidates:
+
+1. Launch app to default window.
+2. Click sidebar folder/source (including privacy-sensitive entries where applicable).
+3. Click between thumbnails/list rows rapidly; verify selection remains stable.
+4. Switch to a different folder; verify browser repopulates and selection state is valid.
+5. Toggle inspector and sidebar; resize panes; verify no re-entrant warning.
+6. Edit metadata field in inspector and Apply; verify browser + inspector refresh coherently.
+7. Repeat steps 2–6 once more after view-mode switch (gallery <-> list).
+
+Must-fail conditions:
+- `Publishing changes from within view updates is not allowed`
+- `NSHostingView is being laid out reentrantly while rendering its SwiftUI content`
+
 Known friction areas (candidates for future AppKit rewrite — see ROADMAP R13, R16–R18):
 - `InspectorView`: `inspectorRefreshRevision` UInt64 hack forces refreshes; `suppressNextFocusScrollAnimation` flag; manual edit-session `@State` snapshots instead of `UndoManager`
 - `NavigationSidebarView`: SwiftUI `List` scroll-position instability; notification-based focus routing

@@ -5,12 +5,14 @@ struct NavigationSidebarView: View {
     @ObservedObject var model: AppModel
     @State private var collapsedSections: Set<String> = []
     @State private var hoveredSection: String?
+    @State private var sidebarSelection: String?
+    @State private var isApplyingModelSelection = false
     @Environment(\.controlActiveState) private var controlActiveState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var isSidebarFocused: Bool
 
     var body: some View {
-        List(selection: $model.selectedSidebarID) {
+        List(selection: $sidebarSelection) {
             ForEach(model.sidebarSectionOrder, id: \.self) { section in
                 let sectionItems = model.sidebarItems.filter { $0.section == section }
                 if !sectionItems.isEmpty {
@@ -49,19 +51,23 @@ struct NavigationSidebarView: View {
         .onReceive(NotificationCenter.default.publisher(for: .sidebarDidRequestFocus)) { _ in
             isSidebarFocused = true
         }
-        .onChange(of: model.selectedSidebarID) { oldValue, newValue in
-            // Capture the triggering event synchronously while it is still current.
-            // NSApp.currentEvent will be nil or stale by the time the deferred Task runs,
-            // breaking the isLikelyUserInitiatedSidebarChange() check (causes Desktop /
-            // Downloads to flicker and revert on user click).
-            let triggerEvent = NSApp.currentEvent
-            // Defer out of the SwiftUI update cycle. Calling handleSidebarSelectionChange
-            // synchronously here causes B14: clearLoadedContentState + loadFiles mutate
-            // @Published properties (browserItems → filteredBrowserItems) from within
-            // the SwiftUI transaction, which triggers "Publishing changes from within
-            // view updates is not allowed" and downstream NSHostingView reentrant layout.
-            Task { @MainActor in
-                model.handleSidebarSelectionChange(from: oldValue, to: newValue, triggerEvent: triggerEvent)
+        .onAppear {
+            sidebarSelection = model.selectedSidebarID
+        }
+        .onChange(of: model.selectedSidebarID) { _, newValue in
+            guard sidebarSelection != newValue else { return }
+            isApplyingModelSelection = true
+            sidebarSelection = newValue
+            DispatchQueue.main.async {
+                isApplyingModelSelection = false
+            }
+        }
+        .onChange(of: sidebarSelection) { oldValue, newValue in
+            guard !isApplyingModelSelection else { return }
+            guard oldValue != newValue else { return }
+            // Defer out of the SwiftUI update cycle to avoid re-entrant publish warnings.
+            DispatchQueue.main.async {
+                model.handleExplicitSidebarSelectionChange(to: newValue)
             }
         }
     }
@@ -92,7 +98,7 @@ struct NavigationSidebarView: View {
 
     @ViewBuilder
     private func sidebarRow(_ item: AppModel.SidebarItem) -> some View {
-        let isSelected = model.selectedSidebarID == item.id
+        let isSelected = sidebarSelection == item.id
         let isInactiveSelected = isSelected && !isSidebarFocused
         let row = HStack(spacing: UIMetrics.Sidebar.rowSpacing) {
             Image(systemName: icon(for: item.kind))
