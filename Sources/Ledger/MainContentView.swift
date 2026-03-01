@@ -1514,6 +1514,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         private weak var controller: NativeThreePaneSplitViewController?
 
         private var viewModeControl: NSSegmentedControl?
+        private var loadingItem: NSToolbarItem?
+        private var loadingSpinner: NSProgressIndicator?
         private var zoomOutItem: NSToolbarItem?
         private var zoomInItem: NSToolbarItem?
         private var applyChangesItem: NSToolbarItem?
@@ -1534,6 +1536,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 .openFolder,
                 .toggleSidebar,
                 .sidebarTrackingSeparator,
+                .browserLoading,
                 .viewMode,
                 .sort,
                 .zoomOut,
@@ -1552,6 +1555,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 .openFolder,
                 .toggleSidebar,
                 .sidebarTrackingSeparator,
+                .browserLoading,
                 .viewMode,
                 .sort,
                 .zoomOut,
@@ -1608,6 +1612,33 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 item.view = control
                 item.toolTip = "Switch browser view"
                 viewModeControl = control
+                return item
+            case .browserLoading:
+                let spinner = NSProgressIndicator(frame: .zero)
+                spinner.style = .spinning
+                spinner.controlSize = .small
+                spinner.translatesAutoresizingMaskIntoConstraints = false
+                spinner.isDisplayedWhenStopped = false
+
+                let container = NSView(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
+                container.translatesAutoresizingMaskIntoConstraints = false
+                container.addSubview(spinner)
+                NSLayoutConstraint.activate([
+                    container.widthAnchor.constraint(equalToConstant: 16),
+                    container.heightAnchor.constraint(equalToConstant: 16),
+                    spinner.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+                    spinner.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+                ])
+
+                let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+                item.label = "Loading"
+                item.paletteLabel = "Loading"
+                item.view = container
+                item.isBordered = false
+                item.visibilityPriority = .low
+                loadingItem = item
+                loadingSpinner = spinner
+                updateLoadingIndicator(with: controller.model)
                 return item
             case .zoomOut:
                 let item = NSToolbarItem(itemIdentifier: itemIdentifier)
@@ -1690,6 +1721,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             guard let controller else { return }
             let model = controller.model
             updateViewMode(with: model)
+            updateLoadingIndicator(with: model)
             updateZoom(with: model)
             updateSortMenu(with: model)
             updatePresetsMenu(with: model)
@@ -1699,6 +1731,17 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
         private func updateViewMode(with model: AppModel) {
             viewModeControl?.selectedSegment = model.browserViewMode == .gallery ? 0 : 1
+        }
+
+        private func updateLoadingIndicator(with model: AppModel) {
+            let isLoading = model.isFolderContentLoading || model.isFolderMetadataLoading
+            loadingItem?.isEnabled = isLoading
+            loadingItem?.view?.isHidden = !isLoading
+            if isLoading {
+                loadingSpinner?.startAnimation(nil)
+            } else {
+                loadingSpinner?.stopAnimation(nil)
+            }
         }
 
         private func updateZoom(with model: AppModel) {
@@ -1815,6 +1858,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 }
 
 private extension NSToolbarItem.Identifier {
+    static let browserLoading = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.BrowserLoading")
     static let viewMode = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ViewMode")
     static let sort = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.Sort")
     static let presetTools = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.PresetTools")
@@ -1841,7 +1885,7 @@ final class BrowserContainerViewController: NSViewController {
     private let model: AppModel
     private let galleryController: BrowserGalleryViewController
     private let listController: BrowserListViewController
-    private var overlayController: NSHostingController<AnyView>?
+    private var overlayView: NSView?
     private var modelObserver: AnyCancellable?
     private var lastOverlayState: OverlayState = .none
     private var lastRenderedMode: AppModel.BrowserViewMode?
@@ -1937,127 +1981,121 @@ final class BrowserContainerViewController: NSViewController {
     }
 
     private func applyOverlay(_ state: OverlayState) {
-        overlayController?.view.removeFromSuperview()
-        overlayController?.removeFromParent()
-        overlayController = nil
+        overlayView?.removeFromSuperview()
+        overlayView = nil
 
         guard state != .none else { return }
 
-        let controller = NSHostingController(rootView: overlayView(for: state))
-        addChild(controller)
-        controller.view.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(controller.view)
+        let nextOverlay = makeOverlayView(for: state)
+        nextOverlay.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(nextOverlay)
         NSLayoutConstraint.activate([
-            controller.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            controller.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            controller.view.topAnchor.constraint(equalTo: view.topAnchor),
-            controller.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            nextOverlay.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            nextOverlay.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            nextOverlay.topAnchor.constraint(equalTo: view.topAnchor),
+            nextOverlay.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
-        overlayController = controller
+        overlayView = nextOverlay
     }
 
-    private func overlayView(for state: OverlayState) -> AnyView {
+    private func makeOverlayView(for state: OverlayState) -> NSView {
         switch state {
         case .none:
-            return AnyView(EmptyView())
+            return NSView(frame: .zero)
         case .loading:
-            return AnyView(BrowserLoadingPlaceholderView(mode: model.browserViewMode))
+            return makeLoadingOverlayView()
         case .noSelection:
-            return AnyView(
-                ContentUnavailableView(
-                    "No Folder Selected",
-                    systemImage: "folder",
-                    description: Text("Open a folder from the toolbar to browse and edit image metadata.")
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(nsColor: .windowBackgroundColor))
+            return makeUnavailableOverlayView(
+                title: "No Folder Selected",
+                symbolName: "folder",
+                message: "Open a folder from the toolbar to browse and edit image metadata."
             )
         case let .enumerationError(message):
-            return AnyView(
-                ContentUnavailableView(
-                    "Folder Unavailable",
-                    systemImage: "lock.fill",
-                    description: Text(message)
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(nsColor: .windowBackgroundColor))
+            return makeUnavailableOverlayView(
+                title: "Folder Unavailable",
+                symbolName: "lock.fill",
+                message: message
             )
         case .emptyFolder:
-            return AnyView(
-                ContentUnavailableView(
-                    "No Supported Images",
-                    systemImage: "photo.on.rectangle.angled",
-                    description: Text("This folder contains no image files supported by \(AppBrand.displayName).")
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(nsColor: .windowBackgroundColor))
+            return makeUnavailableOverlayView(
+                title: "No Supported Images",
+                symbolName: "photo.on.rectangle.angled",
+                message: "This folder contains no image files supported by \(AppBrand.displayName)."
             )
         case .noResults:
-            return AnyView(
-                ContentUnavailableView(
-                    "No Results",
-                    systemImage: "magnifyingglass",
-                    description: Text("Try a different search term.")
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(nsColor: .windowBackgroundColor))
+            return makeUnavailableOverlayView(
+                title: "No Results",
+                symbolName: "magnifyingglass",
+                message: "Try a different search term."
             )
         }
     }
-}
 
-private struct BrowserLoadingPlaceholderView: View {
-    let mode: AppModel.BrowserViewMode
+    private func makeLoadingOverlayView() -> NSView {
+        let container = NSView(frame: .zero)
+        container.wantsLayer = true
+        container.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
 
-    var body: some View {
-        Group {
-            if mode == .list {
-                VStack(spacing: 10) {
-                    ForEach(0 ..< 10, id: \.self) { _ in
-                        HStack(spacing: 10) {
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(.quaternary.opacity(0.42))
-                                .frame(width: 16, height: 16)
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(.quaternary.opacity(0.38))
-                                .frame(height: 12)
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(.quaternary.opacity(0.3))
-                                .frame(width: 54, height: 12)
-                        }
-                    }
-                }
-                .padding(.horizontal, 18)
-                .padding(.top, 70)
-            } else {
-                GeometryReader { proxy in
-                    let columns = 4
-                    let spacing: CGFloat = 14
-                    let horizontalPadding: CGFloat = 18
-                    let usableWidth = max(1, proxy.size.width - (horizontalPadding * 2) - (CGFloat(columns - 1) * spacing))
-                    let side = floor(usableWidth / CGFloat(columns))
+        let spinner = NSProgressIndicator(frame: .zero)
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        spinner.style = .spinning
+        spinner.controlSize = .regular
+        spinner.startAnimation(nil)
+        container.addSubview(spinner)
 
-                    VStack(alignment: .leading, spacing: spacing) {
-                        ForEach(0 ..< 3, id: \.self) { _ in
-                            HStack(spacing: spacing) {
-                                ForEach(0 ..< columns, id: \.self) { _ in
-                                    VStack(spacing: 6) {
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .fill(.quaternary.opacity(0.35))
-                                            .frame(width: side, height: side)
-                                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                            .fill(.quaternary.opacity(0.3))
-                                            .frame(width: side * 0.68, height: 12)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    .padding(.top, 74)
-                    .padding(.horizontal, horizontalPadding)
-                }
-            }
-        }
-        .allowsHitTesting(false)
+        let titleLabel = NSTextField(labelWithString: "Loading…")
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+        titleLabel.textColor = .labelColor
+        container.addSubview(titleLabel)
+
+        NSLayoutConstraint.activate([
+            spinner.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            spinner.centerYAnchor.constraint(equalTo: container.centerYAnchor, constant: -10),
+            titleLabel.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            titleLabel.topAnchor.constraint(equalTo: spinner.bottomAnchor, constant: 10),
+        ])
+        return container
+    }
+
+    private func makeUnavailableOverlayView(title: String, symbolName: String, message: String) -> NSView {
+        let container = NSView(frame: .zero)
+        container.wantsLayer = true
+        container.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+
+        let stack = NSStackView()
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 10
+        container.addSubview(stack)
+
+        let imageView = NSImageView(frame: .zero)
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        imageView.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
+        imageView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 30, weight: .regular)
+        imageView.contentTintColor = .secondaryLabelColor
+        imageView.setContentCompressionResistancePriority(.required, for: .vertical)
+        stack.addArrangedSubview(imageView)
+
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = .systemFont(ofSize: 20, weight: .semibold)
+        titleLabel.textColor = .labelColor
+        titleLabel.alignment = .center
+        stack.addArrangedSubview(titleLabel)
+
+        let messageLabel = NSTextField(wrappingLabelWithString: message)
+        messageLabel.font = .systemFont(ofSize: NSFont.systemFontSize)
+        messageLabel.textColor = .secondaryLabelColor
+        messageLabel.alignment = .center
+        messageLabel.maximumNumberOfLines = 3
+        stack.addArrangedSubview(messageLabel)
+
+        NSLayoutConstraint.activate([
+            stack.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            messageLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 460),
+        ])
+        return container
     }
 }
