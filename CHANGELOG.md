@@ -6,6 +6,10 @@ All notable changes to Ledger are documented here.
 
 ## [Unreleased]
 
+---
+
+## [0.6.6] — build 85 — 2026-03-01
+
 ### Added
 - Roadmap polish item **P26** added to formalize command-scope rules: selection-only image actions, clear separation of folder-wide actions using macOS menu conventions, and context-menu actions constrained to the selected/right-click target files.
 - Exported editable menu/action map to `output/menu_hierarchy_export.yaml` for planning command-scope and menu-layout refinements.
@@ -13,9 +17,6 @@ All notable changes to Ledger are documented here.
 
 ### Fixed
 - **B19** Desktop/Downloads TCC prompt regression on app startup: replaced scattered guards with a centralized startup privacy-access policy. Launch/background paths now avoid filesystem validation for privacy-sensitive favorites/recents, and privacy-sensitive sidebar counts load only after explicit user selection of that exact item. Counts remain blank on app open.
-
----
-
 ## [0.6.5] — build 84 — 2026-03-01
 
 ### Changed
