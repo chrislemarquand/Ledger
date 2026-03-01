@@ -782,6 +782,7 @@ private final class AppKitGalleryLayout: NSCollectionViewFlowLayout {
 
 private final class AppKitGalleryItem: NSCollectionViewItem {
     static let reuseIdentifier = NSUserInterfaceItemIdentifier("AppKitGalleryItem")
+    private let imageInset: CGFloat = 4
 
     private let selectionBackgroundView = NSView(frame: .zero)
     let thumbnailImageView = NSImageView(frame: .zero)
@@ -1014,6 +1015,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         fallbackImageSize: CGSize?,
         in side: CGFloat
     ) -> CGSize {
+        let availableSide = max(1, floor(side - imageInset * 2))
         let aspect: CGFloat
         // Prefer rendered image dimensions so layout tracks displayed content.
         if let fallbackImageSize, fallbackImageSize.width > 0, fallbackImageSize.height > 0 {
@@ -1025,12 +1027,12 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         }
 
         if aspect >= 1 {
-            let width = max(1, floor(side))
-            let height = max(1, floor(side / aspect))
+            let width = max(1, floor(availableSide))
+            let height = max(1, floor(availableSide / aspect))
             return CGSize(width: width, height: height)
         } else {
-            let width = max(1, floor(side * aspect))
-            let height = max(1, floor(side))
+            let width = max(1, floor(availableSide * aspect))
+            let height = max(1, floor(availableSide))
             return CGSize(width: width, height: height)
         }
     }

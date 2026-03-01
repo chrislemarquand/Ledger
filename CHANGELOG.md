@@ -15,6 +15,7 @@ All notable changes to Ledger are documented here.
 - Thumbnail rewrite step **B20d** completed: gallery selection now uses a native tile-level highlight baseline (Finder-style) and no longer uses the custom image-hugging selection ring.
 - Gallery selection highlight now uses a consistent inset rounded background (fixed padding/shape) for cleaner focus rendering without additional custom drawing.
 - Gallery selection highlight now fills the square thumbnail grid area, so selection geometry is square and consistently contains the thumbnail.
+- Square thumbnails now render with equal inner padding on all four sides within that square selection zone.
 
 ---
 
