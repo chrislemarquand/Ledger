@@ -1839,8 +1839,8 @@ final class BrowserContainerViewController: NSViewController {
     }
 
     private let model: AppModel
-    private let galleryController: NSHostingController<AnyView>
-    private let listController: NSHostingController<AnyView>
+    private let galleryController: BrowserGalleryViewController
+    private let listController: BrowserListViewController
     private var overlayController: NSHostingController<AnyView>?
     private var modelObserver: AnyCancellable?
     private var lastOverlayState: OverlayState = .none
@@ -1848,8 +1848,8 @@ final class BrowserContainerViewController: NSViewController {
 
     init(model: AppModel) {
         self.model = model
-        galleryController = NSHostingController(rootView: AnyView(BrowserGalleryView(model: model).tint(AppTheme.accentColor)))
-        listController = NSHostingController(rootView: AnyView(BrowserListView(model: model).tint(AppTheme.accentColor)))
+        galleryController = BrowserGalleryViewController(model: model, items: model.filteredBrowserItems)
+        listController = BrowserListViewController(model: model, items: model.filteredBrowserItems)
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -1910,6 +1910,9 @@ final class BrowserContainerViewController: NSViewController {
 
     private func render() {
         applyBrowserModeIfNeeded(force: false)
+        let items = model.filteredBrowserItems
+        galleryController.update(model: model, items: items)
+        listController.update(model: model, items: items)
 
         let nextOverlayState = currentOverlayState()
         if nextOverlayState == lastOverlayState, nextOverlayState != .loading {

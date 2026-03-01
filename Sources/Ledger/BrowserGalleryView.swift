@@ -30,7 +30,7 @@ private struct BrowserGalleryCollectionRepresentable: NSViewControllerRepresenta
 }
 
 @MainActor
-private final class BrowserGalleryViewController: NSViewController, NSCollectionViewDataSource, NSCollectionViewDelegate {
+final class BrowserGalleryViewController: NSViewController, NSCollectionViewDataSource, NSCollectionViewDelegate {
     private var model: AppModel
     private var items: [AppModel.BrowserItem]
 

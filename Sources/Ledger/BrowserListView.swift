@@ -27,7 +27,7 @@ private struct BrowserListTableRepresentable: NSViewControllerRepresentable {
 }
 
 @MainActor
-private final class BrowserListViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
+final class BrowserListViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
     private var model: AppModel
     private var items: [AppModel.BrowserItem]
 
