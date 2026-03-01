@@ -1,6 +1,6 @@
 # Roadmap
 
-Current version: **0.7** (build 114). Target: **v1.0**.
+Current version: **0.7** (build 116). Target: **v1.0**.
 
 Reference items by ID: **B1–B20** bugs · **P1–P24** polish · **N1–N8** native rewrites · **A1–A2** architecture · **R1–R19** post-v1.0 roadmap.
 
@@ -141,6 +141,8 @@ Replace custom implementations with idiomatic SwiftUI / AppKit equivalents.
 
 ### Branding rename (Ledger)
 Full blueprint: `output/BRANDING_NAMING_REFRESH_IMPLEMENTATION.md`. User-facing name is **Ledger** — partially applied. Remaining work:
+
+Current status: repo/project folder rename to `Ledger` is complete, display/bundle identifiers are `Ledger`, and legacy derived artifacts were removed. Internal target/scheme/source symbol names still include `ExifEditMac` and need coordinated cleanup/migration.
 
 - [ ] **R3** **A — Identity + build settings** — verify `project.pbxproj`, `.xcscheme`, `Info.plist`, `Base.xcconfig` are all consistent for Ledger.
 - [ ] **R4** **B — Runtime strings + UI labels** — audit `ExifEditMacApp.swift` and any remaining hardcoded app-name strings for consistency.
