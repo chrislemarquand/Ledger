@@ -8,6 +8,8 @@
 ## Open issues
 - [ ] `S1` Verify context-menu parity and enabled states in list/gallery/menu bar across mixed selections.
 - [ ] `S1` Verify favorites pin/unpin/reorder flows after relaunch and invalid path cleanup.
+- [ ] `S1` Trace and eliminate intermittent `Publishing changes from within view updates is not allowed` warning (2026-03-01 log) from remaining SwiftUI surfaces.
+- [ ] `S2` Monitor repeated `CMPhotoJFIFUtilities err=-17102` and `IOSurface creation failed: e00002c2` decode/surface-allocation log spam during heavy thumbnail loads; escalate only if tied to visible breakage.
 - [ ] `S2` Validate reduced-motion behavior for inspector section expand/collapse and field focus scrolling.
 - [ ] `S2` Full manual QA matrix execution and sign-off (open/apply/refresh/restore, presets, GPX import).
 

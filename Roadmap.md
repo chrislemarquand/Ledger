@@ -2,7 +2,7 @@
 
 Current version: **0.7.2** (build in `Config/Base.xcconfig`). Target: **v1.0**.
 
-Reference items by ID: **B1–B21** bugs · **P1–P24** polish · **N1–N11** native rewrites · **A1–A3** architecture · **R1–R20** post-v1.0 roadmap.
+Reference items by ID: **B1–B23** bugs · **P1–P24** polish · **N1–N11** native rewrites · **A1–A3** architecture · **R1–R20** post-v1.0 roadmap.
 
 ID convention: `B#`/`P#`/`N#`/`A#`/`R#` are roadmap item IDs. Backlog severity labels use `S0`/`S1`/`S2` in `v1-bug-backlog.md` to avoid collision with roadmap `P#` polish IDs.
 
@@ -56,9 +56,11 @@ ID convention: `B#`/`P#`/`N#`/`A#`/`R#` are roadmap item IDs. Backlog severity l
 ### SwiftUI rendering
 - [x] **B14** ✅ **`@Published` mutated during view update** — two sources fixed: (1) `.onChange(of: model.selectedSidebarID)` deferred `handleSidebarSelectionChange` via `Task { @MainActor in … }` to keep `loadFiles`/`clearLoadedContentState` out of the SwiftUI update cycle; (2) `BrowserListViewController.update()` called from `updateNSViewController` called `setSelectionFromList` synchronously when `shouldAdoptTableSelectionIntoModel()` returned true — fixed by clearing the table's stale row selection before `reloadData()` when items change (NSTableView preserves selection by row index across reloads), and additionally deferring `setSelectionFromList` via `Task` in the `shouldAdoptTableSelectionIntoModel()` path for robustness.
 - [x] **B15** ❌ `Should` **NSHostingView reentrant layout** — partially resolved: the B14 fix eliminated most instances. One remaining instance fires when QuickLook opens via spacebar: `makeKeyAndOrderFront` + `NSApp.activate` in `present()` trigger `windowDidResignKey` on the main window, which fires SwiftUI's `controlActiveState` update mid-keyDown event. Deferring these calls via `Task` fixes the warning but corrupts QL's opening animation (wrong source frame for `sourceFrameOnScreenFor`) and breaks the locked-height logic. Not fixable without a deeper architectural change; the skipped layout pass on QL open has no visible user impact.
+- [ ] **B22** `Should` **Intermittent "Publishing changes from within view updates is not allowed" still appears in Xcode debug output** — reproduced in logs on 2026-03-01 after the browser/AppKit migration. Treat as active SwiftUI mutation-in-render bug until call site is fully traced and removed. Scope: add targeted instrumentation around remaining SwiftUI surfaces (Inspector, Sidebar, sheets), identify the mutating setter path, and ensure all `@Published` writes from view callbacks are deferred outside the render transaction.
 
 ### Resources
 - [x] **B16** ❌ **Missing bundle resource "default.csv"** — investigated: no CSV code or references exist anywhere in the app sources. Message originates from a system framework (likely the image thumbnail pipeline or QuickLook generator) that looks for an optional `default.csv` in the app bundle and falls back gracefully when absent. No visible user impact; not actionable without a stack trace identifying the call site.
+- [ ] **B23** `Nice` **CMPhoto/IOSurface debug-log spam during large thumbnail/preview decode bursts** — repeated `CMPhotoJFIFUtilities err=-17102` and `IOSurface creation failed: e00002c2` messages observed in Xcode logs (2026-03-01). Currently treated as non-blocking framework-level noise unless correlated with user-visible failures (blank thumbnails, persistent decode failure, hangs, or crashes). Keep under observation during performance QA.
 
 ---
 

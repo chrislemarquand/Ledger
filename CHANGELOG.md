@@ -6,6 +6,9 @@ All notable changes to Ledger are documented here.
 
 ## [Unreleased]
 
+### Changed
+- Roadmap/backlog triage updated with two new tracked items from Xcode debug logs: **B22** (intermittent SwiftUI publish-during-view-update warning, actionable) and **B23** (CMPhoto/IOSurface log spam, non-blocking monitoring item).
+
 ---
 
 ## [0.7.2] — build 131 — 2026-03-01
