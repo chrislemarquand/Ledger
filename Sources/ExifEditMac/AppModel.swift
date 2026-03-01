@@ -501,7 +501,9 @@ final class AppModel: ObservableObject {
     private var browserItemHydrationID = UUID()
     private var selectionMetadataLoadTask: Task<Void, Never>?
     private var previewPreloadTask: Task<Void, Never>?
+    private var deferredFolderMetadataPrefetchTask: Task<Void, Never>?
     private var deferredPreviewPreloadTask: Task<Void, Never>?
+    private var activeFolderLoadID = UUID()
     private var previewPreloadID = UUID()
     private var inspectorPreviewInflight: Set<URL> = []
     private var inspectorPreviewTasksByURL: [URL: Task<Void, Never>] = [:]
@@ -540,6 +542,9 @@ final class AppModel: ObservableObject {
     private static let folderMetadataBatchSize = 8
     private static let metadataReadTimeoutNanoseconds: UInt64 = 8_000_000_000
     private static let previewBulkStartDelayNanoseconds: UInt64 = 220_000_000
+    private static let metadataPrefetchStartDelayNanoseconds: UInt64 = 280_000_000
+    private static let initialThumbnailWarmupCount = 56
+    private static let initialThumbnailWarmupSide: CGFloat = 180
     private static let inspectorPreviewTargetSide: CGFloat = 700
     private static let inspectorPreviewFullSide: CGFloat = 1400
     private static let maxInspectorPreviewCacheEntries = 600
@@ -2789,6 +2794,8 @@ final class AppModel: ObservableObject {
     }
 
     private func loadFiles(for kind: SidebarKind) {
+        deferredFolderMetadataPrefetchTask?.cancel()
+        deferredFolderMetadataPrefetchTask = nil
         folderMetadataLoadTask?.cancel()
         folderMetadataLoadTask = nil
         folderMetadataLoadID = UUID()
@@ -2830,6 +2837,8 @@ final class AppModel: ObservableObject {
         // re-apply it afterwards so the error state is actually visible to the view.
         clearLoadedContentState(preserveSessionCaches: true)
         browserEnumerationError = enumerationError
+        let loadID = UUID()
+        activeFolderLoadID = loadID
         let hydrationID = UUID()
         browserItemHydrationID = hydrationID
         browserItems = urls.map {
@@ -2843,8 +2852,12 @@ final class AppModel: ObservableObject {
             )
         }
         startBrowserItemHydration(for: urls, hydrationID: hydrationID)
-
-        startFolderMetadataPrefetch(for: urls, batchSize: metadataBatchSize(for: kind))
+        startInitialThumbnailWarmup(for: urls, loadID: loadID)
+        scheduleDeferredFolderMetadataPrefetch(
+            for: urls,
+            batchSize: metadataBatchSize(for: kind),
+            loadID: loadID
+        )
     }
 
     private func clearLoadedContentState(preserveSessionCaches: Bool = false) {
@@ -2855,6 +2868,8 @@ final class AppModel: ObservableObject {
         folderMetadataLoadTask?.cancel()
         folderMetadataLoadTask = nil
         folderMetadataLoadID = UUID()
+        deferredFolderMetadataPrefetchTask?.cancel()
+        deferredFolderMetadataPrefetchTask = nil
         browserItemHydrationTask?.cancel()
         browserItemHydrationTask = nil
         browserItemHydrationID = UUID()
@@ -2895,6 +2910,38 @@ final class AppModel: ObservableObject {
         inspectorPreviewTasksByURL = [:]
         clearMetadataUndoHistory()
         recalculateInspectorState(forceNotify: true)
+    }
+
+    private func startInitialThumbnailWarmup(for files: [URL], loadID: UUID) {
+        let warmupTargets = Array(files.prefix(Self.initialThumbnailWarmupCount))
+        guard !warmupTargets.isEmpty else { return }
+
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self else { return }
+            for fileURL in warmupTargets {
+                if Task.isCancelled { return }
+                if await MainActor.run(body: { self.activeFolderLoadID != loadID }) {
+                    return
+                }
+                _ = await SharedThumbnailRequestBroker.shared.request(
+                    url: fileURL,
+                    requiredSide: Self.initialThumbnailWarmupSide,
+                    forceRefresh: false
+                )
+            }
+        }
+    }
+
+    private func scheduleDeferredFolderMetadataPrefetch(for files: [URL], batchSize: Int, loadID: UUID) {
+        deferredFolderMetadataPrefetchTask?.cancel()
+        deferredFolderMetadataPrefetchTask = nil
+        deferredFolderMetadataPrefetchTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: Self.metadataPrefetchStartDelayNanoseconds)
+            guard !Task.isCancelled else { return }
+            guard self.activeFolderLoadID == loadID else { return }
+            self.startFolderMetadataPrefetch(for: files, batchSize: batchSize)
+        }
     }
 
     private func startBrowserItemHydration(for files: [URL], hydrationID: UUID) {

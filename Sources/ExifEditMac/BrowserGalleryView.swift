@@ -558,7 +558,7 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
         let forceRefresh = pendingThumbnailRefreshURLs.contains(item.url)
         cell.requestThumbnail(
             for: item.url,
-            requiredSide: requiredSide * 2,
+            requiredSide: requiredSide * 1.5,
             forceRefresh: forceRefresh
         ) { [weak self] image, url in
             guard let self else { return image }

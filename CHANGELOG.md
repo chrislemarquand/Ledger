@@ -19,6 +19,7 @@ All notable changes to Ledger are documented here.
 - Thumbnail rewrite step **B20e** completed: inspector preview loads (foreground, preload, and background warm) now use the same shared thumbnail request broker/service as list and gallery, unifying cache/dedupe behavior and priority handling.
 - Post-B20 cleanup: removed dead gallery selection-ring metric constants and removed unused inspector preview preload progress counters (`previewPreloadCompleted` / `previewPreloadTotal`).
 - Folder-switch thumbnail responsiveness improved: when content is cleared for a new folder, stale shared thumbnail requests are now canceled so the newly selected folder's thumbnails/previews take queue priority.
+- Startup responsiveness pass for folder navigation: on folder open, first-screen thumbnails are warm-loaded immediately at modest size; metadata prefetch starts after a short delay; gallery initial request size reduced (from 2x tile side to 1.5x) to improve first-paint speed and reduce burst memory/CPU.
 
 ---
 
