@@ -421,7 +421,11 @@ struct InspectorView: View {
         }
         .sheet(item: Binding(
             get: { model.activePresetEditor },
-            set: { model.activePresetEditor = $0 }
+            set: { newValue in
+                Task { @MainActor in
+                    model.activePresetEditor = newValue
+                }
+            }
         )) { editor in
             PresetEditorSheet(
                 model: model,
@@ -431,7 +435,11 @@ struct InspectorView: View {
         .tint(AppTheme.accentColor)
         .sheet(isPresented: Binding(
             get: { model.isManagePresetsPresented },
-            set: { model.isManagePresetsPresented = $0 }
+            set: { newValue in
+                Task { @MainActor in
+                    model.isManagePresetsPresented = newValue
+                }
+            }
         )) {
             PresetManagerSheet(model: model)
         }

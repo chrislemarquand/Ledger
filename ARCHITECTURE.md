@@ -18,9 +18,9 @@ ExifEdit (Swift Package)
 │   └── MetadataValidator.swift — validates patches before write
 │
 └── Sources/Ledger       — executable; AppKit + SwiftUI
-    ├── ExifEditMacApp.swift  — @main; SwiftUI App stub + AppDelegate + menu routing
+    ├── LedgerApp.swift       — @main; pure AppKit entry (LedgerMain + AppDelegate)
     ├── AppModel.swift        — @MainActor ObservableObject; all UI state (~4,900 lines)
-    ├── MainContentView.swift — NativeThreePaneSplitViewController + BrowserView + utilities
+    ├── MainContentView.swift — NativeThreePaneSplitViewController + AppKit menus/toolbar + browser container
     ├── NavigationSidebarView.swift
     ├── BrowserListView.swift
     ├── BrowserGalleryView.swift
@@ -41,14 +41,14 @@ The Xcode project (`Ledger.xcodeproj`) wraps the SPM package. Build settings and
 ┌─────────────────────────────────────────┐
 │              ExifEditMac                │
 │                                         │
-│  ExifEditMacApp  ──▶  AppDelegate       │
-│        │                                │
-│        └──▶  NativeThreePaneSplitVC     │  ← AppKit window controller
+│  LedgerMain (@main) ──▶ AppDelegate     │
+│                        └──────────────▶  │
+│                        NativeThreePaneSplitVC  ← AppKit window controller
 │                    │                   │
 │          ┌─────────┼──────────┐        │
 │          ▼         ▼          ▼        │
-│     Sidebar      Browser   Inspector   │  ← NSHostingController → SwiftUI
-│       (SwiftUI) (AppKit+SwiftUI)(SwiftUI)│
+│     Sidebar      Browser   Inspector     │
+│     (SwiftUI)    (AppKit)   (SwiftUI)    │
 │                                         │
 │  AppModel (@MainActor ObservableObject) │  ← single source of truth
 │        │                                │
@@ -65,20 +65,20 @@ The Xcode project (`Ledger.xcodeproj`) wraps the SPM package. Build settings and
 
 ## Window layout
 
-`NativeThreePaneSplitViewController` (`MainContentView.swift`) is an `NSSplitViewController` that owns the entire window. It creates three panes using `NSHostingController` wrappers:
+`NativeThreePaneSplitViewController` (`MainContentView.swift`) is an `NSSplitViewController` that owns the entire window. It creates:
 
 ```
 NSSplitViewController
 ├── NSSplitViewItem (sidebar)   → NSHostingController<NavigationSidebarView>
 └── NSSplitViewController (nested content)
-    ├── NSSplitViewItem         → NSHostingController<BrowserView>
-    │   (BrowserView contains BrowserListView + BrowserGalleryView side-by-side)
+    ├── NSSplitViewItem         → BrowserContainerViewController (pure AppKit)
+    │   (hosts BrowserListViewController + BrowserGalleryViewController and switches visibility by mode)
     └── NSSplitViewItem         → NSHostingController<InspectorView>
 ```
 
 All `NSHostingController` instances use `.sizingOptions = []` so SwiftUI does not drive pane sizing — the split view owns all geometry.
 
-The toolbar is built entirely in AppKit (`NativeToolbarDelegate`). Menu routing uses `NSApp.sendAction(_:to:from:)` targeting the split view controller via the responder chain; SwiftUI `CommandMenu` is used only for static menu structure.
+The toolbar is built entirely in AppKit (`NativeToolbarDelegate`). Top-level menus are also rebuilt/injected in AppKit (`MainContentView.swift`) and validated through `NSMenuItemValidation`. Actions route through the responder chain with `NSApp.sendAction(_:to:from:)`.
 
 ---
 
@@ -93,7 +93,7 @@ The toolbar is built entirely in AppKit (`NativeToolbarDelegate`). Menu routing 
 | Selection | `selectedFileURLs` (Set), `selectionAnchorURL`, `selectionFocusURL` |
 | Metadata | `metadataByFile` ([URL: FileMetadataSnapshot]), `pendingEditsByFile`, `pendingCommitsByFile` |
 | Inspector | `inspectorState`, `collapsedInspectorSections` |
-| Status | `statusMessage`, `isLoadingFiles`, `isApplyingChanges` |
+| Status | `statusMessage`, `isLoadingFiles`, `isApplyingMetadata` |
 | Presets | `presets` ([EditPreset]) |
 
 `filteredBrowserItems` is a cached `@Published private(set)` var rebuilt by `rebuildFilteredBrowserItems()` whenever `browserItems`, `searchQuery`, or `browserSort` change — do not recompute it ad-hoc.
@@ -129,14 +129,15 @@ AppModel.loadMetadataForSelection(urls:)
 
 **Write (Apply)**
 ```
-AppModel.applyPendingEdits(to:)
-  └── builds EditOperation from pendingEditsByFile
-  └── ExifEditEngine.apply(operation:)      [actor hop]
+AppModel.applyChanges(for:)
+  └── builds metadata patches + staged image ops per file
+  └── ExifEditEngine.apply(operation:) / writeMetadataWithoutBackup(operation:) [actor hop]
         └── MetadataValidator.validate()
-        └── BackupManager.createBackup()    → ~/Library/Application Support/ExifEdit/Backups/<UUID>/
+        └── BackupManager.createBackup()    → ~/Library/Application Support/<Brand>/Backups/<UUID>/
         └── ExifToolService.writeMetadata() [spawns exiftool process]
               returns OperationResult (succeeded:, failed:)
-  └── AppModel updates statusMessage, triggers re-read of affected files
+  └── AppModel clears committed pending state, invalidates thumbnails/previews for succeeded files,
+      then re-reads stale metadata for the current selection
 ```
 
 **Restore**
@@ -152,11 +153,11 @@ Backups are pruned on launch via `BackupManager.pruneOperations(keepLast:)` (cal
 
 ## Thumbnail pipeline
 
-`ThumbnailPipeline` (top of `AppModel.swift`) is a stateless enum of static methods backed by `SharedBrowserThumbnailCache` (LRU, max 3,000 entries, thread-safe via `NSLock`).
+`ThumbnailPipeline` (top of `AppModel.swift`) is a stateless enum of static wrappers over `ThumbnailService`, which owns the thumbnail cache and generation.
 
 Generation order for likely-image files: ImageIO oriented thumbnail → QuickLook → `NSImage(contentsOf:)` → workspace icon fallback. For other file types: QuickLook first.
 
-Both `BrowserListViewController` and `BrowserGalleryViewController` use a `SharedThumbnailRequestBroker` actor to deduplicate concurrent requests for the same URL and limit in-flight concurrent thumbnail tasks.
+Both `BrowserListViewController` and `BrowserGalleryViewController` use a `SharedThumbnailRequestBroker` actor to deduplicate concurrent requests for the same URL. After Apply/Restore/Clear, `AppModel` invalidates browser thumbnail URLs so both views refresh from disk-consistent data.
 
 ---
 
@@ -178,14 +179,14 @@ Known friction areas (candidates for future AppKit rewrite — see ROADMAP R13, 
 ```bash
 # Debug build
 xcodebuild -project Ledger.xcodeproj \
-           -scheme ExifEditMac \
+           -scheme Ledger \
            -configuration Debug \
            -destination 'platform=macOS' \
            build
 ```
 
 App binary lands at:
-`~/Library/Developer/Xcode/DerivedData/ExifEditMac-*/Build/Products/Debug/Lattice.app`
+`~/Library/Developer/Xcode/DerivedData/Ledger-*/Build/Products/Debug/Ledger.app`
 
 The only expected build warning is:
 > `appintentsmetadataprocessor: Metadata extraction skipped. No AppIntents.framework dependency found.`
@@ -203,6 +204,6 @@ This is harmless — ignore it.
 | Target | Run with | Status |
 |--------|----------|--------|
 | `ExifEditCoreTests` | `swift test` or xcodebuild | Runnable |
-| `ExifEditMacTests` | — | **Not runnable** |
+| `ExifEditMacTests` (in `Tests/LedgerTests`) | `swift test` | Runnable |
 
-`ExifEditMacTests` (`AppModelTests.swift`) depends on `ExifEditMac`, which is an `.executableTarget`. SPM cannot run tests against executables so `swift test` reports 0 tests. It is also not included in the Xcode scheme's test action. It does compile cleanly (`swift build --target ExifEditMacTests`). To make it runnable the target needs to either be added to the scheme with a test host, or AppModel needs to be extracted into a library target.
+`swift test` currently runs both core and app-level test targets in this repo layout.
