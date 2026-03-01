@@ -1,6 +1,6 @@
 # Roadmap
 
-Current version: **0.7** (build 110). Target: **v1.0**.
+Current version: **0.7** (build 111). Target: **v1.0**.
 
 Reference items by ID: **B1–B20** bugs · **P1–P24** polish · **N1–N8** native rewrites · **A1–A2** architecture · **R1–R19** post-v1.0 roadmap.
 
@@ -36,7 +36,7 @@ Reference items by ID: **B1–B20** bugs · **P1–P24** polish · **N1–N8** n
 ### Browser gallery
 - [x] **B10** ~~Gallery selector changes colour on rotate~~ — ✅ Fixed in 0.6 via `stagedOpsDisplayToken`; cell no longer fully redraws on rotate.
 - [x] **B11** ~~Thumbnail flicker on rotate / flip~~ — ✅ Fixed in 0.6 via `stagedOpsDisplayToken`; display transform updated without clearing thumbnail cache.
-- [ ] **B20** `Blocker` **Gallery thumbnails glitch/reload repeatedly after folder open** — attempted thumbnail pipeline refactor/regression work (commits `3ca1e25` through `888698b`) was fully reverted on 2026-03-01 after introducing beachball/hitching and repeated thumbnail redraw in gallery. Issue remains open and intentionally deferred for a clean native-first redesign (no patch layering).
+- [x] **B20** ✅ `Blocker` **Gallery thumbnails glitch/reload repeatedly after folder open** — resolved via the clean rewrite track `B20a–B20e` (baseline reset, shared thumbnail service, cell-owned lifecycle in gallery/list, native selection baseline, and unified inspector preview pipeline).
 - [x] **B20a** `Must` **Thumbnail rewrite Step 1 — baseline commit** — completed in commit `26536c5` (`Baseline: track thumbnail rewrite plan and deferred UX list`) as the branchpoint before rewrite work.
 - [x] **B20b** `Must` **Thumbnail rewrite Step 2 — single native thumbnail service** — completed: extracted thumbnail cache/request broker/generation strategy into `ThumbnailService` and switched existing list/gallery wrappers to delegate to the shared service.
 - [x] **B20c** `Must` **Thumbnail rewrite Step 3 — AppKit cell-owned lifecycle** — completed: gallery requests are owned by `AppKitGalleryItem` and list requests are owned by `BrowserListNameCellView`/`BrowserListIconView`; both cancel on reuse (`prepareForReuse`) and guard async completion with per-cell request tokens.

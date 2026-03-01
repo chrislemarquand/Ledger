@@ -466,8 +466,6 @@ final class AppModel: ObservableObject {
     @Published var applyMetadataCompleted = 0
     @Published var applyMetadataTotal = 0
     @Published var isPreviewPreloading = false
-    @Published var previewPreloadCompleted = 0
-    @Published var previewPreloadTotal = 0
     @Published var collapsedInspectorSections: Set<String> {
         didSet {
             UserDefaults.standard.set(Array(collapsedInspectorSections), forKey: Self.collapsedInspectorSectionsKey)
@@ -2869,8 +2867,6 @@ final class AppModel: ObservableObject {
         deferredPreviewPreloadTask = nil
         previewPreloadID = UUID()
         isPreviewPreloading = false
-        previewPreloadCompleted = 0
-        previewPreloadTotal = 0
 
         browserItems = []
         selectedFileURLs = []
@@ -4330,18 +4326,14 @@ final class AppModel: ObservableObject {
 
         guard !filesToPreload.isEmpty else {
             isPreviewPreloading = false
-            previewPreloadCompleted = 0
-            previewPreloadTotal = 0
             return
         }
 
         isPreviewPreloading = true
-        previewPreloadCompleted = 0
-        previewPreloadTotal = filesToPreload.count
 
         previewPreloadTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            for (index, fileURL) in filesToPreload.enumerated() {
+            for fileURL in filesToPreload {
                 if Task.isCancelled { return }
                 guard self.previewPreloadID == preloadID else { return }
                 await Task.yield()
@@ -4360,14 +4352,11 @@ final class AppModel: ObservableObject {
                 }
                 self.inspectorPreviewInflight.remove(fileURL)
                 self.inspectorPreviewTasksByURL[fileURL] = nil
-
-                self.previewPreloadCompleted = index + 1
             }
 
             guard !Task.isCancelled, self.previewPreloadID == preloadID else { return }
             self.previewPreloadTask = nil
             self.isPreviewPreloading = false
-            self.previewPreloadCompleted = self.previewPreloadTotal
             self.setStatusMessage("Metadata loaded", autoClearAfterSuccess: true)
         }
     }

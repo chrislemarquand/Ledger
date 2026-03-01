@@ -17,6 +17,7 @@ All notable changes to Ledger are documented here.
 - Gallery selection highlight now fills the square thumbnail grid area, so selection geometry is square and consistently contains the thumbnail.
 - Square thumbnails now render with equal inner padding on all four sides within that square selection zone.
 - Thumbnail rewrite step **B20e** completed: inspector preview loads (foreground, preload, and background warm) now use the same shared thumbnail request broker/service as list and gallery, unifying cache/dedupe behavior and priority handling.
+- Post-B20 cleanup: removed dead gallery selection-ring metric constants and removed unused inspector preview preload progress counters (`previewPreloadCompleted` / `previewPreloadTotal`).
 
 ---
 
