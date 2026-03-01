@@ -75,13 +75,19 @@ final class ThumbnailCoordinator {
         targetSide: CGFloat,
         policy: ThumbnailSurfacePolicy,
         forceRefresh: Bool = false,
+        notifyUpdates: Bool = true,
         priorityOverride: TaskPriority? = nil
     ) {
         let normalizedTarget = max(16, targetSide)
         if forceRefresh {
             invalidate(urls: [url])
         } else if let cached = ThumbnailPipeline.cachedImage(for: url, minRenderedSide: normalizedTarget) {
-            updateState(url: url, phase: .readyHigh, renderedSide: max(normalizedTarget, renderedSide(for: cached)))
+            updateState(
+                url: url,
+                phase: .readyHigh,
+                renderedSide: max(normalizedTarget, renderedSide(for: cached)),
+                notify: false
+            )
             return
         } else if let inflight = inflightTargetSide[url], inflight + 0.5 >= normalizedTarget {
             return
@@ -99,7 +105,7 @@ final class ThumbnailCoordinator {
                 policy: policy,
                 forceRefresh: forceRefresh,
                 generation: generation,
-                notifyUpdates: true,
+                notifyUpdates: notifyUpdates,
                 priorityOverride: priorityOverride
             )
             self.requestTasks[url] = nil
@@ -113,7 +119,13 @@ final class ThumbnailCoordinator {
         policy: ThumbnailSurfacePolicy
     ) {
         for url in urls {
-            ensureThumbnail(url: url, targetSide: targetSide, policy: policy, forceRefresh: false)
+            ensureThumbnail(
+                url: url,
+                targetSide: targetSide,
+                policy: policy,
+                forceRefresh: false,
+                notifyUpdates: false
+            )
         }
     }
 
@@ -178,7 +190,7 @@ final class ThumbnailCoordinator {
         }
 
         let lowSide = min(normalizedTarget, policy.lowResolutionSide(for: normalizedTarget))
-        updateState(url: url, phase: .loadingLow, renderedSide: max(lowSide, 1), notify: notifyUpdates)
+        updateState(url: url, phase: .loadingLow, renderedSide: max(lowSide, 1), notify: false)
 
         let lowImage: NSImage?
         if let cachedLow = ThumbnailPipeline.cachedImage(for: url, minRenderedSide: lowSide) {
@@ -203,7 +215,7 @@ final class ThumbnailCoordinator {
             return cachedHigh
         }
 
-        updateState(url: url, phase: .loadingHigh, renderedSide: max(highSide, 1), notify: notifyUpdates)
+        updateState(url: url, phase: .loadingHigh, renderedSide: max(highSide, 1), notify: false)
         let highImage = await requestImage(
             url: url,
             requiredSide: highSide,
@@ -252,9 +264,15 @@ final class ThumbnailCoordinator {
         renderedSide: CGFloat,
         notify: Bool = true
     ) {
+        let normalizedSide = max(1, renderedSide)
+        if let previous = states[url],
+           previous.phase == phase,
+           abs(previous.renderedSide - normalizedSide) < 1 {
+            return
+        }
         states[url] = ThumbnailLoadState(
             phase: phase,
-            renderedSide: max(1, renderedSide),
+            renderedSide: normalizedSide,
             lastUpdatedAt: Date()
         )
         if notify {

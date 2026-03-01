@@ -1,6 +1,6 @@
 # Roadmap
 
-Current version: **0.6.6** (build 88). Target: **v1.0**.
+Current version: **0.6.6** (build 89). Target: **v1.0**.
 
 Reference items by ID: **B1–B16** bugs · **P1–P24** polish · **N1–N8** native rewrites · **A1–A2** architecture · **R1–R18** post-v1.0 roadmap.
 

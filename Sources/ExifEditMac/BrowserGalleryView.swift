@@ -436,6 +436,7 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
     private func reloadThumbnailItem(for url: URL) {
         guard let row = items.firstIndex(where: { $0.url == url }) else { return }
         let indexPath = IndexPath(item: row, section: 0)
+        guard collectionView.indexPathsForVisibleItems().contains(indexPath) else { return }
         collectionView.reloadItems(at: [indexPath])
     }
 
