@@ -69,7 +69,6 @@ Reference items by ID: **B1–B16** bugs · **P1–P24** polish · **N1–N8** n
 
 ### Browser gallery
 - [x] **P9** ✅ Gallery selection ring outset tuned to 5 pt; overlay anchored directly to image view (definitionally concentric, no independent size calculation); `selectionCornerRadius` removed — overlay radius derived as `thumbnailCornerRadius + selectionOutset`.
-- [x] **P28** ✅ **Thumbnail pipeline finalisation (gallery/list/inspector)** — introduced shared `ThumbnailCoordinator` with per-surface policies and URL-scoped update notifications; removed gallery-local thumbnail task/version bookkeeping and switched gallery/list to coordinator-driven reloads plus visible-neighborhood prefetch; inspector preview generation now uses the same coordinator request path so browser thumbnails and inspector previews no longer diverge in loading logic.
 
 ### QuickLook
 - [x] **P10** ✅ **QuickLook position inconsistent** — `QLPreviewPanel.center()` called before `makeKeyAndOrderFront` for first open; `NSWindow.didResizeNotification` observer locks panel height to QL's natural choice for the first image and derives width from QL's own aspect ratio for each subsequent image (mirrors Finder's behaviour); panel stays centred on screen across all navigation; if the panel is already open and the user has dragged it, size/position are still corrected on image change.

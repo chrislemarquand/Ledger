@@ -45,14 +45,17 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
     private var lastRenderedPending: Set<URL> = []
     private var lastRenderedPrimarySelectionURL: URL?
     private var lastStagedOpsDisplayToken: UInt64 = 0
+    private var thumbnailRequestVersion: [URL: Int] = [:]
+    private var thumbnailVersionCounter = 0
     private var lastThumbnailInvalidationToken = UUID()
+    private var pendingThumbnailRefreshURLs: Set<URL> = []
+    private var thumbnailTasksByURL: [URL: Task<Void, Never>] = [:]
     private var isRenderingState = false
     private var zoomRestoreToken = 0
     private var pinchAccumulator: CGFloat = 0
     private var lastMagnification: CGFloat = 0
     private let pinchThreshold: CGFloat = 0.14
     private var browserFocusObserver: NSObjectProtocol?
-    private var thumbnailUpdateObserver: NSObjectProtocol?
     private var lastRenderedViewMode: AppModel.BrowserViewMode?
 
     init(model: AppModel, items: [AppModel.BrowserItem]) {
@@ -82,29 +85,17 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
                 self?.focusGalleryForKeyboardNavigation()
             }
         }
-        thumbnailUpdateObserver = NotificationCenter.default.addObserver(
-            forName: .thumbnailCoordinatorDidUpdate,
-            object: nil,
-            queue: .main
-        ) { [weak self] note in
-            guard let self,
-                  let url = note.userInfo?["url"] as? URL
-            else { return }
-            Task { @MainActor [weak self] in
-                self?.reloadThumbnailItem(for: url)
-            }
-        }
     }
 
     override func viewWillDisappear() {
         super.viewWillDisappear()
+        for task in thumbnailTasksByURL.values {
+            task.cancel()
+        }
+        thumbnailTasksByURL.removeAll()
         if let browserFocusObserver {
             NotificationCenter.default.removeObserver(browserFocusObserver)
             self.browserFocusObserver = nil
-        }
-        if let thumbnailUpdateObserver {
-            NotificationCenter.default.removeObserver(thumbnailUpdateObserver)
-            self.thumbnailUpdateObserver = nil
         }
     }
 
@@ -212,10 +203,21 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
             lastThumbnailInvalidationToken = model.browserThumbnailInvalidationToken
             let invalidated = model.browserThumbnailInvalidatedURLs
             if invalidated.isEmpty {
-                ThumbnailCoordinator.shared.invalidateAll()
+                ThumbnailPipeline.invalidateAllCachedImages()
+                for task in thumbnailTasksByURL.values {
+                    task.cancel()
+                }
+                thumbnailTasksByURL.removeAll()
+                thumbnailRequestVersion.removeAll()
+                pendingThumbnailRefreshURLs.removeAll()
                 collectionView.reloadData()
             } else {
-                ThumbnailCoordinator.shared.invalidate(urls: invalidated)
+                pendingThumbnailRefreshURLs.formUnion(invalidated)
+                for url in invalidated {
+                    thumbnailTasksByURL[url]?.cancel()
+                    thumbnailTasksByURL[url] = nil
+                    thumbnailRequestVersion.removeValue(forKey: url)
+                }
                 let indexPaths = Set(items.enumerated().compactMap { index, item -> IndexPath? in
                     invalidated.contains(item.url) ? IndexPath(item: index, section: 0) : nil
                 })
@@ -267,7 +269,6 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
             )
             lastRenderedPending = pendingURLs
         }
-        prefetchVisibleNeighborhood()
 
         // When switching from list → gallery the view just became visible.
         // scrollSelectionIntoView defers via DispatchQueue.main.async so the
@@ -386,7 +387,11 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
             guard indexPath.item >= 0, indexPath.item < items.count else { continue }
             guard let cell = collectionView.item(at: indexPath) as? AppKitGalleryItem else { continue }
             let item = items[indexPath.item]
-            if needsFullReconfigure {
+            // Skip full reconfigure for items whose thumbnail is already being refreshed via
+            // reloadItems — reconfiguring here would show the fallback icon since the pipeline
+            // cache has already been cleared, causing a visible flash.
+            let awaitingRefresh = pendingThumbnailRefreshURLs.contains(item.url)
+            if needsFullReconfigure && !awaitingRefresh {
                 let baseImage = ThumbnailPipeline.cachedImage(for: item.url, minRenderedSide: 1)
                     ?? ThumbnailPipeline.fallbackIcon(for: item.url, side: 128)
                 let displayImage = model.displayImageForCurrentStagedState(baseImage, fileURL: item.url)
@@ -425,40 +430,59 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
 
     private func requestThumbnailIfNeeded(for item: AppModel.BrowserItem, tileSide: CGFloat) {
         let requiredSide = max(tileSide, 120)
-        ThumbnailCoordinator.shared.ensureThumbnail(
-            url: item.url,
-            targetSide: requiredSide,
-            policy: .gallery,
-            forceRefresh: false
-        )
+        let forceRefresh = pendingThumbnailRefreshURLs.contains(item.url)
+        if forceRefresh {
+            ThumbnailPipeline.invalidateCachedImages(for: [item.url])
+        } else if ThumbnailPipeline.cachedImage(for: item.url, minRenderedSide: requiredSide * 0.9) != nil {
+            return
+        }
+        thumbnailVersionCounter += 1
+        let requestVersion = thumbnailVersionCounter
+        thumbnailRequestVersion[item.url] = requestVersion
+        thumbnailTasksByURL[item.url]?.cancel()
+        thumbnailTasksByURL[item.url] = Task { [weak self] in
+            guard let self else { return }
+            let image = await SharedThumbnailRequestBroker.shared.request(
+                url: item.url,
+                requiredSide: requiredSide * 2,
+                forceRefresh: forceRefresh
+            )
+            await self.completeThumbnailRequest(
+                url: item.url,
+                requiredSide: requiredSide,
+                requestVersion: requestVersion,
+                image: image
+            )
+        }
     }
 
-    private func reloadThumbnailItem(for url: URL) {
+    private func completeThumbnailRequest(
+        url: URL,
+        requiredSide: CGFloat,
+        requestVersion: Int,
+        image: NSImage?
+    ) async {
+        thumbnailTasksByURL[url] = nil
+
+        guard thumbnailRequestVersion[url] == requestVersion else { return }
+        guard let image else { return }
+
+        pendingThumbnailRefreshURLs.remove(url)
+
         guard let row = items.firstIndex(where: { $0.url == url }) else { return }
         let indexPath = IndexPath(item: row, section: 0)
-        collectionView.reloadItems(at: [indexPath])
-    }
-
-    private func prefetchVisibleNeighborhood() {
-        let visible = collectionView.indexPathsForVisibleItems()
-            .map(\.item)
-            .filter { $0 >= 0 && $0 < items.count }
-            .sorted()
-        guard let minVisible = visible.first, let maxVisible = visible.last else { return }
-        let prefetchLower = max(0, minVisible - 20)
-        let prefetchUpper = min(items.count - 1, maxVisible + 40)
-        guard prefetchLower <= prefetchUpper else { return }
-        let visibleSet = Set(visible)
-        let prefetchURLs = (prefetchLower...prefetchUpper).compactMap { index -> URL? in
-            guard !visibleSet.contains(index) else { return nil }
-            return items[index].url
-        }
-        guard !prefetchURLs.isEmpty else { return }
-        ThumbnailCoordinator.shared.prefetch(
-            urls: prefetchURLs,
-            targetSide: max(layout.tileSide, 120),
-            policy: .gallery
+        guard let cell = collectionView.item(at: indexPath) as? AppKitGalleryItem else { return }
+        let item = items[row]
+        let displayImage = model.displayImageForCurrentStagedState(image, fileURL: url)
+        cell.configure(
+            name: item.name,
+            image: displayImage,
+            isSelected: model.selectedFileURLs.contains(url),
+            hasPendingEdits: model.hasPendingEdits(for: url),
+            tileSide: max(layout.tileSide, 40),
+            preferredAspectRatio: preferredAspectRatio(for: url)
         )
+        updateQuickLookArtifacts()
     }
 
     private func menuForItem(at indexPath: IndexPath) -> NSMenu? {

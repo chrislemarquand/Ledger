@@ -36,15 +36,18 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
 
     private var isApplyingProgrammaticSelection = false
     private var isApplyingProgrammaticSort = false
+    private var listThumbnailRequestVersion: [URL: Int] = [:]
+    private var listThumbnailVersionCounter = 0
     private var lastThumbnailInvalidationToken = UUID()
     private var pendingInvalidatedThumbnailURLs: Set<URL> = []
+    private var pendingThumbnailRefreshURLs: Set<URL> = []
+    private var listThumbnailTasksByURL: [URL: Task<Void, Never>] = [:]
     private var isRenderingState = false
     private var lastRenderedItemURLs: [URL] = []
     private var contextMenuTargetURLs: [URL] = []
     private var didApplyInitialColumnFit = false
     private var browserFocusObserver: NSObjectProtocol?
     private var viewModeObserver: NSObjectProtocol?
-    private var thumbnailUpdateObserver: NSObjectProtocol?
 
     init(model: AppModel, items: [AppModel.BrowserItem]) {
         self.model = model
@@ -84,22 +87,14 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
                 self?.scrollSelectionIntoView()
             }
         }
-        thumbnailUpdateObserver = NotificationCenter.default.addObserver(
-            forName: .thumbnailCoordinatorDidUpdate,
-            object: nil,
-            queue: .main
-        ) { [weak self] note in
-            guard let self,
-                  let url = note.userInfo?["url"] as? URL
-            else { return }
-            Task { @MainActor [weak self] in
-                self?.reloadThumbnailRow(for: url)
-            }
-        }
     }
 
     override func viewWillDisappear() {
         super.viewWillDisappear()
+        for task in listThumbnailTasksByURL.values {
+            task.cancel()
+        }
+        listThumbnailTasksByURL.removeAll()
         if let browserFocusObserver {
             NotificationCenter.default.removeObserver(browserFocusObserver)
             self.browserFocusObserver = nil
@@ -107,10 +102,6 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         if let viewModeObserver {
             NotificationCenter.default.removeObserver(viewModeObserver)
             self.viewModeObserver = nil
-        }
-        if let thumbnailUpdateObserver {
-            NotificationCenter.default.removeObserver(thumbnailUpdateObserver)
-            self.thumbnailUpdateObserver = nil
         }
     }
 
@@ -136,9 +127,20 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
             let invalidated = model.browserThumbnailInvalidatedURLs
             pendingInvalidatedThumbnailURLs = invalidated
             if invalidated.isEmpty {
-                ThumbnailCoordinator.shared.invalidateAll()
+                ThumbnailPipeline.invalidateAllCachedImages()
+                for task in listThumbnailTasksByURL.values {
+                    task.cancel()
+                }
+                listThumbnailTasksByURL.removeAll()
+                listThumbnailRequestVersion.removeAll()
+                pendingThumbnailRefreshURLs.removeAll()
             } else {
-                ThumbnailCoordinator.shared.invalidate(urls: invalidated)
+                pendingThumbnailRefreshURLs.formUnion(invalidated)
+                for url in invalidated {
+                    listThumbnailTasksByURL[url]?.cancel()
+                    listThumbnailTasksByURL[url] = nil
+                    listThumbnailRequestVersion.removeValue(forKey: url)
+                }
             }
         }
 
@@ -215,7 +217,6 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         }
         syncSortIndicator()
         updateQuickLookSourceFrameFromCurrentSelection()
-        prefetchVisibleNeighborhood()
     }
 
     private func syncSortIndicator() {
@@ -668,55 +669,62 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
 
         if let cached = ThumbnailPipeline.cachedImage(for: item.url, minRenderedSide: 1) {
             iconView.image = model.displayImageForCurrentStagedState(cached, fileURL: item.url)
-            requestListThumbnailIfNeeded(for: item, forceRefresh: false)
+            requestListThumbnailIfNeeded(for: item, row: row, forceRefresh: pendingThumbnailRefreshURLs.contains(item.url))
             return
         }
 
         iconView.image = ThumbnailPipeline.fallbackIcon(for: item.url, side: 16)
 
-        requestListThumbnailIfNeeded(for: item, forceRefresh: false)
+        requestListThumbnailIfNeeded(for: item, row: row, forceRefresh: pendingThumbnailRefreshURLs.contains(item.url))
     }
 
-    private func requestListThumbnailIfNeeded(for item: AppModel.BrowserItem, forceRefresh: Bool) {
+    private func requestListThumbnailIfNeeded(for item: AppModel.BrowserItem, row _: Int, forceRefresh: Bool) {
         let requiredSide: CGFloat = 64
-        ThumbnailCoordinator.shared.ensureThumbnail(
-            url: item.url,
-            targetSide: requiredSide,
-            policy: .list,
-            forceRefresh: forceRefresh
-        )
+        if !forceRefresh,
+           ThumbnailPipeline.cachedImage(for: item.url, minRenderedSide: requiredSide) != nil {
+            return
+        }
+        listThumbnailVersionCounter += 1
+        let requestVersion = listThumbnailVersionCounter
+        listThumbnailRequestVersion[item.url] = requestVersion
+        listThumbnailTasksByURL[item.url]?.cancel()
+        listThumbnailTasksByURL[item.url] = Task { [weak self] in
+            guard let self else { return }
+            let image = await SharedThumbnailRequestBroker.shared.request(
+                url: item.url,
+                requiredSide: requiredSide,
+                forceRefresh: forceRefresh
+            )
+            await self.completeListThumbnailRequest(url: item.url, requestVersion: requestVersion, image: image)
+        }
     }
 
-    private func reloadThumbnailRow(for url: URL) {
+    private func completeListThumbnailRequest(url: URL, requestVersion: Int, image: NSImage?) async {
+        listThumbnailTasksByURL[url] = nil
+
+        guard listThumbnailRequestVersion[url] == requestVersion else { return }
+        pendingThumbnailRefreshURLs.remove(url)
+        guard let image else { return }
+
         guard let row = items.firstIndex(where: { $0.url == url }) else { return }
         let nameColumn = tableView.column(withIdentifier: NSUserInterfaceItemIdentifier("name"))
-        guard nameColumn >= 0 else { return }
-        tableView.reloadData(
-            forRowIndexes: IndexSet(integer: row),
-            columnIndexes: IndexSet(integer: nameColumn)
-        )
-    }
-
-    private func prefetchVisibleNeighborhood() {
-        let visibleRows = tableView.rows(in: tableView.visibleRect)
-        guard visibleRows.length > 0 else { return }
-        let minVisible = max(0, visibleRows.location)
-        let maxVisible = min(items.count - 1, visibleRows.location + visibleRows.length - 1)
-        guard minVisible <= maxVisible else { return }
-        let prefetchLower = max(0, minVisible - 10)
-        let prefetchUpper = min(items.count - 1, maxVisible + 20)
-        guard prefetchLower <= prefetchUpper else { return }
-        let visibleSet = Set(minVisible...maxVisible)
-        let prefetchURLs = (prefetchLower...prefetchUpper).compactMap { index -> URL? in
-            guard !visibleSet.contains(index) else { return nil }
-            return items[index].url
+        guard nameColumn >= 0,
+              let nameCell = tableView.view(atColumn: nameColumn, row: row, makeIfNecessary: false) as? NSTableCellView,
+              let currentIcon = nameCell.subviews.first(where: { ($0 as? NSImageView)?.identifier?.rawValue == "name-icon" }) as? NSImageView,
+              currentIcon.toolTip == url.path
+        else {
+            return
         }
-        guard !prefetchURLs.isEmpty else { return }
-        ThumbnailCoordinator.shared.prefetch(
-            urls: prefetchURLs,
-            targetSide: 64,
-            policy: .list
-        )
+
+        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            let transition = CATransition()
+            transition.type = .fade
+            transition.duration = Motion.duration
+            transition.timingFunction = Motion.timingFunction
+            currentIcon.layer?.add(transition, forKey: "listThumbnailSwapFade")
+        }
+        currentIcon.alphaValue = 1
+        currentIcon.image = model.displayImageForCurrentStagedState(image, fileURL: url)
     }
 }
 
