@@ -516,6 +516,7 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         let applyState = model.fileActionState(for: .applyMetadataChanges, targetURLs: targetURLs)
         let clearState = model.fileActionState(for: .clearMetadataChanges, targetURLs: targetURLs)
         let restoreState = model.fileActionState(for: .restoreFromLastBackup, targetURLs: targetURLs)
+        let applyTitle = model.applyMetadataSelectionTitle(for: targetURLs)
 
         func makeItem(title: String, action: Selector, symbolName: String, isEnabled: Bool) -> NSMenuItem {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
@@ -544,7 +545,7 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         menu.addItem(.separator())
 
         let applyItem = makeItem(
-            title: applyState.title,
+            title: applyTitle,
             action: #selector(applyFromContextMenu(_:)),
             symbolName: applyState.symbolName,
             isEnabled: applyState.isEnabled

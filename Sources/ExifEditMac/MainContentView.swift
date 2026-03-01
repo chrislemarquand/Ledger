@@ -699,13 +699,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         } else if menuItem.action == #selector(switchToListAction(_:)) {
             menuItem.state = model.browserViewMode == .list ? .on : .off
         } else if menuItem.action == #selector(applySelectionAction(_:)) {
-            let selectionCount = selection.count
-            if selectionCount > 0 {
-                let suffix = selectionCount == 1 ? "" : "s"
-                menuItem.title = "Apply Metadata Changes to \(selectionCount) Image\(suffix)"
-            } else {
-                menuItem.title = "Apply Metadata Changes to Selection"
-            }
+            menuItem.title = model.applyMetadataSelectionTitle(for: selection)
             return model.fileActionState(for: .applyMetadataChanges, targetURLs: selection).isEnabled
         } else if menuItem.action == #selector(applyFolderAction(_:)) {
             menuItem.title = "Apply Metadata Changes to Folder"

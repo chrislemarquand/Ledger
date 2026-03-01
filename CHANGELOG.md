@@ -6,6 +6,9 @@ All notable changes to Ledger are documented here.
 
 ## [Unreleased]
 
+### Fixed
+- Context-menu Apply label in both list and gallery now exactly matches the Image-menu selection action title format (`"Apply Metadata Changes to N Image(s)"`) and uses the same shared selection-count logic.
+
 ---
 
 ## [0.6.5] — build 75 — 2026-03-01

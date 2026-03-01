@@ -861,6 +861,15 @@ final class AppModel: ObservableObject {
         openInDefaultApp(url)
     }
 
+    func applyMetadataSelectionTitle(for targetURLs: [URL]) -> String {
+        let count = Set(targetURLs).count
+        guard count > 0 else {
+            return "Apply Metadata Changes to Selection"
+        }
+        let suffix = count == 1 ? "" : "s"
+        return "Apply Metadata Changes to \(count) Image\(suffix)"
+    }
+
     func fileActionState(for id: FileActionID, targetURLs: [URL]) -> FileActionState {
         let normalized = Array(Set(targetURLs)).sorted { $0.path < $1.path }
         let hasSelection = !normalized.isEmpty
