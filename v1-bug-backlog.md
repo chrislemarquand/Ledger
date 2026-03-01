@@ -6,6 +6,7 @@
 - `P2`: polish and usability issues.
 
 ## Open issues
+- [ ] `P1` Folder-switch UX regression: opening a folder can briefly flash the "No Supported Images" empty state before thumbnails render. Marked as a regression from earlier builds and currently unresolved; attempted fixes were reverted (`267d49f`, `2c8658a`).
 - [ ] `P1` Verify context-menu parity and enabled states in list/gallery/menu bar across mixed selections.
 - [ ] `P1` Verify favorites pin/unpin/reorder flows after relaunch and invalid path cleanup.
 - [ ] `P2` Validate reduced-motion behavior for inspector section expand/collapse and field focus scrolling.
