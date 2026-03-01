@@ -137,15 +137,15 @@ Replace custom implementations with idiomatic SwiftUI / AppKit equivalents.
 
 ### v1.0.1
 - [ ] **R1** Full sidebar organiser — drag-and-drop group creation, import/export of favourite sets.
-- [ ] **R2** Final branding consolidation — all user-facing labels, titles, and support paths consistent under the chosen app name. (Still open pending R3 completion.)
+- [x] **R2** Final branding consolidation — all user-facing labels, titles, and support paths consistent under the chosen app name. ✅ Completed via R3–R7 (Ledger project identity, runtime labels, defaults/app-support migration, and release artifact naming).
 
 ### Branding rename (Ledger)
 Full blueprint: `output/BRANDING_NAMING_REFRESH_IMPLEMENTATION.md`. User-facing name is **Ledger** — partially applied. Remaining work:
 
-Current status: repo/project folder rename to `Ledger` is complete, display/bundle identifiers are `Ledger`, and legacy derived artifacts were removed. Internal target/scheme/source symbol names still include `ExifEditMac` and need coordinated cleanup/migration.
+Current status: repo/project folder rename to `Ledger` is complete, display/bundle identifiers are `Ledger`, and Xcode target/scheme/plist/entitlements are now aligned to `Ledger`. Remaining `ExifEditMac` references are limited to SwiftPM module naming and explicit legacy migration compatibility paths.
 
-- [ ] **R3** **A — Identity + build settings** — verify `project.pbxproj`, `.xcscheme`, `Info.plist`, `Base.xcconfig` are all consistent for Ledger. (Still open: target/scheme/plist/entitlements filenames and several internal identifiers remain `ExifEditMac`.)
-- [x] **R4** **B — Runtime strings + UI labels** — audit `ExifEditMacApp.swift` and any remaining hardcoded app-name strings for consistency. ✅ Runtime/user-facing labels now resolve via `AppBrand.displayName` (`Ledger`), with no stale user-visible app name strings found.
+- [x] **R3** **A — Identity + build settings** — verify `project.pbxproj`, `.xcscheme`, `Info.plist`, `Base.xcconfig` are all consistent for Ledger. ✅ Done: target/scheme renamed to Ledger; Info.plist/entitlements renamed to `Config/Ledger-*`; release scripts default to `SCHEME_NAME=Ledger`.
+- [x] **R4** **B — Runtime strings + UI labels** — audit app runtime labels and any remaining hardcoded app-name strings for consistency. ✅ Runtime/user-facing labels now resolve via `AppBrand.displayName` (`Ledger`), with no stale user-visible app name strings found.
 - [x] **R5** **C — Persistent domains** — UserDefaults migration: read old `Logbook.*` keys as fallback; write sentinel `Ledger.Migration.v1Completed`. ✅ Sentinel + migration already in place; defaults reads now check current keys first, then `Logbook.*` fallback keys.
 - [x] **R6** **D — App Support directory** — atomic move `~/Library/Application Support/Logbook` → `Ledger`; fallback read from old path if move fails. ✅ `performBrandMigrationsIfNeeded()` + `migrateLegacySupportDirectoryIfNeeded()` implemented; stores read current path with legacy fallback candidates.
 - [x] **R7** **E — Release + distribution artifacts** — verify `scripts/release/*.sh` and DMG name output as `Ledger.dmg`. ✅ Release scripts use `Ledger.xcodeproj` and `APP_DISPLAY_NAME`; DMG name is derived from app bundle name (`$APP_NAME.dmg`), which resolves to `Ledger.dmg`.

@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @main
-struct ExifEditMacApp: App {
+struct LedgerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {

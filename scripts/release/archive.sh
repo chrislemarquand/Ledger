@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PROJECT_PATH="${PROJECT_PATH:-$ROOT_DIR/Ledger.xcodeproj}"
-SCHEME_NAME="${SCHEME_NAME:-ExifEditMac}"
+SCHEME_NAME="${SCHEME_NAME:-Ledger}"
 APP_NAME="${APP_NAME:-$(awk -F'=' '/^APP_DISPLAY_NAME[[:space:]]*=/{gsub(/[[:space:]]/, \"\", $2); print $2}' \"$ROOT_DIR/Config/Base.xcconfig\")}"
 BUILD_DIR="${BUILD_DIR:-$ROOT_DIR/build}"
 ARCHIVE_PATH="$BUILD_DIR/archive/${APP_NAME}.xcarchive"

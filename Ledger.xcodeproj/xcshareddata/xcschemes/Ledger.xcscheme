@@ -17,7 +17,7 @@
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "A10000600000000000000001"
                BuildableName = "Ledger.app"
-               BlueprintName = "ExifEditMac"
+               BlueprintName = "Ledger"
                ReferencedContainer = "container:Ledger.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -59,7 +59,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A10000600000000000000001"
             BuildableName = "Ledger.app"
-            BlueprintName = "ExifEditMac"
+            BlueprintName = "Ledger"
             ReferencedContainer = "container:Ledger.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -76,7 +76,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A10000600000000000000001"
             BuildableName = "Ledger.app"
-            BlueprintName = "ExifEditMac"
+            BlueprintName = "Ledger"
             ReferencedContainer = "container:Ledger.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
 PROJECT_PATH="${PROJECT_PATH:-Ledger.xcodeproj}"
-SCHEME_NAME="${SCHEME_NAME:-ExifEditMac}"
+SCHEME_NAME="${SCHEME_NAME:-Ledger}"
 LOG_DIR="${LOG_DIR:-/tmp}"
 BUILD_LOG="$LOG_DIR/exifedit_release_check_build.log"
 TEST_LOG="$LOG_DIR/exifedit_release_check_test.log"

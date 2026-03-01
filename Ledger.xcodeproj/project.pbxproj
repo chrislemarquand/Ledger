@@ -9,7 +9,7 @@
 /* Begin PBXBuildFile section */
 		469CE1912F4B7DE400D51BC9 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 469CE1902F4B7DE400D51BC9 /* AppIcon.icon */; };
 		A100001B0000000000000001 /* Sources/Ledger/AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000B0000000000000001 /* Sources/Ledger/AppModel.swift */; };
-		A100001C0000000000000001 /* Sources/Ledger/ExifEditMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000C0000000000000001 /* Sources/Ledger/ExifEditMacApp.swift */; };
+		A100001C0000000000000001 /* Sources/Ledger/LedgerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000C0000000000000001 /* Sources/Ledger/LedgerApp.swift */; };
 		A100001D0000000000000001 /* Sources/Ledger/MainContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000D0000000000000001 /* Sources/Ledger/MainContentView.swift */; };
 		A100001E0000000000000001 /* Sources/ExifEditCore/BackupManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000110000000000000001 /* Sources/ExifEditCore/BackupManager.swift */; };
 		A100001F0000000000000001 /* Sources/ExifEditCore/Domain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000120000000000000001 /* Sources/ExifEditCore/Domain.swift */; };
@@ -54,8 +54,8 @@
 		469CE1902F4B7DE400D51BC9 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		A10000010000000000000001 /* Ledger.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Ledger.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000020000000000000001 /* ExifEditCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ExifEditCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		A10000030000000000000001 /* Config/ExifEditMac-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Config/ExifEditMac-Info.plist"; sourceTree = SOURCE_ROOT; };
-		A10000040000000000000001 /* Config/ExifEditMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Config/ExifEditMac.entitlements; sourceTree = SOURCE_ROOT; };
+		A10000030000000000000001 /* Config/Ledger-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Config/Ledger-Info.plist"; sourceTree = SOURCE_ROOT; };
+		A10000040000000000000001 /* Config/Ledger.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Config/Ledger.entitlements; sourceTree = SOURCE_ROOT; };
 		A10000050000000000000001 /* Config/Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		A10000060000000000000001 /* Config/Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Release.xcconfig; sourceTree = SOURCE_ROOT; };
 		A10000070000000000000001 /* scripts/release/archive.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = scripts/release/archive.sh; sourceTree = SOURCE_ROOT; };
@@ -63,7 +63,7 @@
 		A10000090000000000000001 /* scripts/release/notarize.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = scripts/release/notarize.sh; sourceTree = SOURCE_ROOT; };
 		A100000A0000000000000001 /* scripts/release/release.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = scripts/release/release.sh; sourceTree = SOURCE_ROOT; };
 		A100000B0000000000000001 /* Sources/Ledger/AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/AppModel.swift; sourceTree = SOURCE_ROOT; };
-		A100000C0000000000000001 /* Sources/Ledger/ExifEditMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/ExifEditMacApp.swift; sourceTree = SOURCE_ROOT; };
+		A100000C0000000000000001 /* Sources/Ledger/LedgerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/LedgerApp.swift; sourceTree = SOURCE_ROOT; };
 		A100000D0000000000000001 /* Sources/Ledger/MainContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/MainContentView.swift; sourceTree = SOURCE_ROOT; };
 		A10000110000000000000001 /* Sources/ExifEditCore/BackupManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/BackupManager.swift; sourceTree = SOURCE_ROOT; };
 		A10000120000000000000001 /* Sources/ExifEditCore/Domain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/Domain.swift; sourceTree = SOURCE_ROOT; };
@@ -158,8 +158,8 @@
 		A10000530000000000000001 /* Config */ = {
 			isa = PBXGroup;
 			children = (
-				A10000030000000000000001 /* Config/ExifEditMac-Info.plist */,
-				A10000040000000000000001 /* Config/ExifEditMac.entitlements */,
+				A10000030000000000000001 /* Config/Ledger-Info.plist */,
+				A10000040000000000000001 /* Config/Ledger.entitlements */,
 				A10000050000000000000001 /* Config/Debug.xcconfig */,
 				A10000060000000000000001 /* Config/Release.xcconfig */,
 			);
@@ -190,7 +190,7 @@
 			children = (
 				B100000D0000000000000001 /* Assets.xcassets */,
 				A100000B0000000000000001 /* Sources/Ledger/AppModel.swift */,
-				A100000C0000000000000001 /* Sources/Ledger/ExifEditMacApp.swift */,
+				A100000C0000000000000001 /* Sources/Ledger/LedgerApp.swift */,
 				A100000D0000000000000001 /* Sources/Ledger/MainContentView.swift */,
 				A10001410000000000000001 /* Sources/Ledger/Presets.swift */,
 				A10001430000000000000001 /* Sources/Ledger/BrowserGalleryView.swift */,
@@ -219,9 +219,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		A10000600000000000000001 /* ExifEditMac */ = {
+		A10000600000000000000001 /* Ledger */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A10000700000000000000001 /* Build configuration list for PBXNativeTarget "ExifEditMac" */;
+			buildConfigurationList = A10000700000000000000001 /* Build configuration list for PBXNativeTarget "Ledger" */;
 			buildPhases = (
 				A10000800000000000000001 /* Sources */,
 				A10000410000000000000001 /* Frameworks */,
@@ -233,8 +233,8 @@
 			dependencies = (
 				A10000900000000000000001 /* PBXTargetDependency */,
 			);
-			name = ExifEditMac;
-			productName = ExifEditMac;
+			name = Ledger;
+			productName = Ledger;
 			productReference = A10000010000000000000001 /* Ledger.app */;
 			productType = "com.apple.product-type.application";
 		};
@@ -293,7 +293,7 @@
 					};
 				};
 			};
-			buildConfigurationList = A10001100000000000000001 /* Build configuration list for PBXProject "ExifEditMac" */;
+			buildConfigurationList = A10001100000000000000001 /* Build configuration list for PBXProject "Ledger" */;
 			compatibilityVersion = "Xcode 16.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -306,7 +306,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				A10000600000000000000001 /* ExifEditMac */,
+				A10000600000000000000001 /* Ledger */,
 				A10000610000000000000001 /* ExifEditCore */,
 				A10000620000000000000001 /* ExifEditCoreTests */,
 			);
@@ -353,7 +353,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A100001B0000000000000001 /* Sources/Ledger/AppModel.swift in Sources */,
-				A100001C0000000000000001 /* Sources/Ledger/ExifEditMacApp.swift in Sources */,
+				A100001C0000000000000001 /* Sources/Ledger/LedgerApp.swift in Sources */,
 				A100001D0000000000000001 /* Sources/Ledger/MainContentView.swift in Sources */,
 				A10001420000000000000001 /* Sources/Ledger/Presets.swift in Sources */,
 				A10001440000000000000001 /* Sources/Ledger/BrowserGalleryView.swift in Sources */,
@@ -438,8 +438,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = BrandAccent;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
-				CODE_SIGN_ENTITLEMENTS = Config/ExifEditMac.entitlements;
-				INFOPLIST_FILE = "Config/ExifEditMac-Info.plist";
+				CODE_SIGN_ENTITLEMENTS = Config/Ledger.entitlements;
+				INFOPLIST_FILE = "Config/Ledger-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -460,8 +460,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = BrandAccent;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
-				CODE_SIGN_ENTITLEMENTS = Config/ExifEditMac.entitlements;
-				INFOPLIST_FILE = "Config/ExifEditMac-Info.plist";
+				CODE_SIGN_ENTITLEMENTS = Config/Ledger.entitlements;
+				INFOPLIST_FILE = "Config/Ledger-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -528,7 +528,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A10000700000000000000001 /* Build configuration list for PBXNativeTarget "ExifEditMac" */ = {
+		A10000700000000000000001 /* Build configuration list for PBXNativeTarget "Ledger" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A10001220000000000000001 /* Debug */,
@@ -555,7 +555,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A10001100000000000000001 /* Build configuration list for PBXProject "ExifEditMac" */ = {
+		A10001100000000000000001 /* Build configuration list for PBXProject "Ledger" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A10001200000000000000001 /* Debug */,
