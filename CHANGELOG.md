@@ -8,7 +8,7 @@ All notable changes to Ledger are documented here.
 
 ---
 
-## [0.6.6] — build 89 — 2026-03-01
+## [0.6.6] — build 90 — 2026-03-01
 
 ### Changed
 - Thumbnail loading now uses a shared `ThumbnailCoordinator` state machine across browser surfaces, with surface-specific policies for gallery, list, and inspector.
@@ -20,6 +20,7 @@ All notable changes to Ledger are documented here.
 - Added visible-neighborhood thumbnail prefetch in gallery and list to improve perceived thumbnail readiness while scrolling.
 - Added `ThumbnailCoordinator.swift` to the ExifEditMac target's Compile Sources in `project.pbxproj` to resolve missing-symbol build failures in Xcode.
 - Fixed post-open beachball regression by suppressing non-essential thumbnail update notifications (cache-hit, prefetch, and loading phases), deduplicating coordinator state notifications, and limiting gallery item reloads to visible cells.
+- Fixed gallery thumbnail visual glitch/reload churn by only reloading tiles on meaningful final thumbnail readiness (`readyHigh`/fallback), tracking last-reloaded rendered side per URL, and skipping new thumbnail requests when cached resolution is already sufficient.
 
 ---
 
