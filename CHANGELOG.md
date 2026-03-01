@@ -6,6 +6,9 @@ All notable changes to Ledger are documented here.
 
 ## [Unreleased]
 
+### Added
+- Roadmap polish item **P26** added to formalize command-scope rules: selection-only image actions, clear separation of folder-wide actions using macOS menu conventions, and context-menu actions constrained to the selected/right-click target files.
+
 ---
 
 ## [0.6.5] — build 79 — 2026-03-01
