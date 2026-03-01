@@ -52,7 +52,9 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
     private var lastMagnification: CGFloat = 0
     private let pinchThreshold: CGFloat = 0.14
     private var browserFocusObserver: NSObjectProtocol?
+    private var thumbnailUpdateObserver: NSObjectProtocol?
     private var lastRenderedViewMode: AppModel.BrowserViewMode?
+    private var lastReloadedThumbnailSideByURL: [URL: CGFloat] = [:]
 
     init(model: AppModel, items: [AppModel.BrowserItem]) {
         self.model = model
@@ -81,6 +83,18 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
                 self?.focusGalleryForKeyboardNavigation()
             }
         }
+        thumbnailUpdateObserver = NotificationCenter.default.addObserver(
+            forName: .thumbnailCoordinatorDidUpdate,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let self,
+                  let url = note.userInfo?["url"] as? URL
+            else { return }
+            Task { @MainActor [weak self] in
+                self?.reloadThumbnailItem(for: url)
+            }
+        }
     }
 
     override func viewWillDisappear() {
@@ -88,6 +102,10 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
         if let browserFocusObserver {
             NotificationCenter.default.removeObserver(browserFocusObserver)
             self.browserFocusObserver = nil
+        }
+        if let thumbnailUpdateObserver {
+            NotificationCenter.default.removeObserver(thumbnailUpdateObserver)
+            self.thumbnailUpdateObserver = nil
         }
     }
 
@@ -228,6 +246,8 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
         if listChanged {
             collectionView.reloadData()
             lastRenderedURLs = currentURLs
+            let currentSet = Set(currentURLs)
+            lastReloadedThumbnailSideByURL = lastReloadedThumbnailSideByURL.filter { currentSet.contains($0.key) }
         }
 
         // Compute before syncSelection so we can suppress the synchronous scrollToItems
@@ -406,6 +426,37 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
         model.setQuickLookSourceFrame(for: primaryURL, rectOnScreen: rectOnScreen)
     }
 
+    private func requestThumbnailIfNeeded(for item: AppModel.BrowserItem, tileSide: CGFloat) {
+        let requiredSide = max(tileSide, 120)
+        if ThumbnailPipeline.cachedImage(for: item.url, minRenderedSide: requiredSide * 0.95) != nil {
+            return
+        }
+        ThumbnailCoordinator.shared.ensureThumbnail(
+            url: item.url,
+            targetSide: requiredSide,
+            policy: .gallery,
+            forceRefresh: false
+        )
+    }
+
+    private func reloadThumbnailItem(for url: URL) {
+        guard let state = ThumbnailCoordinator.shared.state(for: url) else { return }
+        switch state.phase {
+        case .readyHigh, .failedFallback:
+            break
+        default:
+            return
+        }
+        let previousSide = lastReloadedThumbnailSideByURL[url] ?? 0
+        guard state.renderedSide > previousSide + 1 else { return }
+        lastReloadedThumbnailSideByURL[url] = state.renderedSide
+
+        guard let row = items.firstIndex(where: { $0.url == url }) else { return }
+        let indexPath = IndexPath(item: row, section: 0)
+        guard collectionView.indexPathsForVisibleItems().contains(indexPath) else { return }
+        collectionView.reloadItems(at: [indexPath])
+    }
+
     private func prefetchVisibleNeighborhood() {
         let visible = collectionView.indexPathsForVisibleItems()
             .map(\.item)
@@ -559,11 +610,7 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
             tileSide: max(layout.tileSide, 40),
             preferredAspectRatio: preferredAspectRatio(for: item.url)
         )
-        cell.loadThumbnailIfNeeded(
-            fileURL: item.url,
-            targetSide: max(layout.tileSide, 120),
-            model: model
-        )
+        requestThumbnailIfNeeded(for: item, tileSide: max(layout.tileSide, 40))
         return cell
     }
 
@@ -788,19 +835,10 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
     private var preferredAspectRatio: CGFloat?
     private var imageWidthConstraint: NSLayoutConstraint?
     private var imageHeightConstraint: NSLayoutConstraint?
-    private var representedFileURL: URL?
-    private var thumbnailLoadTask: Task<Void, Never>?
 
     override func loadView() {
         view = NSView(frame: .zero)
         configureViewHierarchy()
-    }
-
-    override func prepareForReuse() {
-        super.prepareForReuse()
-        thumbnailLoadTask?.cancel()
-        thumbnailLoadTask = nil
-        representedFileURL = nil
     }
 
     override func viewDidLayout() {
@@ -893,38 +931,11 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         preferredAspectRatio: CGFloat?
     ) {
         titleField.stringValue = name
-        representedFileURL = nil
         self.preferredAspectRatio = preferredAspectRatio
         setImage(image)
         applySelection(isSelected: isSelected)
         applyPending(hasPendingEdits: hasPendingEdits)
         updateTileSide(tileSide, animated: false)
-    }
-
-    func loadThumbnailIfNeeded(fileURL: URL, targetSide: CGFloat, model: AppModel) {
-        representedFileURL = fileURL
-
-        let requiredSide = max(targetSide, 120)
-        if let cached = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: requiredSide * 0.95) {
-            setImage(model.displayImageForCurrentStagedState(cached, fileURL: fileURL))
-            return
-        }
-
-        thumbnailLoadTask?.cancel()
-        thumbnailLoadTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            let image = await ThumbnailCoordinator.shared.loadThumbnail(
-                url: fileURL,
-                targetSide: requiredSide,
-                policy: .gallery,
-                forceRefresh: false,
-                priorityOverride: .userInitiated
-            )
-            guard !Task.isCancelled else { return }
-            guard self.representedFileURL == fileURL else { return }
-            guard let image else { return }
-            self.setImage(model.displayImageForCurrentStagedState(image, fileURL: fileURL))
-        }
     }
 
     func updateTileSide(_ tileSide: CGFloat, animated: Bool) {
