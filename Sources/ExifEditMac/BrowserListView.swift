@@ -517,42 +517,62 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         let clearState = model.fileActionState(for: .clearMetadataChanges, targetURLs: targetURLs)
         let restoreState = model.fileActionState(for: .restoreFromLastBackup, targetURLs: targetURLs)
 
-        let openItem = NSMenuItem(title: openState.title, action: #selector(openFromContextMenu(_:)), keyEquivalent: "")
-        openItem.target = self
-        openItem.isEnabled = openState.isEnabled
-        openItem.image = NSImage(systemSymbolName: openState.symbolName, accessibilityDescription: nil)
+        func makeItem(title: String, action: Selector, symbolName: String, isEnabled: Bool) -> NSMenuItem {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            item.isEnabled = isEnabled
+            item.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
+            return item
+        }
+
+        let openItem = makeItem(
+            title: openState.title,
+            action: #selector(openFromContextMenu(_:)),
+            symbolName: openState.symbolName,
+            isEnabled: openState.isEnabled
+        )
         menu.addItem(openItem)
 
-        let revealItem = NSMenuItem(title: "Reveal in Finder", action: #selector(revealInFinderFromContextMenu(_:)), keyEquivalent: "")
-        revealItem.target = self
-        revealItem.isEnabled = !targetURLs.isEmpty
-        revealItem.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
+        let revealItem = makeItem(
+            title: "Reveal in Finder",
+            action: #selector(revealInFinderFromContextMenu(_:)),
+            symbolName: "folder",
+            isEnabled: !targetURLs.isEmpty
+        )
         menu.addItem(revealItem)
 
         menu.addItem(.separator())
 
-        let applyItem = NSMenuItem(title: applyState.title, action: #selector(applyFromContextMenu(_:)), keyEquivalent: "")
-        applyItem.target = self
-        applyItem.isEnabled = applyState.isEnabled
-        applyItem.image = NSImage(systemSymbolName: applyState.symbolName, accessibilityDescription: nil)
+        let applyItem = makeItem(
+            title: applyState.title,
+            action: #selector(applyFromContextMenu(_:)),
+            symbolName: applyState.symbolName,
+            isEnabled: applyState.isEnabled
+        )
         menu.addItem(applyItem)
 
-        let refreshItem = NSMenuItem(title: refreshState.title, action: #selector(refreshFromContextMenu(_:)), keyEquivalent: "")
-        refreshItem.target = self
-        refreshItem.isEnabled = refreshState.isEnabled
-        refreshItem.image = NSImage(systemSymbolName: refreshState.symbolName, accessibilityDescription: nil)
+        let refreshItem = makeItem(
+            title: refreshState.title,
+            action: #selector(refreshFromContextMenu(_:)),
+            symbolName: refreshState.symbolName,
+            isEnabled: refreshState.isEnabled
+        )
         menu.addItem(refreshItem)
 
-        let clearItem = NSMenuItem(title: clearState.title, action: #selector(clearFromContextMenu(_:)), keyEquivalent: "")
-        clearItem.target = self
-        clearItem.isEnabled = clearState.isEnabled
-        clearItem.image = NSImage(systemSymbolName: clearState.symbolName, accessibilityDescription: nil)
+        let clearItem = makeItem(
+            title: clearState.title,
+            action: #selector(clearFromContextMenu(_:)),
+            symbolName: clearState.symbolName,
+            isEnabled: clearState.isEnabled
+        )
         menu.addItem(clearItem)
 
-        let restoreItem = NSMenuItem(title: restoreState.title, action: #selector(restoreFromContextMenu(_:)), keyEquivalent: "")
-        restoreItem.target = self
-        restoreItem.isEnabled = restoreState.isEnabled
-        restoreItem.image = NSImage(systemSymbolName: restoreState.symbolName, accessibilityDescription: nil)
+        let restoreItem = makeItem(
+            title: restoreState.title,
+            action: #selector(restoreFromContextMenu(_:)),
+            symbolName: restoreState.symbolName,
+            isEnabled: restoreState.isEnabled
+        )
         menu.addItem(restoreItem)
         return menu
     }

@@ -90,7 +90,7 @@ struct PresetEditorSheet: View {
                     model.dismissPresetEditor(reopenManagePresets: reopenManagePresets)
                 }
                     .keyboardShortcut(.cancelAction)
-                Button(editorPrimaryButtonTitle) {
+                Button("Save") {
                     handleSave()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -107,11 +107,7 @@ struct PresetEditorSheet: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            if let duplicateConflict {
-                Text("Choose a different name, or replace the existing preset.")
-            } else {
-                Text("Choose a different name, or replace the existing preset.")
-            }
+            Text("Choose a different name, or replace the existing preset.")
         }
     }
 
@@ -123,15 +119,6 @@ struct PresetEditorSheet: View {
             return "New Preset"
         case .edit:
             return "Edit Preset"
-        }
-    }
-
-    private var editorPrimaryButtonTitle: String {
-        switch editor.mode {
-        case .createFromCurrent, .createBlank:
-            return "Save"
-        case .edit:
-            return "Save"
         }
     }
 
@@ -435,4 +422,3 @@ struct PresetManagerSheet: View {
         }
     }
 }
-

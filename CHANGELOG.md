@@ -8,9 +8,12 @@ All notable changes to Ledger are documented here.
 
 ### Changed
 - **P17** Image menu metadata apply flow split into two actions: selection-scoped apply now shows a dynamic title (`"Apply Metadata Changes to N Image(s)"`) and folder-wide apply is exposed as `"Apply Metadata Changes to Folder"` (mirrors toolbar Apply behavior).
+- **N11** Browser list context-menu construction now uses a local `makeItem` helper instead of repeated 4-line `NSMenuItem` setup blocks.
 
 ### Fixed
 - Folder menu injection now anchors to both `"Refresh"` and legacy `"Refresh Files and Metadata"` labels, preventing missed insertion when the refresh copy differs.
+- **P6** Favourites relaunch flows verified in test coverage: pin/unpin/reorder persistence across relaunch and stale-missing favourite pruning on load.
+- **N9/N10** Preset editor cleanup: removed dead `editorPrimaryButtonTitle` property and simplified duplicate alert-message branches to a single message path.
 
 ---
 
