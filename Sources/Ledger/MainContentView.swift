@@ -982,8 +982,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         private var applyChangesItem: NSToolbarItem?
         private var inspectorToggleItem: NSToolbarItem?
 
-        private var sortItem: NSToolbarItem?
-        private var presetsItem: NSToolbarItem?
+        private var sortItem: NSMenuToolbarItem?
+        private var presetsItem: NSMenuToolbarItem?
         private var sortMenu: NSMenu?
         private var presetsMenu: NSMenu?
 
@@ -1095,24 +1095,22 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 zoomInItem = item
                 return item
             case .sort:
-                let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+                let item = NSMenuToolbarItem(itemIdentifier: itemIdentifier)
                 item.label = "Sort"
                 item.paletteLabel = "Sort"
                 item.image = NSImage(systemSymbolName: "arrow.up.arrow.down", accessibilityDescription: "Sort")
-                item.target = self
-                item.action = #selector(showSortMenu(_:))
                 item.toolTip = "Sort images"
                 sortItem = item
+                updateSortMenu(with: controller.model)
                 return item
             case .presetTools:
-                let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+                let item = NSMenuToolbarItem(itemIdentifier: itemIdentifier)
                 item.label = "Presets"
                 item.paletteLabel = "Presets"
                 item.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: "Presets")
-                item.target = self
-                item.action = #selector(showPresetsMenu(_:))
                 item.toolTip = "Presets"
                 presetsItem = item
+                updatePresetsMenu(with: controller.model)
                 return item
             case .openFolder:
                 let item = NSToolbarItem(itemIdentifier: itemIdentifier)
@@ -1174,6 +1172,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         private func updateSortMenu(with model: AppModel) {
             let menu = makeSortMenu(model: model)
             sortMenu = menu
+            sortItem?.menu = menu
             for item in menu.items {
                 item.state = .off
             }
@@ -1190,7 +1189,9 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         }
 
         private func updatePresetsMenu(with model: AppModel) {
-            presetsMenu = makePresetsMenu(model: model)
+            let menu = makePresetsMenu(model: model)
+            presetsMenu = menu
+            presetsItem?.menu = menu
         }
 
         private func updateApplyEnabled(with model: AppModel) {
@@ -1201,35 +1202,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             let label = model.isInspectorCollapsed ? "Show Inspector" : "Hide Inspector"
             inspectorToggleItem?.label = label
             inspectorToggleItem?.toolTip = label
-        }
-
-        @objc
-        private func showSortMenu(_ sender: Any?) {
-            guard let controller else { return }
-            if sortMenu == nil {
-                updateSortMenu(with: controller.model)
-            }
-            present(menu: sortMenu, sender: sender)
-        }
-
-        @objc
-        private func showPresetsMenu(_ sender: Any?) {
-            guard let controller else { return }
-            updatePresetsMenu(with: controller.model)
-            present(menu: presetsMenu, sender: sender)
-        }
-
-        private func present(menu: NSMenu?, sender: Any?) {
-            guard let menu,
-                  let controller,
-                  let window = controller.view.window,
-                  let contentView = window.contentView
-            else { return }
-            let anchorInScreen = NSEvent.mouseLocation
-            let anchorInWindow = window.convertPoint(fromScreen: anchorInScreen)
-            let anchorInContent = contentView.convert(anchorInWindow, from: nil)
-            menu.popUp(positioning: nil, at: CGPoint(x: anchorInContent.x, y: anchorInContent.y - 6), in: contentView)
-            _ = sender
         }
 
         private func makeSortMenu(model: AppModel) -> NSMenu {

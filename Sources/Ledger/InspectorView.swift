@@ -183,7 +183,7 @@ struct InspectorView: View {
                                 )
                             }
                         } label: {
-                            Text("Preview")
+                            Text(sectionHeaderTitle("Preview"))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(AppTheme.accentColor)
                                 .tracking(0.4)
@@ -321,7 +321,7 @@ struct InspectorView: View {
                                         .fill(.quaternary.opacity(0.35))
                                 )
                         } label: {
-                            Text(grouped.section.uppercased())
+                            Text(sectionHeaderTitle(grouped.section))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(AppTheme.accentColor)
                                 .tracking(0.4)
@@ -443,6 +443,10 @@ struct InspectorView: View {
 
     private var primarySelectedFileURL: URL? {
         model.selectedFileURLs.sorted { $0.path < $1.path }.first
+    }
+
+    private func sectionHeaderTitle(_ title: String) -> String {
+        title.uppercased()
     }
 
     private var singleSelectionSubtitle: String? {

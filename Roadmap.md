@@ -112,14 +112,14 @@ Replace custom implementations with idiomatic SwiftUI / AppKit equivalents.
 
 | ID | Item | Location | Target |
 |----|------|----------|--------|
-| N1 | Sort / Presets toolbar items | Toolbar | `NSMenuToolbarItem` — decide at implementation time |
+| N1 | ~~Sort / Presets toolbar items~~ | Toolbar | ✅ Implemented with native `NSMenuToolbarItem` for Sort and Presets (replacing manual toolbar-menu popup wiring). |
 | N2 | ~~`BrowserLoadingPlaceholderView`~~ | ~~line 1500~~ | ❌ No change — custom skeleton UI (shimmer rows + tile grid) is better than `ProgressView` (too generic) or `.redacted` (incompatible with `NSViewRepresentable`); existing implementation is correct SwiftUI. |
 | N3 | ~~Sidebar count label~~ | ~~line 1294~~ | ✅ `.badge(model.sidebarImageCountText(for: item).map { Text($0) })` — custom `Spacer` + fixed-width `Text` + `Color.clear` placeholder removed; consistent with Mail and Reminders |
-| N4 | Focus ring on scroll views (2 sites) | ~lines 1785, 2367 | `.focusRingType(.exterior)` |
+| N4 | ~~Focus ring on scroll views (2 sites)~~ | ~~~lines 1785, 2367~~ | ❌ Superseded by the AppKit list/gallery rewrite; focus-ring behavior is now controlled directly on `NSTableView`/`NSCollectionView` (`focusRingType = .none`) rather than legacy scroll-view sites. |
 | N5 | ~~Pending-edit dot (4 sites)~~ | ~~inspector label, inspector preview, list cell, gallery cell~~ | ✅ `Image(systemName: "circle.fill").foregroundStyle(.orange)` (SwiftUI sites); `NSImageView` + `NSImage(systemSymbolName:)` + `contentTintColor` (AppKit sites); `pendingDotCornerRadius` constants removed |
 | N6 | ~~`toggleInspector` label (static "Hide Inspector")~~ | ~~line 1021~~ | ✅ Done — dynamic label via `updateInspectorToggle(with:)` |
-| N7 | `InspectorLocationMapView` NSViewRepresentable | ~line 4554 | SwiftUI `Map(position:)` with `MapCameraPosition.region`, `Marker`, `.mapControls {}`, `.mapInteractionModes([.zoom])`; `InspectorPassthroughMapView` scroll-passthrough subclass may become unnecessary |
-| N8 | `InspectorPreviewActionButtonStyle` + custom environment keys | InspectorView.swift ~lines 5–61 | Three-layer system (2 `EnvironmentKey` structs + `ButtonStyle` + label view) just to propagate hover/pressed state; collapse into a single self-contained button component using `.buttonStyle(.plain)` + `@State isHovered` + `.onHover` |
+| N7 | ~~`InspectorLocationMapView` NSViewRepresentable~~ | ~~~line 4554~~ | ❌ Superseded by near-term `R16` (Inspector AppKit rewrite). |
+| N8 | ~~`InspectorPreviewActionButtonStyle` + custom environment keys~~ | ~~~InspectorView.swift ~lines 5–61~~~ | ❌ Superseded by near-term `R16` (Inspector AppKit rewrite). |
 | N9 | ~~`editorPrimaryButtonTitle` dead computed property~~ | ~~PresetSheets.swift ~line 129~~ | ✅ Removed; preset editor primary button now uses direct `"Save"` label. |
 | N10 | ~~Duplicate alert message branches~~ | ~~PresetSheets.swift ~lines 109–115~~ | ✅ Collapsed duplicate `.alert` message branches into a single `Text(...)` block. |
 | N11 | ~~`NSMenuItem` 4-line-per-item boilerplate~~ | ~~BrowserListView.swift ~lines 520–556~~ | ✅ Replaced repeated per-item setup with a local `makeItem` helper (matching the gallery pattern). |
@@ -165,3 +165,4 @@ Current status: repo/project folder rename to `Ledger` is complete, display/bund
 - [ ] **R14** **Search** — expand-to-field toolbar button (like Notes.app on macOS 26) with metadata-aware search: filename, date range, camera/lens, rating, keyword. `searchQuery`/`filteredBrowserItems` infrastructure already in place.
 - [ ] **R15** **Configurable list columns** — show/hide and reorder columns; add EXIF-backed columns (date modified, camera make/model, lens, focal length, ISO, aperture, shutter speed, pixel dimensions). Each new column gets a `BrowserSort` case and `NSSortDescriptor` prototype; sort and header infrastructure from P7 carries forward directly.
 - [ ] **R19** **Optional gallery UX reintroduction pack (post-v1.0)** — reintroduce non-baseline gallery polish one feature at a time: image-hugging selector ring, ring-anchored pending-dot positioning, ring geometry continuity during staged rotate/flip, tile/image transition polish beyond native defaults, and aggressive gallery prefetch heuristics.
+- [ ] **R20** **Toolbar customization/editing support** — support user-configurable toolbar composition/reordering in a future pass (while preserving native AppKit toolbar behavior and validation).
