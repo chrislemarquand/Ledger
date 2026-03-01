@@ -70,67 +70,14 @@ func appAnimation() -> Animation? {
 }
 
 actor SharedThumbnailRequestBroker {
-    static let shared = SharedThumbnailRequestBroker(maxConcurrentRequests: 4)
-
-    private struct RequestKey: Hashable {
-        let url: URL
-        let requiredSide: Int
-    }
-
-    private let maxConcurrentRequests: Int
-    private var activeRequestCount = 0
-    private var waiters: [CheckedContinuation<Void, Never>] = []
-    private var inflight: [RequestKey: Task<NSImage?, Never>] = [:]
-
-    init(maxConcurrentRequests: Int) {
-        self.maxConcurrentRequests = max(1, maxConcurrentRequests)
-    }
+    static let shared = SharedThumbnailRequestBroker()
 
     func request(url: URL, requiredSide: CGFloat, forceRefresh: Bool) async -> NSImage? {
-        let normalizedSide = max(1, Int(requiredSide.rounded(.up)))
-        let key = RequestKey(url: url, requiredSide: normalizedSide)
-
-        if forceRefresh {
-            ThumbnailPipeline.invalidateCachedImages(for: [url])
-        } else if let task = inflight[key] {
-            return await task.value
-        }
-
-        let task = Task<NSImage?, Never> { [weak self] in
-            guard let self else { return nil }
-            return await self.runWithPermit {
-                await ThumbnailPipeline.generateThumbnail(fileURL: url, maxPixelSize: CGFloat(normalizedSide))
-            }
-        }
-        inflight[key] = task
-        let image = await task.value
-        inflight[key] = nil
-        return image
-    }
-
-    private func acquirePermit() async {
-        if activeRequestCount < maxConcurrentRequests {
-            activeRequestCount += 1
-            return
-        }
-        await withCheckedContinuation { continuation in
-            waiters.append(continuation)
-        }
-    }
-
-    private func releasePermit() {
-        if !waiters.isEmpty {
-            let waiter = waiters.removeFirst()
-            waiter.resume()
-            return
-        }
-        activeRequestCount = max(0, activeRequestCount - 1)
-    }
-
-    private func runWithPermit(_ operation: @Sendable () async -> NSImage?) async -> NSImage? {
-        await acquirePermit()
-        defer { releasePermit() }
-        return await operation()
+        await ThumbnailService.request(
+            url: url,
+            requiredSide: requiredSide,
+            forceRefresh: forceRefresh
+        )
     }
 }
 

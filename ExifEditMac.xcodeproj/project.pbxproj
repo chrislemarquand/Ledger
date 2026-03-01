@@ -29,6 +29,7 @@
 		A10001480000000000000001 /* Sources/ExifEditMac/InspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001470000000000000001 /* Sources/ExifEditMac/InspectorView.swift */; };
 		A100014A0000000000000001 /* Sources/ExifEditMac/NavigationSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001490000000000000001 /* Sources/ExifEditMac/NavigationSidebarView.swift */; };
 		A100014C0000000000000001 /* Sources/ExifEditMac/PresetSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014B0000000000000001 /* Sources/ExifEditMac/PresetSheets.swift */; };
+		A100014E0000000000000001 /* Sources/ExifEditMac/ThumbnailService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014D0000000000000001 /* Sources/ExifEditMac/ThumbnailService.swift */; };
 		B100001D0000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000D0000000000000001 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -81,6 +82,7 @@
 		A10001470000000000000001 /* Sources/ExifEditMac/InspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditMac/InspectorView.swift; sourceTree = SOURCE_ROOT; };
 		A10001490000000000000001 /* Sources/ExifEditMac/NavigationSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditMac/NavigationSidebarView.swift; sourceTree = SOURCE_ROOT; };
 		A100014B0000000000000001 /* Sources/ExifEditMac/PresetSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditMac/PresetSheets.swift; sourceTree = SOURCE_ROOT; };
+		A100014D0000000000000001 /* Sources/ExifEditMac/ThumbnailService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditMac/ThumbnailService.swift; sourceTree = SOURCE_ROOT; };
 		B100000D0000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
@@ -196,6 +198,7 @@
 				A10001470000000000000001 /* Sources/ExifEditMac/InspectorView.swift */,
 				A10001490000000000000001 /* Sources/ExifEditMac/NavigationSidebarView.swift */,
 				A100014B0000000000000001 /* Sources/ExifEditMac/PresetSheets.swift */,
+				A100014D0000000000000001 /* Sources/ExifEditMac/ThumbnailService.swift */,
 			);
 			path = Sources/ExifEditMac;
 			sourceTree = SOURCE_ROOT;
@@ -358,6 +361,7 @@
 				A10001480000000000000001 /* Sources/ExifEditMac/InspectorView.swift in Sources */,
 				A100014A0000000000000001 /* Sources/ExifEditMac/NavigationSidebarView.swift in Sources */,
 				A100014C0000000000000001 /* Sources/ExifEditMac/PresetSheets.swift in Sources */,
+				A100014E0000000000000001 /* Sources/ExifEditMac/ThumbnailService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

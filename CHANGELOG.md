@@ -10,6 +10,7 @@ All notable changes to Ledger are documented here.
 - Marketing version bumped from `0.6.6` to `0.7` to mark the thumbnail/gallery rewrite track as 0.7 work.
 - Reverted the experimental thumbnail pipeline refactor series (`3ca1e25` through `888698b`) after runtime regressions (folder-open beachball and repeated gallery thumbnail redraw/glitching).
 - No thumbnail-fix release is currently claimed; the bug is tracked as open in roadmap item **B20**.
+- Thumbnail rewrite step **B20b** completed as architecture groundwork: thumbnail cache, inflight dedupe/concurrency control, and generation/fallback ordering were extracted into a single shared `ThumbnailService`; existing list/gallery call sites now delegate through that service without introducing new UX behavior claims.
 
 ---
 
