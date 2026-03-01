@@ -1309,6 +1309,9 @@ struct BrowserView: View {
         if let error = model.browserEnumerationError {
             return .enumerationError(error.localizedDescription)
         }
+        if model.isFolderContentLoading, model.browserItems.isEmpty {
+            return .loading
+        }
         if model.isFolderMetadataLoading, model.browserItems.isEmpty {
             return .loading
         }

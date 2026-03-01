@@ -462,6 +462,7 @@ final class AppModel: ObservableObject {
     @Published var isFolderMetadataLoading = false
     @Published var folderMetadataLoadCompleted = 0
     @Published var folderMetadataLoadTotal = 0
+    @Published var isFolderContentLoading = false
     @Published var browserEnumerationError: Error? = nil
     @Published var isApplyingMetadata = false
     @Published var applyMetadataCompleted = 0
@@ -2801,6 +2802,9 @@ final class AppModel: ObservableObject {
     }
 
     private func loadFiles(for kind: SidebarKind) {
+        isFolderContentLoading = true
+        defer { isFolderContentLoading = false }
+
         deferredFolderMetadataPrefetchTask?.cancel()
         deferredFolderMetadataPrefetchTask = nil
         folderMetadataLoadTask?.cancel()
