@@ -1,6 +1,6 @@
 # Roadmap
 
-Current version: **0.7** (build 107). Target: **v1.0**.
+Current version: **0.7** (build 108). Target: **v1.0**.
 
 Reference items by ID: **B1–B20** bugs · **P1–P24** polish · **N1–N8** native rewrites · **A1–A2** architecture · **R1–R19** post-v1.0 roadmap.
 
@@ -40,7 +40,7 @@ Reference items by ID: **B1–B20** bugs · **P1–P24** polish · **N1–N8** n
 - [x] **B20a** `Must` **Thumbnail rewrite Step 1 — baseline commit** — completed in commit `26536c5` (`Baseline: track thumbnail rewrite plan and deferred UX list`) as the branchpoint before rewrite work.
 - [x] **B20b** `Must` **Thumbnail rewrite Step 2 — single native thumbnail service** — completed: extracted thumbnail cache/request broker/generation strategy into `ThumbnailService` and switched existing list/gallery wrappers to delegate to the shared service.
 - [x] **B20c** `Must` **Thumbnail rewrite Step 3 — AppKit cell-owned lifecycle** — completed: gallery requests are owned by `AppKitGalleryItem` and list requests are owned by `BrowserListNameCellView`/`BrowserListIconView`; both cancel on reuse (`prepareForReuse`) and guard async completion with per-cell request tokens.
-- [x] **B20d** `Should` **Thumbnail rewrite Step 4 — native selection baseline** — completed: gallery selection now uses a Finder-like tile-level highlight baseline with consistent inset padding/shape; image-hugging selector ring removed from the v1 rewrite path (tracked as optional post-v1.0 reintroduction in R19).
+- [x] **B20d** `Should` **Thumbnail rewrite Step 4 — native selection baseline** — completed: gallery selection now uses a Finder-like square thumbnail-zone highlight baseline; image-hugging selector ring removed from the v1 rewrite path (tracked as optional post-v1.0 reintroduction in R19).
 - [ ] **B20e** `Must` **Thumbnail rewrite Step 5 — unify inspector preview pipeline** — route inspector preview loads through the same thumbnail service with policy-based sizing/priority.
 
 ### Sidebar

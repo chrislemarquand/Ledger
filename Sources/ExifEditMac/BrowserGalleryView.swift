@@ -817,10 +817,10 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
 
         selectionBackgroundView.translatesAutoresizingMaskIntoConstraints = false
         selectionBackgroundView.wantsLayer = true
-        selectionBackgroundView.layer?.cornerRadius = 8
+        selectionBackgroundView.layer?.cornerRadius = UIMetrics.Gallery.thumbnailCornerRadius
         selectionBackgroundView.layer?.masksToBounds = true
         selectionBackgroundView.layer?.backgroundColor = NSColor.clear.cgColor
-        view.addSubview(selectionBackgroundView, positioned: .below, relativeTo: nil)
+        thumbnailContainer.addSubview(selectionBackgroundView, positioned: .below, relativeTo: thumbnailImageView)
 
         thumbnailContainer.translatesAutoresizingMaskIntoConstraints = false
         thumbnailContainer.wantsLayer = true
@@ -847,15 +847,15 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         view.addSubview(titleField)
 
         NSLayoutConstraint.activate([
-            selectionBackgroundView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 4),
-            selectionBackgroundView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -4),
-            selectionBackgroundView.topAnchor.constraint(equalTo: view.topAnchor, constant: 4),
-            selectionBackgroundView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -4),
-
             thumbnailContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             thumbnailContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             thumbnailContainer.topAnchor.constraint(equalTo: view.topAnchor),
             thumbnailContainer.heightAnchor.constraint(equalTo: thumbnailContainer.widthAnchor),
+
+            selectionBackgroundView.leadingAnchor.constraint(equalTo: thumbnailContainer.leadingAnchor),
+            selectionBackgroundView.trailingAnchor.constraint(equalTo: thumbnailContainer.trailingAnchor),
+            selectionBackgroundView.topAnchor.constraint(equalTo: thumbnailContainer.topAnchor),
+            selectionBackgroundView.bottomAnchor.constraint(equalTo: thumbnailContainer.bottomAnchor),
 
             thumbnailImageView.centerXAnchor.constraint(equalTo: thumbnailContainer.centerXAnchor),
             thumbnailImageView.centerYAnchor.constraint(equalTo: thumbnailContainer.centerYAnchor),
