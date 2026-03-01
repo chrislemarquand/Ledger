@@ -36,12 +36,9 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
 
     private var isApplyingProgrammaticSelection = false
     private var isApplyingProgrammaticSort = false
-    private var listThumbnailRequestVersion: [URL: Int] = [:]
-    private var listThumbnailVersionCounter = 0
     private var lastThumbnailInvalidationToken = UUID()
     private var pendingInvalidatedThumbnailURLs: Set<URL> = []
     private var pendingThumbnailRefreshURLs: Set<URL> = []
-    private var listThumbnailTasksByURL: [URL: Task<Void, Never>] = [:]
     private var isRenderingState = false
     private var lastRenderedItemURLs: [URL] = []
     private var contextMenuTargetURLs: [URL] = []
@@ -91,10 +88,20 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
 
     override func viewWillDisappear() {
         super.viewWillDisappear()
-        for task in listThumbnailTasksByURL.values {
-            task.cancel()
+        let visibleRows = tableView.rows(in: tableView.visibleRect)
+        if visibleRows.length > 0 {
+            let nameColumn = tableView.column(withIdentifier: NSUserInterfaceItemIdentifier("name"))
+            if nameColumn >= 0 {
+                let start = max(visibleRows.location, 0)
+                let end = min(visibleRows.location + visibleRows.length, tableView.numberOfRows)
+                if start < end {
+                    for row in start ..< end {
+                        (tableView.view(atColumn: nameColumn, row: row, makeIfNecessary: false) as? BrowserListNameCellView)?
+                            .cancelThumbnailRequest()
+                    }
+                }
+            }
         }
-        listThumbnailTasksByURL.removeAll()
         if let browserFocusObserver {
             NotificationCenter.default.removeObserver(browserFocusObserver)
             self.browserFocusObserver = nil
@@ -128,19 +135,9 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
             pendingInvalidatedThumbnailURLs = invalidated
             if invalidated.isEmpty {
                 ThumbnailPipeline.invalidateAllCachedImages()
-                for task in listThumbnailTasksByURL.values {
-                    task.cancel()
-                }
-                listThumbnailTasksByURL.removeAll()
-                listThumbnailRequestVersion.removeAll()
                 pendingThumbnailRefreshURLs.removeAll()
             } else {
                 pendingThumbnailRefreshURLs.formUnion(invalidated)
-                for url in invalidated {
-                    listThumbnailTasksByURL[url]?.cancel()
-                    listThumbnailTasksByURL[url] = nil
-                    listThumbnailRequestVersion.removeValue(forKey: url)
-                }
             }
         }
 
@@ -390,66 +387,32 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         let item = items[row]
         let columnID = tableColumn?.identifier.rawValue ?? ""
 
-        let cellID = NSUserInterfaceItemIdentifier("cell-\(columnID)")
-        let cell = (tableView.makeView(withIdentifier: cellID, owner: nil) as? NSTableCellView) ?? {
-            let view = NSTableCellView(frame: .zero)
-            view.identifier = cellID
-            let textField = NSTextField(labelWithString: "")
-            textField.translatesAutoresizingMaskIntoConstraints = false
-            textField.lineBreakMode = .byTruncatingMiddle
-            view.addSubview(textField)
-            view.textField = textField
-
-            if columnID == "name" {
-                let pendingDot = NSImageView(frame: .zero)
-                pendingDot.identifier = NSUserInterfaceItemIdentifier("pending-dot")
-                pendingDot.translatesAutoresizingMaskIntoConstraints = false
-                pendingDot.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: nil)
-                pendingDot.contentTintColor = .systemOrange
-                view.addSubview(pendingDot)
-
-                let iconView = NSImageView(frame: .zero)
-                iconView.identifier = NSUserInterfaceItemIdentifier("name-icon")
-                iconView.translatesAutoresizingMaskIntoConstraints = false
-                iconView.imageScaling = .scaleProportionallyDown
-                view.addSubview(iconView)
-
-                NSLayoutConstraint.activate([
-                    pendingDot.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: UIMetrics.List.cellHorizontalInset),
-                    pendingDot.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-                    pendingDot.widthAnchor.constraint(equalToConstant: UIMetrics.List.pendingDotSize),
-                    pendingDot.heightAnchor.constraint(equalToConstant: UIMetrics.List.pendingDotSize),
-                    iconView.leadingAnchor.constraint(equalTo: pendingDot.trailingAnchor, constant: UIMetrics.List.iconGap),
-                    iconView.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-                    iconView.widthAnchor.constraint(equalToConstant: UIMetrics.List.iconSize),
-                    iconView.heightAnchor.constraint(equalToConstant: UIMetrics.List.iconSize),
-                    textField.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: UIMetrics.List.iconGap),
-                    textField.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -UIMetrics.List.cellHorizontalInset),
-                    textField.centerYAnchor.constraint(equalTo: view.centerYAnchor)
-                ])
-            } else {
+        if columnID == "name" {
+            let cellID = NSUserInterfaceItemIdentifier("cell-name")
+            let cell = (tableView.makeView(withIdentifier: cellID, owner: nil) as? BrowserListNameCellView)
+                ?? BrowserListNameCellView(reuseIdentifier: cellID)
+            configureNameCell(cell, for: item)
+            return cell
+        } else {
+            let cellID = NSUserInterfaceItemIdentifier("cell-\(columnID)")
+            let cell = (tableView.makeView(withIdentifier: cellID, owner: nil) as? NSTableCellView) ?? {
+                let view = NSTableCellView(frame: .zero)
+                view.identifier = cellID
+                let textField = NSTextField(labelWithString: "")
+                textField.translatesAutoresizingMaskIntoConstraints = false
+                view.addSubview(textField)
+                view.textField = textField
                 NSLayoutConstraint.activate([
                     textField.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: UIMetrics.List.cellHorizontalInset),
                     textField.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -UIMetrics.List.cellHorizontalInset),
                     textField.centerYAnchor.constraint(equalTo: view.centerYAnchor)
                 ])
-            }
-            return view
-        }()
-
-        if columnID == "name" {
-            cell.textField?.lineBreakMode = .byTruncatingMiddle
-            if let pendingDot = cell.subviews.first(where: { $0.identifier?.rawValue == "pending-dot" }) {
-                pendingDot.isHidden = !model.hasPendingEdits(for: item.url)
-            }
-            if let iconView = cell.subviews.first(where: { ($0 as? NSImageView)?.identifier?.rawValue == "name-icon" }) as? NSImageView {
-                configureListIcon(iconView, for: item, atRow: row)
-            }
-        } else {
+                return view
+            }()
             cell.textField?.lineBreakMode = .byTruncatingTail
+            cell.textField?.stringValue = model.listColumnValue(for: item.url, columnID: columnID, fallbackItem: item)
+            return cell
         }
-        cell.textField?.stringValue = model.listColumnValue(for: item.url, columnID: columnID, fallbackItem: item)
-        return cell
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
@@ -647,8 +610,8 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
                atColumn: tableView.column(withIdentifier: nameColumn.identifier),
                row: selectedIndex,
                makeIfNecessary: true
-           ) as? NSTableCellView,
-           let iconView = nameCell.subviews.first(where: { ($0 as? NSImageView)?.identifier?.rawValue == "name-icon" }) {
+           ) as? BrowserListNameCellView {
+            let iconView = nameCell.iconView
             let iconRectInTable = iconView.convert(iconView.bounds, to: tableView)
             let iconRectInWindow = tableView.convert(iconRectInTable, to: nil)
             let iconRectOnScreen = window.convertToScreen(iconRectInWindow)
@@ -656,7 +619,12 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         }
     }
 
-    private func configureListIcon(_ iconView: NSImageView, for item: AppModel.BrowserItem, atRow row: Int) {
+    private func configureNameCell(_ cell: BrowserListNameCellView, for item: AppModel.BrowserItem) {
+        cell.textField?.lineBreakMode = .byTruncatingMiddle
+        cell.textField?.stringValue = model.listColumnValue(for: item.url, columnID: "name", fallbackItem: item)
+        cell.applyPending(hasPendingEdits: model.hasPendingEdits(for: item.url))
+
+        let iconView = cell.iconView
         iconView.toolTip = item.url.path
         let isActiveListView = model.browserViewMode == .list
 
@@ -668,63 +636,27 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
         }
 
         if let cached = ThumbnailPipeline.cachedImage(for: item.url, minRenderedSide: 1) {
-            iconView.image = model.displayImageForCurrentStagedState(cached, fileURL: item.url)
-            requestListThumbnailIfNeeded(for: item, row: row, forceRefresh: pendingThumbnailRefreshURLs.contains(item.url))
+            iconView.setImageWithTransition(model.displayImageForCurrentStagedState(cached, fileURL: item.url))
+            requestListThumbnail(for: item, in: cell, forceRefresh: pendingThumbnailRefreshURLs.contains(item.url))
             return
         }
 
-        iconView.image = ThumbnailPipeline.fallbackIcon(for: item.url, side: 16)
-
-        requestListThumbnailIfNeeded(for: item, row: row, forceRefresh: pendingThumbnailRefreshURLs.contains(item.url))
+        iconView.setImageWithTransition(ThumbnailPipeline.fallbackIcon(for: item.url, side: 16))
+        requestListThumbnail(for: item, in: cell, forceRefresh: pendingThumbnailRefreshURLs.contains(item.url))
     }
 
-    private func requestListThumbnailIfNeeded(for item: AppModel.BrowserItem, row _: Int, forceRefresh: Bool) {
+    private func requestListThumbnail(for item: AppModel.BrowserItem, in cell: BrowserListNameCellView, forceRefresh: Bool) {
         let requiredSide: CGFloat = 64
-        if !forceRefresh,
-           ThumbnailPipeline.cachedImage(for: item.url, minRenderedSide: requiredSide) != nil {
-            return
+        cell.iconView.requestThumbnail(
+            for: item.url,
+            requiredSide: requiredSide,
+            forceRefresh: forceRefresh
+        ) { [weak self] image, url in
+            guard let self else { return image }
+            return self.model.displayImageForCurrentStagedState(image, fileURL: url)
+        } onImageApplied: { [weak self] url in
+            self?.pendingThumbnailRefreshURLs.remove(url)
         }
-        listThumbnailVersionCounter += 1
-        let requestVersion = listThumbnailVersionCounter
-        listThumbnailRequestVersion[item.url] = requestVersion
-        listThumbnailTasksByURL[item.url]?.cancel()
-        listThumbnailTasksByURL[item.url] = Task { [weak self] in
-            guard let self else { return }
-            let image = await SharedThumbnailRequestBroker.shared.request(
-                url: item.url,
-                requiredSide: requiredSide,
-                forceRefresh: forceRefresh
-            )
-            await self.completeListThumbnailRequest(url: item.url, requestVersion: requestVersion, image: image)
-        }
-    }
-
-    private func completeListThumbnailRequest(url: URL, requestVersion: Int, image: NSImage?) async {
-        listThumbnailTasksByURL[url] = nil
-
-        guard listThumbnailRequestVersion[url] == requestVersion else { return }
-        pendingThumbnailRefreshURLs.remove(url)
-        guard let image else { return }
-
-        guard let row = items.firstIndex(where: { $0.url == url }) else { return }
-        let nameColumn = tableView.column(withIdentifier: NSUserInterfaceItemIdentifier("name"))
-        guard nameColumn >= 0,
-              let nameCell = tableView.view(atColumn: nameColumn, row: row, makeIfNecessary: false) as? NSTableCellView,
-              let currentIcon = nameCell.subviews.first(where: { ($0 as? NSImageView)?.identifier?.rawValue == "name-icon" }) as? NSImageView,
-              currentIcon.toolTip == url.path
-        else {
-            return
-        }
-
-        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            let transition = CATransition()
-            transition.type = .fade
-            transition.duration = Motion.duration
-            transition.timingFunction = Motion.timingFunction
-            currentIcon.layer?.add(transition, forKey: "listThumbnailSwapFade")
-        }
-        currentIcon.alphaValue = 1
-        currentIcon.image = model.displayImageForCurrentStagedState(image, fileURL: url)
     }
 }
 
@@ -776,4 +708,131 @@ private final class BrowserListTableView: NSTableView {
         super.keyDown(with: event)
     }
 
+}
+
+private final class BrowserListNameCellView: NSTableCellView {
+    let pendingDot = NSImageView(frame: .zero)
+    let iconView = BrowserListIconView(frame: .zero)
+
+    init(reuseIdentifier: NSUserInterfaceItemIdentifier) {
+        super.init(frame: .zero)
+        identifier = reuseIdentifier
+        configureViewHierarchy()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        iconView.cancelThumbnailRequest()
+        iconView.toolTip = nil
+    }
+
+    func applyPending(hasPendingEdits: Bool) {
+        pendingDot.isHidden = !hasPendingEdits
+    }
+
+    func cancelThumbnailRequest() {
+        iconView.cancelThumbnailRequest()
+    }
+
+    private func configureViewHierarchy() {
+        let label = NSTextField(labelWithString: "")
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.lineBreakMode = .byTruncatingMiddle
+        textField = label
+        addSubview(label)
+
+        pendingDot.translatesAutoresizingMaskIntoConstraints = false
+        pendingDot.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: nil)
+        pendingDot.contentTintColor = .systemOrange
+        addSubview(pendingDot)
+
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.imageScaling = .scaleProportionallyDown
+        iconView.wantsLayer = true
+        addSubview(iconView)
+
+        NSLayoutConstraint.activate([
+            pendingDot.leadingAnchor.constraint(equalTo: leadingAnchor, constant: UIMetrics.List.cellHorizontalInset),
+            pendingDot.centerYAnchor.constraint(equalTo: centerYAnchor),
+            pendingDot.widthAnchor.constraint(equalToConstant: UIMetrics.List.pendingDotSize),
+            pendingDot.heightAnchor.constraint(equalToConstant: UIMetrics.List.pendingDotSize),
+
+            iconView.leadingAnchor.constraint(equalTo: pendingDot.trailingAnchor, constant: UIMetrics.List.iconGap),
+            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: UIMetrics.List.iconSize),
+            iconView.heightAnchor.constraint(equalToConstant: UIMetrics.List.iconSize),
+
+            label.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: UIMetrics.List.iconGap),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -UIMetrics.List.cellHorizontalInset),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+    }
+}
+
+private final class BrowserListIconView: NSImageView {
+    private var representedURL: URL?
+    private var requestToken = UUID()
+    private var requestTask: Task<Void, Never>?
+
+    func cancelThumbnailRequest() {
+        requestTask?.cancel()
+        requestTask = nil
+        requestToken = UUID()
+    }
+
+    func requestThumbnail(
+        for url: URL,
+        requiredSide: CGFloat,
+        forceRefresh: Bool,
+        displayTransform: @escaping @MainActor (NSImage, URL) -> NSImage,
+        onImageApplied: @escaping @MainActor (URL) -> Void
+    ) {
+        representedURL = url
+        if !forceRefresh,
+           ThumbnailPipeline.cachedImage(for: url, minRenderedSide: requiredSide) != nil {
+            return
+        }
+
+        cancelThumbnailRequest()
+        let token = UUID()
+        requestToken = token
+
+        requestTask = Task { [weak self] in
+            guard let self else { return }
+            let image = await SharedThumbnailRequestBroker.shared.request(
+                url: url,
+                requiredSide: requiredSide,
+                forceRefresh: forceRefresh
+            )
+            guard let image else { return }
+
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                guard self.requestToken == token else { return }
+                guard self.representedURL == url else { return }
+                self.setImageWithTransition(displayTransform(image, url))
+                onImageApplied(url)
+            }
+        }
+    }
+
+    func setImageWithTransition(_ nextImage: NSImage?) {
+        guard image !== nextImage else { return }
+        if image != nil,
+           nextImage != nil,
+           !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            let transition = CATransition()
+            transition.type = .fade
+            transition.duration = Motion.duration
+            transition.timingFunction = Motion.timingFunction
+            layer?.add(transition, forKey: "listThumbnailSwapFade")
+        }
+        alphaValue = 1
+        image = nextImage
+    }
 }

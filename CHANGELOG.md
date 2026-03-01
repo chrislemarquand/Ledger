@@ -11,7 +11,7 @@ All notable changes to Ledger are documented here.
 - Reverted the experimental thumbnail pipeline refactor series (`3ca1e25` through `888698b`) after runtime regressions (folder-open beachball and repeated gallery thumbnail redraw/glitching).
 - No thumbnail-fix release is currently claimed; the bug is tracked as open in roadmap item **B20**.
 - Thumbnail rewrite step **B20b** completed as architecture groundwork: thumbnail cache, inflight dedupe/concurrency control, and generation/fallback ordering were extracted into a single shared `ThumbnailService`; existing list/gallery call sites now delegate through that service without introducing new UX behavior claims.
-- Thumbnail rewrite step **B20c** started on gallery: thumbnail request/cancel ownership moved from `BrowserGalleryViewController` into `AppKitGalleryItem`, including `prepareForReuse` cancellation and per-cell request tokening to avoid stale async writes after reuse.
+- Thumbnail rewrite step **B20c** completed: thumbnail request/cancel ownership now lives in reusable AppKit views for both browser modes (`AppKitGalleryItem` in gallery and `BrowserListNameCellView`/`BrowserListIconView` in list), with `prepareForReuse` cancellation and per-cell request token checks to prevent stale async image writes after reuse.
 
 ---
 
