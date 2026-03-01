@@ -6,6 +6,10 @@ All notable changes to Ledger are documented here.
 
 ## [Unreleased]
 
+### Changed
+- Reverted the experimental thumbnail pipeline refactor series (`3ca1e25` through `888698b`) after runtime regressions (folder-open beachball and repeated gallery thumbnail redraw/glitching).
+- No thumbnail-fix release is currently claimed; the bug is tracked as open in roadmap item **B20**.
+
 ---
 
 ## [0.6.6] — build 85 — 2026-03-01

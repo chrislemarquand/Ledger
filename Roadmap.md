@@ -1,6 +1,6 @@
 # Roadmap
 
-Current version: **0.6.6** (build 85). Target: **v1.0**.
+Current version: **0.6.6** (build 86). Target: **v1.0**.
 
 Reference items by ID: **B1–B16** bugs · **P1–P24** polish · **N1–N8** native rewrites · **A1–A2** architecture · **R1–R18** post-v1.0 roadmap.
 
@@ -36,6 +36,7 @@ Reference items by ID: **B1–B16** bugs · **P1–P24** polish · **N1–N8** n
 ### Browser gallery
 - [x] **B10** ~~Gallery selector changes colour on rotate~~ — ✅ Fixed in 0.6 via `stagedOpsDisplayToken`; cell no longer fully redraws on rotate.
 - [x] **B11** ~~Thumbnail flicker on rotate / flip~~ — ✅ Fixed in 0.6 via `stagedOpsDisplayToken`; display transform updated without clearing thumbnail cache.
+- [ ] **B20** `Blocker` **Gallery thumbnails glitch/reload repeatedly after folder open** — attempted thumbnail pipeline refactor/regression work (commits `3ca1e25` through `888698b`) was fully reverted on 2026-03-01 after introducing beachball/hitching and repeated thumbnail redraw in gallery. Issue remains open and intentionally deferred for a clean native-first redesign (no patch layering).
 
 ### Sidebar
 - [x] **B19** ✅ **No TCC prompt on startup for Desktop/Downloads** — startup privacy access policy was consolidated so launch/background paths do not probe privacy-sensitive filesystem locations. Key points: (1) startup reconciliation of favorites/recents skips existence/readability validation for privacy-sensitive paths; (2) privacy-sensitive sidebar counts never load in background and only load after explicit user selection of that exact item. Result: Desktop/Downloads counts stay blank on app open; TCC prompt appears only on explicit selection.
