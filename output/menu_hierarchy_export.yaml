@@ -1,0 +1,281 @@
+# Editable menu/action map for Ledger (ExifEditMac)
+# Schema is designed so you can add/reorder/remove items and I can implement it directly.
+#
+# How to edit:
+# - Keep `id` unique.
+# - Use `scope` to indicate intended behavior: `selection`, `folder`, `app`, `window`, `external`.
+# - If you add a new command, set `implementation_status: proposed`.
+# - If you're not sure about an action, leave `notes_for_codex`.
+#
+# I will ask follow-up questions only when an item is ambiguous.
+
+schema_version: 1
+app: Ledger
+source_date: 2026-03-01
+
+top_level_menus:
+  - menu_id: app
+    title: "Ledger"
+    items:
+      - id: app.about
+        title: "About Ledger"
+        scope: app
+        action_kind: delegate_method
+        action_ref: "AppDelegate.showAboutPanel()"
+        implementation_status: current
+
+  - menu_id: file
+    title: "File"
+    items:
+      - id: file.open_folder
+        title: "Open Folder..."
+        scope: folder
+        action_kind: selector
+        action_ref: "NativeThreePaneSplitViewController.openFolderAction(_:)"
+        shortcut: "cmd+o"
+        implementation_status: current
+      - id: file.open_in_default_app
+        title: "Open in <Default App>"
+        title_is_dynamic: true
+        scope: selection
+        action_kind: model_method
+        action_ref: "AppModel.performFileAction(.openInDefaultApp, selectedFileURLs)"
+        shortcut: "cmd+return"
+        implementation_status: current
+      - id: file.reveal_in_finder
+        title: "Reveal in Finder"
+        scope: selection
+        action_kind: model_method
+        action_ref: "AppModel.revealSelectionInFinder()"
+        shortcut: "cmd+shift+r"
+        implementation_status: current
+      - id: file.restore_from_backup
+        title: "Restore from Backup"
+        scope: selection
+        action_kind: model_method
+        action_ref: "AppModel.performFileAction(.restoreFromLastBackup, selectedFileURLs)"
+        implementation_status: current
+    notes_for_codex: "This group currently comes from CommandGroup(replacing: .newItem)."
+
+  - menu_id: edit
+    title: "Edit"
+    items:
+      - id: edit.undo
+        title: "Undo"
+        scope: app
+        action_kind: helper_method
+        action_ref: "ExifEditMacApp.performUndo()"
+        shortcut: "cmd+z"
+        implementation_status: current
+      - id: edit.redo
+        title: "Redo"
+        scope: app
+        action_kind: helper_method
+        action_ref: "ExifEditMacApp.performRedo()"
+        shortcut: "cmd+shift+z"
+        implementation_status: current
+      - id: edit.rotate_left
+        title: "Rotate Left"
+        scope: selection
+        action_kind: helper_method
+        action_ref: "ExifEditMacApp.rotateSelectionLeft()"
+        implementation_status: current
+      - id: edit.rotate_right
+        title: "Rotate Right"
+        scope: selection
+        action_kind: helper_method
+        action_ref: "ExifEditMacApp.rotateSelectionRight()"
+        implementation_status: current
+      - id: edit.flip_horizontal
+        title: "Flip Horizontal"
+        scope: selection
+        action_kind: helper_method
+        action_ref: "ExifEditMacApp.flipSelectionHorizontal()"
+        implementation_status: current
+
+  - menu_id: view
+    title: "View"
+    items:
+      - id: view.as_gallery
+        title: "As Gallery"
+        scope: window
+        action_kind: selector
+        action_ref: "NativeThreePaneSplitViewController.switchToGalleryAction(_:)"
+        shortcut: "cmd+1"
+        implementation_status: current
+      - id: view.as_list
+        title: "As List"
+        scope: window
+        action_kind: selector
+        action_ref: "NativeThreePaneSplitViewController.switchToListAction(_:)"
+        shortcut: "cmd+2"
+        implementation_status: current
+      - id: view.sort_by
+        title: "Sort By > {Name|Date Created|Size|Kind}"
+        scope: window
+        action_kind: selector_submenu
+        action_ref: "NativeThreePaneSplitViewController.sortBy*Action(_:)"
+        implementation_status: current
+      - id: view.zoom_in
+        title: "Zoom In"
+        scope: window
+        action_kind: selector
+        action_ref: "NativeThreePaneSplitViewController.zoomInAction(_:)"
+        shortcut: "cmd++"
+        implementation_status: current
+      - id: view.zoom_out
+        title: "Zoom Out"
+        scope: window
+        action_kind: selector
+        action_ref: "NativeThreePaneSplitViewController.zoomOutAction(_:)"
+        shortcut: "cmd+-"
+        implementation_status: current
+      - id: view.toggle_sidebar
+        title: "Toggle Sidebar"
+        scope: window
+        action_kind: selector
+        action_ref: "NSSplitViewController.toggleSidebar(_:)"
+        shortcut: "cmd+opt+s"
+        implementation_status: current
+      - id: view.toggle_inspector
+        title: "Toggle Inspector"
+        title_is_dynamic: true
+        scope: window
+        action_kind: selector
+        action_ref: "NativeThreePaneSplitViewController.toggleInspectorAction(_:)"
+        implementation_status: current
+
+  - menu_id: image
+    title: "Image"
+    items:
+      - id: image.refresh
+        title: "Refresh"
+        scope: folder
+        action_kind: selector
+        action_ref: "NativeThreePaneSplitViewController.refreshAction(_:)"
+        shortcut: "cmd+r"
+        implementation_status: current
+      - id: image.presets.apply
+        title: "Presets > Apply Preset > <Preset Name>"
+        scope: selection
+        action_kind: model_method
+        action_ref: "AppModel.applyPreset(presetID:)"
+        implementation_status: current
+      - id: image.presets.save_as
+        title: "Presets > Save as Preset..."
+        scope: selection
+        action_kind: selector
+        action_ref: "NativeThreePaneSplitViewController.saveCurrentAsPresetAction(_:)"
+        implementation_status: current
+      - id: image.presets.manage
+        title: "Presets > Manage Presets..."
+        scope: app
+        action_kind: selector
+        action_ref: "NativeThreePaneSplitViewController.managePresetsAction(_:)"
+        implementation_status: current
+      - id: image.apply_selection
+        title: "Apply Metadata Changes to N Image(s)"
+        title_is_dynamic: true
+        scope: selection
+        action_kind: selector
+        action_ref: "NativeThreePaneSplitViewController.applySelectionAction(_:)"
+        shortcut: "cmd+s"
+        implementation_status: current
+      - id: image.apply_folder
+        title: "Apply Metadata Changes to Folder"
+        scope: folder
+        action_kind: selector
+        action_ref: "NativeThreePaneSplitViewController.applyFolderAction(_:)"
+        implementation_status: current
+      - id: image.clear_selection
+        title: "Clear Metadata Changes"
+        scope: selection
+        action_kind: selector
+        action_ref: "NativeThreePaneSplitViewController.clearChangesAction(_:)"
+        shortcut: "cmd+shift+k"
+        implementation_status: current
+      - id: image.restore_selection
+        title: "Restore from Backup"
+        scope: selection
+        action_kind: selector
+        action_ref: "NativeThreePaneSplitViewController.restoreFromBackupAction(_:)"
+        shortcut: "cmd+shift+b"
+        implementation_status: current
+    notes_for_codex: "Apply/Clear/Restore are AppKit-injected at runtime in MainContentView.menuWillOpen."
+
+  - menu_id: folder
+    title: "Folder"
+    items:
+      - id: folder.pin_to_sidebar
+        title: "Pin to Sidebar"
+        scope: folder
+        action_kind: model_method
+        action_ref: "AppModel.pinSelectedSidebarLocationToFavorites()"
+        implementation_status: current
+      - id: folder.unpin_from_sidebar
+        title: "Unpin from Sidebar"
+        scope: folder
+        action_kind: model_method
+        action_ref: "AppModel.unpinSelectedSidebarFavorite()"
+        implementation_status: current
+      - id: folder.move_up_in_sidebar
+        title: "Move Up in Sidebar"
+        scope: folder
+        action_kind: model_method
+        action_ref: "AppModel.moveSelectedFavoriteUp()"
+        implementation_status: current
+      - id: folder.move_down_in_sidebar
+        title: "Move Down in Sidebar"
+        scope: folder
+        action_kind: model_method
+        action_ref: "AppModel.moveSelectedFavoriteDown()"
+        implementation_status: current
+
+  - menu_id: help
+    title: "Help"
+    items:
+      - id: help.exiftool_docs
+        title: "ExifTool Documentation"
+        scope: external
+        action_kind: url_open
+        action_ref: "https://exiftool.org/"
+        implementation_status: current
+
+context_menus:
+  - context_id: browser_list_file
+    scope: selection
+    behavior:
+      - "If right-click target is not currently selected, selection is replaced with target first."
+      - "Actions apply to context selection only."
+    items:
+      - "Open in <Default App>"
+      - "Reveal in Finder"
+      - "Apply Metadata Changes to N Image(s)"
+      - "Refresh Metadata"
+      - "Clear Metadata Changes"
+      - "Restore from Backup"
+
+  - context_id: browser_gallery_file
+    scope: selection
+    behavior:
+      - "If right-click target is not currently selected, selection is replaced with target first."
+      - "Actions apply to context selection only."
+    items:
+      - "Open in <Default App>"
+      - "Reveal in Finder"
+      - "Apply Metadata Changes to N Image(s)"
+      - "Refresh Metadata"
+      - "Clear Metadata Changes"
+      - "Restore from Backup"
+
+quick_look_current_state:
+  invocation:
+    - "Space bar in browser focus (local key monitor)"
+  menu_command_exists: false
+  close_behavior:
+    - "Space or Escape closes Quick Look panel"
+
+edit_instructions:
+  - "To propose a new command, add an item with a new id and set implementation_status: proposed."
+  - "To move commands between menus, cut/paste the item blocks."
+  - "To request dynamic title behavior, set title_is_dynamic: true and describe it in notes_for_codex."

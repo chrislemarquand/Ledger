@@ -8,10 +8,11 @@ All notable changes to Ledger are documented here.
 
 ### Added
 - Roadmap polish item **P26** added to formalize command-scope rules: selection-only image actions, clear separation of folder-wide actions using macOS menu conventions, and context-menu actions constrained to the selected/right-click target files.
+- Exported editable menu/action map to `output/menu_hierarchy_export.yaml` for planning command-scope and menu-layout refinements.
 
 ---
 
-## [0.6.5] — build 79 — 2026-03-01
+## [0.6.5] — build 81 — 2026-03-01
 
 ### Changed
 - **P17** Image menu metadata apply flow split into two actions: selection-scoped apply now shows a dynamic title (`"Apply Metadata Changes to N Image(s)"`) and folder-wide apply is exposed as `"Apply Metadata Changes to Folder"` (mirrors toolbar Apply behavior).
