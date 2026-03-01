@@ -6,6 +6,15 @@ All notable changes to Ledger are documented here.
 
 ## [Unreleased]
 
+### Changed
+- Thumbnail loading now uses a shared `ThumbnailCoordinator` state machine across browser surfaces, with surface-specific policies for gallery, list, and inspector.
+- Gallery thumbnails now follow the same URL-scoped update notification flow as list thumbnails, so cells reload when image generation completes even if the original cell was recycled.
+- Inspector preview generation now routes through the same coordinator pipeline as list/gallery requests, reducing divergent thumbnail code paths.
+
+### Fixed
+- Reduced stale/placeholder thumbnail cases in gallery and list caused by view-local request bookkeeping and cell-lifetime races.
+- Added visible-neighborhood thumbnail prefetch in gallery and list to improve perceived thumbnail readiness while scrolling.
+
 ---
 
 ## [0.6.6] — build 85 — 2026-03-01

@@ -4488,7 +4488,11 @@ final class AppModel: ObservableObject {
                 await Task.yield()
 
                 self.inspectorPreviewInflight.insert(fileURL)
-                if let image = await Self.generateInspectorPreviewOffMain(for: fileURL, priority: .utility) {
+                if let image = await self.generateInspectorPreviewViaCoordinator(
+                    for: fileURL,
+                    forceRefresh: false,
+                    priority: .utility
+                ) {
                     self.storeInspectorPreview(
                         image,
                         for: fileURL,
@@ -4509,10 +4513,18 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private static func generateInspectorPreviewOffMain(for fileURL: URL, priority: TaskPriority) async -> NSImage? {
-        await Task.detached(priority: priority) {
-            await ThumbnailPipeline.generateThumbnail(fileURL: fileURL, maxPixelSize: Self.inspectorPreviewFullSide)
-        }.value
+    private func generateInspectorPreviewViaCoordinator(
+        for fileURL: URL,
+        forceRefresh: Bool,
+        priority: TaskPriority
+    ) async -> NSImage? {
+        await ThumbnailCoordinator.shared.loadThumbnail(
+            url: fileURL,
+            targetSide: Self.inspectorPreviewFullSide,
+            policy: .inspector,
+            forceRefresh: forceRefresh,
+            priorityOverride: priority
+        )
     }
 
     private struct MetadataReadTimeoutError: LocalizedError {
@@ -4643,7 +4655,11 @@ final class AppModel: ObservableObject {
 
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
-            let image = await Self.generateInspectorPreviewOffMain(for: fileURL, priority: requestPriority)
+            let image = await self.generateInspectorPreviewViaCoordinator(
+                for: fileURL,
+                forceRefresh: force,
+                priority: requestPriority
+            )
             if let image {
                 self.storeInspectorPreview(
                     image,
@@ -4797,7 +4813,11 @@ final class AppModel: ObservableObject {
                 continue
             }
             inspectorPreviewInflight.insert(fileURL)
-            if let image = await Self.generateInspectorPreviewOffMain(for: fileURL, priority: .utility) {
+            if let image = await generateInspectorPreviewViaCoordinator(
+                for: fileURL,
+                forceRefresh: false,
+                priority: .utility
+            ) {
                 storeInspectorPreview(
                     image,
                     for: fileURL,
