@@ -538,6 +538,7 @@ final class AppModel: ObservableObject {
     private static let galleryZoomKey = "ui.gallery.zoom"
     private static let collapsedInspectorSectionsKey = "ui.inspector.collapsed.sections"
     private static let selectedPresetIDKey = "ui.presets.selected.id"
+    private static let legacyUserDefaultsPrefixes = ["Logbook"]
     private static let selectionMetadataBatchSize = 120
     private static let selectionMetadataDebounceNanoseconds: UInt64 = 90_000_000
     private static let folderMetadataBatchSize = 8
@@ -599,17 +600,18 @@ final class AppModel: ObservableObject {
         recentLocationsStore: RecentLocationsStoreProtocol = RecentLocationsStore()
     ) {
         Self.performBrandMigrationsIfNeeded()
+        let defaults = UserDefaults.standard
         browserViewMode = BrowserViewMode(
-            rawValue: UserDefaults.standard.string(forKey: Self.browserViewModeKey) ?? ""
+            rawValue: Self.firstUserDefaultsValue(for: Self.browserViewModeKey, defaults: defaults, as: String.self) ?? ""
         ) ?? .gallery
         browserSort = BrowserSort(
-            rawValue: UserDefaults.standard.string(forKey: Self.browserSortKey) ?? ""
+            rawValue: Self.firstUserDefaultsValue(for: Self.browserSortKey, defaults: defaults, as: String.self) ?? ""
         ) ?? .name
-        browserSortAscending = UserDefaults.standard.object(forKey: Self.browserSortAscendingKey) as? Bool ?? true
-        let storedLevel = UserDefaults.standard.integer(forKey: Self.galleryGridLevelKey)
+        browserSortAscending = Self.firstUserDefaultsValue(for: Self.browserSortAscendingKey, defaults: defaults, as: Bool.self) ?? true
+        let storedLevel = Self.firstUserDefaultsValue(for: Self.galleryGridLevelKey, defaults: defaults, as: Int.self) ?? 0
         if storedLevel == 0 {
             // One-time fallback from legacy floating zoom persistence.
-            let legacyZoom = UserDefaults.standard.double(forKey: Self.galleryZoomKey)
+            let legacyZoom = Self.firstUserDefaultsValue(for: Self.galleryZoomKey, defaults: defaults, as: Double.self) ?? 0
             if legacyZoom > 0 {
                 galleryGridLevel = Self.columnCount(forLegacyZoom: CGFloat(legacyZoom))
             } else {
@@ -644,13 +646,17 @@ final class AppModel: ObservableObject {
         self.favoritesStore = favoritesStore
         self.recentLocationsStore = recentLocationsStore
 
-        let storedCollapsed = UserDefaults.standard.stringArray(forKey: Self.collapsedInspectorSectionsKey) ?? []
+        let storedCollapsed = Self.firstUserDefaultsValue(
+            for: Self.collapsedInspectorSectionsKey,
+            defaults: defaults,
+            as: [String].self
+        ) ?? []
         collapsedInspectorSections = Set(storedCollapsed)
         reconcileAndLoadFavorites()
         reconcileAndLoadRecentLocations()
         sidebarItems = composedSidebarItems()
         installWorkspaceVolumeObservers()
-        if let selectedPresetRaw = UserDefaults.standard.string(forKey: Self.selectedPresetIDKey),
+        if let selectedPresetRaw = Self.firstUserDefaultsValue(for: Self.selectedPresetIDKey, defaults: defaults, as: String.self),
            let selectedPresetUUID = UUID(uuidString: selectedPresetRaw) {
             selectedPresetID = selectedPresetUUID
         }
@@ -4625,6 +4631,19 @@ final class AppModel: ObservableObject {
         guard !defaults.bool(forKey: AppBrand.migrationSentinelKey) else { return }
         migrateLegacySupportDirectoryIfNeeded()
         defaults.set(true, forKey: AppBrand.migrationSentinelKey)
+    }
+
+    private static func userDefaultsKeyCandidates(for key: String) -> [String] {
+        [key] + legacyUserDefaultsPrefixes.map { "\($0).\(key)" }
+    }
+
+    private static func firstUserDefaultsValue<T>(for key: String, defaults: UserDefaults, as type: T.Type) -> T? {
+        for candidate in userDefaultsKeyCandidates(for: key) {
+            if let value = defaults.object(forKey: candidate) as? T {
+                return value
+            }
+        }
+        return nil
     }
 
     private static func migrateLegacySupportDirectoryIfNeeded() {
