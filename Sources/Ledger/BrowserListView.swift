@@ -128,6 +128,7 @@ private final class BrowserListViewController: NSViewController, NSTableViewData
     func update(model: AppModel, items: [AppModel.BrowserItem]) {
         self.model = model
         self.items = items
+        guard model.browserViewMode == .list else { return }
 
         if lastThumbnailInvalidationToken != model.browserThumbnailInvalidationToken {
             lastThumbnailInvalidationToken = model.browserThumbnailInvalidationToken

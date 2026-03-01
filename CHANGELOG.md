@@ -6,14 +6,22 @@ All notable changes to Ledger are documented here.
 
 ## [Unreleased]
 
+---
+
+## [0.7.2] — build 131 — 2026-03-01
+
 ### Fixed
 - **Folder-switch UX regression** — brief "No Supported Images" empty-state flash on folder open resolved. Root cause was two compounding issues: (1) `BrowserView.body` used a `switch` that placed `browserContent` at different structural positions for `.none` vs `.loading`, causing SwiftUI to destroy and rebuild the AppKit gallery/list VCs on every overlay transition — this made previous fix attempts cause a different flash; (2) the loading skeleton was never shown during folder switches because `isFolderMetadataLoading` is only set after a 280 ms deferred prefetch, by which point `browserItems` is already populated (so the `isFolderMetadataLoading && browserItems.isEmpty` guard was never true). Fix: restructured `BrowserView` so `browserContent` is always the root with overlays applied via `.overlay()` (stable structural identity, no VC teardown); `selectSidebar` now sets `isFolderContentLoading = true` and defers `loadFiles` into a child Task so SwiftUI gets a render pass to show the skeleton before the gallery's `reloadData()` flash is visible; skeleton clears when the Task completes with the new items loaded.
 - Gallery zoom shortcuts (`⌘+`, `⌘−`) now work while inspector controls have focus; key handling is now captured at the key-window level and gated to gallery mode with zoom-availability checks.
 - Inspector preview loading spinner is centered in the preview frame while loading.
 - Thumbnail presentation remains visually stable when the pending-edit status dot appears; no thumbnail-size jump and no corner-style transition between unedited/edited states.
+- About panel menu action now correctly opens the native About panel from `Ledger > About`.
+- Gallery/list mode-switch crash fixed by guarding gallery layout item size to a minimum positive value before assignment (`itemSize.width/height > 0`).
 
 ### Changed
-- Marketing version bumped from `0.7` to `0.7.1`.
+- Marketing version bumped from `0.7.1` to `0.7.2`.
+- Custom menu-bar command ownership consolidated under AppKit (`NSMenu`/`NSMenuItem`) for native validation and dynamic submenu behavior.
+- Browser center pane now uses an AppKit container controller that owns list/gallery hosts and overlays directly.
 - Reverted two folder-switch empty-state flicker attempts (`1094a1f`, `1b77bfd`) after no user-visible improvement; root cause of those failures now understood and addressed above.
 - Reverted the experimental thumbnail pipeline refactor series (`3ca1e25` through `888698b`) after runtime regressions (folder-open beachball and repeated gallery thumbnail redraw/glitching).
 - Gallery rewrite-track bug **B20** is now resolved in the current 0.7.x baseline.

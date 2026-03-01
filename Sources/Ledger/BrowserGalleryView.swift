@@ -98,6 +98,7 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
     func update(model: AppModel, items: [AppModel.BrowserItem]) {
         self.model = model
         self.items = items
+        guard model.browserViewMode == .gallery else { return }
         renderState()
     }
 
@@ -771,7 +772,7 @@ private final class AppKitGalleryLayout: NSCollectionViewFlowLayout {
             collectionView.bounds.width - sectionInset.left - sectionInset.right - CGFloat(columns - 1) * minimumInteritemSpacing,
             1
         )
-        let side = floor(usableWidth / CGFloat(columns))
+        let side = max(1, floor(usableWidth / CGFloat(columns)))
         itemSize = NSSize(width: side, height: side + titleGap + titleHeight)
     }
 

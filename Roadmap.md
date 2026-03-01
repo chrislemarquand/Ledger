@@ -1,8 +1,8 @@
 # Roadmap
 
-Current version: **0.7.1** (build in `Config/Base.xcconfig`). Target: **v1.0**.
+Current version: **0.7.2** (build in `Config/Base.xcconfig`). Target: **v1.0**.
 
-Reference items by ID: **B1–B20** bugs · **P1–P24** polish · **N1–N8** native rewrites · **A1–A2** architecture · **R1–R19** post-v1.0 roadmap.
+Reference items by ID: **B1–B21** bugs · **P1–P24** polish · **N1–N11** native rewrites · **A1–A3** architecture · **R1–R20** post-v1.0 roadmap.
 
 ID convention: `B#`/`P#`/`N#`/`A#`/`R#` are roadmap item IDs. Backlog severity labels use `S0`/`S1`/`S2` in `v1-bug-backlog.md` to avoid collision with roadmap `P#` polish IDs.
 
@@ -31,6 +31,7 @@ ID convention: `B#`/`P#`/`N#`/`A#`/`R#` are roadmap item IDs. Backlog severity l
 - [x] **B6** ~~View → Sort By checkmark stuck on Name~~ — ✅ SwiftUI Picker removed; AppKit NSMenu injected with `validateMenuItem` setting checkmarks on every menu open.
 - [x] **B7** ~~View → Zoom In / Zoom Out not disabled in list mode~~ — ✅ SwiftUI Buttons removed; AppKit NSMenuItems injected; `validateMenuItem` disables both in list mode and at min/max zoom.
 - [x] **B8** ~~Inspector / sidebar menu labels always say "Hide"~~ — ✅ Static "Toggle Sidebar" / "Toggle Inspector" labels; always correct regardless of state.
+- [x] **B21** ✅ **Menu command ownership split (SwiftUI + AppKit) resolved** — all custom menu-bar commands now run under AppKit ownership (`NSMenu`/`NSMenuItem`) with dynamic submenu population (including `Open With`) and native enabled/disabled/checkmark/title state via `validateMenuItem(_:)`. SwiftUI custom menu-command ownership for these actions was removed.
 
 ### Inspector
 - [x] **B9** ✅ **Stale metadata shown after Apply** — root cause: `pendingEditsByFile[url]` was cleared before the exiftool re-read completed, causing `performRecalculateInspectorState` to fall back to the stale `metadataByFile` snapshot. Fix: `pendingCommitsByFile` captures the applied string values just before clearing; used as a middle fallback (after `pendingEditsByFile`, before `availableSnapshot`) so the inspector shows the written value throughout the reload window; cleared per-file in `loadMetadataForSelection` when the fresh snapshot arrives.
@@ -132,6 +133,7 @@ Replace custom implementations with idiomatic SwiftUI / AppKit equivalents.
 
 - [x] **A1** ✅ **Split MainContentView.swift** — 4,604 lines → 6 files: `NavigationSidebarView.swift` (206), `BrowserListView.swift` (758), `BrowserGalleryView.swift` (1,043), `InspectorView.swift` (681), `PresetSheets.swift` (438), `MainContentView.swift` residual (1,494). Clean build, no regressions.
 - [x] **A2** ~~Sidebar count badge latency~~ — ✅ `warmSidebarImageCounts()` call sites removed in 0.6; counts no longer preloaded on launch, eliminating the flash.
+- [x] **A3** ✅ **Browser center-pane container moved from SwiftUI wrapper to AppKit controller** — replaced `BrowserView` overlay-state wrapper with `BrowserContainerViewController` (`NSViewController`) that owns gallery/list child hosts and loading/empty/error overlays directly in AppKit, removing the SwiftUI structural-identity dependency in the center pane while preserving existing browser behavior.
 
 ---
 
