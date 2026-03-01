@@ -1,6 +1,6 @@
 # Roadmap
 
-Current version: **0.7** (build 105). Target: **v1.0**.
+Current version: **0.7** (build 106). Target: **v1.0**.
 
 Reference items by ID: **B1–B20** bugs · **P1–P24** polish · **N1–N8** native rewrites · **A1–A2** architecture · **R1–R19** post-v1.0 roadmap.
 
@@ -40,7 +40,7 @@ Reference items by ID: **B1–B20** bugs · **P1–P24** polish · **N1–N8** n
 - [x] **B20a** `Must` **Thumbnail rewrite Step 1 — baseline commit** — completed in commit `26536c5` (`Baseline: track thumbnail rewrite plan and deferred UX list`) as the branchpoint before rewrite work.
 - [x] **B20b** `Must` **Thumbnail rewrite Step 2 — single native thumbnail service** — completed: extracted thumbnail cache/request broker/generation strategy into `ThumbnailService` and switched existing list/gallery wrappers to delegate to the shared service.
 - [x] **B20c** `Must` **Thumbnail rewrite Step 3 — AppKit cell-owned lifecycle** — completed: gallery requests are owned by `AppKitGalleryItem` and list requests are owned by `BrowserListNameCellView`/`BrowserListIconView`; both cancel on reuse (`prepareForReuse`) and guard async completion with per-cell request tokens.
-- [ ] **B20d** `Should` **Thumbnail rewrite Step 4 — native selection baseline** — start with Finder-like tile-level selection highlight in gallery (no custom image-hugging ring in v1 rewrite baseline).
+- [x] **B20d** `Should` **Thumbnail rewrite Step 4 — native selection baseline** — completed: gallery selection now uses a Finder-like tile-level highlight baseline; image-hugging selector ring removed from the v1 rewrite path (tracked as optional post-v1.0 reintroduction in R19).
 - [ ] **B20e** `Must` **Thumbnail rewrite Step 5 — unify inspector preview pipeline** — route inspector preview loads through the same thumbnail service with policy-based sizing/priority.
 
 ### Sidebar
@@ -74,7 +74,7 @@ Reference items by ID: **B1–B20** bugs · **P1–P24** polish · **N1–N8** n
 - [x] **P8** ✅ **Selection out of view when switching gallery ↔ list** — list view: `browserDidSwitchViewMode` notification → `scrollRowToVisible`; gallery view: `lastRenderedViewMode` tracked in `renderState()`; on `justBecameActive`, `scrollSelectionIntoView()` calls `layoutSubtreeIfNeeded()` then `scrollToVisible(attrs.frame)` (deferred one run loop); `syncSelection` suppressed from scrolling during mode switch via `!justBecameActive` guard.
 
 ### Browser gallery
-- [x] **P9** ✅ Gallery selection ring outset tuned to 5 pt; overlay anchored directly to image view (definitionally concentric, no independent size calculation); `selectionCornerRadius` removed — overlay radius derived as `thumbnailCornerRadius + selectionOutset`.
+- [x] **P9** ✅ Gallery selection ring geometry was tuned in 0.6; superseded by **B20d** in 0.7 baseline where gallery selection moved to a native tile-level highlight.
 
 ### QuickLook
 - [x] **P10** ✅ **QuickLook position inconsistent** — `QLPreviewPanel.center()` called before `makeKeyAndOrderFront` for first open; `NSWindow.didResizeNotification` observer locks panel height to QL's natural choice for the first image and derives width from QL's own aspect ratio for each subsequent image (mirrors Finder's behaviour); panel stays centred on screen across all navigation; if the panel is already open and the user has dragged it, size/position are still corrected on image change.
