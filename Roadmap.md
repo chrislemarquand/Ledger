@@ -1,6 +1,6 @@
 # Roadmap
 
-Current version: **0.6.6** (build 99). Target: **v1.0**.
+Current version: **0.6.6** (build 100). Target: **v1.0**.
 
 Reference items by ID: **B1–B16** bugs · **P1–P24** polish · **N1–N8** native rewrites · **A1–A2** architecture · **R1–R18** post-v1.0 roadmap.
 
@@ -37,6 +37,11 @@ Reference items by ID: **B1–B16** bugs · **P1–P24** polish · **N1–N8** n
 - [x] **B10** ~~Gallery selector changes colour on rotate~~ — ✅ Fixed in 0.6 via `stagedOpsDisplayToken`; cell no longer fully redraws on rotate.
 - [x] **B11** ~~Thumbnail flicker on rotate / flip~~ — ✅ Fixed in 0.6 via `stagedOpsDisplayToken`; display transform updated without clearing thumbnail cache.
 - [ ] **B20** `Blocker` **Gallery thumbnails glitch/reload repeatedly after folder open** — attempted thumbnail pipeline refactor/regression work (commits `3ca1e25` through `888698b`) was fully reverted on 2026-03-01 after introducing beachball/hitching and repeated thumbnail redraw in gallery. Issue remains open and intentionally deferred for a clean native-first redesign (no patch layering).
+- [ ] **B20a** `Must` **Thumbnail rewrite Step 1 — baseline commit** — before rework, create a dedicated baseline commit explicitly labelled as baseline for the thumbnail/gallery rewrite branchpoint.
+- [ ] **B20b** `Must` **Thumbnail rewrite Step 2 — single native thumbnail service** — replace duplicated list/gallery/inspector request orchestration with one service owning cache, inflight dedupe, generation strategy, and cancellation.
+- [ ] **B20c** `Must` **Thumbnail rewrite Step 3 — AppKit cell-owned lifecycle** — move thumbnail request ownership to `NSCollectionViewItem` / `NSTableCellView` reuse lifecycle (`prepareForReuse` cancellation) to eliminate controller-level reload loops.
+- [ ] **B20d** `Should` **Thumbnail rewrite Step 4 — native selection baseline** — start with Finder-like tile-level selection highlight in gallery (no custom image-hugging ring in v1 rewrite baseline).
+- [ ] **B20e** `Must` **Thumbnail rewrite Step 5 — unify inspector preview pipeline** — route inspector preview loads through the same thumbnail service with policy-based sizing/priority.
 
 ### Sidebar
 - [x] **B19** ✅ **No TCC prompt on startup for Desktop/Downloads** — startup privacy access policy was consolidated so launch/background paths do not probe privacy-sensitive filesystem locations. Key points: (1) startup reconciliation of favorites/recents skips existence/readability validation for privacy-sensitive paths; (2) privacy-sensitive sidebar counts never load in background and only load after explicit user selection of that exact item. Result: Desktop/Downloads counts stay blank on app open; TCC prompt appears only on explicit selection.
@@ -157,3 +162,4 @@ Full blueprint: `output/BRANDING_NAMING_REFRESH_IMPLEMENTATION.md`. User-facing 
 - [ ] **R18** **PresetEditorSheet → AppKit** (optional) — modal sheet; scroll stability matters less here. Main benefit would be DatePicker style consistency with Inspector (`.stepperField`), and removing the per-tag `valueBinding(for:)` pattern. Low priority.
 - [ ] **R14** **Search** — expand-to-field toolbar button (like Notes.app on macOS 26) with metadata-aware search: filename, date range, camera/lens, rating, keyword. `searchQuery`/`filteredBrowserItems` infrastructure already in place.
 - [ ] **R15** **Configurable list columns** — show/hide and reorder columns; add EXIF-backed columns (date modified, camera make/model, lens, focal length, ISO, aperture, shutter speed, pixel dimensions). Each new column gets a `BrowserSort` case and `NSSortDescriptor` prototype; sort and header infrastructure from P7 carries forward directly.
+- [ ] **R19** **Optional gallery UX reintroduction pack (post-v1.0)** — reintroduce non-baseline gallery polish one feature at a time: image-hugging selector ring, ring-anchored pending-dot positioning, ring geometry continuity during staged rotate/flip, tile/image transition polish beyond native defaults, and aggressive gallery prefetch heuristics.
