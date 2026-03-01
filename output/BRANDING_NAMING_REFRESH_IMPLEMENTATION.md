@@ -152,35 +152,35 @@ Final naming locked for this blueprint:
 ### A) Identity + Build Settings
 | File | Line(s) | Current | Planned Change |
 |---|---:|---|---|
-| `/Users/chrislemarquand/Documents/Photography/Exifedit/ExifEditMac.xcodeproj/project.pbxproj` | 47, 106, 217 | `Logbook.app` | Rename product ref to `Lattice.app` |
-| `/Users/chrislemarquand/Documents/Photography/Exifedit/ExifEditMac.xcodeproj/project.pbxproj` | 413, 435 | `INFOPLIST_KEY_CFBundleDisplayName = Logbook;` | Set to `Lattice` |
-| `/Users/chrislemarquand/Documents/Photography/Exifedit/ExifEditMac.xcodeproj/project.pbxproj` | 421, 443 | `PRODUCT_BUNDLE_IDENTIFIER = com.chrislemarquand.Logbook;` | Set to `com.chrislemarquand.Lattice` |
-| `/Users/chrislemarquand/Documents/Photography/Exifedit/ExifEditMac.xcodeproj/project.pbxproj` | 422, 444 | `PRODUCT_NAME = Logbook;` | Set to `Lattice` |
-| `/Users/chrislemarquand/Documents/Photography/Exifedit/ExifEditMac.xcodeproj/project.pbxproj` | 479, 493 | `com.chrislemarquand.LogbookTests` | Optionally align to new test bundle naming |
-| `/Users/chrislemarquand/Documents/Photography/Exifedit/ExifEditMac.xcodeproj/xcshareddata/xcschemes/ExifEditMac.xcscheme` | 19, 61, 78 | `BuildableName = "Logbook.app"` | Update to `Lattice.app` |
+| `/Users/chrislemarquand/Documents/Photography/Exifedit/Ledger.xcodeproj/project.pbxproj` | 47, 106, 217 | `Logbook.app` | Rename product ref to `Lattice.app` |
+| `/Users/chrislemarquand/Documents/Photography/Exifedit/Ledger.xcodeproj/project.pbxproj` | 413, 435 | `INFOPLIST_KEY_CFBundleDisplayName = Logbook;` | Set to `Lattice` |
+| `/Users/chrislemarquand/Documents/Photography/Exifedit/Ledger.xcodeproj/project.pbxproj` | 421, 443 | `PRODUCT_BUNDLE_IDENTIFIER = com.chrislemarquand.Logbook;` | Set to `com.chrislemarquand.Lattice` |
+| `/Users/chrislemarquand/Documents/Photography/Exifedit/Ledger.xcodeproj/project.pbxproj` | 422, 444 | `PRODUCT_NAME = Logbook;` | Set to `Lattice` |
+| `/Users/chrislemarquand/Documents/Photography/Exifedit/Ledger.xcodeproj/project.pbxproj` | 479, 493 | `com.chrislemarquand.LogbookTests` | Optionally align to new test bundle naming |
+| `/Users/chrislemarquand/Documents/Photography/Exifedit/Ledger.xcodeproj/xcshareddata/xcschemes/ExifEditMac.xcscheme` | 19, 61, 78 | `BuildableName = "Logbook.app"` | Update to `Lattice.app` |
 
 ### B) Runtime Strings + UI Labels
 | File | Line(s) | Current | Planned Change |
 |---|---:|---|---|
-| `/Users/chrislemarquand/Documents/Photography/Exifedit/Sources/ExifEditMac/ExifEditMacApp.swift` | 21 | `About Logbook` | `About Lattice` |
-| `/Users/chrislemarquand/Documents/Photography/Exifedit/Sources/ExifEditMac/ExifEditMacApp.swift` | 312 | fallback `"Logbook"` | fallback `Lattice` |
-| `/Users/chrislemarquand/Documents/Photography/Exifedit/Sources/ExifEditMac/ExifEditMacApp.swift` | 454 | `window.title = "Logbook"` | `window.title = "Lattice"` |
+| `/Users/chrislemarquand/Documents/Photography/Exifedit/Sources/Ledger/ExifEditMacApp.swift` | 21 | `About Logbook` | `About Lattice` |
+| `/Users/chrislemarquand/Documents/Photography/Exifedit/Sources/Ledger/ExifEditMacApp.swift` | 312 | fallback `"Logbook"` | fallback `Lattice` |
+| `/Users/chrislemarquand/Documents/Photography/Exifedit/Sources/Ledger/ExifEditMacApp.swift` | 454 | `window.title = "Logbook"` | `window.title = "Lattice"` |
 | `/Users/chrislemarquand/Documents/Photography/Exifedit/Config/ExifEditMac-Info.plist` | 24 | `Copyright © ... Logbook` | update to `Lattice` |
 
 ### C) Persistent Domains + Notifications + Defaults
 | File | Line(s) | Current | Planned Change |
 |---|---:|---|---|
-| `/Users/chrislemarquand/Documents/Photography/Exifedit/Sources/ExifEditMac/AppModel.swift` | 3406, 3412 | `domain: "Logbook.Rotate"` | rename to `domain: "Lattice.Rotate"` + migration read fallback |
-| `/Users/chrislemarquand/Documents/Photography/Exifedit/Sources/ExifEditMac/AppModel.swift` | 3444, 3450 | `domain: "Logbook.Flip"` | rename to `domain: "Lattice.Flip"` + migration read fallback |
-| `/Users/chrislemarquand/Documents/Photography/Exifedit/Sources/ExifEditMac/MainContentView.swift` | 10, 11 | `Notification.Name("Logbook....")` | rename namespace to `Lattice` namespace |
-| `/Users/chrislemarquand/Documents/Photography/Exifedit/Sources/ExifEditMac/MainContentView.swift` | 152, 155 | `Logbook.MainSplit` / `Logbook.ContentSplit` | new autosave names (`Lattice.MainSplit` / `Lattice.ContentSplit`) |
-| `/Users/chrislemarquand/Documents/Photography/Exifedit/Sources/ExifEditMac/MainContentView.swift` | 167-170, 210-211 | old split-view defaults keys | one-time migration copy old keys to new keys |
+| `/Users/chrislemarquand/Documents/Photography/Exifedit/Sources/Ledger/AppModel.swift` | 3406, 3412 | `domain: "Logbook.Rotate"` | rename to `domain: "Lattice.Rotate"` + migration read fallback |
+| `/Users/chrislemarquand/Documents/Photography/Exifedit/Sources/Ledger/AppModel.swift` | 3444, 3450 | `domain: "Logbook.Flip"` | rename to `domain: "Lattice.Flip"` + migration read fallback |
+| `/Users/chrislemarquand/Documents/Photography/Exifedit/Sources/Ledger/MainContentView.swift` | 10, 11 | `Notification.Name("Logbook....")` | rename namespace to `Lattice` namespace |
+| `/Users/chrislemarquand/Documents/Photography/Exifedit/Sources/Ledger/MainContentView.swift` | 152, 155 | `Logbook.MainSplit` / `Logbook.ContentSplit` | new autosave names (`Lattice.MainSplit` / `Lattice.ContentSplit`) |
+| `/Users/chrislemarquand/Documents/Photography/Exifedit/Sources/Ledger/MainContentView.swift` | 167-170, 210-211 | old split-view defaults keys | one-time migration copy old keys to new keys |
 
 ### D) App Support Directories
 | File | Line(s) | Current | Planned Change |
 |---|---:|---|---|
-| `/Users/chrislemarquand/Documents/Photography/Exifedit/Sources/ExifEditMac/AppModel.swift` | 80, 131 | `.../Application Support/Logbook` | move to `.../Application Support/Lattice` with fallback read |
-| `/Users/chrislemarquand/Documents/Photography/Exifedit/Sources/ExifEditMac/Presets.swift` | 75 | appending `Logbook` path | switch to `Lattice` folder |
+| `/Users/chrislemarquand/Documents/Photography/Exifedit/Sources/Ledger/AppModel.swift` | 80, 131 | `.../Application Support/Logbook` | move to `.../Application Support/Lattice` with fallback read |
+| `/Users/chrislemarquand/Documents/Photography/Exifedit/Sources/Ledger/Presets.swift` | 75 | appending `Logbook` path | switch to `Lattice` folder |
 
 ### E) Release + Distribution Artifacts
 | File | Line(s) | Current | Planned Change |
