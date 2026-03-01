@@ -783,6 +783,7 @@ private final class AppKitGalleryLayout: NSCollectionViewFlowLayout {
 private final class AppKitGalleryItem: NSCollectionViewItem {
     static let reuseIdentifier = NSUserInterfaceItemIdentifier("AppKitGalleryItem")
 
+    private let selectionBackgroundView = NSView(frame: .zero)
     let thumbnailImageView = NSImageView(frame: .zero)
     private let thumbnailContainer = NSView(frame: .zero)
     private let pendingDot = NSImageView(frame: .zero)
@@ -813,8 +814,13 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
 
     private func configureViewHierarchy() {
         view.wantsLayer = true
-        view.layer?.cornerRadius = 8
-        view.layer?.masksToBounds = true
+
+        selectionBackgroundView.translatesAutoresizingMaskIntoConstraints = false
+        selectionBackgroundView.wantsLayer = true
+        selectionBackgroundView.layer?.cornerRadius = 8
+        selectionBackgroundView.layer?.masksToBounds = true
+        selectionBackgroundView.layer?.backgroundColor = NSColor.clear.cgColor
+        view.addSubview(selectionBackgroundView, positioned: .below, relativeTo: nil)
 
         thumbnailContainer.translatesAutoresizingMaskIntoConstraints = false
         thumbnailContainer.wantsLayer = true
@@ -841,6 +847,11 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         view.addSubview(titleField)
 
         NSLayoutConstraint.activate([
+            selectionBackgroundView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 4),
+            selectionBackgroundView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -4),
+            selectionBackgroundView.topAnchor.constraint(equalTo: view.topAnchor, constant: 4),
+            selectionBackgroundView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -4),
+
             thumbnailContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             thumbnailContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             thumbnailContainer.topAnchor.constraint(equalTo: view.topAnchor),
@@ -909,7 +920,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
     }
 
     func applySelection(isSelected: Bool) {
-        view.layer?.backgroundColor = isSelected
+        selectionBackgroundView.layer?.backgroundColor = isSelected
             ? AppTheme.accentStrongNSColor.withAlphaComponent(0.22).cgColor
             : NSColor.clear.cgColor
     }

@@ -13,6 +13,7 @@ All notable changes to Ledger are documented here.
 - Thumbnail rewrite step **B20b** completed as architecture groundwork: thumbnail cache, inflight dedupe/concurrency control, and generation/fallback ordering were extracted into a single shared `ThumbnailService`; existing list/gallery call sites now delegate through that service without introducing new UX behavior claims.
 - Thumbnail rewrite step **B20c** completed: thumbnail request/cancel ownership now lives in reusable AppKit views for both browser modes (`AppKitGalleryItem` in gallery and `BrowserListNameCellView`/`BrowserListIconView` in list), with `prepareForReuse` cancellation and per-cell request token checks to prevent stale async image writes after reuse.
 - Thumbnail rewrite step **B20d** completed: gallery selection now uses a native tile-level highlight baseline (Finder-style) and no longer uses the custom image-hugging selection ring.
+- Gallery selection highlight now uses a consistent inset rounded background (fixed padding/shape) for cleaner focus rendering without additional custom drawing.
 
 ---
 
