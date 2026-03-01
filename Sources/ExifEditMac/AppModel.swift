@@ -2650,9 +2650,18 @@ final class AppModel: ObservableObject {
         return "\(count)"
     }
 
+    func shouldEagerlyLoadSidebarImageCount(for item: SidebarItem) -> Bool {
+        !isPrivacySensitiveSidebarKind(item.kind)
+    }
+
     func ensureSidebarImageCount(for item: SidebarItem) {
         guard sidebarImageCounts[item.id] == nil else { return }
         guard sidebarImageCountTasks[item.id] == nil else { return }
+        if isPrivacySensitiveSidebarKind(item.kind) {
+            // Never touch privacy-sensitive locations in background.
+            // Only load counts after an explicit selection of the exact item.
+            guard hasHadExplicitSidebarSelection, selectedSidebarID == item.id else { return }
+        }
         guard let sourceURL = sidebarCountURL(for: item.kind) else {
             var counts = sidebarImageCounts
             counts[item.id] = 0

@@ -11,9 +11,12 @@ All notable changes to Ledger are documented here.
 - Exported editable menu/action map to `output/menu_hierarchy_export.yaml` for planning command-scope and menu-layout refinements.
 - Exported user-friendly spreadsheet version to `output/menu_hierarchy_editable.xlsx` with menu/context command structure, plain-English action descriptions, and editable request columns.
 
+### Fixed
+- **B19** Desktop/Downloads TCC prompt regression on app startup: privacy-sensitive sidebar counts are no longer loaded in background at launch (including favorites/aliases pointing to Desktop/Downloads). Counts remain blank until the user explicitly selects the exact privacy-sensitive item, preventing startup permission prompts.
+
 ---
 
-## [0.6.5] — build 82 — 2026-03-01
+## [0.6.5] — build 83 — 2026-03-01
 
 ### Changed
 - **P17** Image menu metadata apply flow split into two actions: selection-scoped apply now shows a dynamic title (`"Apply Metadata Changes to N Image(s)"`) and folder-wide apply is exposed as `"Apply Metadata Changes to Folder"` (mirrors toolbar Apply behavior).

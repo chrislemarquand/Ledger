@@ -31,10 +31,8 @@ struct NavigationSidebarView: View {
                                     }
                                 }
                                 .task(id: item.id) {
-                                    switch item.kind {
-                                    case .desktop, .downloads: break
-                                    default: model.ensureSidebarImageCount(for: item)
-                                    }
+                                    guard model.shouldEagerlyLoadSidebarImageCount(for: item) else { return }
+                                    model.ensureSidebarImageCount(for: item)
                                 }
                             }
                         }

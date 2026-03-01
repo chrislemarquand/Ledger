@@ -1,6 +1,6 @@
 # Roadmap
 
-Current version: **0.6.5** (build 82). Target: **v1.0**.
+Current version: **0.6.5** (build 83). Target: **v1.0**.
 
 Reference items by ID: **B1–B16** bugs · **P1–P24** polish · **N1–N8** native rewrites · **A1–A2** architecture · **R1–R18** post-v1.0 roadmap.
 
@@ -38,7 +38,7 @@ Reference items by ID: **B1–B16** bugs · **P1–P24** polish · **N1–N8** n
 - [x] **B11** ~~Thumbnail flicker on rotate / flip~~ — ✅ Fixed in 0.6 via `stagedOpsDisplayToken`; display transform updated without clearing thumbnail cache.
 
 ### Sidebar
-- [x] **B19** 🟡 **Cannot reproduce** — Desktop and Downloads were reported to trigger a TCC permission prompt on app startup. Two-layer fix applied: (1) `reloadFilesIfBrowserEmpty` guarded by `hasHadExplicitSidebarSelection` so it never retries privacy-sensitive folders before the user has explicitly clicked them; (2) `shouldSuppressPrivacySensitiveAutoSelection` rejects trigger events predating `initializationUptime` to handle stale Dock/Finder-click events still set as `NSApp.currentEvent` during SwiftUI's first-render auto-selection. Cannot reproduce in the debug build — no TCC prompt triggered at startup or on folder click. Reopen if it resurfaces.
+- [x] **B19** ✅ **No TCC prompt on startup for Desktop/Downloads** — regression fix (2026-03-01): privacy-sensitive sidebar count loading is now blocked unless the user has explicitly selected that exact item (`hasHadExplicitSidebarSelection && selectedSidebarID == item.id`), and sidebar row eager-count tasks now skip all privacy-sensitive kinds (not just source Desktop/Downloads rows). Result: Desktop/Downloads counts stay blank on app open and only trigger TCC when explicitly selected.
 - [x] **B12** ✅ Implementation is correct; residual patchy shadow rendering matches Xcode's sidebar on macOS 26.2 — confirmed system compositor bug, not an app issue. Removed custom layer code; moved window config to `viewWillAppear`.
 
 ### About panel
@@ -85,6 +85,7 @@ Reference items by ID: **B1–B16** bugs · **P1–P24** polish · **N1–N8** n
 - [x] **P16** ~~"Folder" menu item should say "Image"~~ — ✅ `CommandMenu("Folder")` renamed to `CommandMenu("Image")`.
 - [x] **P17** ✅ **Apply metadata: split into two actions** — Image menu Apply is now split into "Apply Metadata Changes to [N Image(s)]" (dynamic selection count label, Cmd+S) and "Apply Metadata Changes to Folder" (folder-wide apply flow matching toolbar Apply). Both actions validate enabled state independently. Context-menu Apply label now uses the same dynamic selection-count title helper as the menu bar for exact wording parity.
 - [ ] **P26** `Should` **Image-menu command scope + macOS-convention menu placement** — ensure image-level commands operate only on the current selection; place folder-wide actions in the macOS-conventional location (either a distinct subsection or the Folder menu); ensure context-menu actions always apply only to the right-click target selection.
+- [ ] **P27** `Should` **Finalise menu structure** — lock the final top-level and context-menu command layout based on the agreed macOS-convention split from this conversation (including scope clarity between File/Image/Folder and consistent context-menu targeting).
 
 ### Status / toolbar
 - [x] **P25** ✅ **Toolbar pane grouping** — added `inspectorTrackingSeparator` (`NSTrackingSeparatorToolbarItem` bound to `contentSplitController.splitView` divider 0); toolbar now has three zones: sidebar (`toggleSidebar`), browser (`openFolder`, `viewMode`, `sort`, `zoomOut`, `zoomIn`, `flexibleSpace`, `presetTools`, `applyChanges`), inspector (`toggleInspector`); each zone tracks its pane on resize. Hard line at toolbar bottom on inspector collapse is expected macOS Liquid Glass behaviour.
