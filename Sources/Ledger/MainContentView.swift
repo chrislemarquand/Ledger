@@ -23,6 +23,10 @@ enum KeyCode {
     static let escape: UInt16 = 53
     static let `return`: UInt16 = 36
     static let numpadReturn: UInt16 = 76
+    static let equal: UInt16 = 24
+    static let minus: UInt16 = 27
+    static let numpadPlus: UInt16 = 69
+    static let numpadMinus: UInt16 = 78
     static let leftArrow: UInt16 = 123
     static let rightArrow: UInt16 = 124
     static let downArrow: UInt16 = 125
@@ -369,6 +373,29 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 }
             }
 
+            // Zoom shortcuts should work anywhere in the key window (including inspector
+            // focus) when gallery mode is active and zoom can change.
+            if let window = view.window ?? NSApp.keyWindow,
+               canHandleBrowserShortcuts(in: window) {
+                if event.keyCode == KeyCode.equal || event.keyCode == KeyCode.numpadPlus {
+                    guard modifiers == [.command] || modifiers == [.command, .shift] else { return event }
+                    guard model.browserViewMode == .gallery else { return nil }
+                    guard model.canIncreaseGalleryZoom else { return nil }
+                    model.increaseGalleryZoom()
+                    nativeToolbarDelegate?.refreshFromModel()
+                    return nil
+                }
+
+                if event.keyCode == KeyCode.minus || event.keyCode == KeyCode.numpadMinus {
+                    guard modifiers == [.command] || modifiers == [.command, .shift] else { return event }
+                    guard model.browserViewMode == .gallery else { return nil }
+                    guard model.canDecreaseGalleryZoom else { return nil }
+                    model.decreaseGalleryZoom()
+                    nativeToolbarDelegate?.refreshFromModel()
+                    return nil
+                }
+            }
+
             guard shouldHandleBrowserKeyCommands() else { return event }
 
             switch event.keyCode {
@@ -535,10 +562,14 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     /// Builds and returns the Sort By NSMenuItem with submenu.
     private func makeSortByMenuItem() -> NSMenuItem {
         let sortMenu = NSMenu(title: "Sort By")
-        sortMenu.addItem(withTitle: "Name", action: #selector(sortByNameAction(_:)), keyEquivalent: "")
-        sortMenu.addItem(withTitle: "Date Created", action: #selector(sortByCreatedAction(_:)), keyEquivalent: "")
-        sortMenu.addItem(withTitle: "Size", action: #selector(sortBySizeAction(_:)), keyEquivalent: "")
-        sortMenu.addItem(withTitle: "Kind", action: #selector(sortByKindAction(_:)), keyEquivalent: "")
+        let nameItem = sortMenu.addItem(withTitle: "Name", action: #selector(sortByNameAction(_:)), keyEquivalent: "1")
+        nameItem.keyEquivalentModifierMask = [.command, .control, .option]
+        let kindItem = sortMenu.addItem(withTitle: "Kind", action: #selector(sortByKindAction(_:)), keyEquivalent: "2")
+        kindItem.keyEquivalentModifierMask = [.command, .control, .option]
+        let createdItem = sortMenu.addItem(withTitle: "Date Created", action: #selector(sortByCreatedAction(_:)), keyEquivalent: "5")
+        createdItem.keyEquivalentModifierMask = [.command, .control, .option]
+        let sizeItem = sortMenu.addItem(withTitle: "Size", action: #selector(sortBySizeAction(_:)), keyEquivalent: "6")
+        sizeItem.keyEquivalentModifierMask = [.command, .control, .option]
         let item = NSMenuItem(title: "Sort By", action: nil, keyEquivalent: "")
         item.image = NSImage(systemSymbolName: "arrow.up.arrow.down", accessibilityDescription: nil)
         item.submenu = sortMenu
@@ -799,6 +830,17 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     }
 
     @objc
+    func refreshSelectionMetadataAction(_: Any?) {
+        model.performFileAction(.refreshMetadata, targetURLs: Array(model.selectedFileURLs))
+    }
+
+    @objc
+    func refreshAllMetadataAction(_: Any?) {
+        let allURLs = model.browserItems.map(\.url)
+        model.refreshMetadata(for: allURLs)
+    }
+
+    @objc
     func focusInspectorEntryAction(_: Any?) {
         guard !model.selectedFileURLs.isEmpty else { return }
         NotificationCenter.default.post(
@@ -847,8 +889,20 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     }
 
     @objc
+    func clearAllChangesAction(_: Any?) {
+        let allURLs = model.browserItems.map(\.url)
+        model.clearPendingEdits(for: allURLs)
+    }
+
+    @objc
     func restoreFromBackupAction(_: Any?) {
         model.performFileAction(.restoreFromLastBackup, targetURLs: Array(model.selectedFileURLs))
+    }
+
+    @objc
+    func restoreAllFromBackupAction(_: Any?) {
+        let allURLs = model.browserItems.map(\.url)
+        model.restoreLastOperation(for: allURLs)
     }
 
     @objc
@@ -1293,7 +1347,7 @@ private extension NSToolbarItem.Identifier {
 struct BrowserView: View {
     @ObservedObject var model: AppModel
 
-    private enum OverlayState {
+    private enum OverlayState: Equatable {
         case none
         case noSelection
         case loading
@@ -1309,7 +1363,9 @@ struct BrowserView: View {
         if let error = model.browserEnumerationError {
             return .enumerationError(error.localizedDescription)
         }
-        if model.isFolderMetadataLoading, model.browserItems.isEmpty {
+        // isFolderContentLoading: folder switch in progress; masks gallery reloadData() flash.
+        // isFolderMetadataLoading + empty: initial load skeleton (first open, no cached metadata).
+        if model.isFolderContentLoading || (model.isFolderMetadataLoading && model.browserItems.isEmpty) {
             return .loading
         }
         if model.browserItems.isEmpty {
@@ -1335,40 +1391,56 @@ struct BrowserView: View {
     }
 
     @ViewBuilder
-    var body: some View {
+    private var overlayContent: some View {
         switch overlayState {
         case .none:
-            browserContent
+            EmptyView()
         case .loading:
-            ZStack {
-                browserContent
-                BrowserLoadingPlaceholderView(mode: model.browserViewMode)
-            }
+            BrowserLoadingPlaceholderView(mode: model.browserViewMode)
         case .noSelection:
             ContentUnavailableView(
                 "No Folder Selected",
                 systemImage: "folder",
                 description: Text("Open a folder from the toolbar to browse and edit image metadata.")
             )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(nsColor: .windowBackgroundColor))
         case let .enumerationError(message):
             ContentUnavailableView(
                 "Folder Unavailable",
                 systemImage: "lock.fill",
                 description: Text(message)
             )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(nsColor: .windowBackgroundColor))
         case .emptyFolder:
             ContentUnavailableView(
                 "No Supported Images",
                 systemImage: "photo.on.rectangle.angled",
                 description: Text("This folder contains no image files supported by \(AppBrand.displayName).")
             )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(nsColor: .windowBackgroundColor))
         case .noResults:
             ContentUnavailableView(
                 "No Results",
                 systemImage: "magnifyingglass",
                 description: Text("Try a different search term.")
             )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(nsColor: .windowBackgroundColor))
         }
+    }
+
+    var body: some View {
+        // browserContent is always the root view — stable structural identity means SwiftUI
+        // never destroys/recreates the AppKit gallery and list view controllers when the
+        // overlay state changes. Previously, browserContent appeared at different structural
+        // positions in each switch branch (bare in .none, inside a wrapping ZStack in .loading),
+        // which caused AppKit VCs to be torn down and rebuilt on every transition.
+        browserContent
+            .allowsHitTesting(overlayState == OverlayState.none)
+            .overlay { overlayContent }
     }
 }
 

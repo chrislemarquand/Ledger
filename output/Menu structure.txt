@@ -1,0 +1,72 @@
+-Ledger
+--About Ledger
+--[Divider]
+--Services
+--[Divider]
+--Hide Ledger (Cmd+H)
+--Hide Others (Cmd+Opt+H)
+--Show All
+--[Divider]
+--Quit Ledger (Cmd+Q)
+-File
+--Open Folder… (Cmd+N)
+--[Divider]
+--Open (Cmd+O)
+--Open With
+---[System inputted items for selected file type]
+--Reveal in Finder
+--Quick Look (Cmd+Y)
+--[Divider]
+--Pin Folder to Sidebar (Cmd+Opt+T)
+--Unpin Folder from Sidebar
+--Move Folder Up in Sidebar
+--Move Folder Down in Sidebar
+--[Divider]
+--[System default items may also appear: Close, etc.]
+-Edit
+--Undo (Cmd+Z)
+--Redo (Cmd+Shft+Z)
+--[System default items: Cut/Copy/Paste/Select All, etc.]
+--[Divider]
+--Rotate (Cmd+R) [should be exactly the same as Inspector function]
+--Flip [should be exactly the same as Inspector function]
+-View
+--as Gallery (Cmd+1)
+--as List (Cmd+2)
+--[Divider]
+--Sort By
+---Name (Ctrl+Opt+Cmd+1)
+---Kind (Ctrl+Opt+Cmd+2)
+---Date Created (Ctrl+Opt+Cmd+5)
+---Size (Ctrl+Opt+Cmd+6)
+--[Divider]
+--Zoom In (Cmd+= / Cmd+)
+--Zoom Out (Cmd-)
+--[Divider]
+--Toggle Sidebar (Cmd+Opt+S)
+--Toggle Inspector (Cmd+Opt+I)
+--[Divider]
+--[System default items may also appear: Enter Full Screen, etc.]
+-Image
+--Apply Metadata Changes to Selection (Cmd+S) [injected, title dynamic with count]
+--Refresh Metadata for Selection (Cmd+R)
+--Clear Metadata Changes (Cmd+K) [injected]
+--Restore from Backup (Cmd+B) [injected]
+--[Divider]
+--Apply Metadata Changes to All Images (Cmd+Opt+S) [injected]
+--Refresh Metadata for All Images (Cmd+Opt+R)
+--Clear Metadata Changes from All Images (Cmd+Opt+K) [injected]
+--Restore Metadata from Backup for All Images (Cmd+Opt+B) [injected]
+--[Divider]
+--Presets
+---Apply Preset
+----[Dynamic preset list]
+----[No Presets]
+---[Divider]
+---Save as Preset…
+---Manage Presets…
+-Window
+--[System default window items]
+-Help
+--ExifTool Documentation
+--[System default help/search items may also appear]

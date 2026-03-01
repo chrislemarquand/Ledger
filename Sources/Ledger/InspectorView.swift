@@ -599,7 +599,7 @@ private struct InspectorPreviewImageView: View {
     let fileURL: URL
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
+        ZStack {
             if let image = model.inspectorPreviewImage(for: fileURL) {
                 Image(nsImage: image)
                     .resizable()
@@ -608,12 +608,16 @@ private struct InspectorPreviewImageView: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(.quaternary.opacity(0.22))
             }
-
+        }
+        .frame(height: 220)
+        .overlay {
             if model.isInspectorPreviewLoading(for: fileURL) {
                 ProgressView()
                     .controlSize(.small)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             }
-
+        }
+        .overlay(alignment: .topLeading) {
             if model.hasPendingImageEdits(for: fileURL) {
                 Image(systemName: "circle.fill")
                     .font(.system(size: 9))
@@ -621,7 +625,6 @@ private struct InspectorPreviewImageView: View {
                     .padding(8)
             }
         }
-        .frame(height: 220)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .task(id: previewTaskID) {
             model.ensureInspectorPreviewLoaded(for: fileURL)

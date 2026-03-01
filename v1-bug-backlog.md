@@ -1,16 +1,19 @@
 # v1.0.0 Bug Backlog
 
 ## Severity rubric
-- `P0`: data loss, crash, or corruption.
-- `P1`: broken core workflow.
-- `P2`: polish and usability issues.
+- `S0`: data loss, crash, or corruption.
+- `S1`: broken core workflow.
+- `S2`: polish and usability issues.
 
 ## Open issues
-- [ ] `P1` Folder-switch UX regression: opening a folder can briefly flash the "No Supported Images" empty state before thumbnails render. Marked as a regression from earlier builds and currently unresolved; attempted fixes were reverted (`267d49f`, `2c8658a`).
-- [ ] `P1` Verify context-menu parity and enabled states in list/gallery/menu bar across mixed selections.
-- [ ] `P1` Verify favorites pin/unpin/reorder flows after relaunch and invalid path cleanup.
-- [ ] `P2` Validate reduced-motion behavior for inspector section expand/collapse and field focus scrolling.
-- [ ] `P2` Full manual QA matrix execution and sign-off (open/apply/refresh/restore, presets, GPX import).
+- [ ] `S1` Verify context-menu parity and enabled states in list/gallery/menu bar across mixed selections.
+- [ ] `S1` Verify favorites pin/unpin/reorder flows after relaunch and invalid path cleanup.
+- [ ] `S2` Validate reduced-motion behavior for inspector section expand/collapse and field focus scrolling.
+- [ ] `S2` Full manual QA matrix execution and sign-off (open/apply/refresh/restore, presets, GPX import).
 
 ## Closed during this pass
-- [x] `P1` Remove actor isolation warning for split resize observer callback (`MainContentView.swift`).
+- [x] `S1` Folder-switch UX regression: fixed. Two-part fix: (1) `BrowserView.body` restructured so `browserContent` is always the root view with overlays applied via `.overlay()`, eliminating the structural identity changes that destroyed/recreated AppKit VCs on every overlay transition; (2) `selectSidebar` sets `isFolderContentLoading = true` and defers `loadFiles` to the next task, giving SwiftUI a render pass to show the loading skeleton before the gallery's `reloadData()` flash is visible. Root cause of previous fix failures: `defer` cleared the flag before SwiftUI rendered (fix 1), and async minimum-delay kept the flag true but the structural identity change destroyed AppKit VCs causing a different flash (fix 2).
+- [x] `S2` Gallery thumbnail corner-style regression: resolved. Thumbnail shape remains consistent from first paint through pending-edit dot appearance; no corner-style transition between unedited/edited states.
+- [x] `S2` Inspector preview loading spinner alignment: resolved. Spinner is centered in the preview placeholder while loading.
+- [x] `S1` Gallery zoom keyboard shortcuts with inspector focus: resolved. `⌘+` and `⌘−` now trigger zoom in gallery mode even when focus is inside inspector controls.
+- [x] `S1` Remove actor isolation warning for split resize observer callback (`MainContentView.swift`).

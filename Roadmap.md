@@ -1,8 +1,10 @@
 # Roadmap
 
-Current version: **0.7** (build in `Config/Base.xcconfig`). Target: **v1.0**.
+Current version: **0.7.1** (build in `Config/Base.xcconfig`). Target: **v1.0**.
 
 Reference items by ID: **B1–B20** bugs · **P1–P24** polish · **N1–N8** native rewrites · **A1–A2** architecture · **R1–R19** post-v1.0 roadmap.
+
+ID convention: `B#`/`P#`/`N#`/`A#`/`R#` are roadmap item IDs. Backlog severity labels use `S0`/`S1`/`S2` in `v1-bug-backlog.md` to avoid collision with roadmap `P#` polish IDs.
 
 ---
 

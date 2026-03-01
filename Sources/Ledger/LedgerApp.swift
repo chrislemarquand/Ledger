@@ -44,7 +44,7 @@ struct LedgerApp: App {
                 } label: {
                     Label("Open Folder…", systemImage: "folder")
                 }
-                .keyboardShortcut("o", modifiers: .command)
+                .keyboardShortcut("n", modifiers: .command)
 
                 Divider()
 
@@ -52,58 +52,90 @@ struct LedgerApp: App {
                     guard let model = appDelegate.appModel else { return }
                     model.performFileAction(.openInDefaultApp, targetURLs: Array(model.selectedFileURLs))
                 } label: {
-                    let state = appDelegate.appModel?.fileActionState(for: .openInDefaultApp, targetURLs: Array(appDelegate.appModel?.selectedFileURLs ?? []))
-                    Label(state?.title ?? "Open in Default App", systemImage: state?.symbolName ?? "arrow.up.forward.app")
+                    Label("Open", systemImage: "arrow.up.forward.app")
                 }
-                .keyboardShortcut(.return, modifiers: .command)
+                .keyboardShortcut("o", modifiers: .command)
                 .disabled({
                     guard let model = appDelegate.appModel else { return true }
                     return !model.fileActionState(for: .openInDefaultApp, targetURLs: Array(model.selectedFileURLs)).isEnabled
                 }())
+
+                Menu("Open With") {
+                    let apps = availableOpenWithApps()
+                    if apps.isEmpty {
+                        Text("No Compatible Apps")
+                    } else {
+                        ForEach(apps) { app in
+                            Button(app.name) {
+                                openSelection(with: app.url)
+                            }
+                        }
+                    }
+                }
+                .disabled(appDelegate.appModel?.selectedFileURLs.isEmpty ?? true)
 
                 Button {
                     appDelegate.appModel?.revealSelectionInFinder()
                 } label: {
                     Label("Reveal in Finder", systemImage: "folder")
                 }
-                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(appDelegate.appModel?.selectedFileURLs.isEmpty ?? true)
+
+                Button {
+                    appDelegate.appModel?.quickLookSelection()
+                } label: {
+                    Label("Quick Look", systemImage: "eye")
+                }
+                .keyboardShortcut("y", modifiers: .command)
                 .disabled(appDelegate.appModel?.selectedFileURLs.isEmpty ?? true)
 
                 Divider()
 
                 Button {
-                    guard let model = appDelegate.appModel else { return }
-                    model.performFileAction(.restoreFromLastBackup, targetURLs: Array(model.selectedFileURLs))
+                    appDelegate.appModel?.pinSelectedSidebarLocationToFavorites()
                 } label: {
-                    let state = appDelegate.appModel?.fileActionState(for: .restoreFromLastBackup, targetURLs: Array(appDelegate.appModel?.selectedFileURLs ?? []))
-                    Label(state?.title ?? "Restore from Backup", systemImage: state?.symbolName ?? "arrow.uturn.backward.circle")
+                    Label("Pin Folder to Sidebar", systemImage: "pin")
                 }
-                .disabled({
-                    guard let model = appDelegate.appModel else { return true }
-                    return !model.fileActionState(for: .restoreFromLastBackup, targetURLs: Array(model.selectedFileURLs)).isEnabled
-                }())
+                .keyboardShortcut("t", modifiers: [.command, .option])
+                .disabled(!(appDelegate.appModel?.canPinSelectedSidebarLocation ?? false))
+
+                Button {
+                    appDelegate.appModel?.unpinSelectedSidebarFavorite()
+                } label: {
+                    Label("Unpin Folder from Sidebar", systemImage: "pin.slash")
+                }
+                .disabled(!(appDelegate.appModel?.canUnpinSelectedSidebarLocation ?? false))
+
+                Button {
+                    appDelegate.appModel?.moveSelectedFavoriteUp()
+                } label: {
+                    Label("Move Folder Up in Sidebar", systemImage: "arrow.up")
+                }
+                .disabled(!(appDelegate.appModel?.canMoveSelectedFavoriteUp ?? false))
+
+                Button {
+                    appDelegate.appModel?.moveSelectedFavoriteDown()
+                } label: {
+                    Label("Move Folder Down in Sidebar", systemImage: "arrow.down")
+                }
+                .disabled(!(appDelegate.appModel?.canMoveSelectedFavoriteDown ?? false))
             }
 
             CommandGroup(after: .pasteboard) {
                 Button {
                     rotateSelectionLeft()
                 } label: {
-                    Label("Rotate Left", systemImage: "rotate.left")
+                    Label("Rotate", systemImage: "rotate.left")
                 }
-                .disabled(appDelegate.appModel?.selectedFileURLs.isEmpty ?? true)
-
-                Button {
-                    rotateSelectionRight()
-                } label: {
-                    Label("Rotate Right", systemImage: "rotate.right")
-                }
+                .keyboardShortcut("r", modifiers: .command)
                 .disabled(appDelegate.appModel?.selectedFileURLs.isEmpty ?? true)
 
                 Button {
                     flipSelectionHorizontal()
                 } label: {
-                    Label("Flip Horizontal", systemImage: "flip.horizontal")
+                    Label("Flip", systemImage: "flip.horizontal")
                 }
+                .keyboardShortcut("F", modifiers: [.command, .shift])
                 .disabled(appDelegate.appModel?.selectedFileURLs.isEmpty ?? true)
             }
 
@@ -120,16 +152,87 @@ struct LedgerApp: App {
                 } label: {
                     Label("Toggle Inspector", systemImage: "sidebar.trailing")
                 }
+                .keyboardShortcut("i", modifiers: [.command, .option])
 
             }
 
             CommandMenu("Image") {
                 Button {
-                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.refreshAction(_:)), to: nil, from: nil)
+                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.applySelectionAction(_:)), to: nil, from: nil)
                 } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
+                    let selection = Array(appDelegate.appModel?.selectedFileURLs ?? [])
+                    let title = appDelegate.appModel?.applyMetadataSelectionTitle(for: selection) ?? "Apply Metadata Changes to Selection"
+                    Label(title, systemImage: "square.and.arrow.down")
                 }
-                .keyboardShortcut("r", modifiers: .command)
+                .keyboardShortcut("s", modifiers: .command)
+                .disabled({
+                    guard let model = appDelegate.appModel else { return true }
+                    return !model.fileActionState(for: .applyMetadataChanges, targetURLs: Array(model.selectedFileURLs)).isEnabled
+                }())
+
+                Button {
+                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.refreshSelectionMetadataAction(_:)), to: nil, from: nil)
+                } label: {
+                    Label("Refresh Metadata for Selection", systemImage: "arrow.clockwise")
+                }
+                .keyboardShortcut("R", modifiers: [.command, .shift])
+                .disabled(appDelegate.appModel?.selectedFileURLs.isEmpty ?? true)
+
+                Button {
+                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.clearChangesAction(_:)), to: nil, from: nil)
+                } label: {
+                    Label("Clear Metadata Changes", systemImage: "xmark.circle")
+                }
+                .keyboardShortcut("k", modifiers: .command)
+                .disabled({
+                    guard let model = appDelegate.appModel else { return true }
+                    return !model.fileActionState(for: .clearMetadataChanges, targetURLs: Array(model.selectedFileURLs)).isEnabled
+                }())
+
+                Button {
+                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.restoreFromBackupAction(_:)), to: nil, from: nil)
+                } label: {
+                    Label("Restore from Backup", systemImage: "arrow.uturn.backward.circle")
+                }
+                .keyboardShortcut("b", modifiers: .command)
+                .disabled({
+                    guard let model = appDelegate.appModel else { return true }
+                    return !model.fileActionState(for: .restoreFromLastBackup, targetURLs: Array(model.selectedFileURLs)).isEnabled
+                }())
+
+                Divider()
+
+                Button {
+                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.applyFolderAction(_:)), to: nil, from: nil)
+                } label: {
+                    Label("Apply Metadata Changes to All Images", systemImage: "square.and.arrow.down")
+                }
+                .keyboardShortcut("S", modifiers: [.command, .option, .shift])
+                .disabled(!(appDelegate.appModel?.canApplyMetadataChanges ?? false))
+
+                Button {
+                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.refreshAllMetadataAction(_:)), to: nil, from: nil)
+                } label: {
+                    Label("Refresh Metadata for All Images", systemImage: "arrow.clockwise")
+                }
+                .keyboardShortcut("r", modifiers: [.command, .option])
+                .disabled((appDelegate.appModel?.browserItems.isEmpty ?? true))
+
+                Button {
+                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.clearAllChangesAction(_:)), to: nil, from: nil)
+                } label: {
+                    Label("Clear Metadata Changes from All Images", systemImage: "xmark.circle")
+                }
+                .keyboardShortcut("k", modifiers: [.command, .option])
+                .disabled(!(appDelegate.appModel?.canApplyMetadataChanges ?? false))
+
+                Button {
+                    NSApp.sendAction(#selector(NativeThreePaneSplitViewController.restoreAllFromBackupAction(_:)), to: nil, from: nil)
+                } label: {
+                    Label("Restore Metadata from Backup for All Images", systemImage: "arrow.uturn.backward.circle")
+                }
+                .keyboardShortcut("b", modifiers: [.command, .option])
+                .disabled((appDelegate.appModel?.browserItems.isEmpty ?? true))
 
                 Divider()
 
@@ -164,36 +267,6 @@ struct LedgerApp: App {
                         Label("Manage Presets…", systemImage: "slider.horizontal.below.square.filled.and.square")
                     }
                 }
-            }
-
-            CommandMenu("Folder") {
-                Button {
-                    appDelegate.appModel?.pinSelectedSidebarLocationToFavorites()
-                } label: {
-                    Label("Pin to Sidebar", systemImage: "pin")
-                }
-                .disabled(!(appDelegate.appModel?.canPinSelectedSidebarLocation ?? false))
-
-                Button {
-                    appDelegate.appModel?.unpinSelectedSidebarFavorite()
-                } label: {
-                    Label("Unpin from Sidebar", systemImage: "pin.slash")
-                }
-                .disabled(!(appDelegate.appModel?.canUnpinSelectedSidebarLocation ?? false))
-
-                Button {
-                    appDelegate.appModel?.moveSelectedFavoriteUp()
-                } label: {
-                    Label("Move Up in Sidebar", systemImage: "arrow.up")
-                }
-                .disabled(!(appDelegate.appModel?.canMoveSelectedFavoriteUp ?? false))
-
-                Button {
-                    appDelegate.appModel?.moveSelectedFavoriteDown()
-                } label: {
-                    Label("Move Down in Sidebar", systemImage: "arrow.down")
-                }
-                .disabled(!(appDelegate.appModel?.canMoveSelectedFavoriteDown ?? false))
             }
 
             CommandGroup(after: .help) {
@@ -252,6 +325,41 @@ struct LedgerApp: App {
         for fileURL in files {
             model.flipHorizontal(fileURL: fileURL)
         }
+    }
+
+    private struct OpenWithApp: Identifiable {
+        let url: URL
+        let name: String
+        var id: String { url.path }
+    }
+
+    private func availableOpenWithApps() -> [OpenWithApp] {
+        guard let model = appDelegate.appModel,
+              let selected = Array(model.selectedFileURLs).sorted(by: { $0.path < $1.path }).first
+        else {
+            return []
+        }
+
+        return NSWorkspace.shared.urlsForApplications(toOpen: selected)
+            .map { appURL in
+                let fallbackName = appURL.deletingPathExtension().lastPathComponent
+                let appName = FileManager.default.displayName(atPath: appURL.path)
+                return OpenWithApp(url: appURL, name: appName.isEmpty ? fallbackName : appName)
+            }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    private func openSelection(with applicationURL: URL) {
+        guard let model = appDelegate.appModel else { return }
+        let files = Array(model.selectedFileURLs).sorted { $0.path < $1.path }
+        guard !files.isEmpty else { return }
+        let config = NSWorkspace.OpenConfiguration()
+        NSWorkspace.shared.open(
+            files,
+            withApplicationAt: applicationURL,
+            configuration: config,
+            completionHandler: nil
+        )
     }
 }
 

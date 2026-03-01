@@ -459,6 +459,7 @@ final class AppModel: ObservableObject {
             notifyInspectorDidChange()
         }
     }
+    @Published var isFolderContentLoading = false
     @Published var isFolderMetadataLoading = false
     @Published var folderMetadataLoadCompleted = 0
     @Published var folderMetadataLoadTotal = 0
@@ -1011,7 +1012,16 @@ final class AppModel: ObservableObject {
 
         // Avoid touching protected locations on app launch; compute counts only after explicit selection.
         ensureSidebarImageCount(for: itemToLoad)
-        loadFiles(for: itemToLoad.kind)
+
+        // Show the loading skeleton immediately so the gallery's reloadData() flash is masked.
+        // loadFiles is deferred to the next task so SwiftUI renders the skeleton before clearing state.
+        isFolderContentLoading = true
+        let kind = itemToLoad.kind
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.loadFiles(for: kind)
+            self.isFolderContentLoading = false
+        }
     }
 
     func handleSidebarSelectionChange(from oldID: String?, to newID: String?, triggerEvent: NSEvent? = nil) {
@@ -2785,15 +2795,18 @@ final class AppModel: ObservableObject {
     }
 
     private func didChooseFolder(_ folderURL: URL) {
-        guard let item = noteRecentLocation(folderURL, promoteToTopIfExisting: false) else {
-            statusMessage = "Couldn’t open this location."
-            return
+        if let item = noteRecentLocation(folderURL, promoteToTopIfExisting: false) {
+            if selectedSidebarID != item.id {
+                suppressNextSidebarSelectionChange = true
+                selectedSidebarID = item.id
+            }
+            loadFiles(for: item.kind)
+        } else {
+            // If the folder is invalid/unreadable, still route through loadFiles so
+            // browserEnumerationError is populated for error-state rendering/tests.
+            let fallbackURL = folderURL.standardizedFileURL
+            loadFiles(for: .folder(fallbackURL))
         }
-        if selectedSidebarID != item.id {
-            suppressNextSidebarSelectionChange = true
-            selectedSidebarID = item.id
-        }
-        loadFiles(for: item.kind)
         NotificationCenter.default.post(
             name: Notification.Name("\(AppBrand.identifierPrefix).SidebarShouldResignFocus"),
             object: nil
@@ -3908,6 +3921,10 @@ final class AppModel: ObservableObject {
 
     private func recalculateInspectorState(forceNotify: Bool = false) {
         inspectorDebounceTask?.cancel()
+        if forceNotify {
+            performRecalculateInspectorState(forceNotify: true)
+            return
+        }
         inspectorDebounceTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 100_000_000)
             guard !Task.isCancelled, let self else { return }

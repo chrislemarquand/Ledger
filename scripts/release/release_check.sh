@@ -31,9 +31,9 @@ if rg -n "warning: .*\\.swift" "$BUILD_LOG" > /dev/null; then
   exit 1
 fi
 
-if rg -n "^- \[ \] `P0`|^- \[ \] `P1`" v1-bug-backlog.md > /dev/null; then
-  echo "Open P0/P1 issues remain in v1-bug-backlog.md"
-  rg -n "^- \[ \] `P0`|^- \[ \] `P1`" v1-bug-backlog.md
+if rg -n "^- \[ \] `S0`|^- \[ \] `S1`" v1-bug-backlog.md > /dev/null; then
+  echo "Open S0/S1 issues remain in v1-bug-backlog.md"
+  rg -n "^- \[ \] `S0`|^- \[ \] `S1`" v1-bug-backlog.md
   exit 1
 fi
 
