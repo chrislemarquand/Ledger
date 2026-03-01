@@ -246,6 +246,13 @@ struct RecentLocationsStore: RecentLocationsStoreProtocol {
     }
 }
 
+enum MoveCommandDirection {
+    case up
+    case down
+    case left
+    case right
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     private static let galleryColumnRange = 2 ... 9
@@ -2292,7 +2299,7 @@ final class AppModel: ObservableObject {
             delta = -1
         case .down:
             delta = 1
-        default:
+        case .left, .right:
             return
         }
 
@@ -2317,8 +2324,6 @@ final class AppModel: ObservableObject {
             delta = -galleryColumnCount
         case .down:
             delta = galleryColumnCount
-        default:
-            return
         }
 
         if extendingSelection {
@@ -5018,8 +5023,6 @@ private final class QuickLookPreviewController: NSObject, @preconcurrency QLPrev
                     _ = moveLinearly(in: panel, delta: -1)
                 case .right:
                     _ = moveLinearly(in: panel, delta: 1)
-                default:
-                    return false
                 }
             }
 

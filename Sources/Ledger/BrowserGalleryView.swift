@@ -1,33 +1,5 @@
 @preconcurrency import AppKit
 import ExifEditCore
-import SwiftUI
-
-struct BrowserGalleryView: View {
-    @ObservedObject var model: AppModel
-    private let topScrollStartInset: CGFloat = 56
-
-    var body: some View {
-        BrowserGalleryCollectionRepresentable(
-            model: model,
-            items: model.filteredBrowserItems
-        )
-        .ignoresSafeArea(.container, edges: .top)
-        .safeAreaPadding(.top, topScrollStartInset)
-    }
-}
-
-private struct BrowserGalleryCollectionRepresentable: NSViewControllerRepresentable {
-    @ObservedObject var model: AppModel
-    let items: [AppModel.BrowserItem]
-
-    func makeNSViewController(context: Context) -> BrowserGalleryViewController {
-        BrowserGalleryViewController(model: model, items: items)
-    }
-
-    func updateNSViewController(_ nsViewController: BrowserGalleryViewController, context: Context) {
-        nsViewController.update(model: model, items: items)
-    }
-}
 
 @MainActor
 final class BrowserGalleryViewController: NSViewController, NSCollectionViewDataSource, NSCollectionViewDelegate {
@@ -59,6 +31,7 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
     init(model: AppModel, items: [AppModel.BrowserItem]) {
         self.model = model
         self.items = items
+        self.lastThumbnailInvalidationToken = model.browserThumbnailInvalidationToken
         super.init(nibName: nil, bundle: nil)
     }
 

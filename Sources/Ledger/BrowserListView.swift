@@ -1,30 +1,5 @@
 @preconcurrency import AppKit
 import ExifEditCore
-import SwiftUI
-
-struct BrowserListView: View {
-    @ObservedObject var model: AppModel
-    private let topScrollStartInset: CGFloat = 56
-
-    var body: some View {
-        BrowserListTableRepresentable(model: model, items: model.filteredBrowserItems)
-        .ignoresSafeArea(.container, edges: .top)
-        .safeAreaPadding(.top, topScrollStartInset)
-    }
-}
-
-private struct BrowserListTableRepresentable: NSViewControllerRepresentable {
-    @ObservedObject var model: AppModel
-    let items: [AppModel.BrowserItem]
-
-    func makeNSViewController(context: Context) -> BrowserListViewController {
-        BrowserListViewController(model: model, items: items)
-    }
-
-    func updateNSViewController(_ nsViewController: BrowserListViewController, context: Context) {
-        nsViewController.update(model: model, items: items)
-    }
-}
 
 @MainActor
 final class BrowserListViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
@@ -49,6 +24,7 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
     init(model: AppModel, items: [AppModel.BrowserItem]) {
         self.model = model
         self.items = items
+        self.lastThumbnailInvalidationToken = model.browserThumbnailInvalidationToken
         super.init(nibName: nil, bundle: nil)
     }
 

@@ -278,10 +278,18 @@ struct InspectorView: View {
                                                 Picker("", selection: Binding(
                                                     get: { model.valueForTag(tag) },
                                                     set: {
+                                                        guard $0 != model.valueForTag(tag) else { return }
                                                         beginEditSessionIfNeeded(for: tag)
                                                         model.updateValue($0, for: tag)
                                                     }
                                                 )) {
+                                                    let currentValue = model.valueForTag(tag)
+                                                    if currentValue.isEmpty {
+                                                        Text(model.isMixedValue(for: tag) ? "Multiple values" : "—")
+                                                            .tag("")
+                                                    } else if !options.contains(where: { $0.value == currentValue }) {
+                                                        Text(currentValue).tag(currentValue)
+                                                    }
                                                     ForEach(options, id: \.value) { option in
                                                         Text(option.label).tag(option.value)
                                                     }
