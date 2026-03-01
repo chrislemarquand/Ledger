@@ -2848,6 +2848,10 @@ final class AppModel: ObservableObject {
     }
 
     private func clearLoadedContentState(preserveSessionCaches: Bool = false) {
+        // Folder switches should prioritize the newly selected folder; cancel stale
+        // shared thumbnail work that would otherwise keep occupying the broker queue.
+        Task { await ThumbnailService.cancelAllRequests() }
+
         folderMetadataLoadTask?.cancel()
         folderMetadataLoadTask = nil
         folderMetadataLoadID = UUID()

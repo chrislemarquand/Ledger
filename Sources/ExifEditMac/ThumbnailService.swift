@@ -103,6 +103,16 @@ enum ThumbnailService {
             return image
         }
 
+        func cancelAllRequests() {
+            for task in inflight.values {
+                task.cancel()
+            }
+            inflight.removeAll()
+            while !waiters.isEmpty {
+                waiters.removeFirst().resume()
+            }
+        }
+
         private func acquirePermit() async {
             if activeRequestCount < maxConcurrentRequests {
                 activeRequestCount += 1
@@ -126,6 +136,10 @@ enum ThumbnailService {
             _ operation: @escaping @Sendable () async -> NSImage?
         ) async -> NSImage? {
             await acquirePermit()
+            guard !Task.isCancelled else {
+                releasePermit()
+                return nil
+            }
             defer { releasePermit() }
             return await operation()
         }
@@ -154,6 +168,10 @@ enum ThumbnailService {
         let icon = NSWorkspace.shared.icon(forFile: fileURL.path)
         icon.size = NSSize(width: side, height: side)
         return icon
+    }
+
+    static func cancelAllRequests() async {
+        await broker.cancelAllRequests()
     }
 
     static func request(url: URL, requiredSide: CGFloat, forceRefresh: Bool) async -> NSImage? {
