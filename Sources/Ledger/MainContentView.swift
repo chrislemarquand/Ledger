@@ -684,19 +684,20 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     /// Toggle Sidebar, Toggle Inspector, other (Enter Full Screen).
     private func rebuildViewMenu(_ menu: NSMenu) {
         // Early exit if already in the correct order.
-        guard menu.items.first?.title != "As Gallery" else { return }
+        guard menu.items.first?.title.lowercased() != "as gallery" else { return }
 
         // Collect items we don't own so we can keep them.
         var sidebarMenuItem: NSMenuItem?
         var inspectorMenuItem: NSMenuItem?
         var extraItems: [NSMenuItem] = []
-        let ownedTitles: Set<String> = ["As Gallery", "As List", "Sort By", "Zoom In", "Zoom Out"]
+        let ownedTitles: Set<String> = ["as gallery", "as list", "sort by", "zoom in", "zoom out"]
 
         for item in menu.items where !item.isSeparatorItem {
-            switch item.title {
-            case "Toggle Sidebar":  sidebarMenuItem = item
-            case "Toggle Inspector": inspectorMenuItem = item
-            case _ where ownedTitles.contains(item.title): break  // will be recreated
+            let normalizedTitle = item.title.lowercased()
+            switch normalizedTitle {
+            case "toggle sidebar": sidebarMenuItem = item
+            case "toggle inspector": inspectorMenuItem = item
+            case _ where ownedTitles.contains(normalizedTitle): break  // will be recreated
             default: extraItems.append(item)
             }
         }
@@ -817,6 +818,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     }
 
     private func rebuildAppMenu(_ menu: NSMenu) {
+        ensureAppMenuBaseline(in: menu)
+
         let removePrefixes = ["Settings", "Preferences"]
         for item in menu.items.reversed() {
             if removePrefixes.contains(where: { item.title.hasPrefix($0) }) {
@@ -839,6 +842,64 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         }
         if let first = menu.items.first, first.isSeparatorItem { menu.removeItem(at: 0) }
         if let last = menu.items.last, last.isSeparatorItem { menu.removeItem(at: menu.items.count - 1) }
+    }
+
+    private func ensureAppMenuBaseline(in menu: NSMenu) {
+        let hasAbout = menu.items.contains { $0.title.hasPrefix("About") }
+        let hasQuit = menu.items.contains { $0.action == #selector(NSApplication.terminate(_:)) }
+        guard !hasAbout || !hasQuit else { return }
+
+        menu.removeAllItems()
+
+        let appName = AppBrand.displayName
+
+        let aboutItem = NSMenuItem(
+            title: "About \(appName)",
+            action: #selector(AppDelegate.showAboutPanelMenuAction(_:)),
+            keyEquivalent: ""
+        )
+        aboutItem.target = NSApp.delegate
+        menu.addItem(aboutItem)
+        menu.addItem(.separator())
+
+        let servicesRoot = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
+        let servicesMenu = NSMenu(title: "Services")
+        servicesRoot.submenu = servicesMenu
+        NSApp.servicesMenu = servicesMenu
+        menu.addItem(servicesRoot)
+        menu.addItem(.separator())
+
+        let hideItem = NSMenuItem(
+            title: "Hide \(appName)",
+            action: #selector(NSApplication.hide(_:)),
+            keyEquivalent: "h"
+        )
+        hideItem.keyEquivalentModifierMask = .command
+        menu.addItem(hideItem)
+
+        let hideOthersItem = NSMenuItem(
+            title: "Hide Others",
+            action: #selector(NSApplication.hideOtherApplications(_:)),
+            keyEquivalent: "h"
+        )
+        hideOthersItem.keyEquivalentModifierMask = [.command, .option]
+        menu.addItem(hideOthersItem)
+
+        let showAllItem = NSMenuItem(
+            title: "Show All",
+            action: #selector(NSApplication.unhideAllApplications(_:)),
+            keyEquivalent: ""
+        )
+        menu.addItem(showAllItem)
+        menu.addItem(.separator())
+
+        let quitItem = NSMenuItem(
+            title: "Quit \(appName)",
+            action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q"
+        )
+        quitItem.keyEquivalentModifierMask = .command
+        menu.addItem(quitItem)
     }
 
     private func makeOpenWithSubmenu() -> NSMenu {
@@ -876,6 +937,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     }
 
     private func rebuildEditMenu(_ menu: NSMenu) {
+        ensureEditMenuBaseline(in: menu)
+
         for item in menu.items where item.tag == MenuTag.editRotate || item.tag == MenuTag.editFlip {
             menu.removeItem(item)
         }
@@ -906,6 +969,43 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         menu.insertItem(rotateItem, at: insertIndex)
         insertIndex += 1
         menu.insertItem(flipItem, at: insertIndex)
+    }
+
+    private func ensureEditMenuBaseline(in menu: NSMenu) {
+        let hasUndo = menu.items.contains { $0.action == #selector(UndoManager.undo) }
+        let hasCut = menu.items.contains { $0.action == #selector(NSText.cut(_:)) }
+        let hasCopy = menu.items.contains { $0.action == #selector(NSText.copy(_:)) }
+        let hasPaste = menu.items.contains { $0.action == #selector(NSText.paste(_:)) }
+        let hasSelectAll = menu.items.contains { $0.action == #selector(NSText.selectAll(_:)) }
+        guard !(hasUndo && hasCut && hasCopy && hasPaste && hasSelectAll) else { return }
+
+        menu.removeAllItems()
+
+        let undoItem = NSMenuItem(title: "Undo", action: #selector(UndoManager.undo), keyEquivalent: "z")
+        undoItem.keyEquivalentModifierMask = .command
+        menu.addItem(undoItem)
+
+        let redoItem = NSMenuItem(title: "Redo", action: #selector(UndoManager.redo), keyEquivalent: "Z")
+        redoItem.keyEquivalentModifierMask = .command
+        menu.addItem(redoItem)
+
+        menu.addItem(.separator())
+
+        let cutItem = NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        cutItem.keyEquivalentModifierMask = .command
+        menu.addItem(cutItem)
+
+        let copyItem = NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        copyItem.keyEquivalentModifierMask = .command
+        menu.addItem(copyItem)
+
+        let pasteItem = NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        pasteItem.keyEquivalentModifierMask = .command
+        menu.addItem(pasteItem)
+
+        let selectAllItem = NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        selectAllItem.keyEquivalentModifierMask = .command
+        menu.addItem(selectAllItem)
     }
 
     private func rebuildImageMenu(_ menu: NSMenu) {

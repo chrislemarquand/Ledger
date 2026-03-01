@@ -1228,6 +1228,13 @@ final class AppModel: ObservableObject {
             lastOperationFilesByID = operationFilesByID
             lastResult = result
 
+            if !result.succeeded.isEmpty {
+                // Applied image operations mutate file pixels on disk, so any pre-apply
+                // cached thumbnails become stale immediately once staged ops are cleared.
+                invalidateBrowserThumbnails(for: result.succeeded)
+                invalidateInspectorPreviews(for: result.succeeded)
+            }
+
             if result.failed.isEmpty {
                 setStatusMessage(
                     "Metadata applied",

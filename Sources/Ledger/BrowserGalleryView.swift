@@ -791,6 +791,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
     private let pendingDot = NSImageView(frame: .zero)
     private let titleField = NSTextField(labelWithString: "")
     private var preferredAspectRatio: CGFloat?
+    private var currentTileSide: CGFloat = 40
     private var imageWidthConstraint: NSLayoutConstraint?
     private var imageHeightConstraint: NSLayoutConstraint?
     private var representedURL: URL?
@@ -896,6 +897,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
     }
 
     func updateTileSide(_ tileSide: CGFloat, animated: Bool) {
+        currentTileSide = tileSide
         let fitted = fittedThumbnailSize(
             preferredAspectRatio: preferredAspectRatio,
             fallbackImageSize: resolvedImageSize(thumbnailImageView.image),
@@ -949,6 +951,8 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
             thumbnailImageView.alphaValue = 1
             thumbnailImageView.image = image
         }
+        // Keep geometry in sync with the actual rendered image as async thumbnails arrive.
+        updateTileSide(currentTileSide, animated: false)
     }
 
     func cancelThumbnailRequest() {
