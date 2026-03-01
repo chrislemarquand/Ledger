@@ -2,7 +2,7 @@
 
 Current version: **0.6.4** (build 71). Target: **v1.0**.
 
-Reference items by ID: **B1–B16** bugs · **P1–P24** polish · **N1–N8** native rewrites · **A1–A2** architecture · **R1–R13** post-v1.0 roadmap.
+Reference items by ID: **B1–B16** bugs · **P1–P24** polish · **N1–N8** native rewrites · **A1–A2** architecture · **R1–R18** post-v1.0 roadmap.
 
 ---
 
@@ -83,7 +83,7 @@ Reference items by ID: **B1–B16** bugs · **P1–P24** polish · **N1–N8** n
 
 ### Menus
 - [x] **P16** ~~"Folder" menu item should say "Image"~~ — ✅ `CommandMenu("Folder")` renamed to `CommandMenu("Image")`.
-- [ ] **P17** `Should` **Apply metadata: split into two actions** — replace the single Apply item with: "Apply Metadata Changes to [N Image(s)]" (current selection, dynamic label) and "Apply Metadata Changes to Folder" (mirrors toolbar Apply). (QA log #13)
+- [x] **P17** ✅ **Apply metadata: split into two actions** — Image menu Apply is now split into "Apply Metadata Changes to [N Image(s)]" (dynamic selection count label, Cmd+S) and "Apply Metadata Changes to Folder" (folder-wide apply flow matching toolbar Apply). Both actions validate enabled state independently.
 
 ### Status / toolbar
 - [x] **P25** ✅ **Toolbar pane grouping** — added `inspectorTrackingSeparator` (`NSTrackingSeparatorToolbarItem` bound to `contentSplitController.splitView` divider 0); toolbar now has three zones: sidebar (`toggleSidebar`), browser (`openFolder`, `viewMode`, `sort`, `zoomOut`, `zoomIn`, `flexibleSpace`, `presetTools`, `applyChanges`), inspector (`toggleInspector`); each zone tracks its pane on resize. Hard line at toolbar bottom on inspector collapse is expected macOS Liquid Glass behaviour.
@@ -111,7 +111,10 @@ Replace custom implementations with idiomatic SwiftUI / AppKit equivalents.
 | N5 | ~~Pending-edit dot (4 sites)~~ | ~~inspector label, inspector preview, list cell, gallery cell~~ | ✅ `Image(systemName: "circle.fill").foregroundStyle(.orange)` (SwiftUI sites); `NSImageView` + `NSImage(systemSymbolName:)` + `contentTintColor` (AppKit sites); `pendingDotCornerRadius` constants removed |
 | N6 | ~~`toggleInspector` label (static "Hide Inspector")~~ | ~~line 1021~~ | ✅ Done — dynamic label via `updateInspectorToggle(with:)` |
 | N7 | `InspectorLocationMapView` NSViewRepresentable | ~line 4554 | SwiftUI `Map(position:)` with `MapCameraPosition.region`, `Marker`, `.mapControls {}`, `.mapInteractionModes([.zoom])`; `InspectorPassthroughMapView` scroll-passthrough subclass may become unnecessary |
-| N8 | `InspectorPreviewActionButtonStyle` + custom environment keys | ~lines 137–193 | Three-layer system (2 `EnvironmentKey` structs + `ButtonStyle` + label view) just to propagate hover/pressed state; collapse into a single self-contained button component using `.buttonStyle(.plain)` + `.onHover` + press gesture — or adopt SwiftUI 6 `@State` button interaction APIs if available |
+| N8 | `InspectorPreviewActionButtonStyle` + custom environment keys | InspectorView.swift ~lines 5–61 | Three-layer system (2 `EnvironmentKey` structs + `ButtonStyle` + label view) just to propagate hover/pressed state; collapse into a single self-contained button component using `.buttonStyle(.plain)` + `@State isHovered` + `.onHover` |
+| N9 | `editorPrimaryButtonTitle` dead computed property | PresetSheets.swift ~line 129 | All three enum cases return `"Save"`; delete the property and use the string literal directly on the button |
+| N10 | Duplicate alert message branches | PresetSheets.swift ~lines 109–115 | Both arms of `if let duplicateConflict` in the `.alert` message block produce identical `Text(...)`; remove the conditional, use a single `Text` |
+| N11 | `NSMenuItem` 4-line-per-item boilerplate | BrowserListView.swift ~lines 520–556 | Identical 4-line setup block repeated 5× (BrowserGalleryView already uses a local `makeItem` helper); adopt the same pattern |
 
 ---
 
@@ -143,6 +146,11 @@ Full blueprint: `output/BRANDING_NAMING_REFRESH_IMPLEMENTATION.md`. User-facing 
 - [ ] **R10** Large-folder performance pass (1,000+ RAW files — scrolling, thumbnail loading, apply speed).
 - [ ] **R11** App Store submission track.
 - [ ] **R12** Drag-and-drop metadata export / batch rename.
-- [ ] **R13** AppKit `NSOutlineView`-based sidebar rewrite — would give correct right-side section chevrons with proper collapse/expand animation for all sections (resolves P5), native drag-to-resize, and full macOS sidebar behaviour for free from the API.
+### AppKit migration (iPad target dropped — pure macOS)
+
+- [ ] **R13** **NavigationSidebarView → AppKit** (`NSTableView` flat sidebar) — current SwiftUI `List` has scroll-position instability, unreliable selection binding, and requires notification hacks for focus routing. AppKit would give: stable scroll position, reliable first-responder routing, correct right-side section chevrons with proper collapse/expand animation (resolves P5), and native badge rendering. High value.
+- [ ] **R16** **InspectorView → AppKit** (`NSViewController` + `NSScrollView` + stacked field controls) — the highest-friction SwiftUI component in the app. Current workarounds to eliminate: `inspectorRefreshRevision` UInt64 forced-refresh hack, `suppressNextFocusScrollAnimation` flag, manual edit-session `@State` snapshots (replace with `UndoManager`), per-tag `Binding` creation on every render, and `@FocusState` fighting the AppKit responder chain. High value.
+- [ ] **R17** **PresetManagerSheet → AppKit** (`NSTableView` in `NSPanel`) — small SwiftUI `List` with same scroll/selection instability as the sidebar. Natural follow-on after R13; low implementation effort. Medium value.
+- [ ] **R18** **PresetEditorSheet → AppKit** (optional) — modal sheet; scroll stability matters less here. Main benefit would be DatePicker style consistency with Inspector (`.stepperField`), and removing the per-tag `valueBinding(for:)` pattern. Low priority.
 - [ ] **R14** **Search** — expand-to-field toolbar button (like Notes.app on macOS 26) with metadata-aware search: filename, date range, camera/lens, rating, keyword. `searchQuery`/`filteredBrowserItems` infrastructure already in place.
 - [ ] **R15** **Configurable list columns** — show/hide and reorder columns; add EXIF-backed columns (date modified, camera make/model, lens, focal length, ISO, aperture, shutter speed, pixel dimensions). Each new column gets a `BrowserSort` case and `NSSortDescriptor` prototype; sort and header infrastructure from P7 carries forward directly.

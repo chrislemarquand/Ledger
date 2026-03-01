@@ -579,7 +579,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         guard let mainMenu = NSApp.mainMenu else { return }
         for topItem in mainMenu.items {
             guard let submenu = topItem.submenu else { continue }
-            if submenu.items.contains(where: { $0.title == "Refresh Files and Metadata" }) {
+            if submenu.items.contains(where: { $0.title == "Refresh" || $0.title == "Refresh Files and Metadata" }) {
                 folderMenuForInjection = submenu
                 submenu.delegate = self
                 return
@@ -669,18 +669,23 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         if menu === viewMenuForSortInjection {
             rebuildViewMenu(menu)
         } else if menu === folderMenuForInjection {
-            if !menu.items.contains(where: { $0.title == "Apply Metadata Changes" }) {
-                let anchor = (menu.items.firstIndex(where: { $0.title == "Refresh Files and Metadata" }) ?? -1) + 1
-                // Insert in reverse so final order is: Apply, Clear, Restore
+            let hasInjectedApplyItems = menu.items.contains { item in
+                item.action == #selector(applySelectionAction(_:)) || item.action == #selector(applyFolderAction(_:))
+            }
+            if !hasInjectedApplyItems {
+                let anchor = (menu.items.firstIndex(where: { $0.title == "Refresh" || $0.title == "Refresh Files and Metadata" }) ?? -1) + 1
+                // Insert in reverse so final order is: Apply Selection, Apply Folder, Clear, Restore
                 let restoreItem = NSMenuItem(title: "Restore from Backup", action: #selector(restoreFromBackupAction(_:)), keyEquivalent: "b")
                 restoreItem.keyEquivalentModifierMask = [.command, .shift]
                 let clearItem = NSMenuItem(title: "Clear Metadata Changes", action: #selector(clearChangesAction(_:)), keyEquivalent: "k")
                 clearItem.keyEquivalentModifierMask = [.command, .shift]
-                let applyItem = NSMenuItem(title: "Apply Metadata Changes", action: #selector(applySelectionAction(_:)), keyEquivalent: "s")
-                applyItem.keyEquivalentModifierMask = .command
+                let applyFolderItem = NSMenuItem(title: "Apply Metadata Changes to Folder", action: #selector(applyFolderAction(_:)), keyEquivalent: "")
+                let applySelectionItem = NSMenuItem(title: "Apply Metadata Changes to Selection", action: #selector(applySelectionAction(_:)), keyEquivalent: "s")
+                applySelectionItem.keyEquivalentModifierMask = .command
                 menu.insertItem(restoreItem, at: anchor)
                 menu.insertItem(clearItem, at: anchor)
-                menu.insertItem(applyItem, at: anchor)
+                menu.insertItem(applyFolderItem, at: anchor)
+                menu.insertItem(applySelectionItem, at: anchor)
             }
         }
     }
@@ -694,7 +699,17 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         } else if menuItem.action == #selector(switchToListAction(_:)) {
             menuItem.state = model.browserViewMode == .list ? .on : .off
         } else if menuItem.action == #selector(applySelectionAction(_:)) {
+            let selectionCount = selection.count
+            if selectionCount > 0 {
+                let suffix = selectionCount == 1 ? "" : "s"
+                menuItem.title = "Apply Metadata Changes to \(selectionCount) Image\(suffix)"
+            } else {
+                menuItem.title = "Apply Metadata Changes to Selection"
+            }
             return model.fileActionState(for: .applyMetadataChanges, targetURLs: selection).isEnabled
+        } else if menuItem.action == #selector(applyFolderAction(_:)) {
+            menuItem.title = "Apply Metadata Changes to Folder"
+            return model.canApplyMetadataChanges
         } else if menuItem.action == #selector(clearChangesAction(_:)) {
             return model.fileActionState(for: .clearMetadataChanges, targetURLs: selection).isEnabled
         } else if menuItem.action == #selector(restoreFromBackupAction(_:)) {
@@ -880,6 +895,11 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     @objc
     func applySelectionAction(_: Any?) {
         model.performFileAction(.applyMetadataChanges, targetURLs: Array(model.selectedFileURLs))
+    }
+
+    @objc
+    func applyFolderAction(_: Any?) {
+        applyChangesAction(nil)
     }
 
     @objc
@@ -1496,4 +1516,3 @@ private struct BrowserLoadingPlaceholderView: View {
         .allowsHitTesting(false)
     }
 }
-
