@@ -14,7 +14,8 @@ let package = Package(
         .target(name: "ExifEditCore"),
         .executableTarget(
             name: "ExifEditMac",
-            dependencies: ["ExifEditCore"]
+            dependencies: ["ExifEditCore"],
+            path: "Sources/Ledger"
         ),
         .testTarget(
             name: "ExifEditCoreTests",
@@ -22,7 +23,8 @@ let package = Package(
         ),
         .testTarget(
             name: "ExifEditMacTests",
-            dependencies: ["ExifEditMac", "ExifEditCore"]
+            dependencies: ["ExifEditMac", "ExifEditCore"],
+            path: "Tests/LedgerTests"
         )
     ]
 )

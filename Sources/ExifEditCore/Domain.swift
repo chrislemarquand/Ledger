@@ -156,7 +156,7 @@ public enum ExifEditError: Error, LocalizedError {
         case let .invalidOperation(reason):
             return reason
         case .presetSchemaVersionTooNew:
-        return "Your presets were saved by a newer version of Ledger and can't be read. Update Ledger to access them."
+            return "Your presets were saved by a newer version of the app and can't be read. Update the app to access them."
         }
     }
 }

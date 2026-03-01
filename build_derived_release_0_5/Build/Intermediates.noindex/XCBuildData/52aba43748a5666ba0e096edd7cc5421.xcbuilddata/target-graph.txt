@@ -1,4 +1,0 @@
-Target dependency graph (2 targets)
-Target 'ExifEditMac' in project 'ExifEditMac'
-➜ Explicit dependency on target 'ExifEditCore' in project 'ExifEditMac'
-Target 'ExifEditCore' in project 'ExifEditMac' (no dependencies)
