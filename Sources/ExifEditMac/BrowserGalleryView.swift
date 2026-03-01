@@ -54,7 +54,6 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
     private var browserFocusObserver: NSObjectProtocol?
     private var thumbnailUpdateObserver: NSObjectProtocol?
     private var lastRenderedViewMode: AppModel.BrowserViewMode?
-    private var lastReloadedThumbnailSideByURL: [URL: CGFloat] = [:]
 
     init(model: AppModel, items: [AppModel.BrowserItem]) {
         self.model = model
@@ -246,8 +245,6 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
         if listChanged {
             collectionView.reloadData()
             lastRenderedURLs = currentURLs
-            let currentSet = Set(currentURLs)
-            lastReloadedThumbnailSideByURL = lastReloadedThumbnailSideByURL.filter { currentSet.contains($0.key) }
         }
 
         // Compute before syncSelection so we can suppress the synchronous scrollToItems
@@ -428,9 +425,6 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
 
     private func requestThumbnailIfNeeded(for item: AppModel.BrowserItem, tileSide: CGFloat) {
         let requiredSide = max(tileSide, 120)
-        if ThumbnailPipeline.cachedImage(for: item.url, minRenderedSide: requiredSide * 0.95) != nil {
-            return
-        }
         ThumbnailCoordinator.shared.ensureThumbnail(
             url: item.url,
             targetSide: requiredSide,
@@ -440,17 +434,6 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
     }
 
     private func reloadThumbnailItem(for url: URL) {
-        guard let state = ThumbnailCoordinator.shared.state(for: url) else { return }
-        switch state.phase {
-        case .readyHigh, .failedFallback:
-            break
-        default:
-            return
-        }
-        let previousSide = lastReloadedThumbnailSideByURL[url] ?? 0
-        guard state.renderedSide > previousSide + 1 else { return }
-        lastReloadedThumbnailSideByURL[url] = state.renderedSide
-
         guard let row = items.firstIndex(where: { $0.url == url }) else { return }
         let indexPath = IndexPath(item: row, section: 0)
         guard collectionView.indexPathsForVisibleItems().contains(indexPath) else { return }
