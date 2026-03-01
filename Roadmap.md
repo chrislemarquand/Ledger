@@ -1,6 +1,6 @@
 # Roadmap
 
-Current version: **0.7** (build 109). Target: **v1.0**.
+Current version: **0.7** (build 110). Target: **v1.0**.
 
 Reference items by ID: **B1–B20** bugs · **P1–P24** polish · **N1–N8** native rewrites · **A1–A2** architecture · **R1–R19** post-v1.0 roadmap.
 
@@ -41,7 +41,7 @@ Reference items by ID: **B1–B20** bugs · **P1–P24** polish · **N1–N8** n
 - [x] **B20b** `Must` **Thumbnail rewrite Step 2 — single native thumbnail service** — completed: extracted thumbnail cache/request broker/generation strategy into `ThumbnailService` and switched existing list/gallery wrappers to delegate to the shared service.
 - [x] **B20c** `Must` **Thumbnail rewrite Step 3 — AppKit cell-owned lifecycle** — completed: gallery requests are owned by `AppKitGalleryItem` and list requests are owned by `BrowserListNameCellView`/`BrowserListIconView`; both cancel on reuse (`prepareForReuse`) and guard async completion with per-cell request tokens.
 - [x] **B20d** `Should` **Thumbnail rewrite Step 4 — native selection baseline** — completed: gallery selection now uses a Finder-like square thumbnail-zone highlight baseline, and square thumbnails render with equal inner padding on all four sides; image-hugging selector ring removed from the v1 rewrite path (tracked as optional post-v1.0 reintroduction in R19).
-- [ ] **B20e** `Must` **Thumbnail rewrite Step 5 — unify inspector preview pipeline** — route inspector preview loads through the same thumbnail service with policy-based sizing/priority.
+- [x] **B20e** `Must` **Thumbnail rewrite Step 5 — unify inspector preview pipeline** — completed: inspector preview loading/preload/background warm paths now request images through the same shared thumbnail broker/service used by list/gallery, with shared cache/dedupe and priority-based request dispatch.
 
 ### Sidebar
 - [x] **B19** ✅ **No TCC prompt on startup for Desktop/Downloads** — startup privacy access policy was consolidated so launch/background paths do not probe privacy-sensitive filesystem locations. Key points: (1) startup reconciliation of favorites/recents skips existence/readability validation for privacy-sensitive paths; (2) privacy-sensitive sidebar counts never load in background and only load after explicit user selection of that exact item. Result: Desktop/Downloads counts stay blank on app open; TCC prompt appears only on explicit selection.

@@ -4347,7 +4347,11 @@ final class AppModel: ObservableObject {
                 await Task.yield()
 
                 self.inspectorPreviewInflight.insert(fileURL)
-                if let image = await Self.generateInspectorPreviewOffMain(for: fileURL, priority: .utility) {
+                if let image = await Self.requestInspectorPreviewFromThumbnailService(
+                    for: fileURL,
+                    priority: .utility,
+                    forceRefresh: false
+                ) {
                     self.storeInspectorPreview(
                         image,
                         for: fileURL,
@@ -4368,9 +4372,17 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private static func generateInspectorPreviewOffMain(for fileURL: URL, priority: TaskPriority) async -> NSImage? {
+    private static func requestInspectorPreviewFromThumbnailService(
+        for fileURL: URL,
+        priority: TaskPriority,
+        forceRefresh: Bool
+    ) async -> NSImage? {
         await Task.detached(priority: priority) {
-            await ThumbnailPipeline.generateThumbnail(fileURL: fileURL, maxPixelSize: Self.inspectorPreviewFullSide)
+            await SharedThumbnailRequestBroker.shared.request(
+                url: fileURL,
+                requiredSide: Self.inspectorPreviewFullSide,
+                forceRefresh: forceRefresh
+            )
         }.value
     }
 
@@ -4495,14 +4507,17 @@ final class AppModel: ObservableObject {
             inspectorPreviewInflight.remove(fileURL)
             inspectorPreviewImages[fileURL] = nil
             inspectorPreviewRenderedSide[fileURL] = nil
-            ThumbnailPipeline.invalidateCachedImages(for: [fileURL])
         }
         guard !inspectorPreviewInflight.contains(fileURL) else { return }
         inspectorPreviewInflight.insert(fileURL)
 
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
-            let image = await Self.generateInspectorPreviewOffMain(for: fileURL, priority: requestPriority)
+            let image = await Self.requestInspectorPreviewFromThumbnailService(
+                for: fileURL,
+                priority: requestPriority,
+                forceRefresh: force
+            )
             if let image {
                 self.storeInspectorPreview(
                     image,
@@ -4656,7 +4671,11 @@ final class AppModel: ObservableObject {
                 continue
             }
             inspectorPreviewInflight.insert(fileURL)
-            if let image = await Self.generateInspectorPreviewOffMain(for: fileURL, priority: .utility) {
+            if let image = await Self.requestInspectorPreviewFromThumbnailService(
+                for: fileURL,
+                priority: .utility,
+                forceRefresh: false
+            ) {
                 storeInspectorPreview(
                     image,
                     for: fileURL,
