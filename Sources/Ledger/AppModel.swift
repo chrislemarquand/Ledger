@@ -531,7 +531,6 @@ final class AppModel: ObservableObject {
     private var workspaceObserverTokens: [NSObjectProtocol] = []
     private var sidebarImageCountTasks: [String: Task<Void, Never>] = [:]
     private var backgroundWarmTasksBySelectionID: [String: Task<Void, Never>] = [:]
-    private var folderContentLoadingTask: Task<Void, Never>?
 
     private static let browserViewModeKey = "ui.browser.view.mode"
     private static let browserSortKey = "ui.browser.sort"
@@ -539,7 +538,6 @@ final class AppModel: ObservableObject {
     private static let galleryGridLevelKey = "ui.gallery.grid.level"
     private static let galleryZoomKey = "ui.gallery.zoom"
     private static let collapsedInspectorSectionsKey = "ui.inspector.collapsed.sections"
-    private static let folderContentLoadingMinimumDuration: TimeInterval = 0.18
     private static let selectedPresetIDKey = "ui.presets.selected.id"
     private static let legacyUserDefaultsPrefixes = ["Logbook"]
     private static let selectionMetadataBatchSize = 120
@@ -2804,8 +2802,8 @@ final class AppModel: ObservableObject {
     }
 
     private func loadFiles(for kind: SidebarKind) {
-        let folderLoadStartedAt = Date()
-        beginFolderContentLoadingOverlay()
+        isFolderContentLoading = true
+        defer { isFolderContentLoading = false }
 
         deferredFolderMetadataPrefetchTask?.cancel()
         deferredFolderMetadataPrefetchTask = nil
@@ -2871,29 +2869,6 @@ final class AppModel: ObservableObject {
             batchSize: metadataBatchSize(for: kind),
             loadID: loadID
         )
-        endFolderContentLoadingOverlay(startedAt: folderLoadStartedAt)
-    }
-
-    private func beginFolderContentLoadingOverlay() {
-        folderContentLoadingTask?.cancel()
-        folderContentLoadingTask = nil
-        isFolderContentLoading = true
-    }
-
-    private func endFolderContentLoadingOverlay(startedAt: Date) {
-        let elapsed = Date().timeIntervalSince(startedAt)
-        let remaining = max(0, Self.folderContentLoadingMinimumDuration - elapsed)
-        let sleepNanos = UInt64((remaining * 1_000_000_000).rounded())
-
-        folderContentLoadingTask?.cancel()
-        folderContentLoadingTask = Task { @MainActor [weak self] in
-            if sleepNanos > 0 {
-                try? await Task.sleep(nanoseconds: sleepNanos)
-            }
-            guard !Task.isCancelled else { return }
-            self?.isFolderContentLoading = false
-            self?.folderContentLoadingTask = nil
-        }
     }
 
     private func clearLoadedContentState(preserveSessionCaches: Bool = false) {
