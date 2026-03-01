@@ -53,6 +53,7 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
     private var lastMagnification: CGFloat = 0
     private let pinchThreshold: CGFloat = 0.14
     private var browserFocusObserver: NSObjectProtocol?
+    private var viewModeObserver: NSObjectProtocol?
     private var lastRenderedViewMode: AppModel.BrowserViewMode?
 
     init(model: AppModel, items: [AppModel.BrowserItem]) {
@@ -82,6 +83,15 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
                 self?.focusGalleryForKeyboardNavigation()
             }
         }
+        viewModeObserver = NotificationCenter.default.addObserver(
+            forName: .browserDidSwitchViewMode,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.handleViewModeSwitch()
+            }
+        }
     }
 
     override func viewWillDisappear() {
@@ -93,12 +103,29 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
             NotificationCenter.default.removeObserver(browserFocusObserver)
             self.browserFocusObserver = nil
         }
+        if let viewModeObserver {
+            NotificationCenter.default.removeObserver(viewModeObserver)
+            self.viewModeObserver = nil
+        }
     }
 
     func update(model: AppModel, items: [AppModel.BrowserItem]) {
         self.model = model
         self.items = items
-        guard model.browserViewMode == .gallery else { return }
+        guard model.browserViewMode == .gallery else {
+            // Keep transition state accurate while inactive so the next switch
+            // back to gallery can trigger a deterministic refresh pass.
+            lastRenderedViewMode = model.browserViewMode
+            return
+        }
+        renderState()
+    }
+
+    private func handleViewModeSwitch() {
+        guard model.browserViewMode == .gallery else {
+            lastRenderedViewMode = model.browserViewMode
+            return
+        }
         renderState()
     }
 
@@ -248,11 +275,11 @@ private final class BrowserGalleryViewController: NSViewController, NSCollection
             lastRenderedPrimarySelectionURL = model.primarySelectionURL
         }
 
-        if listChanged || columnsChanged || selectionChanged || pendingChanged || stagedOpsChanged {
+        if listChanged || columnsChanged || selectionChanged || pendingChanged || stagedOpsChanged || justBecameActive {
             refreshVisibleCellState(
                 pendingURLs: pendingURLs,
                 selectedURLs: selectedURLs,
-                needsFullReconfigure: listChanged || columnsChanged || pendingChanged || stagedOpsChanged
+                needsFullReconfigure: listChanged || columnsChanged || pendingChanged || stagedOpsChanged || justBecameActive
             )
             lastRenderedPending = pendingURLs
         }
