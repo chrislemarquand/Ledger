@@ -6,6 +6,10 @@ All notable changes to Ledger are documented here.
 
 ## [Unreleased]
 
+---
+
+## [0.6.6] — build 86 — 2026-03-01
+
 ### Changed
 - Thumbnail loading now uses a shared `ThumbnailCoordinator` state machine across browser surfaces, with surface-specific policies for gallery, list, and inspector.
 - Gallery thumbnails now follow the same URL-scoped update notification flow as list thumbnails, so cells reload when image generation completes even if the original cell was recycled.
