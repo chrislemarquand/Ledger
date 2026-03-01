@@ -1,16 +1,20 @@
 import AppKit
-import SwiftUI
 
+@MainActor
 @main
-struct LedgerApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+enum LedgerMain {
+    private static var appDelegate: AppDelegate?
 
-    var body: some Scene {
-        Settings {
-            EmptyView()
-        }
+    static func main() {
+        let app = NSApplication.shared
+        let delegate = AppDelegate()
+        self.appDelegate = delegate
+        app.delegate = delegate
+        app.setActivationPolicy(.regular)
+        app.run()
     }
 }
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindowController: MainWindowController?
