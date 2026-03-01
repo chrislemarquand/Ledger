@@ -3180,20 +3180,19 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func isPrivacySensitiveFileSystemURL(_ url: URL) -> Bool {
+        let candidate = url.standardizedFileURL
+        let desktop = desktopDirectoryURL().standardizedFileURL
+        let downloads = downloadsDirectoryURL().standardizedFileURL
+        return isWithinOrSame(candidate, root: desktop) || isWithinOrSame(candidate, root: downloads)
+    }
+
     private func isPrivacySensitiveSidebarKind(_ kind: SidebarKind) -> Bool {
         switch kind {
         case .desktop, .downloads:
             return true
-        case let .favorite(url), let .folder(url):
-            let resolved = url.standardizedFileURL.resolvingSymlinksInPath()
-            let desktop = desktopDirectoryURL().standardizedFileURL.resolvingSymlinksInPath()
-            let downloads = downloadsDirectoryURL().standardizedFileURL.resolvingSymlinksInPath()
-            return resolved.path == desktop.path || resolved.path == downloads.path
-        case let .mountedVolume(url):
-            let resolved = url.standardizedFileURL.resolvingSymlinksInPath()
-            let desktop = desktopDirectoryURL().standardizedFileURL.resolvingSymlinksInPath()
-            let downloads = downloadsDirectoryURL().standardizedFileURL.resolvingSymlinksInPath()
-            return resolved.path == desktop.path || resolved.path == downloads.path
+        case let .favorite(url), let .folder(url), let .mountedVolume(url):
+            return isPrivacySensitiveFileSystemURL(url)
         case .pictures:
             return false
         }
@@ -3234,8 +3233,13 @@ final class AppModel: ObservableObject {
         return candidatePath == root.standardizedFileURL.path || candidatePath.hasPrefix(rootPath)
     }
 
-    private func canonicalSidebarURL(_ url: URL) -> URL? {
+    private func canonicalSidebarURL(_ url: URL, validateExistence: Bool = true) -> URL? {
         let standardized = url.standardizedFileURL
+        if !validateExistence {
+            // Startup/background paths for privacy-sensitive locations should avoid
+            // filesystem probes to prevent TCC prompts before explicit user intent.
+            return standardized
+        }
         let resolved = standardized.resolvingSymlinksInPath()
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: resolved.path, isDirectory: &isDirectory),
@@ -3342,7 +3346,8 @@ final class AppModel: ObservableObject {
             var normalized: [SidebarItem] = []
             for favorite in stored.sorted(by: { $0.order < $1.order }) {
                 let url = URL(fileURLWithPath: favorite.path)
-                guard let canonical = canonicalSidebarURL(url) else { continue }
+                let shouldValidate = !isPrivacySensitiveFileSystemURL(url)
+                guard let canonical = canonicalSidebarURL(url, validateExistence: shouldValidate) else { continue }
                 let id = "favorite::\(canonical.path)"
                 if normalized.contains(where: { $0.id == id }) {
                     continue
@@ -3383,7 +3388,8 @@ final class AppModel: ObservableObject {
             var openedByID: [String: Date] = [:]
             for location in stored.sorted(by: { $0.order < $1.order }) {
                 let url = URL(fileURLWithPath: location.path)
-                guard let canonical = canonicalSidebarURL(url) else { continue }
+                let shouldValidate = !isPrivacySensitiveFileSystemURL(url)
+                guard let canonical = canonicalSidebarURL(url, validateExistence: shouldValidate) else { continue }
                 let id = "folder::\(canonical.path)"
                 if normalized.contains(where: { $0.item.id == id }) {
                     continue

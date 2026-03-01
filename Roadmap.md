@@ -1,6 +1,6 @@
 # Roadmap
 
-Current version: **0.6.5** (build 83). Target: **v1.0**.
+Current version: **0.6.5** (build 84). Target: **v1.0**.
 
 Reference items by ID: **B1–B16** bugs · **P1–P24** polish · **N1–N8** native rewrites · **A1–A2** architecture · **R1–R18** post-v1.0 roadmap.
 
@@ -38,7 +38,7 @@ Reference items by ID: **B1–B16** bugs · **P1–P24** polish · **N1–N8** n
 - [x] **B11** ~~Thumbnail flicker on rotate / flip~~ — ✅ Fixed in 0.6 via `stagedOpsDisplayToken`; display transform updated without clearing thumbnail cache.
 
 ### Sidebar
-- [x] **B19** ✅ **No TCC prompt on startup for Desktop/Downloads** — regression fix (2026-03-01): privacy-sensitive sidebar count loading is now blocked unless the user has explicitly selected that exact item (`hasHadExplicitSidebarSelection && selectedSidebarID == item.id`), and sidebar row eager-count tasks now skip all privacy-sensitive kinds (not just source Desktop/Downloads rows). Result: Desktop/Downloads counts stay blank on app open and only trigger TCC when explicitly selected.
+- [x] **B19** ✅ **No TCC prompt on startup for Desktop/Downloads** — startup privacy access policy was consolidated so launch/background paths do not probe privacy-sensitive filesystem locations. Key points: (1) startup reconciliation of favorites/recents skips existence/readability validation for privacy-sensitive paths; (2) privacy-sensitive sidebar counts never load in background and only load after explicit user selection of that exact item. Result: Desktop/Downloads counts stay blank on app open; TCC prompt appears only on explicit selection.
 - [x] **B12** ✅ Implementation is correct; residual patchy shadow rendering matches Xcode's sidebar on macOS 26.2 — confirmed system compositor bug, not an app issue. Removed custom layer code; moved window config to `viewWillAppear`.
 
 ### About panel
