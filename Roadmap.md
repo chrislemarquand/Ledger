@@ -2,7 +2,7 @@
 
 Current version: **0.6.6** (build 100). Target: **v1.0**.
 
-Reference items by ID: **B1–B16** bugs · **P1–P24** polish · **N1–N8** native rewrites · **A1–A2** architecture · **R1–R18** post-v1.0 roadmap.
+Reference items by ID: **B1–B20** bugs · **P1–P24** polish · **N1–N8** native rewrites · **A1–A2** architecture · **R1–R19** post-v1.0 roadmap.
 
 ---
 
