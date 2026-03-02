@@ -11,6 +11,18 @@ All notable changes to Ledger are documented here.
 
 ---
 
+## [0.8.0-rc.1] — build 144 — 2026-03-02
+
+### Fixed
+- Edit menu **Undo/Redo** now route to the app's metadata/image staging undo stacks, restoring working undo/redo behavior from both keyboard shortcuts (`⌘Z`, `⇧⌘Z`) and the Edit menu for metadata edits and staged rotate/flip operations.
+- Thumbnail request dedupe now separates foreground and background request lanes and applies explicit task priorities, reducing Thread Performance Checker priority-inversion warnings caused by user-initiated thumbnail requests awaiting lower-QoS inflight tasks.
+
+### Changed
+- Marketing version bumped from `0.7.3` to `0.8`.
+- Declared this build as the first release candidate for the `0.8` line.
+
+---
+
 ## [0.7.3] — build 141 — 2026-03-01
 
 ### Fixed

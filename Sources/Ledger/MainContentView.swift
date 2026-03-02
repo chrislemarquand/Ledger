@@ -976,9 +976,9 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     private func rebuildEditMenu(_ menu: NSMenu) {
         ensureEditMenuBaseline(in: menu)
 
-        menu.items.first(where: { $0.action == #selector(UndoManager.undo) })?.image =
+        menu.items.first(where: { $0.action == #selector(undoMetadataMenuAction(_:)) })?.image =
             NSImage(systemSymbolName: "arrow.uturn.backward", accessibilityDescription: nil)
-        menu.items.first(where: { $0.action == #selector(UndoManager.redo) })?.image =
+        menu.items.first(where: { $0.action == #selector(redoMetadataMenuAction(_:)) })?.image =
             NSImage(systemSymbolName: "arrow.uturn.forward", accessibilityDescription: nil)
 
         for item in menu.items where item.tag == MenuTag.editRotate || item.tag == MenuTag.editFlip {
@@ -1023,21 +1023,24 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     }
 
     private func ensureEditMenuBaseline(in menu: NSMenu) {
-        let hasUndo = menu.items.contains { $0.action == #selector(UndoManager.undo) }
+        let hasUndo = menu.items.contains { $0.action == #selector(undoMetadataMenuAction(_:)) }
+        let hasRedo = menu.items.contains { $0.action == #selector(redoMetadataMenuAction(_:)) }
         let hasCut = menu.items.contains { $0.action == #selector(NSText.cut(_:)) }
         let hasCopy = menu.items.contains { $0.action == #selector(NSText.copy(_:)) }
         let hasPaste = menu.items.contains { $0.action == #selector(NSText.paste(_:)) }
         let hasSelectAll = menu.items.contains { $0.action == #selector(NSText.selectAll(_:)) }
-        guard !(hasUndo && hasCut && hasCopy && hasPaste && hasSelectAll) else { return }
+        guard !(hasUndo && hasRedo && hasCut && hasCopy && hasPaste && hasSelectAll) else { return }
 
         menu.removeAllItems()
 
-        let undoItem = NSMenuItem(title: "Undo", action: #selector(UndoManager.undo), keyEquivalent: "z")
+        let undoItem = NSMenuItem(title: "Undo", action: #selector(undoMetadataMenuAction(_:)), keyEquivalent: "z")
         undoItem.keyEquivalentModifierMask = .command
+        undoItem.target = self
         menu.addItem(undoItem)
 
-        let redoItem = NSMenuItem(title: "Redo", action: #selector(UndoManager.redo), keyEquivalent: "Z")
+        let redoItem = NSMenuItem(title: "Redo", action: #selector(redoMetadataMenuAction(_:)), keyEquivalent: "Z")
         redoItem.keyEquivalentModifierMask = .command
+        redoItem.target = self
         menu.addItem(redoItem)
 
         menu.addItem(.separator())
@@ -1194,7 +1197,11 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         let selection = Array(model.selectedFileURLs)
-        if menuItem.action == #selector(openInDefaultAppMenuAction(_:)) {
+        if menuItem.action == #selector(undoMetadataMenuAction(_:)) {
+            return model.canUndoMetadataEdits
+        } else if menuItem.action == #selector(redoMetadataMenuAction(_:)) {
+            return model.canRedoMetadataEdits
+        } else if menuItem.action == #selector(openInDefaultAppMenuAction(_:)) {
             let state = model.fileActionState(for: .openInDefaultApp, targetURLs: selection)
             menuItem.title = state.title
             return state.isEnabled
@@ -1413,6 +1420,16 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     @objc
     func quickLookSelectionMenuAction(_: Any?) {
         model.quickLookSelection()
+    }
+
+    @objc
+    func undoMetadataMenuAction(_: Any?) {
+        _ = model.undoLastMetadataEdit()
+    }
+
+    @objc
+    func redoMetadataMenuAction(_: Any?) {
+        _ = model.redoLastMetadataEdit()
     }
 
     @objc
