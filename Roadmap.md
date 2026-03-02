@@ -1,6 +1,6 @@
 # ROADMAP
 
-Current version: **0.8 (RC1)**. Target: **v1.0**.
+Current version: **0.8.1 (RC1a)**. Target: **v1.0**.
 
 This file is the working roadmap. Full historical detail is archived in `ROADMAPOLD.MD`.
 

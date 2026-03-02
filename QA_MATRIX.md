@@ -1,42 +1,42 @@
 # v1.0.0 QA Matrix
 
-Covers all user-facing behaviour. Run on a clean build against a folder of real image files (mix of JPEG, HEIC, RAW). Mark items `[x]` as they pass; note failures inline.
+Covers all user-facing behaviour. Run on a clean build against a folder of real image files (mix of JPEG, HEIC, RAW). Mark items `[x]` as they pass; note failures inline marked with #.
 
 ---
 
 ## 1. Launch
 
-- [ ] App launches without an "exiftool not found" alert.
-- [ ] Window appears at a sensible default size.
-- [ ] No crash or console error on cold launch with no previously opened folder.
+- [x] App launches without an "exiftool not found" alert.
+- [x] Window appears at a sensible default size.
+- [x] No crash or console error on cold launch with no previously opened folder.
 
 ---
 
 ## 2. Folder opening
 
-- [ ] Open folder via toolbar button (Open Folder).
-- [ ] Open folder via File menu → Open Folder… (Cmd+O).
-- [ ] Browser populates with thumbnails.
-- [ ] Window title updates to folder name.
-- [ ] Loading state (shimmer / progress) shown while enumerating; clears when done.
-- [ ] Subtitle shows "N images" once loaded.
-- [ ] Open a second folder; browser replaces content cleanly.
-- [ ] Open a folder containing subdirectories; only image files appear (no folders listed).
-- [ ] Open an empty folder; browser shows empty state (no crash).
-- [ ] Open a non-existent path; browser shows "Folder Unavailable" error state.
+- [x] Open folder via toolbar button (Open Folder).
+- [x] Open folder via File menu → Open Folder… (Cmd+O).
+- [x] Browser populates with thumbnails.
+- [x] Window title updates to folder name.
+- [x] Loading state (shimmer / progress) shown while enumerating; clears when done.
+- [x] Subtitle shows "N images" once loaded.
+- [x] Open a second folder; browser replaces content cleanly.
+- [x] Open a folder containing subdirectories; only image files appear (no folders listed).
+- [x] Open an empty folder; browser shows empty state (no crash).
+- [ ] Open a non-existent path; browser shows "Folder Unavailable" error state. #UNABLE TO TEST
 
 ---
 
 ## 3. Sidebar
 
-- [ ] Recents section lists recently opened folders.
-- [ ] Favourites section present (empty if no pins yet).
-- [ ] Locations section present.
-- [ ] Image count badge appears next to each item.
-- [ ] Click a sidebar item loads that folder in the browser.
-- [ ] Section collapse/expand works for all sections.
-- [ ] **Pin** a folder from the sidebar context menu; it appears in Favourites.
-- [ ] **Unpin** a favourite; it disappears from Favourites.
+- [x] Recents section lists recently opened folders.
+- [x] Favourites section present (empty if no pins yet).
+- [x] Locations section present.
+- [x] Image count badge appears next to each item.
+- [x] Click a sidebar item loads that folder in the browser.
+- [x] Section collapse/expand works for all sections.
+- [x] **Pin** a folder from the sidebar context menu; it appears in Favourites.
+- [ ] **Unpin** a favourite; it disappears from Favourites. - #When pinning and unpinng a folder, the selection in the sidebar no longer matches up with the content of the browser. The selected folder name appears at the top (e..g Desktop) but the contents of the browser are not of that folder, they're of an now unpinned folder. This is a bug that needs fixing. '
 - [ ] **Reorder** a favourite (Move Up / Move Down); order persists after relaunch.
 - [ ] Delete a pinned folder from disk; relaunch and verify the stale favourite is removed.
 - [ ] Sidebar collapses fully via toolbar Toggle Sidebar button.
@@ -47,46 +47,46 @@ Covers all user-facing behaviour. Run on a clean build against a folder of real 
 
 ## 4. Browser — list view
 
-- [ ] Switch to list view (Cmd+1 or View → As List); View menu shows checkmark on As List.
-- [ ] Columns visible: Name, Date, Size, Type (or equivalent).
-- [ ] Click a column header to sort; arrow indicator appears on that column.
-- [ ] Click the active column header again; sort direction reverses.
-- [ ] Sort selection matches the checkmark in View → Sort By.
-- [ ] Changing sort via View menu updates the column header indicator.
-- [ ] Sort persists after switching gallery → list and back.
-- [ ] Pending-edit dot (orange circle) visible in the row for files with unsaved edits.
-- [ ] Thumbnail visible for each file; falls back to file icon if unavailable.
+- [x] Switch to list view (Cmd+1 or View → As List); View menu shows checkmark on As List.
+- [x] Columns visible: Name, Date, Size, Type (or equivalent).
+- [x] Click a column header to sort; arrow indicator appears on that column.
+- [x] Click the active column header again; sort direction reverses.
+- [x] Sort selection matches the checkmark in View → Sort By. - #NEED TO MAKE SURE THE FOUR SORT LAYOUTS ARE IN A CONSISTENT ORDER THROUHGOUT THE UI OF THE APP
+- [x] Changing sort via View menu updates the column header indicator.
+- [x] Sort persists after switching gallery → list and back.
+- [x] Pending-edit dot (orange circle) visible in the row for files with unsaved edits.
+- [x] Thumbnail visible for each file; falls back to file icon if unavailable.
 
 ---
 
 ## 5. Browser — gallery view
 
-- [ ] Switch to gallery view (Cmd+2 or View → As Gallery); View menu shows checkmark on As Gallery.
-- [ ] Tiles show thumbnails at the current zoom level.
-- [ ] Zoom In (Cmd++) increases tile size.
-- [ ] Zoom Out (Cmd+-) decreases tile size.
+- [x] Switch to gallery view (Cmd+2 or View → As Gallery); View menu shows checkmark on As Gallery.
+- [x] Tiles show thumbnails at the current zoom level.
+- [ ] Zoom In (Cmd++) increases tile size. - #FAILED, MARK AS BUG, REGRESSION FROM PREVIOUS BUILDS
+- [ ] Zoom Out (Cmd+-) decreases tile size. - #FAILED, MARK AS BUG, REGRESSION FROM PREVIOUS BUILDS
 - [ ] Zoom In disabled at maximum zoom level.
 - [ ] Zoom Out disabled at minimum zoom level.
-- [ ] Zoom In and Zoom Out menu items both disabled when in list view.
-- [ ] Toolbar Zoom In / Zoom Out items match menu item enabled states.
+- [X] Zoom In and Zoom Out menu items both disabled when in list view.
+- [x] Toolbar Zoom In / Zoom Out items match menu item enabled states.
 - [ ] Pinch gesture on trackpad zooms tiles.
-- [ ] Pending-edit dot visible on tiles with unsaved edits.
+- [x] Pending-edit dot visible on tiles with unsaved edits.
 
 ---
 
 ## 6. Selection
 
-- [ ] Plain click selects a single file; inspector updates.
-- [ ] Plain click on a different file replaces selection.
-- [ ] Cmd+click on a second file adds it to selection.
-- [ ] Cmd+click on an already-selected file deselects it.
-- [ ] Shift+click selects a contiguous range.
-- [ ] Cmd+Shift+click extends selection additively.
-- [ ] Selection is preserved when switching list ↔ gallery view.
-- [ ] Selected file is scrolled into view after switching modes.
-- [ ] Selection count shown in subtitle: "X of N images" for partial selection, "N images" for all-or-none.
-- [ ] Cmd+A selects all files.
-- [ ] Click on empty area deselects all.
+- [x] Plain click selects a single file; inspector updates.
+- [x] Plain click on a different file replaces selection.
+- [x] Cmd+click on a second file adds it to selection.
+- [x] Cmd+click on an already-selected file deselects it.
+- [x] Shift+click selects a contiguous range.
+- [ ] Cmd+Shift+click extends selection additively. - #NO NEEDS FURTHER TESTING BUT DOESN'T SEEM TO WORK'
+- [ ] Selection is preserved when switching list ↔ gallery view. - #YES BUT LIST VIEW SHOWS SELECTION AS GREY AND NOT ACTIVE COLOUR SO CANNOT BE MANIPULATED
+- [ ] Selected file is scrolled into view after switching modes. - #ONLY WHEN SWITCHING FROM LIST TO GALLERY, NOT FROM GALLERY TO LIST
+- [X] Selection count shown in subtitle: "X of N images" for partial selection, "N images" for all-or-none.
+- [X] Cmd+A selects all files.
+- [X] Click on empty area deselects all.
 
 ---
 

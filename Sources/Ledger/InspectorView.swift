@@ -314,7 +314,10 @@ struct InspectorView: View {
                                                         get: { model.valueForTag(tag) },
                                                         set: {
                                                             beginEditSessionIfNeeded(for: tag)
-                                                            model.updateValue($0, for: tag)
+                                                            let newValue = $0
+                                                            DispatchQueue.main.async {
+                                                                model.updateValue(newValue, for: tag)
+                                                            }
                                                         }
                                                     ),
                                                     prompt: Text(model.isMixedValue(for: tag) ? "Multiple values" : model.placeholderForTag(tag))
@@ -394,9 +397,15 @@ struct InspectorView: View {
         }
         .onChange(of: model.selectedFileURLs) { _, _ in
             editSessionSnapshots.removeAll()
-            focusedTagID = nil
             activeEditTagID = nil
             suppressNextFocusScrollAnimation = true
+            // Defer @FocusState clear: setting it synchronously during the SwiftUI
+            // update phase triggers an AppKit first-responder change which calls
+            // layout() on the NSHostingView while SwiftUI is still processing the
+            // update → NSHostingView reentrant layout fault.
+            DispatchQueue.main.async {
+                focusedTagID = nil
+            }
         }
         .onAppear {
             inspectorRefreshRevision = model.inspectorRefreshRevision
@@ -689,17 +698,19 @@ private struct InspectorLocationMapView: NSViewRepresentable {
     }
 
     func updateNSView(_ view: MKMapView, context _: Context) {
-        view.removeAnnotations(view.annotations)
-        let annotation = MKPointAnnotation()
-        annotation.coordinate = coordinate
-        view.addAnnotation(annotation)
-        view.setRegion(
-            MKCoordinateRegion(
-                center: coordinate,
-                span: defaultSpan
-            ),
-            animated: false
-        )
+        // Defer AppKit mutations: addAnnotation/setRegion can propagate setNeedsLayout
+        // up through the view hierarchy to the NSHostingView, calling layout() while
+        // SwiftUI is still inside updateNSView → NSHostingView reentrant layout fault.
+        let coordinate = coordinate
+        let region = MKCoordinateRegion(center: coordinate, span: defaultSpan)
+        DispatchQueue.main.async { [weak view] in
+            guard let view else { return }
+            view.removeAnnotations(view.annotations)
+            let annotation = MKPointAnnotation()
+            annotation.coordinate = coordinate
+            view.addAnnotation(annotation)
+            view.setRegion(region, animated: false)
+        }
     }
 }
 

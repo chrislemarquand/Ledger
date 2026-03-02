@@ -1097,7 +1097,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
         let applyAllItem = NSMenuItem(title: "Apply Metadata Changes to All Images", action: #selector(applyFolderAction(_:)), keyEquivalent: "S")
         applyAllItem.keyEquivalentModifierMask = [.command, .option, .shift]
-        applyAllItem.image = NSImage(systemSymbolName: "square.and.arrow.down", accessibilityDescription: nil)
+        applyAllItem.image = NSImage(systemSymbolName: "square.and.arrow.down.on.square", accessibilityDescription: nil)
         applyAllItem.tag = MenuTag.imageApplyAll
         applyAllItem.target = self
         menu.addItem(applyAllItem)
@@ -1154,7 +1154,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
         let saveItem = NSMenuItem(title: "Save as Preset…", action: #selector(saveCurrentAsPresetAction(_:)), keyEquivalent: "")
         saveItem.tag = MenuTag.imageSavePreset
-        saveItem.image = NSImage(systemSymbolName: "square.and.arrow.down.on.square", accessibilityDescription: nil)
+        saveItem.image = NSImage(systemSymbolName: "square.and.arrow.down.badge.checkmark", accessibilityDescription: nil)
         saveItem.target = self
         menu.addItem(saveItem)
 
@@ -1862,7 +1862,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 let item = NSToolbarItem(itemIdentifier: itemIdentifier)
                 item.label = "Apply Changes"
                 item.paletteLabel = "Apply Changes"
-                item.image = NSImage(systemSymbolName: "square.and.arrow.down", accessibilityDescription: "Save and apply")
+                item.image = NSImage(systemSymbolName: "square.and.arrow.down.on.square", accessibilityDescription: "Save and apply")
                 item.autovalidates = false
                 item.target = controller
                 item.action = #selector(NativeThreePaneSplitViewController.applyChangesAction(_:))
@@ -2011,6 +2011,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 keyEquivalent: ""
             )
             saveItem.target = controller
+            saveItem.image = NSImage(systemSymbolName: "square.and.arrow.down.badge.checkmark", accessibilityDescription: nil)
             saveItem.isEnabled = !model.selectedFileURLs.isEmpty
             menu.addItem(saveItem)
 

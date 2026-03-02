@@ -4,10 +4,15 @@ All notable changes to Ledger are documented here.
 
 ---
 
-## [Unreleased]
+## [0.8.1-rc.1a] — build TBD — 2026-03-02
+
+### Fixed
+- **B22** `NSHostingView is being laid out reentrantly while rendering its SwiftUI content` fault eliminated on the inspector smoke path. Three sources of synchronous `@Published`/AppKit mutations during SwiftUI update phases: (1) `TextField` binding `set` called `model.updateValue` synchronously — deferred via `DispatchQueue.main.async`, making it consistent with `DatePicker` and `Picker` fields which already deferred; (2) `.onChange(of: model.selectedFileURLs)` set `@FocusState focusedTagID = nil` synchronously — setting `@FocusState` during the SwiftUI update phase triggers an AppKit first-responder change that calls `layout()` on the hosting view mid-render, now deferred; (3) `InspectorLocationMapView.updateNSView` called `addAnnotation`/`setRegion` synchronously — these propagate `setNeedsLayout` up to the `NSHostingView` during SwiftUI's `updateNSView` pass, now deferred via `DispatchQueue.main.async { [weak view] in … }`.
 
 ### Changed
+- Apply/save SF Symbol convention formalised: `square.and.arrow.down` for selection-scoped apply (toolbar Apply Changes button, Image menu "Apply to Selection", context menus); `square.and.arrow.down.on.square` for folder-wide apply (Image menu "Apply to Folder"); `square.and.arrow.down.badge.checkmark` for Save as Preset (Image menu and presets toolbar dropdown, where it was previously unsymboled).
 - Roadmap/backlog triage updated with two new tracked items from Xcode debug logs: **B22** (intermittent SwiftUI publish-during-view-update warning, actionable) and **B23** (CMPhoto/IOSurface log spam, non-blocking monitoring item).
+- Marketing version bumped from `0.8` to `0.8.1`.
 
 ---
 
