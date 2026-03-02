@@ -699,12 +699,12 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         let sortMenu = NSMenu(title: "Sort By")
         let nameItem = sortMenu.addItem(withTitle: "Name", action: #selector(sortByNameAction(_:)), keyEquivalent: "1")
         nameItem.keyEquivalentModifierMask = [.command, .control, .option]
-        let kindItem = sortMenu.addItem(withTitle: "Kind", action: #selector(sortByKindAction(_:)), keyEquivalent: "2")
-        kindItem.keyEquivalentModifierMask = [.command, .control, .option]
-        let createdItem = sortMenu.addItem(withTitle: "Date Created", action: #selector(sortByCreatedAction(_:)), keyEquivalent: "5")
+        let createdItem = sortMenu.addItem(withTitle: "Date Created", action: #selector(sortByCreatedAction(_:)), keyEquivalent: "2")
         createdItem.keyEquivalentModifierMask = [.command, .control, .option]
-        let sizeItem = sortMenu.addItem(withTitle: "Size", action: #selector(sortBySizeAction(_:)), keyEquivalent: "6")
+        let sizeItem = sortMenu.addItem(withTitle: "Size", action: #selector(sortBySizeAction(_:)), keyEquivalent: "3")
         sizeItem.keyEquivalentModifierMask = [.command, .control, .option]
+        let kindItem = sortMenu.addItem(withTitle: "Kind", action: #selector(sortByKindAction(_:)), keyEquivalent: "4")
+        kindItem.keyEquivalentModifierMask = [.command, .control, .option]
         let item = NSMenuItem(title: "Sort By", action: nil, keyEquivalent: "")
         item.image = NSImage(systemSymbolName: "arrow.up.arrow.down", accessibilityDescription: nil)
         item.submenu = sortMenu
@@ -2110,6 +2110,8 @@ final class BrowserContainerViewController: NSViewController {
         observe(model.$stagedOpsDisplayToken)
         observe(model.$browserSort)
         observe(model.$browserSortAscending)
+        observe(model.$galleryGridLevel)
+        observe(model.$inspectorRefreshRevision)
     }
 
     override func viewWillDisappear() {
@@ -2195,103 +2197,69 @@ final class BrowserContainerViewController: NSViewController {
     }
 
     private func makeOverlayView(for state: OverlayState) -> NSView {
+        // AppKit decides when and which overlay to show; SwiftUI handles rendering.
+        // NSHostingView is constrained to fill the container in applyOverlay — it
+        // does not drive its own sizing.
+        let content: BrowserPlaceholderView.Content
         switch state {
         case .none:
             return NSView(frame: .zero)
         case .loading:
-            return makeLoadingOverlayView()
+            content = .loading
         case .noSelection:
-            return makeUnavailableOverlayView(
+            content = .unavailable(
                 title: "No Folder Selected",
                 symbolName: "folder",
                 message: "Open a folder from the toolbar to browse and edit image metadata."
             )
         case let .enumerationError(message):
-            return makeUnavailableOverlayView(
-                title: "Folder Unavailable",
-                symbolName: "lock.fill",
-                message: message
-            )
+            content = .unavailable(title: "Folder Unavailable", symbolName: "lock.fill", message: message)
         case .emptyFolder:
-            return makeUnavailableOverlayView(
+            content = .unavailable(
                 title: "No Supported Images",
                 symbolName: "photo.on.rectangle.angled",
                 message: "This folder contains no image files supported by \(AppBrand.displayName)."
             )
         case .noResults:
-            return makeUnavailableOverlayView(
-                title: "No Results",
-                symbolName: "magnifyingglass",
-                message: "Try a different search term."
-            )
+            content = .unavailable(title: "No Results", symbolName: "magnifyingglass", message: "Try a different search term.")
         }
+        return NSHostingView(rootView: BrowserPlaceholderView(content: content))
+    }
+}
+
+// MARK: - Browser placeholder (SwiftUI island)
+// Purely presentational. Receives plain values from BrowserContainerViewController —
+// no AppModel observation, no boundary-crossing state. AppKit owns all geometry
+// (the hosting view is constrained to fill its container in applyOverlay).
+
+private struct BrowserPlaceholderView: View {
+    enum Content {
+        case loading
+        case unavailable(title: String, symbolName: String, message: String)
     }
 
-    private func makeLoadingOverlayView() -> NSView {
-        let container = NSView(frame: .zero)
-        container.wantsLayer = true
-        container.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+    let content: Content
 
-        let spinner = NSProgressIndicator(frame: .zero)
-        spinner.translatesAutoresizingMaskIntoConstraints = false
-        spinner.style = .spinning
-        spinner.controlSize = .regular
-        spinner.startAnimation(nil)
-        container.addSubview(spinner)
-
-        let titleLabel = NSTextField(labelWithString: "Loading…")
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
-        titleLabel.textColor = .labelColor
-        container.addSubview(titleLabel)
-
-        NSLayoutConstraint.activate([
-            spinner.centerXAnchor.constraint(equalTo: container.centerXAnchor),
-            spinner.centerYAnchor.constraint(equalTo: container.centerYAnchor, constant: -10),
-            titleLabel.centerXAnchor.constraint(equalTo: container.centerXAnchor),
-            titleLabel.topAnchor.constraint(equalTo: spinner.bottomAnchor, constant: 10),
-        ])
-        return container
-    }
-
-    private func makeUnavailableOverlayView(title: String, symbolName: String, message: String) -> NSView {
-        let container = NSView(frame: .zero)
-        container.wantsLayer = true
-        container.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
-
-        let stack = NSStackView()
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        stack.orientation = .vertical
-        stack.alignment = .centerX
-        stack.spacing = 10
-        container.addSubview(stack)
-
-        let imageView = NSImageView(frame: .zero)
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        imageView.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
-        imageView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 30, weight: .regular)
-        imageView.contentTintColor = .secondaryLabelColor
-        imageView.setContentCompressionResistancePriority(.required, for: .vertical)
-        stack.addArrangedSubview(imageView)
-
-        let titleLabel = NSTextField(labelWithString: title)
-        titleLabel.font = .systemFont(ofSize: 20, weight: .semibold)
-        titleLabel.textColor = .labelColor
-        titleLabel.alignment = .center
-        stack.addArrangedSubview(titleLabel)
-
-        let messageLabel = NSTextField(wrappingLabelWithString: message)
-        messageLabel.font = .systemFont(ofSize: NSFont.systemFontSize)
-        messageLabel.textColor = .secondaryLabelColor
-        messageLabel.alignment = .center
-        messageLabel.maximumNumberOfLines = 3
-        stack.addArrangedSubview(messageLabel)
-
-        NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: container.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-            messageLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 460),
-        ])
-        return container
+    var body: some View {
+        ZStack {
+            Color(nsColor: .windowBackgroundColor)
+            switch content {
+            case .loading:
+                VStack(spacing: 10) {
+                    ProgressView()
+                        .controlSize(.regular)
+                    Text("Loading…")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.primary)
+                }
+            case let .unavailable(title, symbolName, message):
+                ContentUnavailableView {
+                    Label(title, systemImage: symbolName)
+                } description: {
+                    Text(message)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

@@ -102,9 +102,6 @@ struct PresetEditorSheet: View {
             Button("Replace") {
                 replaceExistingPreset()
             }
-            Button("Keep Both") {
-                saveAsDuplicate()
-            }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Choose a different name, or replace the existing preset.")
@@ -289,29 +286,19 @@ struct PresetEditorSheet: View {
             return
         }
 
-        persist(editorName: trimmedName, overridePresetID: nil, forceCreate: false)
+        persist(editorName: trimmedName, overridePresetID: nil)
     }
 
     private func replaceExistingPreset() {
         guard let duplicateConflict else { return }
         persist(
             editorName: editor.name.trimmingCharacters(in: .whitespacesAndNewlines),
-            overridePresetID: duplicateConflict.id,
-            forceCreate: false
+            overridePresetID: duplicateConflict.id
         )
         self.duplicateConflict = nil
     }
 
-    private func saveAsDuplicate() {
-        persist(
-            editorName: editor.name.trimmingCharacters(in: .whitespacesAndNewlines),
-            overridePresetID: nil,
-            forceCreate: true
-        )
-        duplicateConflict = nil
-    }
-
-    private func persist(editorName: String, overridePresetID: UUID?, forceCreate: Bool) {
+    private func persist(editorName: String, overridePresetID: UUID?) {
         let fields = editor.includedTagIDs.map { tagID in
             PresetFieldValue(tagID: tagID, value: editor.valuesByTagID[tagID] ?? "")
         }
@@ -319,9 +306,7 @@ struct PresetEditorSheet: View {
         let normalizedNotes = notes.isEmpty ? nil : notes
 
         let saved: MetadataPreset?
-        if forceCreate {
-            saved = model.createPreset(name: editorName, notes: normalizedNotes, fields: fields)
-        } else if let overridePresetID {
+        if let overridePresetID {
             saved = model.updatePreset(id: overridePresetID, name: editorName, notes: normalizedNotes, fields: fields)
         } else {
             switch editor.mode {

@@ -169,13 +169,15 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
         guard let primary = model.primarySelectionURL,
               let row = items.firstIndex(where: { $0.url == primary }) else { return }
         let indexPath = IndexPath(item: row, section: 0)
-        // Defer one run loop so the collection view's layout is committed after the
-        // opacity transition. Use layoutSubtreeIfNeeded + scrollRectToVisible rather
-        // than scrollToItems — the latter is unreliable when the view is just becoming
-        // visible (it silently no-ops if the layout pass hasn't been committed yet).
+        // Defer one run loop so layout is committed after the view becomes visible.
+        // Call layoutSubtreeIfNeeded on the scrollView (not the collectionView) so
+        // the clip view is sized before item frames are queried — necessary on the
+        // list→gallery switch where the collection view's bounds come from its parent.
+        // Use scrollRectToVisible rather than scrollToItems (the latter silently
+        // no-ops if the layout pass has not been committed yet).
         DispatchQueue.main.async { [weak self] in
             guard let self, self.model.browserViewMode == .gallery else { return }
-            self.collectionView.layoutSubtreeIfNeeded()
+            self.scrollView.layoutSubtreeIfNeeded()
             guard let attrs = self.collectionView.collectionViewLayout?.layoutAttributesForItem(at: indexPath) else { return }
             self.collectionView.scrollToVisible(attrs.frame)
         }
@@ -865,8 +867,8 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
 
             pendingDot.widthAnchor.constraint(equalToConstant: UIMetrics.Gallery.pendingDotSize),
             pendingDot.heightAnchor.constraint(equalToConstant: UIMetrics.Gallery.pendingDotSize),
-            pendingDot.trailingAnchor.constraint(equalTo: thumbnailContainer.trailingAnchor, constant: -UIMetrics.Gallery.pendingDotInset),
-            pendingDot.topAnchor.constraint(equalTo: thumbnailContainer.topAnchor, constant: UIMetrics.Gallery.pendingDotInset),
+            pendingDot.leadingAnchor.constraint(equalTo: thumbnailImageView.leadingAnchor, constant: UIMetrics.Gallery.pendingDotInset),
+            pendingDot.topAnchor.constraint(equalTo: thumbnailImageView.topAnchor, constant: UIMetrics.Gallery.pendingDotInset),
 
             titleField.topAnchor.constraint(equalTo: thumbnailContainer.bottomAnchor, constant: UIMetrics.Gallery.titleGap),
             titleField.leadingAnchor.constraint(equalTo: view.leadingAnchor),

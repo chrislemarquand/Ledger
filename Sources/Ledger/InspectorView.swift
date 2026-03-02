@@ -293,11 +293,12 @@ struct InspectorView: View {
                                                         }
                                                     }
                                                 )) {
+                                                    // Always include tag("") so SwiftUI never sees an
+                                                    // untagged selection when the field has no value.
+                                                    Text(model.isMixedValue(for: tag) ? "Multiple values" : "—")
+                                                        .tag("")
                                                     let currentValue = model.valueForTag(tag)
-                                                    if currentValue.isEmpty {
-                                                        Text(model.isMixedValue(for: tag) ? "Multiple values" : "—")
-                                                            .tag("")
-                                                    } else if !options.contains(where: { $0.value == currentValue }) {
+                                                    if !currentValue.isEmpty && !options.contains(where: { $0.value == currentValue }) {
                                                         Text(currentValue).tag(currentValue)
                                                     }
                                                     ForEach(options, id: \.value) { option in
@@ -377,6 +378,11 @@ struct InspectorView: View {
             .contentMargins(.top, topScrollStartInset, for: .scrollContent)
             .animation(appAnimation(), value: model.collapsedInspectorSections)
             .onChange(of: focusedTagID) { oldValue, newValue in
+                if oldValue != nil {
+                    // Focus left a text field — end the undo coalescing window so
+                    // the next edit in any field gets its own undo entry.
+                    model.endUndoCoalescing()
+                }
                 guard let newValue else { return }
                 guard oldValue != nil else { return }
                 DispatchQueue.main.async {
@@ -396,6 +402,7 @@ struct InspectorView: View {
             }
         }
         .onChange(of: model.selectedFileURLs) { _, _ in
+            model.endUndoCoalescing()
             editSessionSnapshots.removeAll()
             activeEditTagID = nil
             suppressNextFocusScrollAnimation = true
@@ -636,9 +643,22 @@ private struct InspectorPreviewImageView: View {
     var body: some View {
         ZStack {
             if let image = model.inspectorPreviewImage(for: fileURL) {
+                // Overlay the dot on the Image itself so it anchors to the actual
+                // rendered image bounds (which match the aspect-ratio-scaled size),
+                // not the fixed 220 pt container — keeping it inside for both
+                // portrait and landscape images.
                 Image(nsImage: image)
                     .resizable()
                     .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(alignment: .topLeading) {
+                        if model.hasPendingImageEdits(for: fileURL) {
+                            Image(systemName: "circle.fill")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.orange)
+                                .padding(8)
+                        }
+                    }
             } else {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(.quaternary.opacity(0.22))
@@ -652,15 +672,6 @@ private struct InspectorPreviewImageView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             }
         }
-        .overlay(alignment: .topLeading) {
-            if model.hasPendingImageEdits(for: fileURL) {
-                Image(systemName: "circle.fill")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.orange)
-                    .padding(8)
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .task(id: previewTaskID) {
             model.ensureInspectorPreviewLoaded(for: fileURL)
         }

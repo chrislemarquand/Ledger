@@ -297,6 +297,16 @@ public struct ExifToolService: ExifToolServiceProtocol {
             throw ExifEditError.processFailed(code: process.terminationStatus, stderr: stderrText)
         }
 
+        // exiftool exits 0 when a mixed batch has some writable tags and some not —
+        // the writable ones are written but the unwritable ones are silently skipped.
+        // Detect this by checking stderr for the specific warning exiftool emits,
+        // so partial write failures are never swallowed.
+        if kind == .write, !stderrText.isEmpty,
+           let warning = stderrText.components(separatedBy: "\n")
+               .first(where: { $0.contains("doesn't exist or isn't writable") }) {
+            throw ExifEditError.processFailed(code: 0, stderr: warning)
+        }
+
         return stdoutData
     }
 

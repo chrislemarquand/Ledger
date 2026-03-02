@@ -1,6 +1,6 @@
 # ROADMAP
 
-Current version: **0.8.1 (RC1a)**. Target: **v1.0**.
+Current version: **0.8.2 (RC2)**. Target: **v1.0**.
 
 This file is the working roadmap. Full historical detail is archived in `ROADMAPOLD.MD`.
 
@@ -9,27 +9,27 @@ This file is the working roadmap. Full historical detail is archived in `ROADMAP
 ## 1) Still To Do Before v1.0
 
 ### Outstanding bugs
-- [ ] **B22** `Should` Intermittent `Publishing changes from within view updates is not allowed` warning still appears in debug output; continue tracing remaining SwiftUI update-cycle mutation path(s).
-- [ ] **B23** `Nice` Monitor `CMPhotoJFIFUtilities err=-17102` and `IOSurface creation failed: e00002c2` log spam during heavy decode bursts; escalate only if user-visible failures occur.
-- [ ] **B24** `Must` Gallery zoom display regression: zoom level changes correctly (toolbar/menu items enable/disable at range limits) but `NSCollectionView` layout does not refresh until the user clicks a thumbnail. Regression from previous builds.
-- [ ] **B25** `Must` Sidebar/browser mismatch after unpin: unpinning a Favourites item leaves the sidebar selection label (e.g. "Desktop") pointing at the wrong folder — browser content reflects the unpinned entry, not the labelled one.
-- [ ] **B26** `Must` List view selection renders grey/inactive after switching from gallery. Selection is preserved but appears as an unfocused (non-active) highlight and cannot be manipulated without clicking again.
-- [ ] **B27** `Should` Stale sidebar entries not pruned on relaunch: after a pinned folder is deleted from disk (Trash emptied), the entry still appears in Favourites/Recents after relaunch. Clicking it correctly shows "Folder Unavailable". Pruning logic is not removing entries whose paths no longer exist.
-- [ ] **B28** `Should` Scroll-into-view on mode switch is one-directional: works gallery→list but not list→gallery.
-- [ ] **B29** `Should` QuickLook panel height is not consistently locked: panel occasionally uses a different vertical size for a new image rather than maintaining the locked height and varying only width by aspect ratio. Intermittent and hard to reproduce.
-- [ ] **B30** `Should` QuickLook re-centring after drag is inconsistent: pressing an arrow key after dragging the panel to a custom position should re-centre it (Finder behaviour), but this only happens sometimes.
-- [ ] **B31** `Nice` View → Sort By menu order is inconsistent with toolbar sort menu and list column order. View menu: Name, Kind, Date Created, Size. Toolbar and columns: Name, Date Created, Size, Kind. View menu should be updated to match.
-- [ ] **B32** `Should` Gallery thumbnail pending-edit dot (orange circle) does not appear on a tile after editing metadata — tile only refreshes when a different image is selected. List view shows the dot immediately. Likely the same gallery display-refresh failure as B24.
-- [ ] **B33** `Must` `EXIF:DateTimeDigitized` is not writable via exiftool for at least some JPEG files: `exiftool failed with exit code 1: Warning: Sorry, EXIF:DateTimeDigitized doesn't exist or isn't writable`. Both staging a new value and clearing the field via the ✕ button fail. Needs investigation into ExifTool command construction / tag mapping for this field.
-- [ ] **B34** `Should` Apply success subtitle shows generic "Metadata applied" instead of the count-based "Applied N images". Partial-failure path (B35) may have the same issue.
-- [ ] **B35** `Must` Partial apply failure is silent: when one file in a batch fails (e.g. DateTimeDigitized not writable), no failure count is shown in the subtitle and no alert is presented. Other files in the selection apply successfully. The error is being swallowed rather than surfaced in the partial-failure tally.
-- [ ] **B36** `Should` Undo in text fields operates character-by-character (one undo entry per keystroke) rather than field-level (one undo step returning to the value at the start of the edit session). Redo has the same granularity. Expected behaviour matches standard macOS text-editing undo coalescing.
-- [ ] **B37** `Must` "Restore from Backup" remains enabled in the Image menu and context menu after a restore has already been performed. Should disable once no restorable backup exists for the selection.
-- [ ] **B38** `Must` Inspector section expand/collapse still animates with Reduce Motion enabled. Regression — was fixed as P13 but is broken again.
-- [ ] **B39** `Must` Sidebar section collapse/expand still animates with Reduce Motion enabled. Regression — was fixed as P4 but is broken again.
-- [ ] **B40** `Nice` QuickLook panel open/close transition is not simplified with Reduce Motion enabled. May be framework-constrained (QuickLookUI controls its own animation); investigate before writing off.
-- [ ] **B41** `Should` Preset names are not enforced as unique: the duplicate-name alert offers a "Keep Both" option, allowing multiple presets with identical names. The alert should prevent saving and prompt the user to choose a different name instead.
-- [ ] **B42** `Nice` App writes through macOS advisory file locks (set via Finder/Preview lock) without reporting failure. exiftool bypasses the advisory lock flag (`uchg`) since it is not enforced at POSIX level. Fix should be an app-level pre-write check using `URLResourceKey.isLockedKey` before passing files to exiftool, surfacing a clear error rather than claiming success. Does not require changes to exiftool command construction.
+- [x] **B22** `Should` Intermittent `Publishing changes from within view updates is not allowed` warning: cannot reproduce after AppKit/SwiftUI interaction rewrites; closed as fixed by those earlier changes.
+- [x] **B23** `Nice` Monitor `CMPhotoJFIFUtilities err=-17102` and `IOSurface creation failed: e00002c2` log spam: not reproduced under heavy thumbnail load; no user-visible breakage. Closed as system-framework noise.
+- [x] **B24** `Must` Gallery zoom display regression: zoom level changes correctly (toolbar/menu items enable/disable at range limits) but `NSCollectionView` layout does not refresh until the user clicks a thumbnail. Regression from previous builds.
+- [x] **B25** `Must` Sidebar/browser mismatch after unpin: unpinning a Favourites item leaves the sidebar selection label (e.g. "Desktop") pointing at the wrong folder — browser content reflects the unpinned entry, not the labelled one.
+- [x] **B26** `Must` List view selection renders grey/inactive after switching from gallery. Selection is preserved but appears as an unfocused (non-active) highlight and cannot be manipulated without clicking again.
+- [x] **B27** `Should` Stale sidebar entries not pruned on relaunch: fixed. `loadFiles` now detects `NSFileNoSuchFileError`/`NSFileReadNoSuchFileError` on enumeration failure and auto-removes the stale favourite/recent entry and clears selection. Permission errors are left intact.
+- [x] **B28** `Should` Scroll-into-view on mode switch is one-directional: fixed. `scrollSelectionIntoView` was calling `collectionView.layoutSubtreeIfNeeded()` but on a list→gallery switch the clip view bounds hadn't been updated yet, leaving item frames stale. Fix: call `scrollView.layoutSubtreeIfNeeded()` instead so the full scroll-view hierarchy is laid out before querying item attributes.
+- [x] **B29** `Should` QuickLook panel height inconsistency: fixed. Root cause: `lockedHeight` was only cleared when `!panel.isVisible`, so re-opening while the panel was already visible carried over a stale height from the previous image set. Fix: `lockedHeight = nil` is now unconditional in `present()`, so every session captures a fresh height from its first image.
+- [x] **B30** `Should` QuickLook re-centring after drag inconsistent: fixed alongside B29. Without the `panelDidResize` handler, QL anchors its bottom-left corner on resize, causing the panel to jump left/up when aspect ratio changes. The height-lock + re-centre handler is retained; with B29's stale-height bug removed it now fires consistently. Note: QL uses the current panel as a bounding box when sizing the next image — without correcting the frame after each resize, the panel progressively shrinks on every AR-changing navigation. The handler restores `lockedHeight` × current AR to keep the panel a stable size across the session.
+- [x] **B31** `Nice` View → Sort By menu order is inconsistent with toolbar sort menu and list column order: fixed. Reordered View → Sort By to Name, Date Created, Size, Kind and renumbered key equivalents ⌘⌃⌥1–4 to match.
+- [x] **B32** `Should` Gallery thumbnail pending-edit dot (orange circle) does not appear on a tile after editing metadata — tile only refreshes when a different image is selected. List view shows the dot immediately. Likely the same gallery display-refresh failure as B24.
+- [x] **B33** `Must` `EXIF:DateTimeDigitized` not writable: fixed. ExifTool uses `CreateDate` (not `DateTimeDigitized`) as the writable tag name for EXIF 0x9004. Changed `EditableTag` key from `"DateTimeDigitized"` to `"CreateDate"` so the write command uses `-EXIF:CreateDate=...`.
+- [x] **B34** `Should` Apply success subtitle shows generic "Metadata applied" instead of the count-based "Applied N images": fixed. Success path now uses `result.succeeded.count` to produce "Applied N image(s)".
+- [x] **B35** `Must` Partial apply failure is silent: fixed. exiftool exits 0 on mixed-batch writes (good tags written, bad tag skipped), so `run` never threw. Fix: `ExifToolService.run` now scans stderr for "doesn't exist or isn't writable" on write operations and throws on exit 0 too.
+- [x] **B36** `Should` Undo in text fields operates character-by-character: fixed. Added `undoCoalescingTagID` to AppModel. `updateValue` now only pushes a new undo entry on the first keystroke in a field; subsequent keystrokes in the same field are folded in. `endUndoCoalescing()` is called from InspectorView when `focusedTagID` changes (focus leaves a field) and on selection change, so the next edit in any field always gets its own distinct undo entry.
+- [x] **B37** `Must` "Restore from Backup" remains enabled after restore: fixed. Removed successfully-restored operation IDs from `lastOperationIDs`/`lastOperationFilesByID` so `hasRestorableBackup` returns false and the menu item disables immediately.
+- [x] **B38** `Must` Inspector section expand/collapse with Reduce Motion — cannot reproduce. Closed as not a bug.
+- [x] **B39** `Must` Sidebar section collapse/expand with Reduce Motion — cannot reproduce. Closed as not a bug.
+- [x] **B40** `Nice` QuickLook open/close transition not simplified with Reduce Motion: closed as framework-constrained. QLPreviewPanel controls its own animation engine; Finder itself shows no difference with Reduce Motion enabled.
+- [x] **B41** `Should` Preset names are not enforced as unique: fixed. Removed "Keep Both" button and `saveAsDuplicate()`. The duplicate-name alert now offers only "Replace" and "Cancel" — users who want a different name dismiss and edit the name field.
+- [ ] **B42** `Nice` App writes through macOS advisory file locks (set via Finder/Preview lock) without reporting failure. exiftool bypasses the advisory lock flag (`uchg`) since it is not enforced at POSIX level. Fix should be an app-level pre-write check using `URLResourceKey.isUserImmutableKey` before passing files to exiftool, surfacing a clear error rather than claiming success. Does not require changes to exiftool command construction.
 
 ### Pre-v1.0 release readiness notes
 - **B4** is currently marked cannot-reproduce and remains closed unless it resurfaces.
@@ -126,6 +126,7 @@ This file is the working roadmap. Full historical detail is archived in `ROADMAP
 
 ### Near-term / v1.0.1 track
 - [ ] **R1** Full sidebar organizer (drag-drop group creation, import/export favorite sets).
+- [ ] **R22** Respect macOS advisory file locks: pre-write check via `URLResourceKey.isUserImmutableKey` before passing files to exiftool; skip and report locked files clearly. Stretch: prompt to unlock-and-apply (Finder-style). (B42)
 - [x] **R2** Branding consolidation complete (rolled up via R3-R7).
 - [x] **R3** Identity/build settings alignment to Ledger.
 - [x] **R4** Runtime labels/string audit for Ledger naming.

@@ -333,9 +333,9 @@ final class AppModel: ObservableObject {
             .init(id: "exif-exposure-program", namespace: .exif, key: "ExposureProgram", label: "Exposure Program", section: "Capture"),
             .init(id: "exif-flash", namespace: .exif, key: "Flash", label: "Flash", section: "Capture"),
             .init(id: "exif-metering-mode", namespace: .exif, key: "MeteringMode", label: "Metering Mode", section: "Capture"),
-            .init(id: "datetime-modified", namespace: .exif, key: "ModifyDate", label: "Date Modified", section: "Date and Time"),
-            .init(id: "datetime-digitized", namespace: .exif, key: "DateTimeDigitized", label: "Digitized", section: "Date and Time"),
-            .init(id: "datetime-created", namespace: .exif, key: "DateTimeOriginal", label: "Date Created", section: "Date and Time"),
+            .init(id: "datetime-modified", namespace: .exif, key: "ModifyDate", label: "Date Time", section: "Date and Time"),
+            .init(id: "datetime-digitized", namespace: .exif, key: "CreateDate", label: "Date Time Digitized", section: "Date and Time"),
+            .init(id: "datetime-created", namespace: .exif, key: "DateTimeOriginal", label: "Date Time Original", section: "Date and Time"),
             .init(id: "exif-gps-lat", namespace: .exif, key: "GPSLatitude", label: "Latitude", section: "Location"),
             .init(id: "exif-gps-lon", namespace: .exif, key: "GPSLongitude", label: "Longitude", section: "Location"),
             .init(id: "exif-gps-alt", namespace: .exif, key: "GPSAltitude", label: "Altitude", section: "Location"),
@@ -529,6 +529,7 @@ final class AppModel: ObservableObject {
     private var metadataUndoStack: [PendingEditState] = []
     private var metadataRedoStack: [PendingEditState] = []
     private var isApplyingMetadataUndoState = false
+    private var undoCoalescingTagID: String? = nil
     private var workspaceObserverTokens: [NSObjectProtocol] = []
     private var sidebarImageCountTasks: [String: Task<Void, Never>] = [:]
     private var backgroundWarmTasksBySelectionID: [String: Task<Void, Never>] = [:]
@@ -1218,8 +1219,9 @@ final class AppModel: ObservableObject {
             }
 
             if result.failed.isEmpty {
+                let n = result.succeeded.count
                 setStatusMessage(
-                    "Metadata applied",
+                    "Applied \(n) \(n == 1 ? "image" : "images")",
                     autoClearAfterSuccess: true
                 )
             } else if result.succeeded.isEmpty {
@@ -1318,6 +1320,15 @@ final class AppModel: ObservableObject {
                     // Without this, metadataByFile retains the applied values and
                     // the inspector continues to show the pre-restore metadata.
                     staleMetadataFiles.insert(fileURL)
+                }
+                // Remove restored operation IDs so "Restore from Backup" disables once
+                // no backup remains for the selection.
+                let succeededSet = Set(summary.succeeded)
+                for opID in operationIDsToRestore {
+                    guard let fileURL = operationFilesByID[opID],
+                          succeededSet.contains(fileURL) else { continue }
+                    lastOperationIDs.removeAll { $0 == opID }
+                    lastOperationFilesByID.removeValue(forKey: opID)
                 }
                 invalidateBrowserThumbnails(for: summary.succeeded)
                 invalidateInspectorPreviews(for: summary.succeeded)
@@ -1573,12 +1584,24 @@ final class AppModel: ObservableObject {
         let previousState = currentPendingEditState()
         draftValues[tag] = value
         trackPendingEdit(value, for: tag, source: .manual)
-        registerMetadataUndoIfNeeded(previous: previousState)
+        // Coalesce undo entries within a continuous text-field edit session.
+        // Only push on the first keystroke in a field; subsequent keystrokes in the
+        // same field are folded in. endUndoCoalescing() is called from InspectorView
+        // when focus leaves the field, allowing the next edit to push its own entry.
+        if undoCoalescingTagID != tag.id {
+            registerMetadataUndoIfNeeded(previous: previousState)
+            undoCoalescingTagID = tag.id
+        }
         notifyInspectorDidChange()
+    }
+
+    func endUndoCoalescing() {
+        undoCoalescingTagID = nil
     }
 
     @discardableResult
     func undoLastMetadataEdit() -> Bool {
+        undoCoalescingTagID = nil
         guard let previousState = metadataUndoStack.popLast() else { return false }
         let currentState = currentPendingEditState()
         metadataRedoStack.append(currentState)
@@ -1589,6 +1612,7 @@ final class AppModel: ObservableObject {
 
     @discardableResult
     func redoLastMetadataEdit() -> Bool {
+        undoCoalescingTagID = nil
         guard let nextState = metadataRedoStack.popLast() else { return false }
         let currentState = currentPendingEditState()
         metadataUndoStack.append(currentState)
@@ -1794,7 +1818,6 @@ final class AppModel: ObservableObject {
     }
 
     func pickerOptions(for tag: EditableTag) -> [PickerOption]? {
-        let currentValue = valueForTag(tag).trimmingCharacters(in: .whitespacesAndNewlines)
         let base: [PickerOption]
 
         switch tag.id {
@@ -1850,16 +1873,7 @@ final class AppModel: ObservableObject {
             return nil
         }
 
-        var options = base
-        if isMixedValue(for: tag) {
-            options.insert(.init(value: "", label: "Multiple Values"), at: 0)
-        } else if currentValue.isEmpty {
-            options.insert(.init(value: "", label: "Not Set"), at: 0)
-        } else if !base.contains(where: { $0.value == currentValue }) {
-            options.insert(.init(value: currentValue, label: "Unknown (\(currentValue))"), at: 0)
-        }
-
-        return options
+        return base
     }
 
     func isMixedValue(for tag: EditableTag) -> Bool {
@@ -2768,8 +2782,8 @@ final class AppModel: ObservableObject {
 
     func unpinSidebarItem(_ item: SidebarItem) {
         guard case let .favorite(url) = item.kind else { return }
+        let wasSelected = selectedSidebarID == item.id
         let neighborSelectionID = favoriteNeighborSelectionID(removingFavoriteURL: url)
-        let preferredSelectionID = selectedSidebarID == item.id ? neighborSelectionID : selectedSidebarID
         favoriteItems.removeAll { candidate in
             if case let .favorite(candidateURL) = candidate.kind {
                 return candidateURL == url
@@ -2777,7 +2791,40 @@ final class AppModel: ObservableObject {
             return false
         }
         persistFavorites()
-        refreshSidebarItems(preferredSelectionID: preferredSelectionID)
+
+        // Restore to Recents if it's a plain user folder (was moved out of Recents when pinned).
+        var restoredRecentID: String? = nil
+        if let canonical = canonicalSidebarURL(url),
+           sourceSidebarItem(forCanonicalURL: canonical) == nil,
+           mountedVolumeSidebarItem(forCanonicalURL: canonical) == nil {
+            let recentID = "folder::\(canonical.path)"
+            if !locationItems.contains(where: { $0.id == recentID }) {
+                recentLocationLastOpenedAtByID[recentID] = Date()
+                locationItems.insert(
+                    SidebarItem(id: recentID, title: item.title, section: "Recents", kind: .folder(canonical)),
+                    at: 0
+                )
+                trimRecentLocationsToLimit()
+                persistRecentLocations()
+                restoredRecentID = recentID
+            }
+        }
+
+        // Choose landing selection:
+        // - Unpinned item was selected: prefer adjacent favourite → restored Recent → nil (no folder)
+        // - Unpinned item was not selected: keep whatever is currently selected
+        let preferredSelectionID: String? = wasSelected
+            ? (neighborSelectionID ?? restoredRecentID)
+            : selectedSidebarID
+
+        let priorSelectedID = selectedSidebarID
+        // selectFirstWhenMissing: false — don't silently jump to Desktop/Downloads when nothing fits.
+        refreshSidebarItems(selectFirstWhenMissing: false, preferredSelectionID: preferredSelectionID)
+
+        // Always sync browser content to the sidebar selection if it changed.
+        if selectedSidebarID != priorSelectedID {
+            selectSidebar(id: selectedSidebarID)
+        }
     }
 
     func moveFavoriteUp(_ item: SidebarItem) {
@@ -2844,6 +2891,48 @@ final class AppModel: ObservableObject {
         } catch {
             enumerationError = error
             urls = []
+        }
+
+        // If enumeration failed because the folder no longer exists, remove the sidebar entry now
+        // so stale entries don't persist after relaunch. Permission errors are NOT pruned —
+        // a temporarily inaccessible drive or Desktop/Downloads without TCC should remain.
+        if let enumerationError, isFolderNotFoundError(enumerationError) {
+            let folderName: String
+            let sectionLabel: String
+            switch kind {
+            case let .favorite(url):
+                folderName = url.lastPathComponent
+                sectionLabel = "Pinned"
+                favoriteItems.removeAll { item in
+                    guard case let .favorite(u) = item.kind else { return false }
+                    return u == url
+                }
+                persistFavorites()
+                refreshSidebarItems(selectFirstWhenMissing: false, preferredSelectionID: nil)
+            case let .folder(url):
+                folderName = url.lastPathComponent
+                sectionLabel = "Recents"
+                locationItems.removeAll { item in
+                    guard case let .folder(u) = item.kind else { return false }
+                    return u == url
+                }
+                recentLocationLastOpenedAtByID.removeValue(forKey: "folder::\(url.path)")
+                persistRecentLocations()
+                refreshSidebarItems(selectFirstWhenMissing: false, preferredSelectionID: nil)
+            default:
+                folderName = ""
+                sectionLabel = ""
+            }
+            selectedSidebarID = nil
+
+            if !folderName.isEmpty {
+                let alert = NSAlert()
+                alert.alertStyle = .informational
+                alert.messageText = "\u{201c}\(folderName)\u{201d} No Longer Available"
+                alert.informativeText = "This folder could not be found — it may have been deleted or moved. It has been removed from \(sectionLabel) in \(AppBrand.displayName)."
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
+            }
         }
 
         // clearLoadedContentState resets browserEnumerationError to nil;
@@ -3099,6 +3188,12 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func isFolderNotFoundError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        guard nsError.domain == NSCocoaErrorDomain else { return false }
+        return nsError.code == NSFileNoSuchFileError || nsError.code == NSFileReadNoSuchFileError
+    }
+
     private func isPrivacySensitiveFileSystemURL(_ url: URL) -> Bool {
         let candidate = url.standardizedFileURL
         let desktop = desktopDirectoryURL().standardizedFileURL
@@ -3166,7 +3261,13 @@ final class AppModel: ObservableObject {
         removeRecentLocation(forCanonicalURL: canonical)
         persistFavorites()
         persistRecentLocations()
-        refreshSidebarItems(preferredSelectionID: id)
+
+        // If the pinned item was selected (as a Recent: “folder::”), follow it to the new
+        // favourite ID (“favorite::”) — same physical folder, no reload needed.
+        // If a different item was selected, keep the current selection unchanged.
+        let folderID = "folder::\(canonical.path)"
+        let wasSelected = selectedSidebarID == folderID || selectedSidebarID == id
+        refreshSidebarItems(preferredSelectionID: wasSelected ? id : selectedSidebarID)
         statusMessage = "“\(title)” added to Pinned."
     }
 
@@ -4788,9 +4889,15 @@ final class AppModel: ObservableObject {
         let invalidated = Array(previousPreviewSources.union(nextPreviewSources))
         if !invalidated.isEmpty {
             invalidateBrowserThumbnails(for: invalidated)
-            invalidateInspectorPreviews(for: invalidated)
+            // Do NOT clear inspectorPreviewImages here. The cached image is the raw disk
+            // image; the rotation/flip transform is applied on the fly in
+            // inspectorPreviewImage(for:) via displayImageForCurrentStagedState. Clearing
+            // it causes the preview to blank while an identical image reloads from disk.
+            // Bump stagedOpsDisplayToken instead so gallery cells reconfigure immediately
+            // with the updated (undo'd) transform.
+            stagedOpsDisplayToken &+= 1
         }
-        recalculateInspectorState()
+        recalculateInspectorState(forceNotify: true)
         isApplyingMetadataUndoState = false
     }
 
@@ -4833,9 +4940,12 @@ private final class QuickLookPreviewController: NSObject, @preconcurrency QLPrev
     private var displayToSource: [URL: URL] = [:]
     private weak var model: AppModel?
     private var panelObservation: NSKeyValueObservation?
-    // Height locked to the first image's natural QL height for the session.
-    // All subsequent images use this height; width varies by aspect ratio.
-    // Mirrors Finder's QuickLook behaviour. Cleared on panel close.
+    // Locked to the height QL chooses for the first image of each session.
+    // QL uses the current panel as a bounding box when sizing subsequent images,
+    // so without correcting the size after each resize the panel shrinks on every
+    // AR-changing navigation. We preserve QL's aspect ratio but restore the locked
+    // height so the panel stays a consistent size across the session.
+    // Always cleared in present() so stale values never carry over between sessions.
     private var lockedHeight: CGFloat?
 
     func present(urls: [URL], focusedURL: URL?, model: AppModel) {
@@ -4863,23 +4973,28 @@ private final class QuickLookPreviewController: NSObject, @preconcurrency QLPrev
             }
         }
 
+        // Always reset the locked height so a stale value from a previous session
+        // (panel still visible, different image set) never corrupts the new session.
+        lockedHeight = nil
+
         // Register the resize observer exactly once per panel instance.
+        // Without this, QL anchors its bottom-left corner on resize, causing the
+        // panel to jump left/up when aspect ratio changes between images.
         NotificationCenter.default.removeObserver(self, name: NSWindow.didResizeNotification, object: panel)
         NotificationCenter.default.addObserver(self, selector: #selector(panelDidResize(_:)),
                                                name: NSWindow.didResizeNotification, object: panel)
 
-        if !panel.isVisible {
-            lockedHeight = nil // Fresh open — capture height from the first image.
-        }
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    // Called whenever QL resizes the panel (new image, user drag, etc.).
-    // On first call: locks the height to QL's natural choice for the first image.
-    // On subsequent calls: maintains that height, deriving width from QL's own
-    // aspect ratio for the new image (QL already accounts for EXIF rotation).
-    // Fires before the display refresh, so corrections are invisible.
+    // Called whenever QL resizes the panel (new image or user drag).
+    // Locks height to QL's natural choice for the first image, then on subsequent
+    // resizes restores that height while deriving width from the current AR.
+    // This counteracts QL's bounding-box behaviour: without correction, QL
+    // constrains each image to the previous panel size, causing progressive shrinkage.
+    // A guard on the computed frame prevents the setFrame call from re-triggering
+    // this handler in a loop.
     @objc private func panelDidResize(_ notification: Notification) {
         guard let panel = notification.object as? NSPanel else { return }
         let size = panel.frame.size
@@ -4895,20 +5010,16 @@ private final class QuickLookPreviewController: NSObject, @preconcurrency QLPrev
         let screenFrame = (panel.screen ?? NSScreen.main)?.visibleFrame
             ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
 
-        // Constrain to screen; if width would overflow, scale both dimensions down.
-        let finalWidth = min(targetWidth, screenFrame.width - 40)
+        let finalWidth  = min(targetWidth, screenFrame.width - 40)
         let finalHeight = finalWidth < targetWidth
             ? (finalWidth / aspectRatio).rounded()
             : targetHeight
 
         let origin = NSPoint(
-            x: (screenFrame.minX + (screenFrame.width - finalWidth)  / 2).rounded(),
+            x: (screenFrame.minX + (screenFrame.width  - finalWidth)  / 2).rounded(),
             y: (screenFrame.minY + (screenFrame.height - finalHeight) / 2).rounded()
         )
         let targetFrame = NSRect(origin: origin, size: NSSize(width: finalWidth, height: finalHeight))
-
-        // Guard prevents a loop: our own setFrame triggers a second notification,
-        // but the frame is already at target so we return immediately.
         guard panel.frame != targetFrame else { return }
         panel.setFrame(targetFrame, display: true)
     }

@@ -16,6 +16,7 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
     private var pendingThumbnailRefreshURLs: Set<URL> = []
     private var isRenderingState = false
     private var lastRenderedItemURLs: [URL] = []
+    private var lastRenderedViewMode: AppModel.BrowserViewMode?
     private var contextMenuTargetURLs: [URL] = []
     private var didApplyInitialColumnFit = false
     private var browserFocusObserver: NSObjectProtocol?
@@ -104,7 +105,13 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
     func update(model: AppModel, items: [AppModel.BrowserItem]) {
         self.model = model
         self.items = items
-        guard model.browserViewMode == .list else { return }
+        guard model.browserViewMode == .list else {
+            lastRenderedViewMode = model.browserViewMode
+            return
+        }
+
+        let justBecameActive = lastRenderedViewMode != .list
+        lastRenderedViewMode = model.browserViewMode
 
         if lastThumbnailInvalidationToken != model.browserThumbnailInvalidationToken {
             lastThumbnailInvalidationToken = model.browserThumbnailInvalidationToken
@@ -191,6 +198,13 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
         }
         syncSortIndicator()
         updateQuickLookSourceFrameFromCurrentSelection()
+
+        if justBecameActive {
+            // update() is called from render(), which runs after applyBrowserModeIfNeeded()
+            // has already made the list view visible. makeFirstResponder succeeds here
+            // because the table view's parent is no longer hidden.
+            focusListForKeyboardNavigation()
+        }
     }
 
     private func syncSortIndicator() {
