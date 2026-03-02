@@ -1,230 +1,133 @@
-# Roadmap
+# ROADMAP
 
-Current version: **0.7.3** (build in `Config/Base.xcconfig`). Target: **v1.0**.
+Current version: **0.7.3**. Target: **v1.0**.
 
-Reference items by ID: **B1–B23** bugs · **P1–P24** polish · **N1–N11** native rewrites · **A1–A10** architecture/stability · **R1–R21** post-v1.0 roadmap.
-
-ID convention: `B#`/`P#`/`N#`/`A#`/`R#` are roadmap item IDs. Backlog severity labels use `S0`/`S1`/`S2` in `v1-bug-backlog.md` to avoid collision with roadmap `P#` polish IDs.
+This file is the working roadmap. Full historical detail is archived in `ROADMAPOLD.MD`.
 
 ---
 
-## Severity guide
+## 1) Still To Do Before v1.0
 
-| Label | Meaning |
-|-------|---------|
-| Blocker | Crash or data loss — fix before any build |
-| Must | Broken feature — must fix for v1.0 |
-| Should | Wrong or inconsistent behaviour — fix for v1.0 |
-| Nice | Cosmetic / polish — nice to have before 1.0 |
+### Outstanding bugs
+- [ ] **B22** `Should` Intermittent `Publishing changes from within view updates is not allowed` warning still appears in debug output; continue tracing remaining SwiftUI update-cycle mutation path(s).
+- [ ] **B23** `Nice` Monitor `CMPhotoJFIFUtilities err=-17102` and `IOSurface creation failed: e00002c2` log spam during heavy decode bursts; escalate only if user-visible failures occur.
 
----
-
-## v1.0 — Outstanding bugs
-
-### Menus & state
-- [x] **B1** ~~Apply metadata menu state~~ — ✅ SwiftUI Button removed; AppKit NSMenuItem injected in Folder menu; `validateMenuItem` enables only when selection has pending edits.
-- [x] **B2** ~~Clear metadata menu state~~ — ✅ Same fix as B1.
-- [x] **B3** ~~Restore from backup menu state~~ — ✅ Same fix as B1; enabled only when selection has a restorable backup.
-- [x] **B4** 🟡 **Cannot reproduce** — restoring does not succeed for all files in a folder; some retain edited metadata after restore. (QA checklist #46) Could not reproduce after B17 fix (2026-02-26); possible the `clearLoadedContentState` reordering resolved the silent-skip path. Reopen if it resurfaces.
-- [x] **B17** ✅ **TCC approval leaves browser empty** — selecting Downloads (or Desktop) triggers a macOS TCC permission prompt; while the prompt is shown `enumerateImages` returns 0 results; after the user approves, the app regains focus but `loadFiles` was never retried. Fix: (1) `loadFiles` restructured to capture `enumerationError` before calling `clearLoadedContentState`, then re-apply it after — so the "Folder Unavailable" error state is now actually shown instead of silently degrading to "No Images"; (2) `reloadFilesIfBrowserEmpty()` added to `AppModel`; (3) `applicationDidBecomeActive` added to `AppDelegate` — calls `reloadFilesIfBrowserEmpty()` so any TCC-gated folder with an empty browser is automatically retried the moment the user returns to the app.
-- [x] **B5** ~~View → As Gallery / As List broken~~ — ✅ SwiftUI Buttons removed; AppKit NSMenuItems injected with `validateMenuItem` setting checkmarks; Cmd+1 / Cmd+2 key equivalents preserved.
-- [x] **B6** ~~View → Sort By checkmark stuck on Name~~ — ✅ SwiftUI Picker removed; AppKit NSMenu injected with `validateMenuItem` setting checkmarks on every menu open.
-- [x] **B7** ~~View → Zoom In / Zoom Out not disabled in list mode~~ — ✅ SwiftUI Buttons removed; AppKit NSMenuItems injected; `validateMenuItem` disables both in list mode and at min/max zoom.
-- [x] **B8** ~~Inspector / sidebar menu labels always say "Hide"~~ — ✅ Static "Toggle Sidebar" / "Toggle Inspector" labels; always correct regardless of state.
-- [x] **B21** ✅ **Menu command ownership split (SwiftUI + AppKit) resolved** — all custom menu-bar commands now run under AppKit ownership (`NSMenu`/`NSMenuItem`) with dynamic submenu population (including `Open With`) and native enabled/disabled/checkmark/title state via `validateMenuItem(_:)`. SwiftUI custom menu-command ownership for these actions was removed.
-
-### Inspector
-- [x] **B9** ✅ **Stale metadata shown after Apply** — root cause: `pendingEditsByFile[url]` was cleared before the exiftool re-read completed, causing `performRecalculateInspectorState` to fall back to the stale `metadataByFile` snapshot. Fix: `pendingCommitsByFile` captures the applied string values just before clearing; used as a middle fallback (after `pendingEditsByFile`, before `availableSnapshot`) so the inspector shows the written value throughout the reload window; cleared per-file in `loadMetadataForSelection` when the fresh snapshot arrives.
-
-### Browser gallery
-- [x] **B10** ~~Gallery selector changes colour on rotate~~ — ✅ Fixed in 0.6 via `stagedOpsDisplayToken`; cell no longer fully redraws on rotate.
-- [x] **B11** ~~Thumbnail flicker on rotate / flip~~ — ✅ Fixed in 0.6 via `stagedOpsDisplayToken`; display transform updated without clearing thumbnail cache.
-- [x] **B20** ✅ `Blocker` **Gallery thumbnails glitch/reload repeatedly after folder open** — resolved via the clean rewrite track `B20a–B20e` (baseline reset, shared thumbnail service, cell-owned lifecycle in gallery/list, native selection baseline, and unified inspector preview pipeline).
-- [x] **B20a** `Must` **Thumbnail rewrite Step 1 — baseline commit** — completed in commit `26536c5` (`Baseline: track thumbnail rewrite plan and deferred UX list`) as the branchpoint before rewrite work.
-- [x] **B20b** `Must` **Thumbnail rewrite Step 2 — single native thumbnail service** — completed: extracted thumbnail cache/request broker/generation strategy into `ThumbnailService` and switched existing list/gallery wrappers to delegate to the shared service.
-- [x] **B20c** `Must` **Thumbnail rewrite Step 3 — AppKit cell-owned lifecycle** — completed: gallery requests are owned by `AppKitGalleryItem` and list requests are owned by `BrowserListNameCellView`/`BrowserListIconView`; both cancel on reuse (`prepareForReuse`) and guard async completion with per-cell request tokens.
-- [x] **B20d** `Should` **Thumbnail rewrite Step 4 — native selection baseline** — completed: gallery selection now uses a Finder-like square thumbnail-zone highlight baseline, and square thumbnails render with equal inner padding on all four sides; image-hugging selector ring removed from the v1 rewrite path (tracked as optional post-v1.0 reintroduction in R19).
-- [x] **B20e** `Must` **Thumbnail rewrite Step 5 — unify inspector preview pipeline** — completed: inspector preview loading/preload/background warm paths now request images through the same shared thumbnail broker/service used by list/gallery, with shared cache/dedupe and priority-based request dispatch.
-
-### Sidebar
-- [x] **B19** ✅ **No TCC prompt on startup for Desktop/Downloads** — startup privacy access policy was consolidated so launch/background paths do not probe privacy-sensitive filesystem locations. Key points: (1) startup reconciliation of favorites/recents skips existence/readability validation for privacy-sensitive paths; (2) privacy-sensitive sidebar counts never load in background and only load after explicit user selection of that exact item. Result: Desktop/Downloads counts stay blank on app open; TCC prompt appears only on explicit selection.
-- [x] **B12** ✅ Implementation is correct; residual patchy shadow rendering matches Xcode's sidebar on macOS 26.2 — confirmed system compositor bug, not an app issue. Removed custom layer code; moved window config to `viewWillAppear`.
-
-### About panel
-- [x] **B13** ✅ About panel showed version 0.5 (1) instead of current version; `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` were hardcoded in target build settings, silently overriding Base.xcconfig. Removed from project.pbxproj — xcconfig is now sole source of truth.
-
-### SwiftUI rendering
-- [x] **B14** ✅ **`@Published` mutated during view update** — two sources fixed: (1) `.onChange(of: model.selectedSidebarID)` deferred `handleSidebarSelectionChange` via `Task { @MainActor in … }` to keep `loadFiles`/`clearLoadedContentState` out of the SwiftUI update cycle; (2) `BrowserListViewController.update()` called from `updateNSViewController` called `setSelectionFromList` synchronously when `shouldAdoptTableSelectionIntoModel()` returned true — fixed by clearing the table's stale row selection before `reloadData()` when items change (NSTableView preserves selection by row index across reloads), and additionally deferring `setSelectionFromList` via `Task` in the `shouldAdoptTableSelectionIntoModel()` path for robustness.
-- [x] **B15** ❌ `Should` **NSHostingView reentrant layout** — partially resolved: the B14 fix eliminated most instances. One remaining instance fires when QuickLook opens via spacebar: `makeKeyAndOrderFront` + `NSApp.activate` in `present()` trigger `windowDidResignKey` on the main window, which fires SwiftUI's `controlActiveState` update mid-keyDown event. Deferring these calls via `Task` fixes the warning but corrupts QL's opening animation (wrong source frame for `sourceFrameOnScreenFor`) and breaks the locked-height logic. Not fixable without a deeper architectural change; the skipped layout pass on QL open has no visible user impact.
-- [ ] **B22** `Should` **Intermittent "Publishing changes from within view updates is not allowed" still appears in Xcode debug output** — still open. A sidebar-local selection refactor was attempted then reverted due click-selection regression; safe change retained: Inspector sheet bindings now defer writes to `model.activePresetEditor` / `model.isManagePresetsPresented` through `Task { @MainActor ... }`. Remaining scope: trace the exact residual mutation path(s) without altering stable sidebar selection behavior.
-
-### Resources
-- [x] **B16** ❌ **Missing bundle resource "default.csv"** — investigated: no CSV code or references exist anywhere in the app sources. Message originates from a system framework (likely the image thumbnail pipeline or QuickLook generator) that looks for an optional `default.csv` in the app bundle and falls back gracefully when absent. No visible user impact; not actionable without a stack trace identifying the call site.
-- [ ] **B23** `Nice` **CMPhoto/IOSurface debug-log spam during large thumbnail/preview decode bursts** — repeated `CMPhotoJFIFUtilities err=-17102` and `IOSurface creation failed: e00002c2` messages observed in Xcode logs (2026-03-01). Currently treated as non-blocking framework-level noise unless correlated with user-visible failures (blank thumbnails, persistent decode failure, hangs, or crashes). Keep under observation during performance QA.
+### Pre-v1.0 release readiness notes
+- **B4** is currently marked cannot-reproduce and remains closed unless it resurfaces.
+- **B15** remains accepted as framework-constrained (QuickLook reentrant warning edge case with no visible user impact).
 
 ---
 
-## v1.0 — Outstanding polish
+## 2) Already Completed Before v1.0
 
-### Sidebar
-- [x] **P1** ~~SF Symbol accentcolor in context menus~~ — ✅ `.tint(Color.primary)` applied to context menu content, overriding the inherited accent tint; per-item `symbolRenderingMode`/`foregroundStyle` overrides removed.
-- [x] **P2** ❌ **Sidebar resize** — snap-to-collapse on drag is intentional macOS 26 Liquid Glass sidebar design (matches Finder and Xcode on 26.2); not an app bug. Three earlier attempts to override this behaviour reverted.
-- [x] **P3** ❌ **Sidebar toggle animation drops frames** — gallery thumbnails resize on every frame of the sidebar animation via `shouldInvalidateLayout(forBoundsChange:) -> true`, which is correct `NSCollectionViewFlowLayout` behaviour. Frame drops are a consequence of macOS 26's longer native `toggleSidebar` animation vs the shorter inspector animation (0.16s). Expected framework behaviour; no fix available without fighting the layout design.
-- [x] **P4** ✅ **Sidebar section collapse not instant under Reduce Motion** — `NavigationSidebarView` now reads `@Environment(\.accessibilityReduceMotion)`; `toggleSection` uses `Transaction` with `disablesAnimations = true` when set, matching the pattern already used by inspector sections. (QA checklist #55)
-- [x] **P5** ❌ **Recents section does not animate on collapse/expand** ❌ `DisclosureGroup` approach tried and reverted: SwiftUI renders `DisclosureGroup` in a `.listStyle(.sidebar)` List with a left-side chevron (tree-view style), not the right-side chevron used by native macOS sidebar section headers. No SwiftUI API to move the indicator without a fully custom `DisclosureGroupStyle`. Reverting preserves correct right-side chevron on all sections; Recents animation remains broken.
-- [x] **P6** ✅ **Favourites flows after relaunch** — verified in `AppModelTests`: pin/unpin/reorder survives relaunch (`testFavoriteOrderPersistsAcrossRelaunch`), and stale missing favourites are pruned on load via canonical-path reconciliation (`testFavoriteReconciliationDropsInvalidPaths`).
+### Bugs (B)
+- [x] **B1** Apply metadata menu state.
+- [x] **B2** Clear metadata menu state.
+- [x] **B3** Restore from backup menu state.
+- [x] **B4** Restore-skip bug (cannot reproduce after B17).
+- [x] **B5** View mode switching menu commands.
+- [x] **B6** Sort-by checkmark state.
+- [x] **B7** Zoom command enable/disable state.
+- [x] **B8** Sidebar/inspector toggle menu labeling.
+- [x] **B9** Stale inspector metadata after Apply.
+- [x] **B10** Gallery selector color change on rotate.
+- [x] **B11** Thumbnail flicker on rotate/flip.
+- [x] **B12** Sidebar shadow rendering triage (system behavior).
+- [x] **B13** About panel version/build mismatch.
+- [x] **B14** `@Published` mutation during view update (major paths).
+- [x] **B15** NSHostingView reentrant layout warning mostly mitigated; residual QuickLook path documented as acceptable for v1.
+- [x] **B16** Missing `default.csv` message triaged as non-actionable framework noise.
+- [x] **B17** TCC approval left browser empty.
+- [x] **B19** No Desktop/Downloads TCC prompt on startup.
+- [x] **B20** Gallery thumbnail glitch/reload blocker.
+- [x] **B20a** Thumbnail rewrite step 1 baseline.
+- [x] **B20b** Thumbnail rewrite step 2 shared thumbnail service.
+- [x] **B20c** Thumbnail rewrite step 3 cell-owned lifecycle.
+- [x] **B20d** Thumbnail rewrite step 4 native selection baseline.
+- [x] **B20e** Thumbnail rewrite step 5 unified inspector preview pipeline.
+- [x] **B21** Menu command ownership consolidated under AppKit.
 
-### Browser list
-- [x] **P7** ✅ **Column headers don't sort** — `NSSortDescriptor` prototypes added to all four columns; `tableView(_:sortDescriptorsDidChange:)` maps the clicked column key to `model.browserSort` and `model.browserSortAscending`; clicking the active column header toggles ascending/descending (matching Finder); nil values always sort last regardless of direction; `syncSortIndicator()` keeps the header arrow in sync when sort changes via the View menu; both sort column and direction persist across launches. Foundation is in place for R15 (configurable columns).
-- [x] **P8** ✅ **Selection out of view when switching gallery ↔ list** — list view: `browserDidSwitchViewMode` notification → `scrollRowToVisible`; gallery view: `lastRenderedViewMode` tracked in `renderState()`; on `justBecameActive`, `scrollSelectionIntoView()` calls `layoutSubtreeIfNeeded()` then `scrollToVisible(attrs.frame)` (deferred one run loop); `syncSelection` suppressed from scrolling during mode switch via `!justBecameActive` guard.
+### Polish (P)
+- [x] **P1** Context-menu SF Symbol tint normalization.
+- [x] **P2** Sidebar resize behavior triaged as intentional system behavior.
+- [x] **P3** Sidebar toggle frame drops triaged as expected layout cost.
+- [x] **P4** Sidebar section collapse honors Reduce Motion.
+- [x] **P5** Recents section animation limitation documented.
+- [x] **P6** Favorites relaunch/reconcile flows verified.
+- [x] **P7** List column-header sorting implemented.
+- [x] **P8** Selection scroll-into-view on list/gallery mode switch.
+- [x] **P9** Gallery selection ring superseded by B20d baseline.
+- [x] **P10** QuickLook positioning consistency.
+- [x] **P11** Dynamic inspector toggle labeling.
+- [x] **P12** Inspector toggle placement finalization.
+- [x] **P13** Inspector section collapse honors Reduce Motion.
+- [x] **P14** Inspector dropdown width limitation documented.
+- [x] **P15** Date/time picker layout correction.
+- [x] **P16** Folder menu renamed to Image menu.
+- [x] **P17** Apply metadata split into selection vs folder actions.
+- [x] **P18** Subtitle/status area priority and wording cleanup.
+- [x] **P19** Apply/restore partial-failure count messaging.
+- [x] **P20** Credits typography + version-source cleanup.
+- [x] **P21** Desktop prompt behavior documented (sandbox-dependent).
+- [x] **P22** Search bar removed from v1 UI (deferred feature).
+- [x] **P23** Sidebar toggle right-alignment limitation documented.
+- [x] **P24** Inspector picker invalid empty-tag race resolved.
+- [x] **P25** Toolbar pane grouping with tracking separators.
+- [x] **P26** Image-menu command scope and menu placement.
+- [x] **P27** Final menu structure lock.
 
-### Browser gallery
-- [x] **P9** ✅ Gallery selection ring geometry was tuned in 0.6; superseded by **B20d** in 0.7 baseline where gallery selection moved to a native tile-level highlight.
+### Native UI rewrite cleanup (N)
+- [x] **N1** Native `NSMenuToolbarItem` for Sort/Presets.
+- [x] **N2** Loading placeholder retained intentionally (no native replacement change).
+- [x] **N3** Sidebar count badge replaced with native `.badge(...)`.
+- [x] **N4** Focus-ring cleanup superseded by AppKit list/gallery rewrite.
+- [x] **N5** Pending-edit dot normalization across SwiftUI/AppKit surfaces.
+- [x] **N6** Dynamic inspector toggle label wiring.
+- [x] **N7** Inspector map view rewrite deferred to post-v1 AppKit inspector migration.
+- [x] **N8** Inspector preview button-style cleanup deferred with inspector migration.
+- [x] **N9** Dead preset-editor primary-button property removal.
+- [x] **N10** Duplicate alert-message branch simplification.
+- [x] **N11** Context-menu item boilerplate reduction helper.
 
-### QuickLook
-- [x] **P10** ✅ **QuickLook position inconsistent** — `QLPreviewPanel.center()` called before `makeKeyAndOrderFront` for first open; `NSWindow.didResizeNotification` observer locks panel height to QL's natural choice for the first image and derives width from QL's own aspect ratio for each subsequent image (mirrors Finder's behaviour); panel stays centred on screen across all navigation; if the panel is already open and the user has dragged it, size/position are still corrected on image change.
-
-### Inspector
-- [x] **P11** ~~Inspector toggle label static~~ — ✅ toolbar label and tooltip now dynamic via `updateInspectorToggle(with:)`. (QA log #6 was stale)
-- [x] **P12** ✅ Inspector toggle moved to immediately before the search field; Apply button now precedes it.
-- [x] **P13** ✅ **Inspector section collapse not instant under Reduce Motion** — `DisclosureGroup` binding setters already use `Transaction` with `disablesAnimations = true` when `reduceMotion` is on; `.animation(appAnimation(), value:)` on the outer scroll view returns nil under Reduce Motion. (QA checklist #56)
-- [x] **P14** ❌ **Inspector dropdown widths inconsistent** — `Picker(.menu)` renders as `NSPopUpButton` which has a content-driven intrinsic width and does not respond to `.frame(maxWidth: .infinity)`; each picker is as wide as its longest option. Not fixable without `NSViewRepresentable` to set `contentHuggingPriority(.defaultLow, for: .horizontal)` on the underlying button.
-- [x] **P15** ✅ **Date / time picker layout** — `DatePicker(.stepperField)` has a fixed intrinsic width and does not stretch; removed `.frame(maxWidth: .infinity)` from the picker and added `Spacer()` between it and the X button so the picker sits at its natural size left-aligned and the clear button is pinned to the right edge, matching the "no date" state layout.
-- [x] **P24** ✅ **Inspector picker sends invalid tag `""`** — was a race symptom of B14: `draftValues` being mutated mid-render caused the Picker selection to return `""` while its `options` list (computed before the mutation) didn't include a `""` entry. Resolved by the B14 fix; Picker options and selection binding now evaluate against a consistent model state.
-
-### Menus
-- [x] **P16** ~~"Folder" menu item should say "Image"~~ — ✅ `CommandMenu("Folder")` renamed to `CommandMenu("Image")`.
-- [x] **P17** ✅ **Apply metadata: split into two actions** — Image menu Apply is now split into "Apply Metadata Changes to [N Image(s)]" (dynamic selection count label, Cmd+S) and "Apply Metadata Changes to Folder" (folder-wide apply flow matching toolbar Apply). Both actions validate enabled state independently. Context-menu Apply label now uses the same dynamic selection-count title helper as the menu bar for exact wording parity.
-- [x] **P26** `Should` **Image-menu command scope + macOS-convention menu placement** — ensure image-level commands operate only on the current selection; place folder-wide actions in the macOS-conventional location (either a distinct subsection or the Folder menu); ensure context-menu actions always apply only to the right-click target selection.
-- [x] **P27** `Should` **Finalise menu structure** — lock the final top-level and context-menu command layout based on the agreed macOS-convention split from this conversation (including scope clarity between File/Image/Folder and consistent context-menu targeting).
-
-### Status / toolbar
-- [x] **P25** ✅ **Toolbar pane grouping** — added `inspectorTrackingSeparator` (`NSTrackingSeparatorToolbarItem` bound to `contentSplitController.splitView` divider 0); toolbar now has three zones: sidebar (`toggleSidebar`), browser (`openFolder`, `viewMode`, `sort`, `zoomOut`, `zoomIn`, `flexibleSpace`, `presetTools`, `applyChanges`), inspector (`toggleInspector`); each zone tracks its pane on resize. Hard line at toolbar bottom on inspector collapse is expected macOS Liquid Glass behaviour.
-- [x] **P18** ✅ **Subtitle / status area** — subtitle priority stack: applying → loading → transient status message → `"X of N images"` (partial selection) → `"N images"` (idle); preview-preload progress removed (not user-meaningful). Wording uses "images" throughout.
-- [x] **P19** ✅ **Apply partial failure count** — `"Applied X of N — Y failed"` / `"Restored X of N — Y failed"`; raw error string no longer appended inline.
-
-### Other
-- [x] **P20** ✅ Credits now use `smallSystemFontSize` matching the About panel's native credits area. Also fixed B13: `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` removed from target-level project.pbxproj settings that were overriding Base.xcconfig, so version and build now read correctly from the bundle.
-- [x] **P21** ❌ **Desktop TCC prompt not appearing** — not fixable without sandboxing. TCC prompts appear for all apps (sandboxed or not) for hardware/system data (Camera, Mic, Photos Library, etc.), but file-system location prompts (Desktop, Documents, Downloads) are only enforced for sandboxed apps on macOS 13+. Silent access to Desktop for a non-sandboxed app is correct macOS behaviour. Will resolve automatically when sandboxed for App Store submission (R11).
-- [x] **P22** ❌ **Search bar removed for v1.0** — name-only search is too limited for a metadata editor and the toolbar aesthetic was wrong. `searchQuery`/`filteredBrowserItems` infrastructure kept in AppModel (dormant); proper search deferred to post-v1.0 (see R14).
-- [x] **P23** ❌ **Sidebar toggle right-aligned when expanded** — not achievable without a custom tracking view. Moving `.toggleSidebar` after `.sidebarTrackingSeparator` places it in the content section alongside the other toolbar buttons (flexibleSpace pushes it right into the cluster). No clean native solution; reverted to standard left-aligned placement.
-
----
-
-## v1.0 — Outstanding native UI rewrites
-
-Replace custom implementations with idiomatic SwiftUI / AppKit equivalents.
-
-| ID | Item | Location | Target |
-|----|------|----------|--------|
-| N1 | ~~Sort / Presets toolbar items~~ | Toolbar | ✅ Implemented with native `NSMenuToolbarItem` for Sort and Presets (replacing manual toolbar-menu popup wiring). |
-| N2 | ~~`BrowserLoadingPlaceholderView`~~ | ~~line 1500~~ | ❌ No change — custom skeleton UI (shimmer rows + tile grid) is better than `ProgressView` (too generic) or `.redacted` (incompatible with `NSViewRepresentable`); existing implementation is correct SwiftUI. |
-| N3 | ~~Sidebar count label~~ | ~~line 1294~~ | ✅ `.badge(model.sidebarImageCountText(for: item).map { Text($0) })` — custom `Spacer` + fixed-width `Text` + `Color.clear` placeholder removed; consistent with Mail and Reminders |
-| N4 | ~~Focus ring on scroll views (2 sites)~~ | ~~~lines 1785, 2367~~ | ❌ Superseded by the AppKit list/gallery rewrite; focus-ring behavior is now controlled directly on `NSTableView`/`NSCollectionView` (`focusRingType = .none`) rather than legacy scroll-view sites. |
-| N5 | ~~Pending-edit dot (4 sites)~~ | ~~inspector label, inspector preview, list cell, gallery cell~~ | ✅ `Image(systemName: "circle.fill").foregroundStyle(.orange)` (SwiftUI sites); `NSImageView` + `NSImage(systemSymbolName:)` + `contentTintColor` (AppKit sites); `pendingDotCornerRadius` constants removed |
-| N6 | ~~`toggleInspector` label (static "Hide Inspector")~~ | ~~line 1021~~ | ✅ Done — dynamic label via `updateInspectorToggle(with:)` |
-| N7 | ~~`InspectorLocationMapView` NSViewRepresentable~~ | ~~~line 4554~~ | ❌ Superseded by near-term `R16` (Inspector AppKit rewrite). |
-| N8 | ~~`InspectorPreviewActionButtonStyle` + custom environment keys~~ | ~~~InspectorView.swift ~lines 5–61~~~ | ❌ Superseded by near-term `R16` (Inspector AppKit rewrite). |
-| N9 | ~~`editorPrimaryButtonTitle` dead computed property~~ | ~~PresetSheets.swift ~line 129~~ | ✅ Removed; preset editor primary button now uses direct `"Save"` label. |
-| N10 | ~~Duplicate alert message branches~~ | ~~PresetSheets.swift ~lines 109–115~~ | ✅ Collapsed duplicate `.alert` message branches into a single `Text(...)` block. |
-| N11 | ~~`NSMenuItem` 4-line-per-item boilerplate~~ | ~~BrowserListView.swift ~lines 520–556~~ | ✅ Replaced repeated per-item setup with a local `makeItem` helper (matching the gallery pattern). |
-
----
-
-## v1.0 — Architecture
-
-- [x] **A1** ✅ **Split MainContentView.swift** — 4,604 lines → 6 files: `NavigationSidebarView.swift` (206), `BrowserListView.swift` (758), `BrowserGalleryView.swift` (1,043), `InspectorView.swift` (681), `PresetSheets.swift` (438), `MainContentView.swift` residual (1,494). Clean build, no regressions.
-- [x] **A2** ~~Sidebar count badge latency~~ — ✅ `warmSidebarImageCounts()` call sites removed in 0.6; counts no longer preloaded on launch, eliminating the flash.
-- [x] **A3** ✅ **Browser center-pane container moved from SwiftUI wrapper to AppKit controller** — replaced `BrowserView` overlay-state wrapper with `BrowserContainerViewController` (`NSViewController`) that owns gallery/list child hosts and loading/empty/error overlays directly in AppKit, removing the SwiftUI structural-identity dependency in the center pane while preserving existing browser behavior.
-
-### Pre-v1.0 SwiftUI/AppKit stabilization plan (authoritative)
-
-Goal: keep SwiftUI sidebar + inspector for v1.0, but make the hybrid shell stable and predictable (no re-entrant update loops, no selection snap-back regressions).
-
-- [x] **A4** ✅ **Boundary ownership contract**
-  - AppKit owns: window/split views, menu validation/injection, pane sizing/collapse, first-responder routing.
-  - SwiftUI owns: sidebar/inspector content rendering only.
-  - AppModel is the sole mutable state authority.
-  - **Acceptance:** contract documented in `Architecture.md` under **Hybrid contract (A4, pre-v1.0 source of truth)** and referenced by this roadmap section.
-
-- [x] **A5** ✅ **One-way state flow at SwiftUI boundaries**
-  - Replace remaining two-way direct bridges that can write back during render.
-  - SwiftUI emits explicit user intent methods to `AppModel`; model pushes state down.
-  - **Acceptance:** no sidebar click/selection snap-back; folder activation stable under rapid repeated clicks.
-  - Implemented: `NavigationSidebarView` now uses local `sidebarSelection` state and forwards user changes through `handleExplicitSidebarSelectionChange(to:)`; legacy two-way sidebar suppression/revert path and stale event heuristics were removed from `AppModel`.
-
-- [x] **A6** ✅ **No synchronous model mutation in SwiftUI update cycle**
-  - Audit `onChange`, `DisclosureGroup` setters, focus callbacks, picker callbacks.
-  - Defer boundary writes (`DispatchQueue.main.async` / `Task { @MainActor ... }`) where required.
-  - **Acceptance:** must-fix warning `Publishing changes from within view updates is not allowed` no longer appears during normal smoke path.
-  - Implemented: sidebar selection intent dispatch deferred from `NavigationSidebarView.onChange`; inspector `DisclosureGroup` section-toggle writes deferred; preset-sheet model presentation bindings (`activePresetEditor`, `isManagePresetsPresented`) deferred through main-actor tasks.
-
-- [x] **A7** ✅ **Remove user-path auto-selection suppression**
-  - Keep privacy/startup auto-selection guards only for non-user/background paths.
-  - Explicit user selection paths must not be reverted by heuristics.
-  - **Acceptance:** selecting Desktop/Downloads/favorites/recents behaves deterministically, including after folder switches.
-  - Implemented: user-driven sidebar path now routes only through `handleExplicitSidebarSelectionChange(to:)`; legacy suppress/revert heuristics were removed from `AppModel`. Privacy-sensitive gating is retained only in startup/background flows (`reloadFilesIfBrowserEmpty`, sidebar count warm policy).
-
-- [x] **A8** ✅ **Targeted observation only in AppKit hosts**
-  - No broad `objectWillChange` observers in split/container hosts.
-  - Use explicit `@Published` subscriptions for toolbar/title/render triggers.
-  - **Acceptance:** no host-wide render storms attributable to broad observation.
-  - Implemented: `NativeThreePaneSplitViewController` now uses explicit `uiRefreshObservers`; `BrowserContainerViewController` now uses explicit `renderObservers`; both pipelines use targeted publishers with `removeDuplicates`.
-
-- [x] **A9** ✅ **No layout-time publish from AppKit callbacks**
-  - Split resize/layout notifications must not synchronously mutate SwiftUI-bound `@Published` state.
-  - Use deferred/coalesced pane-state sync.
-  - **Acceptance:** must-fix warning `NSHostingView is being laid out reentrantly while rendering its SwiftUI content` no longer appears on normal pane resize/toggle flows.
-  - Implemented: all AppKit pane-collapse state publication now routes through deferred/coalesced `schedulePaneStateSync()` (including startup and window-configuration paths); direct `syncSidebarCollapsedState()` / `syncInspectorCollapsedState()` calls were removed from `viewDidLoad`, initial inspector setup, and `configureWindowIfNeeded`, leaving split-resize/toggle flows on the same deferred path.
-
-- [x] **A10** ✅ **Warning gate + smoke checklist freeze**
-  - Add a compact smoke checklist and classify logs:
-    - Must-fix before v1.0:  
-      `Publishing changes from within view updates is not allowed`  
-      `NSHostingView is being laid out reentrantly while rendering its SwiftUI content`
-    - Observe only / framework noise unless user-visible breakage:
-      ICC/profile decode warnings, `CMPhotoJFIFUtilities`, `IOSurface` decode spam.
-  - Add and enforce the **PR architecture checklist** + **Hybrid release smoke checklist** in `Architecture.md`.
-  - **Acceptance:** checklist committed and used as release gate for v1.0 candidates.
-  - Implemented: `Architecture.md` now contains the frozen **Hybrid contract**, explicit **Warning gate**, required **PR architecture checklist**, and **Hybrid release smoke checklist** with must-fail conditions matching the two must-fix warnings above.
-
-Execution rule: complete A4→A10 in order; no sidebar/inspector visual rewrites during this track unless required to satisfy a must-fix warning or broken interaction.
-
-Pre-v1.0 scope guard: **do not** perform large AppKit rewrites of `NavigationSidebarView` or `InspectorView` before v1.0. Priority is hybrid stability (SwiftUI content + AppKit shell working correctly together).
+### Architecture and stabilization (A)
+- [x] **A1** Split `MainContentView.swift` into focused files.
+- [x] **A2** Sidebar count badge preload latency removal.
+- [x] **A3** Browser center pane moved to AppKit container.
+- [x] **A4** Hybrid AppKit/SwiftUI ownership contract formalized.
+- [x] **A5** One-way state flow at SwiftUI boundaries.
+- [x] **A6** Deferred boundary writes to avoid update-cycle publishes.
+- [x] **A7** Removed user-path auto-selection suppression.
+- [x] **A8** Targeted observation in AppKit hosts.
+- [x] **A9** No layout-time publish from AppKit callbacks.
+- [x] **A10** Warning gate + smoke checklist freeze in architecture docs.
 
 ---
 
-## Post-v1.0 roadmap
+## 3) Future Roadmap
 
-### v1.0.1
-- [ ] **R1** Full sidebar organiser — drag-and-drop group creation, import/export of favourite sets.
-- [x] **R2** Final branding consolidation — all user-facing labels, titles, and support paths consistent under the chosen app name. ✅ Completed via R3–R7 (Ledger project identity, runtime labels, defaults/app-support migration, and release artifact naming).
+### Near-term / v1.0.1 track
+- [ ] **R1** Full sidebar organizer (drag-drop group creation, import/export favorite sets).
+- [x] **R2** Branding consolidation complete (rolled up via R3-R7).
+- [x] **R3** Identity/build settings alignment to Ledger.
+- [x] **R4** Runtime labels/string audit for Ledger naming.
+- [x] **R5** UserDefaults key-domain migration and sentinel.
+- [x] **R6** App Support directory migration (`Logbook` -> `Ledger`).
+- [x] **R7** Release/distribution artifact naming (`Ledger.dmg`).
 
-### Branding rename (Ledger)
-Full blueprint: `output/BRANDING_NAMING_REFRESH_IMPLEMENTATION.md`. User-facing name is **Ledger** — partially applied. Remaining work:
-
-Current status: repo/project folder rename to `Ledger` is complete, display/bundle identifiers are `Ledger`, and Xcode target/scheme/plist/entitlements are now aligned to `Ledger`. Remaining `ExifEditMac` references are limited to SwiftPM module naming and explicit legacy migration compatibility paths.
-
-- [x] **R3** **A — Identity + build settings** — verify `project.pbxproj`, `.xcscheme`, `Info.plist`, `Base.xcconfig` are all consistent for Ledger. ✅ Done: target/scheme renamed to Ledger; Info.plist/entitlements renamed to `Config/Ledger-*`; release scripts default to `SCHEME_NAME=Ledger`.
-- [x] **R4** **B — Runtime strings + UI labels** — audit app runtime labels and any remaining hardcoded app-name strings for consistency. ✅ Runtime/user-facing labels now resolve via `AppBrand.displayName` (`Ledger`), with no stale user-visible app name strings found.
-- [x] **R5** **C — Persistent domains** — UserDefaults migration: read old `Logbook.*` keys as fallback; write sentinel `Ledger.Migration.v1Completed`. ✅ Sentinel + migration already in place; defaults reads now check current keys first, then `Logbook.*` fallback keys.
-- [x] **R6** **D — App Support directory** — atomic move `~/Library/Application Support/Logbook` → `Ledger`; fallback read from old path if move fails. ✅ `performBrandMigrationsIfNeeded()` + `migrateLegacySupportDirectoryIfNeeded()` implemented; stores read current path with legacy fallback candidates.
-- [x] **R7** **E — Release + distribution artifacts** — verify `scripts/release/*.sh` and DMG name output as `Ledger.dmg`. ✅ Release scripts use `Ledger.xcodeproj` and `APP_DISPLAY_NAME`; DMG name is derived from app bundle name (`$APP_NAME.dmg`), which resolves to `Ledger.dmg`.
-
-### Future features
-- [ ] **R8** GPX import and conflict-resolution UI (in QA matrix; currently untested).
-- [ ] **R9** Restore last-used folder on relaunch (consider privacy and removable-drive edge cases). (QA checklist #2)
-- [ ] **R10** Large-folder performance pass (1,000+ RAW files — scrolling, thumbnail loading, apply speed).
+### Feature roadmap
+- [ ] **R8** GPX import + conflict-resolution UI.
+- [ ] **R9** Restore last-used folder on relaunch.
+- [ ] **R10** Large-folder performance pass (1000+ RAW files).
 - [ ] **R11** App Store submission track.
 - [ ] **R12** Drag-and-drop metadata export / batch rename.
-### AppKit migration (iPad target dropped — pure macOS)
+- [ ] **R14** Metadata-aware search UI and query model.
+- [ ] **R15** Configurable list columns (show/hide/reorder + EXIF columns).
+- [ ] **R19** Optional gallery UX reintroduction pack.
+- [ ] **R20** Toolbar customization/editing support.
+- [ ] **R21** Long-term architecture principle: AppKit shell + SwiftUI islands.
 
-- [ ] **R13** **NavigationSidebarView → AppKit** (`NSTableView` flat sidebar) — explicitly deferred to post-v1.0 by pre-v1.0 scope guard; keep current SwiftUI sidebar and stabilize hybrid boundary first (A4–A10).
-- [ ] **R16** **InspectorView → AppKit** (`NSViewController` + `NSScrollView` + stacked field controls) — explicitly deferred to post-v1.0 by pre-v1.0 scope guard; keep current SwiftUI inspector and stabilize hybrid boundary first (A4–A10).
-- [ ] **R17** **PresetManagerSheet → AppKit** (`NSTableView` in `NSPanel`) — small SwiftUI `List` with same scroll/selection instability as the sidebar. Natural follow-on after R13; low implementation effort. Medium value.
-- [ ] **R18** **PresetEditorSheet → AppKit** (optional) — modal sheet; scroll stability matters less here. Main benefit would be DatePicker style consistency with Inspector (`.stepperField`), and removing the per-tag `valueBinding(for:)` pattern. Low priority.
-- [ ] **R14** **Search** — expand-to-field toolbar button (like Notes.app on macOS 26) with metadata-aware search: filename, date range, camera/lens, rating, keyword. `searchQuery`/`filteredBrowserItems` infrastructure already in place.
-- [ ] **R15** **Configurable list columns** — show/hide and reorder columns; add EXIF-backed columns (date modified, camera make/model, lens, focal length, ISO, aperture, shutter speed, pixel dimensions). Each new column gets a `BrowserSort` case and `NSSortDescriptor` prototype; sort and header infrastructure from P7 carries forward directly.
-- [ ] **R19** **Optional gallery UX reintroduction pack (post-v1.0)** — reintroduce non-baseline gallery polish one feature at a time: image-hugging selector ring, ring-anchored pending-dot positioning, ring geometry continuity during staged rotate/flip, tile/image transition polish beyond native defaults, and aggressive gallery prefetch heuristics.
-- [ ] **R20** **Toolbar customization/editing support** — support user-configurable toolbar composition/reordering in a future pass (while preserving native AppKit toolbar behavior and validation).
-- [ ] **R21** **Permanent architecture principle: AppKit shell + SwiftUI islands** — keep AppKit as the long-term owner of window/split/menu/focus lifecycle, with SwiftUI used selectively for contained content surfaces. Require explicit model-driven bridges and clear ownership boundaries for any new UI work.
+### AppKit migration track (post-v1)
+- [ ] **R13** Sidebar (`NavigationSidebarView`) -> AppKit `NSTableView`.
+- [ ] **R16** Inspector (`InspectorView`) -> AppKit `NSViewController`.
+- [ ] **R17** Preset manager sheet -> AppKit `NSTableView` panel.
+- [ ] **R18** Preset editor sheet -> AppKit (optional, lower priority).

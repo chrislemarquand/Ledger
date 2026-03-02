@@ -223,7 +223,10 @@ struct InspectorView: View {
                                                                 get: { model.dateValueForTag(tag) ?? date },
                                                                 set: {
                                                                     beginEditSessionIfNeeded(for: tag)
-                                                                    model.updateDateValue($0, for: tag)
+                                                                    let newDate = $0
+                                                                    DispatchQueue.main.async {
+                                                                        model.updateDateValue(newDate, for: tag)
+                                                                    }
                                                                 }
                                                             ),
                                                             displayedComponents: [.date, .hourAndMinute]
@@ -235,7 +238,9 @@ struct InspectorView: View {
 
                                                         Button {
                                                             beginEditSessionIfNeeded(for: tag)
-                                                            model.clearDateValue(for: tag)
+                                                            DispatchQueue.main.async {
+                                                                model.clearDateValue(for: tag)
+                                                            }
                                                         } label: {
                                                             Image(systemName: "xmark.circle.fill")
                                                                 .foregroundStyle(.secondary)
@@ -268,7 +273,10 @@ struct InspectorView: View {
 
                                                         Button("Set") {
                                                             beginEditSessionIfNeeded(for: tag)
-                                                            model.updateDateValue(Date(), for: tag)
+                                                            let now = Date()
+                                                            DispatchQueue.main.async {
+                                                                model.updateDateValue(now, for: tag)
+                                                            }
                                                         }
                                                         .controlSize(.small)
                                                     }
@@ -279,7 +287,10 @@ struct InspectorView: View {
                                                     set: {
                                                         guard $0 != model.valueForTag(tag) else { return }
                                                         beginEditSessionIfNeeded(for: tag)
-                                                        model.updateValue($0, for: tag)
+                                                        let newValue = $0
+                                                        DispatchQueue.main.async {
+                                                            model.updateValue(newValue, for: tag)
+                                                        }
                                                     }
                                                 )) {
                                                     let currentValue = model.valueForTag(tag)

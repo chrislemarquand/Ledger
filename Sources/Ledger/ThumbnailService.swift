@@ -7,6 +7,12 @@ enum ThumbnailService {
     private struct RequestKey: Hashable {
         let url: URL
         let requiredSide: Int
+        let lane: RequestLane
+    }
+
+    private enum RequestLane: Hashable {
+        case foreground
+        case background
     }
 
     private final class ThumbnailCache: @unchecked Sendable {
@@ -88,12 +94,13 @@ enum ThumbnailService {
 
         func request(
             key: RequestKey,
+            priority: TaskPriority,
             operation: @escaping @Sendable () async -> NSImage?
         ) async -> NSImage? {
             if let task = inflight[key] {
                 return await task.value
             }
-            let task = Task<NSImage?, Never> { [weak self] in
+            let task = Task<NSImage?, Never>(priority: priority) { [weak self] in
                 guard let self else { return nil }
                 return await self.runWithPermit(operation)
             }
@@ -182,9 +189,29 @@ enum ThumbnailService {
             return cached
         }
 
-        let key = RequestKey(url: url, requiredSide: normalizedSide)
-        return await broker.request(key: key) {
+        let lane = requestLane(for: Task.currentPriority)
+        let taskPriority = taskPriority(for: lane)
+        let key = RequestKey(url: url, requiredSide: normalizedSide, lane: lane)
+        return await broker.request(key: key, priority: taskPriority) {
             await generateThumbnail(fileURL: url, maxPixelSize: CGFloat(normalizedSide))
+        }
+    }
+
+    private static func requestLane(for priority: TaskPriority) -> RequestLane {
+        switch priority {
+        case .userInitiated, .high:
+            return .foreground
+        default:
+            return .background
+        }
+    }
+
+    private static func taskPriority(for lane: RequestLane) -> TaskPriority {
+        switch lane {
+        case .foreground:
+            return .userInitiated
+        case .background:
+            return .utility
         }
     }
 

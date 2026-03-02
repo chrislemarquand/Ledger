@@ -363,14 +363,18 @@ struct PresetManagerSheet: View {
 
             HStack {
                 Button("New Preset…") {
-                    model.beginCreateBlankPreset()
-                    model.isManagePresetsPresented = false
+                    DispatchQueue.main.async {
+                        model.beginCreateBlankPreset()
+                        model.isManagePresetsPresented = false
+                    }
                 }
 
                 Button("Edit…") {
                     guard let selectedPresetID else { return }
-                    model.beginEditPreset(selectedPresetID)
-                    model.isManagePresetsPresented = false
+                    DispatchQueue.main.async {
+                        model.beginEditPreset(selectedPresetID)
+                        model.isManagePresetsPresented = false
+                    }
                 }
                 .disabled(selectedPresetID == nil)
 
@@ -388,7 +392,9 @@ struct PresetManagerSheet: View {
                 Spacer()
 
                 Button("Done") {
-                    model.isManagePresetsPresented = false
+                    DispatchQueue.main.async {
+                        model.isManagePresetsPresented = false
+                    }
                 }
                 .keyboardShortcut(.cancelAction)
             }
