@@ -4,6 +4,13 @@ All notable changes to Ledger are documented here.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **Inspector map sustained CPU** (~10% at idle with a GPS-tagged image selected): `InspectorLocationMapView` used a live `MKMapView` (`InspectorPassthroughMapView` subclass) which unconditionally starts a VectorKit display link on init, running full tile-geometry decode and label layout at 60 fps indefinitely, even when the map is completely static. Diagnosed via Instruments Time Profiler — VectorKit was 25% of total trace weight. Fix: replaced the `NSViewRepresentable`-wrapped `MKMapView` with a `MKMapSnapshotter`-based SwiftUI view that renders a one-shot static image, composites a pin annotation using `lockFocusFlipped(true)`, and re-renders only when coordinates or frame size change. No display link; CPU settles to <1% at idle.
+
+---
+
 ## [1.0.0] — 2026-03-03
 
 ### Fixed

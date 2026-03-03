@@ -683,54 +683,63 @@ private struct InspectorPreviewImageView: View {
 }
 
 
-private struct InspectorLocationMapView: NSViewRepresentable {
+// Renders a static map snapshot via MKMapSnapshotter — no live MKMapView display link.
+private struct InspectorLocationMapView: View {
     let coordinate: CLLocationCoordinate2D
-    private let defaultSpan = MKCoordinateSpan(latitudeDelta: 0.004, longitudeDelta: 0.004)
+    @State private var snapshotImage: NSImage?
 
-    func makeNSView(context _: Context) -> MKMapView {
-        let view = InspectorPassthroughMapView(frame: .zero)
-        view.isPitchEnabled = false
-        view.isRotateEnabled = false
-        view.showsCompass = false
-        view.showsScale = false
-        view.isZoomEnabled = true
-        view.isScrollEnabled = false
-        view.setRegion(
-            MKCoordinateRegion(
-                center: coordinate,
-                span: defaultSpan
-            ),
-            animated: false
+    var body: some View {
+        GeometryReader { geometry in
+            Group {
+                if let image = snapshotImage {
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .clipped()
+                } else {
+                    Color(nsColor: .windowBackgroundColor)
+                }
+            }
+            .task(id: taskKey(geometry.size)) {
+                snapshotImage = await makeSnapshot(size: geometry.size)
+            }
+        }
+    }
+
+    private func taskKey(_ size: CGSize) -> String {
+        "\(coordinate.latitude),\(coordinate.longitude),\(Int(size.width)),\(Int(size.height))"
+    }
+
+    @MainActor
+    private func makeSnapshot(size: CGSize) async -> NSImage? {
+        guard size.width > 0, size.height > 0 else { return nil }
+        let options = MKMapSnapshotter.Options()
+        options.region = MKCoordinateRegion(
+            center: coordinate,
+            span: MKCoordinateSpan(latitudeDelta: 0.004, longitudeDelta: 0.004)
         )
-        let annotation = MKPointAnnotation()
-        annotation.coordinate = coordinate
-        view.addAnnotation(annotation)
-        return view
-    }
+        options.size = size
+        guard let snapshot = try? await MKMapSnapshotter(options: options).start() else { return nil }
 
-    func updateNSView(_ view: MKMapView, context _: Context) {
-        // Defer AppKit mutations: addAnnotation/setRegion can propagate setNeedsLayout
-        // up through the view hierarchy to the NSHostingView, calling layout() while
-        // SwiftUI is still inside updateNSView → NSHostingView reentrant layout fault.
-        let coordinate = coordinate
-        let region = MKCoordinateRegion(center: coordinate, span: defaultSpan)
-        DispatchQueue.main.async { [weak view] in
-            guard let view else { return }
-            view.removeAnnotations(view.annotations)
-            let annotation = MKPointAnnotation()
-            annotation.coordinate = coordinate
-            view.addAnnotation(annotation)
-            view.setRegion(region, animated: false)
+        // Composite a pin onto the snapshot image.
+        // lockFocusFlipped(true) gives a top-left origin / y-down coordinate space,
+        // which matches the coordinate space of snapshot.point(for:).
+        let baseImage = snapshot.image
+        let result = NSImage(size: baseImage.size)
+        result.lockFocusFlipped(true)
+        baseImage.draw(in: NSRect(origin: .zero, size: baseImage.size))
+        let pinPoint = snapshot.point(for: coordinate)
+        let pinSize: CGFloat = 22
+        if let pin = NSImage(systemSymbolName: "mappin.circle.fill", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(paletteColors: [.white, .systemRed])) {
+            pin.draw(in: NSRect(
+                x: pinPoint.x - pinSize / 2,
+                y: pinPoint.y - pinSize / 2,
+                width: pinSize,
+                height: pinSize
+            ))
         }
-    }
-}
-
-private final class InspectorPassthroughMapView: MKMapView {
-    override func scrollWheel(with event: NSEvent) {
-        if let scrollView = enclosingScrollView {
-            scrollView.scrollWheel(with: event)
-            return
-        }
-        super.scrollWheel(with: event)
+        result.unlockFocus()
+        return result
     }
 }
