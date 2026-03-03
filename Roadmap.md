@@ -33,6 +33,9 @@ Primary objective: get import right end-to-end.
 - [ ] Import conflict-resolution UX (unmatched/conflict buckets, explicit user resolution).
 - [ ] Deterministic import reporting and dry-run parity.
 
+### Browser
+- [ ] Click-to-drag rubber-band selection in list and gallery views.
+
 ### Settings
 - [ ] Inspector field visibility controls.
 - [ ] Backup enable/disable controls with menu/context behavior alignment.
