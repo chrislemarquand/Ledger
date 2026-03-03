@@ -19,10 +19,11 @@
     {
       "layers" : [
         {
-          "image-name" : "liquid_glass_lens_optic_cue2.svg",
-          "name" : "liquid_glass_lens_optic_cue2",
+          "glass" : true,
+          "image-name" : "new4.svg",
+          "name" : "new4",
           "position" : {
-            "scale" : 1.1,
+            "scale" : 0.9,
             "translation-in-points" : [
               0,
               0
