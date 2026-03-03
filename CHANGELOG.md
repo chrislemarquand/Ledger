@@ -4,6 +4,45 @@ All notable changes to Ledger are documented here.
 
 ---
 
+## [1.0.0] — 2026-03-03
+
+### Fixed
+- **Apply Metadata toolbar button** did not activate immediately after a metadata edit; the button only updated when selection changed. Root cause: `installUIRefreshObservers()` was missing `model.$inspectorRefreshRevision` and `model.$stagedOpsDisplayToken`. Menu items are unaffected because they pull state on demand via `menuWillOpen`; toolbar items require explicit pushing. Both publishers now added to the observer list.
+- **Sidebar empty-space click** caused content to shift up slightly as SwiftUI's `List(selection:)` briefly set the selection to nil before the model sync restored it. Fix: the `onChange` handler now intercepts nil and immediately re-asserts `model.selectedSidebarID`, matching standard macOS sidebar behaviour (Finder, Music) where clicking empty space never deselects.
+- **Backup directory** was stored at `~/Library/Application Support/ExifEdit/Backups` (a legacy path) rather than `~/Library/Application Support/Ledger/Backups` alongside all other app data. Both the engine's `BackupManager` and the startup prune task now receive the correct `Ledger/Backups` base directory from `AppModel`.
+
+### Changed
+- About panel credits text is now centre-aligned.
+- New app icon.
+- Marketing version bumped to `1.0.0`.
+
+---
+
+## [0.8.2-rc.2] — 2026-03-03
+
+### Fixed
+- **B24** Gallery zoom (Cmd+/Cmd−) changed the zoom level but the `NSCollectionView` layout did not refresh until a thumbnail was clicked. Fix: `model.$galleryGridLevel` added to `installRenderObservers()`.
+- **B25** Sidebar label showed the wrong folder name after pin/unpin. Two-part fix: `pinFavorite` no longer silently jumps selection to the newly-pinned item when something else is selected; `unpinSidebarItem` now always calls `selectSidebar` with a correctly-resolved landing target (adjacent favourite → restored Recent → nil).
+- **B26** List view selection rendered as grey/inactive after a gallery→list mode switch, preventing keyboard interaction. Fix: `makeFirstResponder` deferred until `update()` (after the view is visible) by detecting `justBecameActive` via `lastRenderedViewMode`.
+- **B27** Stale sidebar entries (for folders deleted or emptied to Trash) persisted after relaunch. Fix: `loadFiles` now detects `NSFileNoSuchFileError`/`NSFileReadNoSuchFileError` and immediately removes the stale favourite or recent entry.
+- **B28** Scroll-into-view worked on list→gallery switches but not gallery→list. Fix: `scrollView.layoutSubtreeIfNeeded()` used instead of `collectionView.layoutSubtreeIfNeeded()` to drive top-down layout before querying item frames.
+- **B29** QuickLook panel height not consistently locked across images. Fix: `lockedHeight` is now always cleared in `present()`, not only when the panel was hidden.
+- **B30** QuickLook panel re-centring after drag was inconsistent. The `panelDidResize` height-lock + re-centre handler confirmed correct and necessary; without it AppKit anchors the bottom-left on resize.
+- **B31** View → Sort By menu order (Name, Kind, Date Created, Size) did not match toolbar/columns order (Name, Date Created, Size, Kind). Fixed by reordering to Name, Date Created, Size, Kind with renumbered key equivalents ⌘⌃⌥1–4.
+- **B32** Gallery thumbnail pending-edit dot did not appear after editing metadata until another image was selected. Fix: `model.$inspectorRefreshRevision` added to `installRenderObservers()`.
+- **B33** `EXIF:DateTimeDigitized` was not writable — exiftool names the tag `CreateDate`, not `DateTimeDigitized`. Fixed the `EditableTag` key; both write and clear now work correctly.
+- **B34** Apply success subtitle showed "Metadata applied" instead of "Applied N images". Fixed to use `result.succeeded.count`.
+- **B35** Partial apply failures were silent when exiftool exited 0 but emitted a "doesn't exist or isn't writable" warning on stderr. Fix: stderr is now scanned for this warning on write operations and the file is counted as failed even on exit 0.
+- **B36** Cmd+Z undid one character at a time in text fields instead of the entire field edit. Fix: `updateValue` now coalesces within an edit session via `undoCoalescingTagID`; only the first keystroke pushes an undo entry. `endUndoCoalescing()` is called on focus and selection change.
+- **B37** "Restore from Backup" remained enabled after a successful restore. Fix: successfully-restored operation IDs are now removed from `lastOperationIDs`/`lastOperationFilesByID` so `hasRestorableBackup` returns false.
+- **B38/B39** Inspector and sidebar section collapse/expand reduce-motion regressions: cannot reproduce — closed as not a bug.
+- **B40** QuickLook open/close transition not simplified under Reduce Motion: closed as framework-constrained (QLPreviewPanel owns its animation engine; Finder is identical).
+- **B41** Preset name uniqueness not enforced — "Keep Both" allowed duplicates. Fix: "Keep Both" / `saveAsDuplicate` removed; the duplicate-name alert now offers only Replace or Cancel.
+- **Inspector picker fault** `Picker: the selection "" is invalid` on multi-selection: `tag("")` is now always the first unconditional item in all pickers, preventing SwiftUI validation failure before ViewBuilder content is fully evaluated.
+- **Inspector preview / gallery thumbnail disappear on rotate undo/redo**: `applyPendingEditState` was calling `invalidateInspectorPreviews`, clearing the raw disk image cache even though no file had changed. Fix: removed the `invalidateInspectorPreviews` call; `stagedOpsDisplayToken` bumped instead so gallery cells reconfigure with the updated transform.
+
+---
+
 ## [0.8.1-rc.1a] — build 145 — 2026-03-02
 
 ### Fixed

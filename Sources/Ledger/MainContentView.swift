@@ -228,6 +228,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         observe(model.$statusMessage)
         observe(model.$isSidebarCollapsed)
         observe(model.$isInspectorCollapsed)
+        observe(model.$inspectorRefreshRevision)
+        observe(model.$stagedOpsDisplayToken)
     }
 
     override func viewDidLoad() {

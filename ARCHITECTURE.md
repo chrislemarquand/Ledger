@@ -80,6 +80,8 @@ All `NSHostingController` instances use `.sizingOptions = []` so SwiftUI does no
 
 The toolbar is built entirely in AppKit (`NativeToolbarDelegate`). Top-level menus are also rebuilt/injected in AppKit (`MainContentView.swift`) and validated through `NSMenuItemValidation`. Actions route through the responder chain with `NSApp.sendAction(_:to:from:)`.
 
+**Toolbar vs menu enabled-state pattern**: menu items *pull* state on demand via `menuWillOpen` (always fresh). Toolbar items must be *pushed* — `NativeToolbarDelegate.refreshFromModel()` sets `item.isEnabled` and is called from `installUIRefreshObservers()` in `NativeThreePaneSplitViewController`. If a toolbar button fails to reflect a state change, the relevant `@Published` property is missing from that observer list.
+
 ---
 
 ## AppModel
@@ -240,7 +242,7 @@ Before merging any UI-facing change, verify and record:
 - Warning gate check:
   - normal smoke path does not emit must-fix warnings listed above
 
-#### Hybrid release smoke checklist (v1.0 gate)
+#### Hybrid release smoke checklist (run on each release candidate)
 
 Run this path on release candidates:
 
@@ -293,6 +295,6 @@ This is harmless — ignore it.
 | Target | Run with | Status |
 |--------|----------|--------|
 | `ExifEditCoreTests` | `swift test` or xcodebuild | Runnable |
-| `ExifEditMacTests` (in `Tests/LedgerTests`) | `swift test` | Runnable |
+| `ExifEditMacTests` (in `Tests/LedgerTests`) | — | Compiles but **not runnable**: `AppModel` depends on AppKit and the full app environment; the executable target limitation prevents running these tests in isolation |
 
-`swift test` currently runs both core and app-level test targets in this repo layout.
+Run `swift test` or `xcodebuild test` to execute `ExifEditCoreTests` only.

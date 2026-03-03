@@ -35,21 +35,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let purpose = "Edit photo metadata — EXIF, IPTC, and XMP — powered by ExifTool."
         let nativeFont = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
         let nativeColor = NSColor.secondaryLabelColor
+        let centred = NSMutableParagraphStyle()
+        centred.alignment = .center
+        let baseAttributes: [NSAttributedString.Key: Any] = [
+            .font: nativeFont,
+            .foregroundColor: nativeColor,
+            .paragraphStyle: centred
+        ]
         let credits = NSMutableAttributedString(
             string: "\(purpose)\n\nUses ExifTool \(exifToolVersion) by Phil Harvey\n",
-            attributes: [
-                .font: nativeFont,
-                .foregroundColor: nativeColor
-            ]
+            attributes: baseAttributes
         )
         let linkText = "https://exiftool.org/"
         let linkRange = NSRange(location: credits.length, length: (linkText as NSString).length)
         credits.append(NSAttributedString(
             string: linkText,
-            attributes: [
-                .font: nativeFont,
-                .foregroundColor: nativeColor
-            ]
+            attributes: baseAttributes
         ))
         credits.addAttributes(
             [

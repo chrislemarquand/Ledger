@@ -1,8 +1,8 @@
 {
   "fill" : {
     "linear-gradient" : [
-      "display-p3:0.34912,0.67480,0.63916,1.00000",
-      "display-p3:0.46610,0.91010,0.86784,1.00000"
+      "display-p3:0.34961,0.67480,0.63916,1.00000",
+      "display-p3:0.38891,0.75937,0.72411,1.00000"
     ],
     "orientation" : {
       "start" : {
@@ -18,24 +18,11 @@
   "groups" : [
     {
       "layers" : [
-
-      ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
-      },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.5
-      }
-    },
-    {
-      "layers" : [
         {
-          "image-name" : "lens_teal_shift_most.png",
-          "name" : "lens_teal_shift_most",
+          "image-name" : "new.svg",
+          "name" : "new",
           "position" : {
-            "scale" : 0.64,
+            "scale" : 1.3,
             "translation-in-points" : [
               0,
               0

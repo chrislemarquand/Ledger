@@ -65,6 +65,14 @@ struct NavigationSidebarView: View {
         .onChange(of: sidebarSelection) { oldValue, newValue in
             guard !isApplyingModelSelection else { return }
             guard oldValue != newValue else { return }
+            guard let newValue else {
+                // User clicked empty space — restore existing selection without side effects.
+                // Standard Mac sidebar behaviour: clicking empty space never deselects.
+                DispatchQueue.main.async {
+                    sidebarSelection = model.selectedSidebarID
+                }
+                return
+            }
             // Defer out of the SwiftUI update cycle to avoid re-entrant publish warnings.
             DispatchQueue.main.async {
                 model.handleExplicitSidebarSelectionChange(to: newValue)

@@ -644,7 +644,8 @@ final class AppModel: ObservableObject {
             }
         }
 
-        engine = ExifEditEngine(exifToolService: service)
+        let backupDirectory = AppBrand.currentSupportDirectoryURL().appendingPathComponent("Backups", isDirectory: true)
+        engine = ExifEditEngine(exifToolService: service, backupManager: BackupManager(baseDirectory: backupDirectory))
         self.presetStore = presetStore
         self.favoritesStore = favoritesStore
         self.recentLocationsStore = recentLocationsStore
@@ -664,8 +665,8 @@ final class AppModel: ObservableObject {
             selectedPresetID = selectedPresetUUID
         }
         loadPresets()
-        Task.detached(priority: .background) {
-            try? BackupManager().pruneOperations(keepLast: 20)
+        Task.detached(priority: .background) { [backupDirectory] in
+            try? BackupManager(baseDirectory: backupDirectory).pruneOperations(keepLast: 20)
         }
 
     }
