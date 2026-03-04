@@ -326,17 +326,14 @@ final class AppModel: ObservableObject {
             .init(id: "exif-model", namespace: .exif, key: "Model", label: "Model", section: "Camera"),
             .init(id: "exif-serial", namespace: .exif, key: "SerialNumber", label: "Serial Number", section: "Camera"),
             .init(id: "exif-lens", namespace: .exif, key: "LensModel", label: "Lens Model", section: "Camera"),
-            .init(id: "exif-lens-exif", namespace: .exif, key: "Lens", label: "Lens (EXIF)", section: "Camera"),
             .init(id: "exif-aperture", namespace: .exif, key: "FNumber", label: "Aperture", section: "Capture"),
             .init(id: "exif-shutter", namespace: .exif, key: "ExposureTime", label: "Shutter Speed", section: "Capture"),
             .init(id: "exif-iso", namespace: .exif, key: "ISO", label: "ISO", section: "Capture"),
             .init(id: "exif-focal", namespace: .exif, key: "FocalLength", label: "Focal Length", section: "Capture"),
             .init(id: "exif-exposure-program", namespace: .exif, key: "ExposureProgram", label: "Exposure Program", section: "Capture"),
             .init(id: "exif-flash", namespace: .exif, key: "Flash", label: "Flash", section: "Capture"),
-            .init(id: "exif-flash-fired", namespace: .exif, key: "FlashFired", label: "Flash Fired", section: "Capture"),
             .init(id: "exif-metering-mode", namespace: .exif, key: "MeteringMode", label: "Metering Mode", section: "Capture"),
             .init(id: "exif-exposure-comp", namespace: .exif, key: "ExposureCompensation", label: "Exposure Compensation", section: "Capture"),
-            .init(id: "xmp-exposure-bias", namespace: .xmp, key: "ExposureBiasValue", label: "Exposure Bias (XMP)", section: "Capture"),
             .init(id: "datetime-modified", namespace: .exif, key: "ModifyDate", label: "Date Time", section: "Date and Time"),
             .init(id: "datetime-digitized", namespace: .exif, key: "CreateDate", label: "Date Time Digitized", section: "Date and Time"),
             .init(id: "datetime-created", namespace: .exif, key: "DateTimeOriginal", label: "Date Time Original", section: "Date and Time"),
@@ -347,7 +344,6 @@ final class AppModel: ObservableObject {
             .init(id: "xmp-title", namespace: .xmp, key: "Title", label: "Title", section: "Descriptive"),
             .init(id: "xmp-description", namespace: .xmp, key: "Description", label: "Description", section: "Descriptive"),
             .init(id: "xmp-subject", namespace: .xmp, key: "Subject", label: "Keywords", section: "Descriptive"),
-            .init(id: "iptc-keywords", namespace: .iptc, key: "Keywords", label: "Keywords (IPTC)", section: "Descriptive"),
             .init(id: "exif-artist", namespace: .exif, key: "Artist", label: "Artist", section: "Rights"),
             .init(id: "exif-copyright", namespace: .exif, key: "Copyright", label: "Copyright", section: "Rights"),
             .init(id: "xmp-creator", namespace: .xmp, key: "Creator", label: "Creator", section: "Rights"),
@@ -1919,11 +1915,6 @@ final class AppModel: ObservableObject {
                 .init(value: "93", label: "Auto, Fired, Red-Eye, No Return"),
                 .init(value: "95", label: "Auto, Fired, Red-Eye, Return Detected")
             ]
-        case "exif-flash-fired":
-            base = [
-                .init(value: "0", label: "No"),
-                .init(value: "1", label: "Yes"),
-            ]
         case "exif-metering-mode":
             base = [
                 .init(value: "0", label: "Unknown"),
@@ -2620,15 +2611,49 @@ final class AppModel: ObservableObject {
         let unique = Array(Set(files)).sorted(by: { $0.path < $1.path })
         guard !unique.isEmpty else { return [:] }
         let snapshots = await readMetadataBatchResilient(unique)
-        guard !snapshots.isEmpty else { return [:] }
-
-        var result: [URL: FileMetadataSnapshot] = [:]
         var map = metadataByFile
+
+        // Start from cached metadata so imports still work if one refresh call fails.
+        var result: [URL: FileMetadataSnapshot] = [:]
+        for fileURL in unique {
+            if let cached = map[fileURL] {
+                result[fileURL] = cached
+            }
+        }
+
+        // Merge fresh reads on top of cache.
         for snapshot in snapshots {
             result[snapshot.fileURL] = snapshot
             map[snapshot.fileURL] = snapshot
             staleMetadataFiles.remove(snapshot.fileURL)
         }
+
+        // Import matching should see staged values (for example, staged EOS date/time before apply).
+        for fileURL in unique {
+            guard var snapshot = result[fileURL],
+                  let staged = pendingEditsByFile[fileURL],
+                  !staged.isEmpty
+            else {
+                continue
+            }
+
+            var fields = snapshot.fields
+            for (tag, record) in staged {
+                let value = record.value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let index = fields.firstIndex(where: { $0.namespace == tag.namespace && $0.key == tag.key }) {
+                    if value.isEmpty {
+                        fields.remove(at: index)
+                    } else {
+                        fields[index] = MetadataField(key: tag.key, namespace: tag.namespace, value: value)
+                    }
+                } else if !value.isEmpty {
+                    fields.append(MetadataField(key: tag.key, namespace: tag.namespace, value: value))
+                }
+            }
+            snapshot = FileMetadataSnapshot(fileURL: snapshot.fileURL, fields: fields)
+            result[fileURL] = snapshot
+        }
+
         metadataByFile = map
         return result
     }
@@ -4121,9 +4146,6 @@ final class AppModel: ObservableObject {
         case "exif-flash":
             candidateKeys = [tag.key, "FlashFired", "FlashMode"]
             candidateNamespaces = [.exif, .xmp]
-        case "exif-flash-fired":
-            candidateKeys = [tag.key, "Flash"]
-            candidateNamespaces = [.exif, .xmp]
         case "exif-metering-mode":
             candidateKeys = [tag.key]
             candidateNamespaces = [.exif, .xmp]
@@ -4418,7 +4440,7 @@ final class AppModel: ObservableObject {
         if tag.id == "exif-shutter" {
             return formatExposureTime(trimmed)
         }
-        if tag.id == "exif-exposure-program" || tag.id == "exif-flash" || tag.id == "exif-flash-fired" || tag.id == "exif-metering-mode" {
+        if tag.id == "exif-exposure-program" || tag.id == "exif-flash" || tag.id == "exif-metering-mode" {
             return normalizeEnumRawValue(trimmed)
         }
         if tag.id == "exif-aperture" || tag.id == "exif-focal" || tag.id == "exif-iso" || tag.id == "exif-exposure-comp" || tag.id == "xmp-exposure-bias" {

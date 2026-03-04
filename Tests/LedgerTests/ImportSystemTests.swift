@@ -66,6 +66,42 @@ final class ImportSystemTests: XCTestCase {
         XCTAssertEqual(result.rows[1].targetSelector, .rowNumber(2))
     }
 
+    func testCSVImportAdapterRowParityRespectsStartAndCount() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let csv = temp.appendingPathComponent("input.csv")
+        try """
+        Title
+        A
+        B
+        C
+        D
+        """.write(to: csv, atomically: true, encoding: .utf8)
+
+        var options = ImportRunOptions.defaults(for: .csv)
+        options.matchStrategy = .rowParity
+        options.rowParityStartRow = 2
+        options.rowParityRowCount = 2
+        let context = ImportParseContext(
+            options: options,
+            sourceURL: csv,
+            auxiliaryURLs: [],
+            targetFiles: [],
+            tagCatalog: [
+                .init(id: "xmp-title", key: "Title", namespace: .xmp, label: "Title", section: "Descriptive"),
+            ],
+            metadataByFile: [:]
+        )
+
+        let result = try CSVImportAdapter().parse(context: context)
+        XCTAssertEqual(result.rows.count, 2)
+        XCTAssertEqual(result.rows[0].sourceIdentifier, "Row 002")
+        XCTAssertEqual(result.rows[0].targetSelector, .rowNumber(1))
+        XCTAssertEqual(result.rows[1].sourceIdentifier, "Row 003")
+        XCTAssertEqual(result.rows[1].targetSelector, .rowNumber(2))
+    }
+
     func testMatcherFlagsDuplicateSourceIdentifiersAsConflicts() {
         let rows: [ImportRow] = [
             .init(
@@ -328,6 +364,32 @@ final class ImportSystemTests: XCTestCase {
         XCTAssertEqual(prepared.parseResult.rows.count, 2)
     }
 
+    func testEOSAdapterStripsExcelEqualsFromShutterSpeed() async throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let csv = temp.appendingPathComponent("eos-tv-equals.csv")
+        try """
+        ,Frame No.,Tv,Av,ISO (M),Date,Time
+        ,1,="1/200",2.8,200,8/10/2025,12:33:42
+        """.write(to: csv, atomically: true, encoding: .utf8)
+
+        let model = makeModel()
+        let coordinator = ImportCoordinator()
+        var options = ImportRunOptions.defaults(for: .eos1v)
+        options.sourceURLPath = csv.path
+
+        let prepared = try await coordinator.prepareRun(
+            options: options,
+            targetFiles: [URL(fileURLWithPath: "/tmp/001.jpg")],
+            tagCatalog: model.importTagCatalog,
+            metadataProvider: { _ in [:] }
+        )
+
+        let shutter = prepared.parseResult.rows.first?.fields.first(where: { $0.tagID == "exif-shutter" })?.value
+        XCTAssertEqual(shutter, "1/200")
+    }
+
     func testEOSAdapterParsesUnicodeLineSeparatorLineEndings() async throws {
         let temp = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: temp) }
@@ -355,6 +417,129 @@ final class ImportSystemTests: XCTestCase {
         XCTAssertEqual(prepared.parseResult.rows.count, 2)
     }
 
+    func testEOSAdapterRowParityRespectsStartAndCount() async throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let csv = temp.appendingPathComponent("eos-window.csv")
+        try """
+        ,Frame No.,Tv,Av,ISO (M),Date,Time
+        ,1,="1/60",2.8,200,8/10/2025,12:33:42
+        ,2,="1/125",4.0,200,8/10/2025,12:35:42
+        ,3,="1/250",5.6,200,8/10/2025,12:37:42
+        """.write(to: csv, atomically: true, encoding: .utf8)
+
+        let model = makeModel()
+        let coordinator = ImportCoordinator()
+        var options = ImportRunOptions.defaults(for: .eos1v)
+        options.sourceURLPath = csv.path
+        options.matchStrategy = .rowParity
+        options.rowParityStartRow = 2
+        options.rowParityRowCount = 1
+
+        let prepared = try await coordinator.prepareRun(
+            options: options,
+            targetFiles: [
+                URL(fileURLWithPath: "/tmp/001.jpg"),
+                URL(fileURLWithPath: "/tmp/002.jpg"),
+            ],
+            tagCatalog: model.importTagCatalog,
+            metadataProvider: { _ in [:] }
+        )
+
+        XCTAssertEqual(prepared.parseResult.rows.count, 1)
+        XCTAssertEqual(prepared.parseResult.rows[0].sourceIdentifier.lowercased(), "002.jpg")
+        XCTAssertEqual(prepared.parseResult.rows[0].targetSelector, .rowNumber(1))
+    }
+
+    func testGPXImportAdapterParsesTimestampsWithoutFractionalSeconds() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let gpx = temp.appendingPathComponent("track.gpx")
+        try """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <gpx version="1.1" creator="test">
+          <trk>
+            <trkseg>
+              <trkpt lat="51.5007000" lon="-0.1246000">
+                <ele>35.0</ele>
+                <time>2026-01-01T12:00:00Z</time>
+              </trkpt>
+            </trkseg>
+          </trk>
+        </gpx>
+        """.write(to: gpx, atomically: true, encoding: .utf8)
+
+        let file = URL(fileURLWithPath: "/tmp/001.jpg")
+        var options = ImportRunOptions.defaults(for: .gpx)
+        options.sourceURLPath = gpx.path
+        options.gpxToleranceSeconds = 60
+        let context = ImportParseContext(
+            options: options,
+            sourceURL: gpx,
+            auxiliaryURLs: [],
+            targetFiles: [file],
+            tagCatalog: [],
+            metadataByFile: [
+                file: FileMetadataSnapshot(
+                    fileURL: file,
+                    fields: [
+                        MetadataField(key: "CreateDate", namespace: .exif, value: "2026:01:01 12:00:00"),
+                    ]
+                ),
+            ]
+        )
+
+        let result = try GPXImportAdapter().parse(context: context)
+        XCTAssertEqual(result.rows.count, 1)
+        XCTAssertTrue(result.warnings.isEmpty)
+    }
+
+    func testGPXImportAdapterParsesNamespacedTrackPointAndTime() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let gpx = temp.appendingPathComponent("track-namespaced.gpx")
+        try """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <gpx version="1.1" creator="test">
+          <trk>
+            <trkseg>
+              <x:trkpt lat="51.5007000" lon="-0.1246000">
+                <x:ele>35.0</x:ele>
+                <x:time>2026-01-01T12:00:00.000Z</x:time>
+              </x:trkpt>
+            </trkseg>
+          </trk>
+        </gpx>
+        """.write(to: gpx, atomically: true, encoding: .utf8)
+
+        let file = URL(fileURLWithPath: "/tmp/001.jpg")
+        var options = ImportRunOptions.defaults(for: .gpx)
+        options.sourceURLPath = gpx.path
+        options.gpxToleranceSeconds = 60
+        let context = ImportParseContext(
+            options: options,
+            sourceURL: gpx,
+            auxiliaryURLs: [],
+            targetFiles: [file],
+            tagCatalog: [],
+            metadataByFile: [
+                file: FileMetadataSnapshot(
+                    fileURL: file,
+                    fields: [
+                        MetadataField(key: "CreateDate", namespace: .exif, value: "2026:01:01 12:00:00"),
+                    ]
+                ),
+            ]
+        )
+
+        let result = try GPXImportAdapter().parse(context: context)
+        XCTAssertEqual(result.rows.count, 1)
+        XCTAssertTrue(result.warnings.isEmpty)
+    }
+
 
     func testStageImportAssignmentsRespectsEmptyPolicy() throws {
         let model = makeModel()
@@ -377,6 +562,30 @@ final class ImportSystemTests: XCTestCase {
             pendingPolicy: .merge
         )
         XCTAssertEqual(skipSummary.skippedFields, 1)
+    }
+
+    func testImportMetadataSnapshotsOverlaysStagedDateValues() async throws {
+        let model = makeModel()
+        let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.metadataByFile = [
+            file: FileMetadataSnapshot(
+                fileURL: file,
+                fields: [
+                    MetadataField(key: "Make", namespace: .exif, value: "Canon"),
+                ]
+            ),
+        ]
+
+        _ = model.stageImportAssignments(
+            [ImportAssignment(targetURL: file, fields: [.init(tagID: "datetime-created", value: "2026:01:04 14:24:03")])],
+            sourceKind: .eos1v,
+            emptyValuePolicy: .clear,
+            pendingPolicy: .merge
+        )
+
+        let snapshots = await model.importMetadataSnapshots(for: [file])
+        let date = snapshots[file]?.fields.first(where: { $0.namespace == .exif && $0.key == "DateTimeOriginal" })?.value
+        XCTAssertEqual(date, "2026:01:04 14:24:03")
     }
 
     private func makeModel() -> AppModel {

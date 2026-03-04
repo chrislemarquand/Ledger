@@ -96,9 +96,12 @@ private final class ImportWizardViewController: NSViewController {
     private let scopePopup = NSPopUpButton()
     private let emptyPolicyPopup = NSPopUpButton()
     private let matchStrategyPopup = NSPopUpButton()
+    private let rowStartField = NSTextField(string: "1")
+    private let rowCountField = NSTextField(string: "0")
     private let toleranceField = NSTextField(string: "600")
     private let offsetField = NSTextField(string: "0")
     private let selectedFieldsLabel = NSTextField(labelWithString: "")
+    private let scopeSummaryLabel = NSTextField(labelWithString: "")
     private let chooseFieldsButton = NSButton(title: "Choose Fields…", target: nil, action: nil)
     private let detailsTextView = NSTextView()
     private let detailsScrollView = NSScrollView()
@@ -112,6 +115,7 @@ private final class ImportWizardViewController: NSViewController {
             options = ImportRunOptions.defaults(for: initialSourceKind)
         }
         super.init(nibName: nil, bundle: nil)
+        applySelectionDrivenDefaults()
     }
 
     @available(*, unavailable)
@@ -134,6 +138,7 @@ private final class ImportWizardViewController: NSViewController {
     func selectSourceKind(_ sourceKind: ImportSourceKind) {
         options = coordinator.loadPersistedOptions(for: sourceKind)
         options.sourceKind = sourceKind
+        applySelectionDrivenDefaults()
         preparedRun = nil
         latestResolveResult = nil
         workingReport = nil
@@ -265,11 +270,15 @@ private final class ImportWizardViewController: NSViewController {
         auxiliaryPathField.stringValue = options.auxiliaryURLPaths.isEmpty
             ? "No auxiliary files selected"
             : options.auxiliaryURLPaths.joined(separator: "\n")
+        rowStartField.stringValue = String(max(1, options.rowParityStartRow))
+        rowCountField.stringValue = String(max(0, options.rowParityRowCount))
         toleranceField.stringValue = String(options.gpxToleranceSeconds)
         offsetField.stringValue = String(options.gpxCameraOffsetSeconds)
 
         let selectedCount = options.selectedTagIDs.isEmpty ? (model?.importTagCatalog.count ?? 0) : options.selectedTagIDs.count
         selectedFieldsLabel.stringValue = "\(selectedCount) fields selected"
+        scopeSummaryLabel.stringValue = currentScopeSummaryText()
+        scopeSummaryLabel.textColor = .secondaryLabelColor
     }
 
     private func render() {
@@ -319,9 +328,14 @@ private final class ImportWizardViewController: NSViewController {
         }
 
         contentStack.addArrangedSubview(makeLabeledRow(label: "Target Scope", view: scopePopup))
+        contentStack.addArrangedSubview(makeLabeledRow(label: "Applying To", view: scopeSummaryLabel))
         contentStack.addArrangedSubview(makeLabeledRow(label: "Empty Values", view: emptyPolicyPopup))
         if options.sourceKind == .csv || options.sourceKind == .eos1v {
             contentStack.addArrangedSubview(makeLabeledRow(label: "Matching", view: matchStrategyPopup))
+            if options.matchStrategy == .rowParity {
+                contentStack.addArrangedSubview(makeLabeledRow(label: "Start Row", view: rowStartField))
+                contentStack.addArrangedSubview(makeLabeledRow(label: "Row Count", view: rowCountField))
+            }
         }
 
         if options.sourceKind == .gpx {
@@ -508,6 +522,7 @@ private final class ImportWizardViewController: NSViewController {
         let selected = ImportSourceKind.allCases[sourceKindPopup.indexOfSelectedItem]
         options = coordinator.loadPersistedOptions(for: selected)
         options.sourceKind = selected
+        applySelectionDrivenDefaults()
         preparedRun = nil
         latestResolveResult = nil
         workingReport = nil
@@ -568,6 +583,13 @@ private final class ImportWizardViewController: NSViewController {
     private func scopeChanged(_: Any?) {
         if scopePopup.indexOfSelectedItem >= 0 {
             options.scope = ImportScope.allCases[scopePopup.indexOfSelectedItem]
+            if options.scope == .selection,
+               options.matchStrategy == .rowParity,
+               let model {
+                options.rowParityRowCount = model.selectedFileURLs.count
+                rowCountField.stringValue = String(max(0, options.rowParityRowCount))
+            }
+            scopeSummaryLabel.stringValue = currentScopeSummaryText()
         }
     }
 
@@ -582,6 +604,13 @@ private final class ImportWizardViewController: NSViewController {
     private func matchStrategyChanged(_: Any?) {
         if matchStrategyPopup.indexOfSelectedItem >= 0 {
             options.matchStrategy = ImportMatchStrategy.allCases[matchStrategyPopup.indexOfSelectedItem]
+            if options.matchStrategy == .rowParity,
+               options.scope == .selection,
+               let model {
+                options.rowParityRowCount = model.selectedFileURLs.count
+                rowCountField.stringValue = String(max(0, options.rowParityRowCount))
+            }
+            render()
         }
     }
 
@@ -663,6 +692,8 @@ private final class ImportWizardViewController: NSViewController {
             guard validateSourceStep() else { return }
             options.gpxToleranceSeconds = max(1, toleranceField.integerValue)
             options.gpxCameraOffsetSeconds = offsetField.integerValue
+            options.rowParityStartRow = max(1, rowStartField.integerValue)
+            options.rowParityRowCount = max(0, rowCountField.integerValue)
             prepareImportRun()
         case .match:
             currentStep = .preview
@@ -843,7 +874,36 @@ private final class ImportWizardViewController: NSViewController {
             showAlert(title: "Select Source", message: "Choose a source before continuing.")
             return false
         }
+        if options.matchStrategy == .rowParity, rowStartField.integerValue < 1 {
+            showAlert(title: "Invalid Start Row", message: "Start row must be 1 or greater.")
+            return false
+        }
+        if options.matchStrategy == .rowParity, rowCountField.integerValue < 0 {
+            showAlert(title: "Invalid Row Count", message: "Row count cannot be negative.")
+            return false
+        }
         return true
+    }
+
+    private func applySelectionDrivenDefaults() {
+        guard let model else { return }
+        let selectedCount = model.selectedFileURLs.count
+        options.scope = selectedCount > 0 ? .selection : .folder
+        if options.matchStrategy == .rowParity {
+            options.rowParityStartRow = max(1, options.rowParityStartRow)
+            options.rowParityRowCount = selectedCount > 0 ? selectedCount : options.rowParityRowCount
+        }
+    }
+
+    private func currentScopeSummaryText() -> String {
+        guard let model else { return "No targets" }
+        let count = model.importTargetFiles(for: options.scope).count
+        switch options.scope {
+        case .selection:
+            return "Selection (\(count) image\(count == 1 ? "" : "s"))"
+        case .folder:
+            return "Folder (\(count) image\(count == 1 ? "" : "s"))"
+        }
     }
 
     private func applyConflictResolution(

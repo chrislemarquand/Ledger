@@ -37,10 +37,16 @@ struct CSVImportAdapter: ImportSourceAdapter {
             ImportWarning(sourceLine: 1, message: "Unsupported column “\($0)” ignored.", severity: .warning)
         }
         var parsedRows: [ImportRow] = []
-        var parityRowNumber = 0
+        var paritySourceRowNumber = 0
+        var parityMappedCount = 0
+        let parityStartRow = max(1, context.options.rowParityStartRow)
+        let parityMaxRows = context.options.rowParityRowCount > 0 ? context.options.rowParityRowCount : Int.max
 
         for rowIndex in 1..<rows.count {
             let row = rows[rowIndex]
+            if row.allSatisfy({ CSVSupport.trim($0).isEmpty }) {
+                continue
+            }
             let identifier: String
             let selector: ImportTargetSelector
             switch context.options.matchStrategy {
@@ -72,9 +78,16 @@ struct CSVImportAdapter: ImportSourceAdapter {
                 identifier = filename
                 selector = .filename(filename)
             case .rowParity:
-                parityRowNumber += 1
-                identifier = String(format: "Row %03d", parityRowNumber)
-                selector = .rowNumber(parityRowNumber)
+                paritySourceRowNumber += 1
+                guard paritySourceRowNumber >= parityStartRow else {
+                    continue
+                }
+                guard parityMappedCount < parityMaxRows else {
+                    continue
+                }
+                parityMappedCount += 1
+                identifier = String(format: "Row %03d", paritySourceRowNumber)
+                selector = .rowNumber(parityMappedCount)
             }
 
             var fields: [ImportFieldValue] = []

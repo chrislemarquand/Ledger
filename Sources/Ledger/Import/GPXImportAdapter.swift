@@ -179,8 +179,9 @@ private final class GPXTrackParser: NSObject, XMLParserDelegate {
         qualifiedName _: String?,
         attributes attributeDict: [String: String] = [:]
     ) {
-        currentElement = elementName
-        if elementName == "trkpt" {
+        let name = Self.localName(for: elementName)
+        currentElement = name
+        if name == "trkpt" {
             currentLat = Double(attributeDict["lat"] ?? "")
             currentLon = Double(attributeDict["lon"] ?? "")
             currentEle = nil
@@ -203,12 +204,13 @@ private final class GPXTrackParser: NSObject, XMLParserDelegate {
         namespaceURI _: String?,
         qualifiedName _: String?
     ) {
-        if elementName == "ele" {
+        let name = Self.localName(for: elementName)
+        if name == "ele" {
             currentEle = Double(CSVSupport.trim(currentTimeText))
             currentTimeText = ""
-        } else if elementName == "time" {
+        } else if name == "time" {
             currentTimeText = CSVSupport.trim(currentTimeText)
-        } else if elementName == "trkpt" {
+        } else if name == "trkpt" {
             defer {
                 currentLat = nil
                 currentLon = nil
@@ -218,7 +220,7 @@ private final class GPXTrackParser: NSObject, XMLParserDelegate {
             }
             guard let latitude = currentLat,
                   let longitude = currentLon,
-                  let timestamp = GPXTrackParser.dateFormatter.date(from: currentTimeText)
+                  let timestamp = GPXTrackParser.parseTimestamp(currentTimeText)
             else {
                 return
             }
@@ -239,4 +241,23 @@ private final class GPXTrackParser: NSObject, XMLParserDelegate {
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
     }()
+
+    private nonisolated(unsafe) static let dateFormatterNoFractional: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static func parseTimestamp(_ raw: String) -> Date? {
+        let trimmed = CSVSupport.trim(raw)
+        guard !trimmed.isEmpty else { return nil }
+        if let withFractional = dateFormatter.date(from: trimmed) {
+            return withFractional
+        }
+        return dateFormatterNoFractional.date(from: trimmed)
+    }
+
+    private static func localName(for qName: String) -> String {
+        qName.split(separator: ":").last.map(String.init) ?? qName
+    }
 }

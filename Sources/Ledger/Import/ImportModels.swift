@@ -203,6 +203,8 @@ struct ImportRunOptions: Hashable, Codable, Sendable {
     var scope: ImportScope
     var emptyValuePolicy: ImportEmptyValuePolicy
     var matchStrategy: ImportMatchStrategy
+    var rowParityStartRow: Int
+    var rowParityRowCount: Int
     var sourceURLPath: String?
     var auxiliaryURLPaths: [String]
     var selectedTagIDs: [String]
@@ -215,6 +217,8 @@ struct ImportRunOptions: Hashable, Codable, Sendable {
             scope: .folder,
             emptyValuePolicy: .clear,
             matchStrategy: sourceKind == .eos1v ? .rowParity : .filename,
+            rowParityStartRow: 1,
+            rowParityRowCount: 0,
             sourceURLPath: nil,
             auxiliaryURLPaths: [],
             selectedTagIDs: [],

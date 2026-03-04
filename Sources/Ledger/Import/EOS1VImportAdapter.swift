@@ -53,6 +53,9 @@ struct EOS1VImportAdapter: ImportSourceAdapter {
         var parsedRows: [ImportRow] = []
         var warnings: [ImportWarning] = []
         var outputRowNumber = 0
+        var paritySourceRowNumber = 0
+        let parityStartRow = max(1, context.options.rowParityStartRow)
+        let parityMaxRows = context.options.rowParityRowCount > 0 ? context.options.rowParityRowCount : Int.max
 
         for rowIndex in (headerIndex + 1)..<rows.count {
             let row = rows[rowIndex]
@@ -65,8 +68,22 @@ struct EOS1VImportAdapter: ImportSourceAdapter {
                 continue
             }
 
+            if context.options.matchStrategy == .rowParity {
+                paritySourceRowNumber += 1
+                if paritySourceRowNumber < parityStartRow {
+                    continue
+                }
+                if outputRowNumber >= parityMaxRows {
+                    continue
+                }
+            }
+
             outputRowNumber += 1
-            let selector = targetSelector(for: outputRowNumber, strategy: context.options.matchStrategy)
+            let selector = targetSelector(
+                for: outputRowNumber,
+                strategy: context.options.matchStrategy,
+                sourceRowNumber: paritySourceRowNumber
+            )
             var fields: [ImportFieldValue] = []
 
             if let dto = buildDateTimeOriginal(row: map) {
@@ -95,20 +112,15 @@ struct EOS1VImportAdapter: ImportSourceAdapter {
 
             let exposureComp = cleanExposureCompensation(columnValue(in: map, matching: ["Exposure compensation", "Exposure Compensation"]))
             appendIfNotEmpty(&fields, tagID: "exif-exposure-comp", value: exposureComp)
-            appendIfNotEmpty(&fields, tagID: "xmp-exposure-bias", value: exposureComp)
 
             let flashFired = mapFlashFired(columnValue(in: map, matching: ["Flash mode", "Flash"]))
-            appendIfNotEmpty(&fields, tagID: "exif-flash-fired", value: flashFired)
             appendIfNotEmpty(&fields, tagID: "exif-flash", value: flashFired)
 
             appendIfNotEmpty(&fields, tagID: "exif-make", value: "Canon")
             appendIfNotEmpty(&fields, tagID: "exif-model", value: "EOS 1V")
             appendIfNotEmpty(&fields, tagID: "xmp-subject", value: "Film")
-            appendIfNotEmpty(&fields, tagID: "iptc-keywords", value: "Film")
 
-            let lensInference = inferLens(focalLength: focal)
-            appendIfNotEmpty(&fields, tagID: "exif-lens", value: lensInference.lensModel)
-            appendIfNotEmpty(&fields, tagID: "exif-lens-exif", value: lensInference.exifLens)
+            appendIfNotEmpty(&fields, tagID: "exif-lens", value: inferLens(focalLength: focal))
 
             parsedRows.append(
                 ImportRow(
@@ -268,8 +280,13 @@ struct EOS1VImportAdapter: ImportSourceAdapter {
         return ""
     }
 
-    private func targetSelector(for outputRowNumber: Int, strategy: ImportMatchStrategy) -> (selector: ImportTargetSelector, identifier: String) {
-        let rowString = Self.rowFormatter.string(from: NSNumber(value: outputRowNumber)) ?? String(format: "%03d", outputRowNumber)
+    private func targetSelector(
+        for outputRowNumber: Int,
+        strategy: ImportMatchStrategy,
+        sourceRowNumber: Int
+    ) -> (selector: ImportTargetSelector, identifier: String) {
+        let sourceRowValue = sourceRowNumber > 0 ? sourceRowNumber : outputRowNumber
+        let rowString = Self.rowFormatter.string(from: NSNumber(value: sourceRowValue)) ?? String(format: "%03d", sourceRowValue)
         let candidates = Self.extensionProbeOrder.map { "\(rowString)\($0)" }
         let fallback = candidates.first ?? "\(rowString).jpg"
         switch strategy {
@@ -282,8 +299,12 @@ struct EOS1VImportAdapter: ImportSourceAdapter {
 
     private func cleanTv(_ raw: String?) -> String {
         var value = CSVSupport.trim(raw ?? "")
-        if value.hasPrefix("=\""), value.hasSuffix("\""), value.count >= 3 {
-            value.removeFirst(2)
+        if value.hasPrefix("=") {
+            value.removeFirst()
+            value = CSVSupport.trim(value)
+        }
+        if value.hasPrefix("\""), value.hasSuffix("\""), value.count >= 2 {
+            value.removeFirst()
             value.removeLast()
         }
         return value
@@ -393,17 +414,17 @@ struct EOS1VImportAdapter: ImportSourceAdapter {
             .replacingOccurrences(of: #"\.0+$"#, with: "", options: .regularExpression)
     }
 
-    private func inferLens(focalLength: String) -> (lensModel: String, exifLens: String) {
+    private func inferLens(focalLength: String) -> String {
         let number = Int(focalLength.prefix { $0.isNumber })
         switch number {
         case 28:
-            return ("EF28mm ƒ2.8 IS USM", "EF28mm ƒ2.8 IS USM")
+            return "EF28mm ƒ2.8 IS USM"
         case 40:
-            return ("EF40mm ƒ2.8 STM", "EF40mm ƒ2.8 STM")
+            return "EF40mm ƒ2.8 STM"
         case 50:
-            return ("EF50mm ƒ1.8 STM", "EF50mm ƒ1.8 STM")
+            return "EF50mm ƒ1.8 STM"
         default:
-            return ("EF24-105mm ƒ4L IS USM", "EF24-105mm ƒ4L IS USM")
+            return "EF24-105mm ƒ4L IS USM"
         }
     }
 
