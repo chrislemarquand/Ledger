@@ -585,11 +585,12 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         static let fileUnpin = 9_107
         static let fileMoveUp = 9_108
         static let fileMoveDown = 9_109
-        static let fileImportCSV = 9_110
-        static let fileImportGPX = 9_111
-        static let fileImportReferenceFolder = 9_112
-        static let fileImportReferenceImage = 9_113
-        static let fileImportEOS1V = 9_114
+        static let fileImportRoot = 9_110
+        static let fileImportCSV = 9_111
+        static let fileImportGPX = 9_112
+        static let fileImportReferenceFolder = 9_113
+        static let fileImportReferenceImage = 9_114
+        static let fileImportEOS1V = 9_115
 
         static let editRotate = 9_201
         static let editFlip = 9_202
@@ -794,7 +795,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
     private func rebuildFileMenu(_ menu: NSMenu) {
         let systemItems = menu.items.filter { item in
-            item.tag < 9_100 && !item.isSeparatorItem && item.title != "New" && item.title != "Open…"
+            item.tag < 9_100 && !item.isSeparatorItem && item.title != "New" && item.title != "Open…" && item.title != "Import"
         }
 
         menu.removeAllItems()
@@ -807,6 +808,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
         let importItem = NSMenuItem(title: "Import", action: nil, keyEquivalent: "")
         importItem.image = NSImage(systemSymbolName: "square.and.arrow.down.on.square", accessibilityDescription: nil)
+        importItem.tag = MenuTag.fileImportRoot
         importItem.submenu = makeImportSubmenu()
         menu.addItem(importItem)
 
