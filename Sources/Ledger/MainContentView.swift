@@ -114,6 +114,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     private var lastWindowTitleText = ""
     private var lastWindowSubtitleText = ""
     private var isPaneStateSyncScheduled = false
+    private var importWizardController: ImportWizardWindowController?
 
     init(model: AppModel) {
         self.model = model
@@ -584,6 +585,11 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         static let fileUnpin = 9_107
         static let fileMoveUp = 9_108
         static let fileMoveDown = 9_109
+        static let fileImportCSV = 9_110
+        static let fileImportGPX = 9_111
+        static let fileImportReferenceFolder = 9_112
+        static let fileImportReferenceImage = 9_113
+        static let fileImportEOS1V = 9_114
 
         static let editRotate = 9_201
         static let editFlip = 9_202
@@ -799,6 +805,11 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         openFolderItem.tag = MenuTag.fileOpenFolder
         menu.addItem(openFolderItem)
 
+        let importItem = NSMenuItem(title: "Import", action: nil, keyEquivalent: "")
+        importItem.image = NSImage(systemSymbolName: "square.and.arrow.down.on.square", accessibilityDescription: nil)
+        importItem.submenu = makeImportSubmenu()
+        menu.addItem(importItem)
+
         menu.addItem(.separator())
 
         let openItem = NSMenuItem(title: "Open", action: #selector(openInDefaultAppMenuAction(_:)), keyEquivalent: "o")
@@ -970,6 +981,29 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             let appIcon = NSWorkspace.shared.icon(forFile: app.url.path)
             appIcon.size = NSSize(width: 16, height: 16)
             item.image = appIcon
+            submenu.addItem(item)
+        }
+        return submenu
+    }
+
+    private func makeImportSubmenu() -> NSMenu {
+        let submenu = NSMenu(title: "Import")
+        submenu.autoenablesItems = false
+
+        let items: [(title: String, action: Selector, symbol: String, tag: Int)] = [
+            ("CSV…", #selector(importCSVAction(_:)), "tablecells", MenuTag.fileImportCSV),
+            ("GPX…", #selector(importGPXAction(_:)), "location", MenuTag.fileImportGPX),
+            ("Reference Folder…", #selector(importReferenceFolderAction(_:)), "folder.badge.questionmark", MenuTag.fileImportReferenceFolder),
+            ("Reference Image…", #selector(importReferenceImageAction(_:)), "photo.badge.plus", MenuTag.fileImportReferenceImage),
+            ("EOS-1V…", #selector(importEOS1VAction(_:)), "camera", MenuTag.fileImportEOS1V),
+        ]
+
+        for descriptor in items {
+            let item = NSMenuItem(title: descriptor.title, action: descriptor.action, keyEquivalent: "")
+            item.target = self
+            item.image = NSImage(systemSymbolName: descriptor.symbol, accessibilityDescription: nil)
+            item.tag = descriptor.tag
+            item.isEnabled = !model.browserItems.isEmpty
             submenu.addItem(item)
         }
         return submenu
@@ -1213,6 +1247,12 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             return !selection.isEmpty
         } else if menuItem.action == #selector(quickLookSelectionMenuAction(_:)) {
             return !selection.isEmpty
+        } else if menuItem.action == #selector(importCSVAction(_:))
+            || menuItem.action == #selector(importGPXAction(_:))
+            || menuItem.action == #selector(importReferenceFolderAction(_:))
+            || menuItem.action == #selector(importReferenceImageAction(_:))
+            || menuItem.action == #selector(importEOS1VAction(_:)) {
+            return !model.browserItems.isEmpty
         } else if menuItem.action == #selector(pinFolderToSidebarAction(_:)) {
             return model.canPinSelectedSidebarLocation
         } else if menuItem.action == #selector(unpinFolderFromSidebarAction(_:)) {
@@ -1391,6 +1431,54 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     @objc
     func openFolderAction(_: Any?) {
         model.openFolder()
+    }
+
+    private func presentImportWizard(sourceKind: ImportSourceKind) {
+        guard !model.browserItems.isEmpty else {
+            model.statusMessage = "Open a folder with images before importing."
+            return
+        }
+        guard let parentWindow = view.window else { return }
+        if parentWindow.attachedSheet != nil,
+           parentWindow.attachedSheet !== importWizardController?.window {
+            model.statusMessage = "Close the current sheet before opening import."
+            return
+        }
+
+        if importWizardController == nil {
+            let controller = ImportWizardWindowController(model: model, initialSourceKind: sourceKind)
+            controller.onClose = { [weak self] in
+                self?.importWizardController = nil
+            }
+            importWizardController = controller
+        }
+        importWizardController?.updateInitialSourceKind(sourceKind)
+        importWizardController?.presentSheet(for: parentWindow)
+    }
+
+    @objc
+    func importCSVAction(_: Any?) {
+        presentImportWizard(sourceKind: .csv)
+    }
+
+    @objc
+    func importGPXAction(_: Any?) {
+        presentImportWizard(sourceKind: .gpx)
+    }
+
+    @objc
+    func importReferenceFolderAction(_: Any?) {
+        presentImportWizard(sourceKind: .referenceFolder)
+    }
+
+    @objc
+    func importReferenceImageAction(_: Any?) {
+        presentImportWizard(sourceKind: .referenceImage)
+    }
+
+    @objc
+    func importEOS1VAction(_: Any?) {
+        presentImportWizard(sourceKind: .eos1v)
     }
 
     @objc
@@ -1693,8 +1781,10 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         private var inspectorToggleItem: NSToolbarItem?
 
         private var sortItem: NSMenuToolbarItem?
+        private var importItem: NSMenuToolbarItem?
         private var presetsItem: NSMenuToolbarItem?
         private var sortMenu: NSMenu?
+        private var importMenu: NSMenu?
         private var presetsMenu: NSMenu?
 
         init(controller: NativeThreePaneSplitViewController) {
@@ -1714,6 +1804,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 .zoomIn,
                 .flexibleSpace,
                 .presetTools,
+                .importTools,
                 .applyChanges,
                 .inspectorTrackingSeparator,
                 .toggleInspector
@@ -1733,6 +1824,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 .zoomIn,
                 .flexibleSpace,
                 .presetTools,
+                .importTools,
                 .applyChanges,
                 .inspectorTrackingSeparator,
                 .toggleInspector
@@ -1842,6 +1934,15 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 sortItem = item
                 updateSortMenu(with: controller.model)
                 return item
+            case .importTools:
+                let item = NSMenuToolbarItem(itemIdentifier: itemIdentifier)
+                item.label = "Import"
+                item.paletteLabel = "Import"
+                item.image = NSImage(systemSymbolName: "checklist.checked", accessibilityDescription: "Import")
+                item.toolTip = "Import metadata"
+                importItem = item
+                updateImportMenu(with: controller.model)
+                return item
             case .presetTools:
                 let item = NSMenuToolbarItem(itemIdentifier: itemIdentifier)
                 item.label = "Presets"
@@ -1895,6 +1996,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             updateLoadingIndicator(with: model)
             updateZoom(with: model)
             updateSortMenu(with: model)
+            updateImportMenu(with: model)
             updatePresetsMenu(with: model)
             updateApplyEnabled(with: model)
             updateInspectorToggle(with: model)
@@ -1945,6 +2047,12 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             presetsItem?.menu = menu
         }
 
+        private func updateImportMenu(with model: AppModel) {
+            let menu = makeImportMenu(model: model)
+            importMenu = menu
+            importItem?.menu = menu
+        }
+
         private func updateApplyEnabled(with model: AppModel) {
             applyChangesItem?.isEnabled = model.canApplyMetadataChanges
         }
@@ -1976,6 +2084,28 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             case .kind:
                 menu.item(withTitle: "Kind")?.state = .on
             }
+            return menu
+        }
+
+        private func makeImportMenu(model: AppModel) -> NSMenu {
+            guard let controller else { return NSMenu(title: "Import") }
+            let menu = NSMenu(title: "Import")
+            menu.autoenablesItems = false
+            let isEnabled = !model.browserItems.isEmpty
+
+            func addItem(title: String, action: Selector, imageName: String) {
+                let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+                item.target = controller
+                item.isEnabled = isEnabled
+                item.image = NSImage(systemSymbolName: imageName, accessibilityDescription: nil)
+                menu.addItem(item)
+            }
+
+            addItem(title: "CSV…", action: #selector(NativeThreePaneSplitViewController.importCSVAction(_:)), imageName: "tablecells")
+            addItem(title: "GPX…", action: #selector(NativeThreePaneSplitViewController.importGPXAction(_:)), imageName: "location")
+            addItem(title: "Reference Folder…", action: #selector(NativeThreePaneSplitViewController.importReferenceFolderAction(_:)), imageName: "folder.badge.questionmark")
+            addItem(title: "Reference Image…", action: #selector(NativeThreePaneSplitViewController.importReferenceImageAction(_:)), imageName: "photo.badge.plus")
+            addItem(title: "EOS-1V…", action: #selector(NativeThreePaneSplitViewController.importEOS1VAction(_:)), imageName: "camera")
             return menu
         }
 
@@ -2033,6 +2163,7 @@ private extension NSToolbarItem.Identifier {
     static let browserLoading = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.BrowserLoading")
     static let viewMode = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ViewMode")
     static let sort = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.Sort")
+    static let importTools = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.Import")
     static let presetTools = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.PresetTools")
     static let zoomOut = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ZoomOut")
     static let zoomIn = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ZoomIn")

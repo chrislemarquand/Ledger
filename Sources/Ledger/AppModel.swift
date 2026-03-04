@@ -325,14 +325,18 @@ final class AppModel: ObservableObject {
             .init(id: "exif-make", namespace: .exif, key: "Make", label: "Make", section: "Camera"),
             .init(id: "exif-model", namespace: .exif, key: "Model", label: "Model", section: "Camera"),
             .init(id: "exif-serial", namespace: .exif, key: "SerialNumber", label: "Serial Number", section: "Camera"),
-            .init(id: "exif-lens", namespace: .exif, key: "LensModel", label: "Lens", section: "Camera"),
+            .init(id: "exif-lens", namespace: .exif, key: "LensModel", label: "Lens Model", section: "Camera"),
+            .init(id: "exif-lens-exif", namespace: .exif, key: "Lens", label: "Lens (EXIF)", section: "Camera"),
             .init(id: "exif-aperture", namespace: .exif, key: "FNumber", label: "Aperture", section: "Capture"),
             .init(id: "exif-shutter", namespace: .exif, key: "ExposureTime", label: "Shutter Speed", section: "Capture"),
             .init(id: "exif-iso", namespace: .exif, key: "ISO", label: "ISO", section: "Capture"),
             .init(id: "exif-focal", namespace: .exif, key: "FocalLength", label: "Focal Length", section: "Capture"),
             .init(id: "exif-exposure-program", namespace: .exif, key: "ExposureProgram", label: "Exposure Program", section: "Capture"),
             .init(id: "exif-flash", namespace: .exif, key: "Flash", label: "Flash", section: "Capture"),
+            .init(id: "exif-flash-fired", namespace: .exif, key: "FlashFired", label: "Flash Fired", section: "Capture"),
             .init(id: "exif-metering-mode", namespace: .exif, key: "MeteringMode", label: "Metering Mode", section: "Capture"),
+            .init(id: "exif-exposure-comp", namespace: .exif, key: "ExposureCompensation", label: "Exposure Compensation", section: "Capture"),
+            .init(id: "xmp-exposure-bias", namespace: .xmp, key: "ExposureBiasValue", label: "Exposure Bias (XMP)", section: "Capture"),
             .init(id: "datetime-modified", namespace: .exif, key: "ModifyDate", label: "Date Time", section: "Date and Time"),
             .init(id: "datetime-digitized", namespace: .exif, key: "CreateDate", label: "Date Time Digitized", section: "Date and Time"),
             .init(id: "datetime-created", namespace: .exif, key: "DateTimeOriginal", label: "Date Time Original", section: "Date and Time"),
@@ -343,6 +347,7 @@ final class AppModel: ObservableObject {
             .init(id: "xmp-title", namespace: .xmp, key: "Title", label: "Title", section: "Descriptive"),
             .init(id: "xmp-description", namespace: .xmp, key: "Description", label: "Description", section: "Descriptive"),
             .init(id: "xmp-subject", namespace: .xmp, key: "Subject", label: "Keywords", section: "Descriptive"),
+            .init(id: "iptc-keywords", namespace: .iptc, key: "Keywords", label: "Keywords (IPTC)", section: "Descriptive"),
             .init(id: "exif-artist", namespace: .exif, key: "Artist", label: "Artist", section: "Rights"),
             .init(id: "exif-copyright", namespace: .exif, key: "Copyright", label: "Copyright", section: "Rights"),
             .init(id: "xmp-creator", namespace: .xmp, key: "Creator", label: "Creator", section: "Rights"),
@@ -358,6 +363,7 @@ final class AppModel: ObservableObject {
     enum StagedEditSource: Hashable {
         case manual
         case preset(UUID)
+        case importSource(ImportSourceKind)
     }
 
     struct StagedEditRecord: Hashable {
@@ -1081,6 +1087,17 @@ final class AppModel: ObservableObject {
         invalidateInspectorPreviews(for: browserItems.map(\.url))
         recalculateInspectorState(forceNotify: true)
         setStatusMessage("Discarded unsaved metadata changes.", autoClearAfterSuccess: true)
+    }
+
+    private func clearPendingStateForImportReplacement() {
+        pendingEditsByFile.removeAll()
+        pendingImageOpsByFile.removeAll()
+        removeAllStagedQuickLookPreviewFiles()
+        stagedOpsDisplayToken &+= 1
+        invalidateAllBrowserThumbnails()
+        if !browserItems.isEmpty {
+            invalidateInspectorPreviews(for: browserItems.map(\.url))
+        }
     }
 
     func clearPendingEdits(for fileURLs: [URL]) {
@@ -1902,6 +1919,11 @@ final class AppModel: ObservableObject {
                 .init(value: "93", label: "Auto, Fired, Red-Eye, No Return"),
                 .init(value: "95", label: "Auto, Fired, Red-Eye, Return Detected")
             ]
+        case "exif-flash-fired":
+            base = [
+                .init(value: "0", label: "No"),
+                .init(value: "1", label: "Yes"),
+            ]
         case "exif-metering-mode":
             base = [
                 .init(value: "0", label: "Unknown"),
@@ -2565,6 +2587,107 @@ final class AppModel: ObservableObject {
             }
         }
         return result
+    }
+
+    var importTagCatalog: [ImportTagDescriptor] {
+        EditableTag.common.map {
+            ImportTagDescriptor(
+                id: $0.id,
+                key: $0.key,
+                namespace: $0.namespace,
+                label: $0.label,
+                section: $0.section
+            )
+        }
+    }
+
+    func importTargetFiles(for scope: ImportScope) -> [URL] {
+        let visibleOrder = filteredBrowserItems.map(\.url)
+        switch scope {
+        case .selection:
+            let selectionSet = selectedFileURLs
+            let selection = visibleOrder.filter { selectionSet.contains($0) }
+            if !selection.isEmpty {
+                return selection
+            }
+            return visibleOrder
+        case .folder:
+            return visibleOrder
+        }
+    }
+
+    func importMetadataSnapshots(for files: [URL]) async -> [URL: FileMetadataSnapshot] {
+        let unique = Array(Set(files)).sorted(by: { $0.path < $1.path })
+        guard !unique.isEmpty else { return [:] }
+        let snapshots = await readMetadataBatchResilient(unique)
+        guard !snapshots.isEmpty else { return [:] }
+
+        var result: [URL: FileMetadataSnapshot] = [:]
+        var map = metadataByFile
+        for snapshot in snapshots {
+            result[snapshot.fileURL] = snapshot
+            map[snapshot.fileURL] = snapshot
+            staleMetadataFiles.remove(snapshot.fileURL)
+        }
+        metadataByFile = map
+        return result
+    }
+
+    func stageImportAssignments(
+        _ assignments: [ImportAssignment],
+        sourceKind: ImportSourceKind,
+        emptyValuePolicy: ImportEmptyValuePolicy,
+        pendingPolicy: ImportPendingEditsPolicy
+    ) -> ImportStageSummary {
+        guard !assignments.isEmpty else {
+            return ImportStageSummary(stagedFiles: 0, stagedFields: 0, skippedFields: 0, warnings: [])
+        }
+
+        let previousState = currentPendingEditState()
+        if pendingPolicy == .replace {
+            clearPendingStateForImportReplacement()
+        }
+
+        var stagedFiles: Set<URL> = []
+        var stagedFields = 0
+        var skippedFields = 0
+        var warnings: [String] = []
+
+        for assignment in assignments {
+            for field in assignment.fields {
+                guard let tag = editableTag(forID: field.tagID) else {
+                    skippedFields += 1
+                    warnings.append("Unsupported tag \(field.tagID) skipped.")
+                    continue
+                }
+                let trimmed = field.value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.isEmpty, emptyValuePolicy == .skip {
+                    skippedFields += 1
+                    continue
+                }
+                stageEdit(
+                    trimmed,
+                    for: tag,
+                    fileURLs: [assignment.targetURL],
+                    source: .importSource(sourceKind)
+                )
+                stagedFields += 1
+                stagedFiles.insert(assignment.targetURL)
+            }
+        }
+
+        registerMetadataUndoIfNeeded(previous: previousState)
+        recalculateInspectorState(forceNotify: true)
+        setStatusMessage(
+            "Staged import for \(stagedFiles.count) file(s).",
+            autoClearAfterSuccess: true
+        )
+        return ImportStageSummary(
+            stagedFiles: stagedFiles.count,
+            stagedFields: stagedFields,
+            skippedFields: skippedFields,
+            warnings: warnings
+        )
     }
 
     var selectedSidebarItem: SidebarItem? {
@@ -3874,6 +3997,38 @@ final class AppModel: ObservableObject {
                     newValue: normalized
                 )
             )
+        } else if tag.id == "xmp-subject" {
+            patches.append(
+                MetadataPatch(
+                    key: "Keywords",
+                    namespace: .iptc,
+                    newValue: normalized
+                )
+            )
+        } else if tag.id == "iptc-keywords" {
+            patches.append(
+                MetadataPatch(
+                    key: "Subject",
+                    namespace: .xmp,
+                    newValue: normalized
+                )
+            )
+        } else if tag.id == "exif-exposure-comp" {
+            patches.append(
+                MetadataPatch(
+                    key: "ExposureBiasValue",
+                    namespace: .xmp,
+                    newValue: normalized
+                )
+            )
+        } else if tag.id == "xmp-exposure-bias" {
+            patches.append(
+                MetadataPatch(
+                    key: "ExposureCompensation",
+                    namespace: .exif,
+                    newValue: normalized
+                )
+            )
         }
 
         return patches
@@ -3948,6 +4103,9 @@ final class AppModel: ObservableObject {
         case "exif-lens":
             candidateKeys = [tag.key, "Lens", "LensID"]
             candidateNamespaces = [.exif, .xmp]
+        case "exif-lens-exif":
+            candidateKeys = [tag.key, "LensModel", "LensID"]
+            candidateNamespaces = [.exif, .xmp]
         case "datetime-modified":
             candidateKeys = [tag.key, "ModifyDate", "FileModifyDate"]
             candidateNamespaces = [.exif, .xmp, .iptc]
@@ -3963,9 +4121,18 @@ final class AppModel: ObservableObject {
         case "exif-flash":
             candidateKeys = [tag.key, "FlashFired", "FlashMode"]
             candidateNamespaces = [.exif, .xmp]
+        case "exif-flash-fired":
+            candidateKeys = [tag.key, "Flash"]
+            candidateNamespaces = [.exif, .xmp]
         case "exif-metering-mode":
             candidateKeys = [tag.key]
             candidateNamespaces = [.exif, .xmp]
+        case "exif-exposure-comp":
+            candidateKeys = [tag.key, "ExposureBiasValue"]
+            candidateNamespaces = [.exif, .xmp]
+        case "xmp-exposure-bias":
+            candidateKeys = [tag.key, "ExposureCompensation"]
+            candidateNamespaces = [.xmp, .exif]
         case "xmp-city":
             candidateKeys = [tag.key]
             candidateNamespaces = [.xmp, .iptc]
@@ -3984,6 +4151,9 @@ final class AppModel: ObservableObject {
         case "xmp-subject":
             candidateKeys = [tag.key, "Keywords"]
             candidateNamespaces = [.xmp, .iptc]
+        case "iptc-keywords":
+            candidateKeys = [tag.key, "Subject"]
+            candidateNamespaces = [.iptc, .xmp]
         case "xmp-creator":
             candidateKeys = [tag.key, "By-line", "By-lineTitle", "Byline", "BylineTitle"]
             candidateNamespaces = [.xmp, .iptc, .exif]
@@ -4219,7 +4389,7 @@ final class AppModel: ObservableObject {
         guard !trimmed.isEmpty else { return "" }
 
         switch tag.id {
-        case "exif-make", "exif-model", "exif-lens":
+        case "exif-make", "exif-model", "exif-lens", "exif-lens-exif":
             let squashedWhitespace = trimmed.replacingOccurrences(
                 of: "\\s+",
                 with: " ",
@@ -4248,10 +4418,10 @@ final class AppModel: ObservableObject {
         if tag.id == "exif-shutter" {
             return formatExposureTime(trimmed)
         }
-        if tag.id == "exif-exposure-program" || tag.id == "exif-flash" || tag.id == "exif-metering-mode" {
+        if tag.id == "exif-exposure-program" || tag.id == "exif-flash" || tag.id == "exif-flash-fired" || tag.id == "exif-metering-mode" {
             return normalizeEnumRawValue(trimmed)
         }
-        if tag.id == "exif-aperture" || tag.id == "exif-focal" || tag.id == "exif-iso" {
+        if tag.id == "exif-aperture" || tag.id == "exif-focal" || tag.id == "exif-iso" || tag.id == "exif-exposure-comp" || tag.id == "xmp-exposure-bias" {
             return normalizeNumericRawValue(trimmed)
         }
 

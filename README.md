@@ -49,6 +49,18 @@ Download the latest release from the [Releases](../../releases) page, unzip, and
 
 ---
 
+## Development tests
+
+Run the full suite with:
+
+```bash
+./scripts/test/run_all.sh
+```
+
+This uses `swift test --parallel`, which is the stable mode for this project environment.
+
+---
+
 ## Credits
 
 Powered by [ExifTool](https://exiftool.org/) by Phil Harvey.

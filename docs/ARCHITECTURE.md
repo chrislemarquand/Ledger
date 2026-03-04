@@ -294,7 +294,8 @@ This is harmless — ignore it.
 
 | Target | Run with | Status |
 |--------|----------|--------|
-| `ExifEditCoreTests` | `swift test` or xcodebuild | Runnable |
-| `ExifEditMacTests` (in `Tests/LedgerTests`) | — | Compiles but **not runnable**: `AppModel` depends on AppKit and the full app environment; the executable target limitation prevents running these tests in isolation |
+| `ExifEditCoreTests` | `./scripts/test/run_all.sh --filter ExifEditCoreTests` | Runnable |
+| `ExifEditMacTests` (in `Tests/LedgerTests`) | `./scripts/test/run_all.sh --filter ExifEditMacTests` | Runnable |
 
-Run `swift test` or `xcodebuild test` to execute `ExifEditCoreTests` only.
+Run `./scripts/test/run_all.sh` for the full test suite.
+`swift test --parallel` is used intentionally because serial `swift test` can intermittently stall in this environment.

@@ -6,6 +6,8 @@ All notable changes to Ledger are documented here.
 
 ## [Unreleased]
 
+- Marketing version bumped from `1.0.1` to `1.0.2`.
+
 ---
 
 ## [1.0.1] — build 156 — 2026-03-04
