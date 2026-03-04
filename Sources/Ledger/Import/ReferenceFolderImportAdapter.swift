@@ -51,7 +51,7 @@ struct ReferenceFolderImportAdapter: ImportSourceAdapter {
             )
         }
 
-        if rows.isEmpty {
+        if sourceFiles.isEmpty {
             warnings.append(
                 ImportWarning(
                     sourceLine: nil,

@@ -540,6 +540,32 @@ final class ImportSystemTests: XCTestCase {
         XCTAssertTrue(result.warnings.isEmpty)
     }
 
+    func testReferenceFolderImportAdapterDoesNotReportEmptyFolderWhenMetadataReadFails() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let sourceFolder = temp.appendingPathComponent("ref", isDirectory: true)
+        try FileManager.default.createDirectory(at: sourceFolder, withIntermediateDirectories: true)
+        let image = sourceFolder.appendingPathComponent("0001.jpg")
+        try Data().write(to: image)
+
+        var options = ImportRunOptions.defaults(for: .referenceFolder)
+        options.sourceURLPath = sourceFolder.path
+        let context = ImportParseContext(
+            options: options,
+            sourceURL: sourceFolder,
+            auxiliaryURLs: [],
+            targetFiles: [],
+            tagCatalog: [],
+            metadataByFile: [:]
+        )
+
+        let result = try ReferenceFolderImportAdapter().parse(context: context)
+        XCTAssertTrue(result.rows.isEmpty)
+        XCTAssertTrue(result.warnings.contains(where: { $0.message.contains("Couldn’t read metadata for reference file 0001.jpg.") }))
+        XCTAssertFalse(result.warnings.contains(where: { $0.message.contains("no supported image files") }))
+    }
+
 
     func testStageImportAssignmentsRespectsEmptyPolicy() throws {
         let model = makeModel()

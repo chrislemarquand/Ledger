@@ -233,6 +233,19 @@
 			path = Sources/Ledger;
 			sourceTree = SOURCE_ROOT;
 		};
+		A10000570000000000000001 /* Sources/ExifEditCore */ = {
+			isa = PBXGroup;
+			children = (
+				A10000110000000000000001 /* Sources/ExifEditCore/BackupManager.swift */,
+				A10000120000000000000001 /* Sources/ExifEditCore/Domain.swift */,
+				A10000130000000000000001 /* Sources/ExifEditCore/ExifEditEngine.swift */,
+				A10000140000000000000001 /* Sources/ExifEditCore/ExifToolCommandBuilder.swift */,
+				A10000150000000000000001 /* Sources/ExifEditCore/ExifToolService.swift */,
+				A10000160000000000000001 /* Sources/ExifEditCore/MetadataValidator.swift */,
+			);
+			path = Sources/ExifEditCore;
+			sourceTree = SOURCE_ROOT;
+		};
 		C20000F00000000000000001 /* Sources/Ledger/Import */ = {
 			isa = PBXGroup;
 			children = (
@@ -259,19 +272,6 @@
 				C200010E0000000000000001 /* Sources/Ledger/ImportUI/ImportWizardWindowController.swift */,
 			);
 			path = Sources/Ledger/ImportUI;
-			sourceTree = SOURCE_ROOT;
-		};
-		A10000570000000000000001 /* Sources/ExifEditCore */ = {
-			isa = PBXGroup;
-			children = (
-				A10000110000000000000001 /* Sources/ExifEditCore/BackupManager.swift */,
-				A10000120000000000000001 /* Sources/ExifEditCore/Domain.swift */,
-				A10000130000000000000001 /* Sources/ExifEditCore/ExifEditEngine.swift */,
-				A10000140000000000000001 /* Sources/ExifEditCore/ExifToolCommandBuilder.swift */,
-				A10000150000000000000001 /* Sources/ExifEditCore/ExifToolService.swift */,
-				A10000160000000000000001 /* Sources/ExifEditCore/MetadataValidator.swift */,
-			);
-			path = Sources/ExifEditCore;
 			sourceTree = SOURCE_ROOT;
 		};
 /* End PBXGroup section */

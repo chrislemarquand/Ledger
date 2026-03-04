@@ -2610,7 +2610,6 @@ final class AppModel: ObservableObject {
     func importMetadataSnapshots(for files: [URL]) async -> [URL: FileMetadataSnapshot] {
         let unique = Array(Set(files)).sorted(by: { $0.path < $1.path })
         guard !unique.isEmpty else { return [:] }
-        let snapshots = await readMetadataBatchResilient(unique)
         var map = metadataByFile
 
         // Start from cached metadata so imports still work if one refresh call fails.
@@ -2621,11 +2620,17 @@ final class AppModel: ObservableObject {
             }
         }
 
-        // Merge fresh reads on top of cache.
-        for snapshot in snapshots {
-            result[snapshot.fileURL] = snapshot
-            map[snapshot.fileURL] = snapshot
-            staleMetadataFiles.remove(snapshot.fileURL)
+        // Read import metadata in smaller batches so one slow call does not drop an entire run.
+        let batchSize = max(1, Self.folderMetadataBatchSize)
+        for start in stride(from: 0, to: unique.count, by: batchSize) {
+            let end = min(start + batchSize, unique.count)
+            let batch = Array(unique[start..<end])
+            let snapshots = await readMetadataBatchResilient(batch)
+            for snapshot in snapshots {
+                result[snapshot.fileURL] = snapshot
+                map[snapshot.fileURL] = snapshot
+                staleMetadataFiles.remove(snapshot.fileURL)
+            }
         }
 
         // Import matching should see staged values (for example, staged EOS date/time before apply).

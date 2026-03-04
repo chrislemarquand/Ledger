@@ -604,18 +604,38 @@ private final class ImportWizardViewController: NSViewController {
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 4
+        stack.edgeInsets = NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
+        stack.translatesAutoresizingMaskIntoConstraints = false
         var checkboxes: [(id: String, button: NSButton)] = []
 
-        for tag in tags {
-            let button = NSButton(checkboxWithTitle: "\(tag.section): \(tag.label)", target: nil, action: nil)
-            button.state = selected.contains(tag.id) ? .on : .off
-            checkboxes.append((tag.id, button))
-            stack.addArrangedSubview(button)
+        if tags.isEmpty {
+            stack.addArrangedSubview(NSTextField(labelWithString: "No importable fields are available."))
+        } else {
+            for tag in tags {
+                let button = NSButton(checkboxWithTitle: "\(tag.section): \(tag.label)", target: nil, action: nil)
+                button.state = selected.contains(tag.id) ? .on : .off
+                checkboxes.append((tag.id, button))
+                stack.addArrangedSubview(button)
+            }
         }
+
+        let documentView = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 320))
+        documentView.translatesAutoresizingMaskIntoConstraints = false
+        documentView.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: documentView.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor),
+            stack.widthAnchor.constraint(equalTo: documentView.widthAnchor),
+        ])
+        documentView.layoutSubtreeIfNeeded()
+        let fittingHeight = stack.fittingSize.height
+        documentView.frame = NSRect(x: 0, y: 0, width: 520, height: max(320, fittingHeight))
 
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
-        scroll.documentView = stack
+        scroll.documentView = documentView
         scroll.frame = NSRect(x: 0, y: 0, width: 520, height: 320)
 
         let alert = NSAlert()
