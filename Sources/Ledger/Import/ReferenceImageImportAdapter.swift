@@ -19,11 +19,12 @@ struct ReferenceImageImportAdapter: ImportSourceAdapter {
 
         var rows: [ImportRow] = []
         rows.reserveCapacity(context.targetFiles.count)
+        let sourceIdentifier = context.sourceURL.lastPathComponent
         for (index, targetURL) in context.targetFiles.enumerated() {
             rows.append(
                 ImportRow(
                     sourceLine: index + 1,
-                    sourceIdentifier: targetURL.lastPathComponent,
+                    sourceIdentifier: sourceIdentifier,
                     targetSelector: .direct(targetURL),
                     fields: fields
                 )

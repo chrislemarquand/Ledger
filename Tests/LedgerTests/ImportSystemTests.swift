@@ -584,6 +584,39 @@ final class ImportSystemTests: XCTestCase {
         XCTAssertEqual(fields[0].value, "-0.218891666667")
     }
 
+    func testReferenceImageImportUsesReferenceFilenameAsSourceIdentifier() throws {
+        let source = URL(fileURLWithPath: "/tmp/reference.jpg")
+        let targetA = URL(fileURLWithPath: "/tmp/001.jpg")
+        let targetB = URL(fileURLWithPath: "/tmp/002.jpg")
+        let descriptors: [ImportTagDescriptor] = [
+            .init(id: "xmp-title", key: "Title", namespace: .xmp, label: "Title", section: "Descriptive"),
+        ]
+        var options = ImportRunOptions.defaults(for: .referenceImage)
+        options.sourceURLPath = source.path
+        options.selectedTagIDs = ["xmp-title"]
+
+        let context = ImportParseContext(
+            options: options,
+            sourceURL: source,
+            auxiliaryURLs: [],
+            targetFiles: [targetA, targetB],
+            tagCatalog: descriptors,
+            metadataByFile: [
+                source: FileMetadataSnapshot(
+                    fileURL: source,
+                    fields: [MetadataField(key: "Title", namespace: .xmp, value: "Reference Title")]
+                ),
+            ]
+        )
+
+        let result = try ReferenceImageImportAdapter().parse(context: context)
+        XCTAssertEqual(result.rows.count, 2)
+        XCTAssertEqual(result.rows[0].sourceIdentifier, "reference.jpg")
+        XCTAssertEqual(result.rows[1].sourceIdentifier, "reference.jpg")
+        XCTAssertEqual(result.rows[0].targetSelector, .direct(targetA))
+        XCTAssertEqual(result.rows[1].targetSelector, .direct(targetB))
+    }
+
 
     func testStageImportAssignmentsRespectsEmptyPolicy() throws {
         let model = makeModel()
