@@ -11,9 +11,10 @@ build_artifacts/
 build_derived/
 build_derived_*/
 build_derived_handoff/
+dist/
+*.profraw
 
 # Local diagnostics / handoff artifacts
 debugconsoleoutput.txt
-output/claude_handoff_bundle_latest.txt
-output/*.xlsx
-output/~$*.xlsx
+output/
+tmp/
