@@ -102,6 +102,7 @@ struct NavigationSidebarView: View {
             || model.canUnpinSidebarItem(item)
             || model.canMoveFavoriteUp(item)
             || model.canMoveFavoriteDown(item)
+            || model.canRemoveRecentSidebarItem(item)
     }
 
     @ViewBuilder
@@ -187,13 +188,25 @@ struct NavigationSidebarView: View {
             } label: {
                 Label("Pin", systemImage: "pin")
             }
+            if model.canRemoveRecentSidebarItem(item) {
+                Button(role: .destructive) {
+                    model.removeRecentSidebarItem(item)
+                } label: {
+                    Label("Remove", systemImage: "minus.circle")
+                }
+            }
         }
 
         if model.canUnpinSidebarItem(item) {
             Button {
                 model.unpinSidebarItem(item)
             } label: {
-                Label("Unpin Pinned", systemImage: "pin.slash")
+                Label("Unpin", systemImage: "pin.slash")
+            }
+            Button(role: .destructive) {
+                model.removeRecentSidebarItem(item)
+            } label: {
+                Label("Remove", systemImage: "minus.circle")
             }
 
             if model.canMoveFavoriteUp(item) || model.canMoveFavoriteDown(item) {
@@ -203,14 +216,14 @@ struct NavigationSidebarView: View {
             Button {
                 model.moveFavoriteUp(item)
             } label: {
-                Label("Move Pinned Up", systemImage: "arrow.up")
+                Label("Move Up", systemImage: "arrow.up")
             }
             .disabled(!model.canMoveFavoriteUp(item))
 
             Button {
                 model.moveFavoriteDown(item)
             } label: {
-                Label("Move Pinned Down", systemImage: "arrow.down")
+                Label("Move Down", systemImage: "arrow.down")
             }
             .disabled(!model.canMoveFavoriteDown(item))
         }

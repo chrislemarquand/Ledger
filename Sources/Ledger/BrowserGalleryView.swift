@@ -892,7 +892,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
     ) {
         titleField.stringValue = name
         self.preferredAspectRatio = preferredAspectRatio
-        setImage(image)
+        setImage(image, animated: false)
         applySelection(isSelected: isSelected)
         applyPending(hasPendingEdits: hasPendingEdits)
         updateTileSide(tileSide, animated: false)
@@ -935,9 +935,10 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         pendingDot.isHidden = !hasPendingEdits
     }
 
-    func setImage(_ image: NSImage?) {
+    func setImage(_ image: NSImage?, animated: Bool = true) {
         guard thumbnailImageView.image !== image else { return }
-        let shouldFadeTransition = thumbnailImageView.image != nil
+        let shouldFadeTransition = animated
+            && thumbnailImageView.image != nil
             && image != nil
             && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
 
@@ -950,6 +951,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
             thumbnailImageView.alphaValue = 1
             thumbnailImageView.image = image
         } else {
+            thumbnailImageView.layer?.removeAnimation(forKey: "thumbnailSwapFade")
             thumbnailImageView.alphaValue = 1
             thumbnailImageView.image = image
         }

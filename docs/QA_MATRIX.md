@@ -160,7 +160,7 @@ Covers all user-facing behaviour. Run on a clean build against a folder of real 
 - [X] Image → Restore from Backup is enabled after at least one Apply has been performed on the selection.
 - [X] Restore reverts files to the state before the last Apply.
 - [X] Subtitle shows "Restored N images" on full success.
-- [ ] Partial failure: subtitle shows "Restored X of N — Y failed". (Deferred to v1.0.1 — hard to trigger reliably in manual testing.)
+- [ ] Partial failure: subtitle shows "Restored X of N — Y failed". (Carry-forward manual QA item; hard to trigger reliably in ad-hoc testing.)
 - [X] Inspector refreshes with the restored values.
 - [X] Restore is disabled when no backup exists for the selection.
 
@@ -246,7 +246,7 @@ Covers all user-facing behaviour. Run on a clean build against a folder of real 
 | Restore succeeded | "Restored N images" |
 | Restore partial failure | "Restored X of N — Y failed" |
 
-- [ ] Each row in the table above verified. (Deferred to v1.0.1 — individual states verified during feature testing; full systematic table pass not completed.)
+- [ ] Each row in the table above verified. (Carry-forward manual QA item; individual states verified during feature testing, but full systematic table pass not completed.)
 
 ---
 
@@ -265,5 +265,5 @@ Enable macOS Reduce Motion (System Settings → Accessibility → Display) for t
 ## 20. Error states
 
 - [X] Open a folder the app cannot read; "Folder Unavailable" shown with appropriate icon and message.
-- [ ] Apply to a read-only file; failure reflected in partial-failure count; other files in selection succeed. (Deferred to v1.0.1 alongside B42 file-lock work.)
+- [x] Apply to a read-only file; failure reflected in partial-failure count; other files in selection succeed. (B42 / R22 implemented in v1.0.1.)
 - [x] Restore when the backup directory has been manually deleted; graceful error message, no crash. (Verified: shows "Backup for this operation was not found." — no crash.)

@@ -826,23 +826,23 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
         menu.addItem(.separator())
 
-        let pinItem = NSMenuItem(title: "Pin Folder to Sidebar", action: #selector(pinFolderToSidebarAction(_:)), keyEquivalent: "t")
+        let pinItem = NSMenuItem(title: "Pin Folder", action: #selector(pinFolderToSidebarAction(_:)), keyEquivalent: "t")
         pinItem.keyEquivalentModifierMask = [.command, .option]
         pinItem.image = NSImage(systemSymbolName: "pin", accessibilityDescription: nil)
         pinItem.tag = MenuTag.filePin
         menu.addItem(pinItem)
 
-        let unpinItem = NSMenuItem(title: "Unpin Folder from Sidebar", action: #selector(unpinFolderFromSidebarAction(_:)), keyEquivalent: "")
+        let unpinItem = NSMenuItem(title: "Unpin Folder", action: #selector(unpinFolderFromSidebarAction(_:)), keyEquivalent: "")
         unpinItem.image = NSImage(systemSymbolName: "pin.slash", accessibilityDescription: nil)
         unpinItem.tag = MenuTag.fileUnpin
         menu.addItem(unpinItem)
 
-        let moveUpItem = NSMenuItem(title: "Move Folder Up in Sidebar", action: #selector(moveFolderUpInSidebarAction(_:)), keyEquivalent: "")
+        let moveUpItem = NSMenuItem(title: "Move Folder Up", action: #selector(moveFolderUpInSidebarAction(_:)), keyEquivalent: "")
         moveUpItem.image = NSImage(systemSymbolName: "arrow.up", accessibilityDescription: nil)
         moveUpItem.tag = MenuTag.fileMoveUp
         menu.addItem(moveUpItem)
 
-        let moveDownItem = NSMenuItem(title: "Move Folder Down in Sidebar", action: #selector(moveFolderDownInSidebarAction(_:)), keyEquivalent: "")
+        let moveDownItem = NSMenuItem(title: "Move Folder Down", action: #selector(moveFolderDownInSidebarAction(_:)), keyEquivalent: "")
         moveDownItem.image = NSImage(systemSymbolName: "arrow.down", accessibilityDescription: nil)
         moveDownItem.tag = MenuTag.fileMoveDown
         menu.addItem(moveDownItem)
@@ -2140,7 +2140,7 @@ final class BrowserContainerViewController: NSViewController {
         if let error = model.browserEnumerationError {
             return .enumerationError(error.localizedDescription)
         }
-        if model.isFolderContentLoading || (model.isFolderMetadataLoading && model.browserItems.isEmpty) {
+        if model.browserItems.isEmpty && (model.isFolderContentLoading || model.isFolderMetadataLoading) {
             return .loading
         }
         if model.browserItems.isEmpty {

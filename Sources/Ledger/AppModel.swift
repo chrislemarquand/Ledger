@@ -946,13 +946,23 @@ final class AppModel: ObservableObject {
     }
 
     func openFolder(at folderURL: URL) {
+        var isDirectory: ObjCBool = false
+        let standardized = folderURL.standardizedFileURL
+        if !FileManager.default.fileExists(atPath: standardized.path, isDirectory: &isDirectory) {
+            clearLoadedContentState(preserveSessionCaches: true)
+            browserEnumerationError = CocoaError(.fileNoSuchFile)
+            return
+        }
         didChooseFolder(folderURL)
     }
 
     func refresh() {
         invalidateAllBrowserThumbnails()
         if let item = selectedSidebarItem {
-            loadFiles(for: item.kind)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                await self.loadFiles(for: item.kind)
+            }
         }
 
         Task {
@@ -970,7 +980,10 @@ final class AppModel: ObservableObject {
     func reloadFilesIfBrowserEmpty() {
         guard let item = selectedSidebarItem, browserItems.isEmpty else { return }
         guard !isPrivacySensitiveSidebarKind(item.kind) || hasHadExplicitSidebarSelection else { return }
-        loadFiles(for: item.kind)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.loadFiles(for: item.kind)
+        }
     }
 
     func refreshMetadata(for fileURLs: [URL]) {
@@ -984,6 +997,7 @@ final class AppModel: ObservableObject {
                 for snapshot in snapshots {
                     map[snapshot.fileURL] = snapshot
                     staleMetadataFiles.remove(snapshot.fileURL)
+                    pendingCommitsByFile.removeValue(forKey: snapshot.fileURL)
                 }
                 metadataByFile = map
                 invalidateInspectorPreviews(for: files)
@@ -1021,7 +1035,7 @@ final class AppModel: ObservableObject {
         let kind = itemToLoad.kind
         Task { @MainActor [weak self] in
             guard let self else { return }
-            self.loadFiles(for: kind)
+            await self.loadFiles(for: kind)
             self.isFolderContentLoading = false
         }
     }
@@ -1117,19 +1131,48 @@ final class AppModel: ObservableObject {
             )
         }
 
+        var writableFiles: [URL] = []
+        var preflightFailed: [FileError] = []
+        for fileURL in reachableFiles {
+            let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
+            if attrs?[.immutable] as? Bool == true {
+                preflightFailed.append(FileError(
+                    fileURL: fileURL,
+                    message: "This file is locked in Finder. Unlock it to apply changes."
+                ))
+            } else if let values = try? fileURL.resourceValues(forKeys: [.isWritableKey]),
+                      values.isWritable == false {
+                preflightFailed.append(FileError(
+                    fileURL: fileURL,
+                    message: "This file is not writable. Check permissions in Finder."
+                ))
+            } else {
+                writableFiles.append(fileURL)
+            }
+        }
+
+        guard !writableFiles.isEmpty else {
+            let n = preflightFailed.count
+            setStatusMessage(
+                "\(n == 1 ? "1 file is" : "\(n) files are") locked or not writable — no changes applied.",
+                autoClearAfterSuccess: false
+            )
+            return
+        }
+
         isApplyingMetadata = true
         applyMetadataCompleted = 0
-        applyMetadataTotal = reachableFiles.count
+        applyMetadataTotal = writableFiles.count
 
         Task {
             let startedAt = Date()
             var succeeded: [URL] = []
-            var failed: [FileError] = []
+            var failed: [FileError] = preflightFailed
             var firstBackupLocation: URL?
             var operationIDs: [UUID] = []
             var operationFilesByID: [UUID: URL] = [:]
 
-            for (index, fileURL) in reachableFiles.enumerated() {
+            for (index, fileURL) in writableFiles.enumerated() {
                 let patches = buildPatches(for: fileURL)
                 let imageOps = effectiveImageOperations(for: fileURL)
                 guard !patches.isEmpty || !imageOps.isEmpty else {
@@ -2740,6 +2783,34 @@ final class AppModel: ObservableObject {
         return false
     }
 
+    func canRemoveRecentSidebarItem(_ item: SidebarItem) -> Bool {
+        switch item.kind {
+        case .folder, .favorite: return true
+        default: return false
+        }
+    }
+
+    func removeRecentSidebarItem(_ item: SidebarItem) {
+        switch item.kind {
+        case let .folder(url):
+            let canonical = url.standardizedFileURL.resolvingSymlinksInPath()
+            removeRecentLocation(forCanonicalURL: canonical)
+            persistRecentLocations()
+        case let .favorite(url):
+            let canonical = url.standardizedFileURL.resolvingSymlinksInPath()
+            favoriteItems.removeAll { candidate in
+                guard case let .favorite(candidateURL) = candidate.kind else { return false }
+                return candidateURL == url
+            }
+            persistFavorites()
+            removeRecentLocation(forCanonicalURL: canonical)
+            persistRecentLocations()
+        default:
+            return
+        }
+        refreshSidebarItems(selectFirstWhenMissing: false)
+    }
+
     func canMoveFavoriteUp(_ item: SidebarItem) -> Bool {
         guard case let .favorite(url) = item.kind,
               let index = favoriteItems.firstIndex(where: { candidate in
@@ -2841,12 +2912,18 @@ final class AppModel: ObservableObject {
             if selectedSidebarID != item.id {
                 selectedSidebarID = item.id
             }
-            loadFiles(for: item.kind)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                await self.loadFiles(for: item.kind)
+            }
         } else {
             // If the folder is invalid/unreadable, still route through loadFiles so
             // browserEnumerationError is populated for error-state rendering/tests.
             let fallbackURL = folderURL.standardizedFileURL
-            loadFiles(for: .folder(fallbackURL))
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                await self.loadFiles(for: .folder(fallbackURL))
+            }
         }
         NotificationCenter.default.post(
             name: Notification.Name("\(AppBrand.identifierPrefix).SidebarShouldResignFocus"),
@@ -2854,7 +2931,7 @@ final class AppModel: ObservableObject {
         )
     }
 
-    private func loadFiles(for kind: SidebarKind) {
+    private func loadFiles(for kind: SidebarKind) async {
         deferredFolderMetadataPrefetchTask?.cancel()
         deferredFolderMetadataPrefetchTask = nil
         folderMetadataLoadTask?.cancel()
@@ -2936,25 +3013,55 @@ final class AppModel: ObservableObject {
             }
         }
 
-        // clearLoadedContentState resets browserEnumerationError to nil;
-        // re-apply it afterwards so the error state is actually visible to the view.
-        clearLoadedContentState(preserveSessionCaches: true)
-        browserEnumerationError = enumerationError
         let loadID = UUID()
         activeFolderLoadID = loadID
         let hydrationID = UUID()
         browserItemHydrationID = hydrationID
-        browserItems = urls.map {
-            BrowserItem(
-                url: $0,
-                name: $0.lastPathComponent,
-                modifiedAt: nil,
-                createdAt: nil,
-                sizeBytes: nil,
-                kind: nil
-            )
+
+        let shouldPublishHydratedOnly = browserSort != .name
+        let prehydratedItems: [BrowserItem]?
+        if shouldPublishHydratedOnly {
+            let attributesByURL = await readBrowserFileAttributes(for: urls)
+            guard !Task.isCancelled, activeFolderLoadID == loadID, browserItemHydrationID == hydrationID else { return }
+            prehydratedItems = urls.map { url in
+                let attrs = attributesByURL[url]
+                return BrowserItem(
+                    url: url,
+                    name: url.lastPathComponent,
+                    modifiedAt: attrs?.modifiedAt,
+                    createdAt: attrs?.createdAt,
+                    sizeBytes: attrs?.sizeBytes,
+                    kind: attrs?.kind
+                )
+            }
+        } else {
+            prehydratedItems = nil
         }
-        startBrowserItemHydration(for: urls, hydrationID: hydrationID)
+
+        // clearLoadedContentState resets browserEnumerationError to nil;
+        // re-apply it afterwards so the error state is actually visible to the view.
+        clearLoadedContentState(
+            preserveSessionCaches: true,
+            preserveBrowserItemsDuringSwitch: true
+        )
+        browserEnumerationError = enumerationError
+
+        if let prehydratedItems {
+            browserItems = prehydratedItems
+        } else {
+            browserItems = urls.map {
+                BrowserItem(
+                    url: $0,
+                    name: $0.lastPathComponent,
+                    modifiedAt: nil,
+                    createdAt: nil,
+                    sizeBytes: nil,
+                    kind: nil
+                )
+            }
+            startBrowserItemHydration(for: urls, hydrationID: hydrationID)
+        }
+
         startInitialThumbnailWarmup(for: urls, loadID: loadID)
         scheduleDeferredFolderMetadataPrefetch(
             for: urls,
@@ -2963,7 +3070,10 @@ final class AppModel: ObservableObject {
         )
     }
 
-    private func clearLoadedContentState(preserveSessionCaches: Bool = false) {
+    private func clearLoadedContentState(
+        preserveSessionCaches: Bool = false,
+        preserveBrowserItemsDuringSwitch: Bool = false
+    ) {
         // Folder switches should prioritize the newly selected folder; cancel stale
         // shared thumbnail work that would otherwise keep occupying the broker queue.
         Task { await ThumbnailService.cancelAllRequests() }
@@ -2990,7 +3100,9 @@ final class AppModel: ObservableObject {
         previewPreloadID = UUID()
         isPreviewPreloading = false
 
-        browserItems = []
+        if !preserveBrowserItemsDuringSwitch {
+            browserItems = []
+        }
         selectedFileURLs = []
         draftValues = [:]
         baselineValues = [:]
@@ -3040,8 +3152,7 @@ final class AppModel: ObservableObject {
         deferredFolderMetadataPrefetchTask = nil
         deferredFolderMetadataPrefetchTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            try? await Task.sleep(nanoseconds: Self.metadataPrefetchStartDelayNanoseconds)
-            guard !Task.isCancelled else { return }
+            do { try await Task.sleep(nanoseconds: Self.metadataPrefetchStartDelayNanoseconds) } catch { return }
             guard self.activeFolderLoadID == loadID else { return }
             self.startFolderMetadataPrefetch(for: files, batchSize: batchSize)
         }
@@ -3054,62 +3165,58 @@ final class AppModel: ObservableObject {
 
         browserItemHydrationTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            typealias BrowserFileAttributes = (modifiedAt: Date?, createdAt: Date?, sizeBytes: Int?, kind: String?)
-            var attributesByURL: [URL: BrowserFileAttributes] = [:]
-            attributesByURL.reserveCapacity(files.count)
-
-            let batchSize = 96
-            for batchStart in stride(from: 0, to: files.count, by: batchSize) {
-                if Task.isCancelled { return }
-                guard self.browserItemHydrationID == hydrationID else { return }
-
-                let batchEnd = min(batchStart + batchSize, files.count)
-                let batch = Array(files[batchStart..<batchEnd])
-                let batchResult = await Task.detached(priority: .utility) { () -> [URL: BrowserFileAttributes] in
-                    var result: [URL: BrowserFileAttributes] = [:]
-                    result.reserveCapacity(batch.count)
-                    for fileURL in batch {
-                        let resourceValues = try? fileURL.resourceValues(
-                            forKeys: [
-                                .contentModificationDateKey,
-                                .creationDateKey,
-                                .fileSizeKey,
-                                .localizedTypeDescriptionKey
-                            ]
-                        )
-                        result[fileURL] = (
-                            resourceValues?.contentModificationDate,
-                            resourceValues?.creationDate,
-                            resourceValues?.fileSize,
-                            resourceValues?.localizedTypeDescription
-                        )
-                    }
-                    return result
-                }.value
-
-                if Task.isCancelled { return }
-                guard self.browserItemHydrationID == hydrationID else { return }
-                attributesByURL.merge(batchResult) { _, new in new }
-
-                let currentURLs = Set(self.browserItems.map(\.url))
-                if !currentURLs.isEmpty {
-                    self.browserItems = self.browserItems.map { item in
-                        guard let attrs = attributesByURL[item.url] else { return item }
-                        return BrowserItem(
-                            url: item.url,
-                            name: item.name,
-                            modifiedAt: attrs.modifiedAt,
-                            createdAt: attrs.createdAt,
-                            sizeBytes: attrs.sizeBytes,
-                            kind: attrs.kind
-                        )
-                    }
-                }
-            }
+            let attributesByURL = await self.readBrowserFileAttributes(for: files)
 
             guard !Task.isCancelled, self.browserItemHydrationID == hydrationID else { return }
+            if !self.browserItems.isEmpty {
+                // Apply hydrated attributes in one pass to avoid repeated resort/reload
+                // churn while folder loads under non-name sort modes.
+                self.browserItems = self.browserItems.map { item in
+                    guard let attrs = attributesByURL[item.url] else { return item }
+                    return BrowserItem(
+                        url: item.url,
+                        name: item.name,
+                        modifiedAt: attrs.modifiedAt,
+                        createdAt: attrs.createdAt,
+                        sizeBytes: attrs.sizeBytes,
+                        kind: attrs.kind
+                    )
+                }
+            }
             self.browserItemHydrationTask = nil
         }
+    }
+
+    private typealias BrowserFileAttributes = (modifiedAt: Date?, createdAt: Date?, sizeBytes: Int?, kind: String?)
+
+    private func readBrowserFileAttributes(for files: [URL]) async -> [URL: BrowserFileAttributes] {
+        await Task.detached(priority: .utility) { () -> [URL: BrowserFileAttributes] in
+            var result: [URL: BrowserFileAttributes] = [:]
+            result.reserveCapacity(files.count)
+            let batchSize = 96
+            for batchStart in stride(from: 0, to: files.count, by: batchSize) {
+                if Task.isCancelled { return result }
+                let batchEnd = min(batchStart + batchSize, files.count)
+                let batch = files[batchStart..<batchEnd]
+                for fileURL in batch {
+                    let resourceValues = try? fileURL.resourceValues(
+                        forKeys: [
+                            .contentModificationDateKey,
+                            .creationDateKey,
+                            .fileSizeKey,
+                            .localizedTypeDescriptionKey
+                        ]
+                    )
+                    result[fileURL] = (
+                        resourceValues?.contentModificationDate,
+                        resourceValues?.creationDate,
+                        resourceValues?.fileSize,
+                        resourceValues?.localizedTypeDescription
+                    )
+                }
+            }
+            return result
+        }.value
     }
 
     private func sortBrowserItems(_ items: [BrowserItem]) -> [BrowserItem] {
@@ -3586,7 +3693,10 @@ final class AppModel: ObservableObject {
         }
 
         guard selectedSidebarID != previousSelectionID, let replacement = selectedSidebarItem else { return }
-        loadFiles(for: replacement.kind)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.loadFiles(for: replacement.kind)
+        }
     }
 
     private func clearToEmptyStateAfterSourceLoss() {
@@ -3995,8 +4105,8 @@ final class AppModel: ObservableObject {
             return
         }
         inspectorDebounceTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 100_000_000)
-            guard !Task.isCancelled, let self else { return }
+            do { try await Task.sleep(nanoseconds: 100_000_000) } catch { return }
+            guard let self else { return }
             self.performRecalculateInspectorState(forceNotify: forceNotify)
         }
     }
@@ -4237,15 +4347,19 @@ final class AppModel: ObservableObject {
         return max(1, x)
     }
 
+    private static let compactDecimalFormatter: NumberFormatter = {
+        let f = NumberFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.numberStyle = .decimal
+        f.maximumFractionDigits = 8
+        f.minimumFractionDigits = 0
+        f.decimalSeparator = "."
+        f.usesGroupingSeparator = false
+        return f
+    }()
+
     private static func compactDecimalString(_ value: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.numberStyle = .decimal
-        formatter.maximumFractionDigits = 8
-        formatter.minimumFractionDigits = 0
-        formatter.decimalSeparator = "."
-        formatter.usesGroupingSeparator = false
-        return formatter.string(from: NSNumber(value: value)) ?? String(value)
+        compactDecimalFormatter.string(from: NSNumber(value: value)) ?? String(value)
     }
 
     private func normalizePresetFields(_ fields: [PresetFieldValue]) -> [PresetFieldValue] {
@@ -4406,6 +4520,7 @@ final class AppModel: ObservableObject {
                 for snapshot in snapshots {
                     map[snapshot.fileURL] = snapshot
                     self.staleMetadataFiles.remove(snapshot.fileURL)
+                    self.pendingCommitsByFile.removeValue(forKey: snapshot.fileURL)
                 }
                 self.metadataByFile = map
                 self.folderMetadataLoadCompleted = batchEnd
@@ -4433,8 +4548,7 @@ final class AppModel: ObservableObject {
         let filesSnapshot = files
         deferredPreviewPreloadTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            try? await Task.sleep(nanoseconds: Self.previewBulkStartDelayNanoseconds)
-            guard !Task.isCancelled else { return }
+            do { try await Task.sleep(nanoseconds: Self.previewBulkStartDelayNanoseconds) } catch { return }
             self.startPreviewPreload(for: filesSnapshot)
         }
     }
@@ -4598,8 +4712,7 @@ final class AppModel: ObservableObject {
         selectionMetadataLoadTask?.cancel()
         selectionMetadataLoadTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            try? await Task.sleep(nanoseconds: Self.selectionMetadataDebounceNanoseconds)
-            guard !Task.isCancelled else { return }
+            do { try await Task.sleep(nanoseconds: Self.selectionMetadataDebounceNanoseconds) } catch { return }
             await self.loadMetadataForSelection()
         }
     }
@@ -4788,11 +4901,9 @@ final class AppModel: ObservableObject {
     private func warmCachesInBackground(files: [URL]) async {
         // Never contend with the active foreground load. Warm only when the UI is idle.
         while isFolderMetadataLoading || isPreviewPreloading {
-            if Task.isCancelled { return }
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            do { try await Task.sleep(nanoseconds: 300_000_000) } catch { return }
         }
-        try? await Task.sleep(nanoseconds: Self.previewBulkStartDelayNanoseconds)
-        if Task.isCancelled { return }
+        do { try await Task.sleep(nanoseconds: Self.previewBulkStartDelayNanoseconds) } catch { return }
 
         let filesNeedingMetadata = files.filter { fileURL in
             staleMetadataFiles.contains(fileURL) || metadataByFile[fileURL] == nil
@@ -4809,6 +4920,7 @@ final class AppModel: ObservableObject {
                 for snapshot in snapshots {
                     map[snapshot.fileURL] = snapshot
                     staleMetadataFiles.remove(snapshot.fileURL)
+                    pendingCommitsByFile.removeValue(forKey: snapshot.fileURL)
                 }
             }
             metadataByFile = map

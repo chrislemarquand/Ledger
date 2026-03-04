@@ -6,8 +6,22 @@ All notable changes to Ledger are documented here.
 
 ## [Unreleased]
 
+---
+
+## [1.0.1] — build 156 — 2026-03-04
+
 ### Fixed
 - **Inspector map sustained CPU** (~10% at idle with a GPS-tagged image selected): `InspectorLocationMapView` used a live `MKMapView` (`InspectorPassthroughMapView` subclass) which unconditionally starts a VectorKit display link on init, running full tile-geometry decode and label layout at 60 fps indefinitely, even when the map is completely static. Diagnosed via Instruments Time Profiler — VectorKit was 25% of total trace weight. Fix: replaced the `NSViewRepresentable`-wrapped `MKMapView` with a `MKMapSnapshotter`-based SwiftUI view that renders a one-shot static image, composites a pin annotation using `lockFocusFlipped(true)`, and re-renders only when coordinates or frame size change. No display link; CPU settles to <1% at idle.
+- **Folder-switch flash/reorder mismatch across sort modes** (`B43`): non-name sorts could visibly churn while sort-key metadata hydrated. Fix: prehydrate non-name attributes before publish, preserve existing browser content during switch, and keep loading overlay behavior consistent so transitions are atomic.
+- **Advisory locked-file handling during apply** (`B42`/`R22`): apply now preflights both `FileAttributeKey.immutable` and `.isWritableKey`, skips locked/unwritable files, and reports targeted per-file failures.
+- **Stale pending-commit values after metadata reload**: `pendingCommitsByFile` is now cleared on successful metadata reads (selection, folder, and background warm paths) so inspector values reflect disk state correctly after refresh.
+- **Deferred-task cancellation after `Task.sleep`**: replaced `try? await Task.sleep` patterns with cancellation-aware `do/catch` exits across deferred metadata/preview flows.
+- **Per-call formatter churn** in metadata/date normalization and compact decimal serialization: promoted repeated formatter allocations to static formatter instances.
+
+### Changed
+- Sidebar context menu polish: simplified labels (`Unpin`, `Move Up`, `Move Down`) and added `Remove` for recent and pinned folders.
+- Browser loading overlay condition now only shows loading when there are no browser items available to render.
+- Marketing version bumped from `1.0.0` to `1.0.1`.
 
 ---
 

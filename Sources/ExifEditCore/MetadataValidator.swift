@@ -1,6 +1,19 @@
 import Foundation
 
 public struct MetadataValidator {
+    private nonisolated(unsafe) static let isoDateFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
+    private static let exifDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy:MM:dd HH:mm:ss"
+        return f
+    }()
+
     private static let nonWritableKeys: Set<String> = [
         "FileType",
         "MIMEType",
@@ -32,18 +45,11 @@ public struct MetadataValidator {
     }
 
     private func normalizedDate(from input: String) throws -> Date {
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-        if let parsed = iso.date(from: input) {
+        if let parsed = Self.isoDateFormatter.date(from: input) {
             return parsed
         }
 
-        let fallback = DateFormatter()
-        fallback.locale = Locale(identifier: "en_US_POSIX")
-        fallback.dateFormat = "yyyy:MM:dd HH:mm:ss"
-
-        if let parsed = fallback.date(from: input) {
+        if let parsed = Self.exifDateFormatter.date(from: input) {
             return parsed
         }
 
