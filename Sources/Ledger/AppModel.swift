@@ -4001,6 +4001,27 @@ final class AppModel: ObservableObject {
     }
 
     private func patchesForTag(_ tag: EditableTag, rawValue: String) -> [MetadataPatch] {
+        if tag.id == "exif-gps-lat" {
+            return gpsPatches(
+                rawValue: rawValue,
+                valueKey: "GPSLatitude",
+                refKey: "GPSLatitudeRef",
+                negativeRef: "S",
+                positiveRef: "N",
+                namespace: .exif
+            )
+        }
+        if tag.id == "exif-gps-lon" {
+            return gpsPatches(
+                rawValue: rawValue,
+                valueKey: "GPSLongitude",
+                refKey: "GPSLongitudeRef",
+                negativeRef: "W",
+                positiveRef: "E",
+                namespace: .exif
+            )
+        }
+
         let normalized = normalizedWriteValue(rawValue, for: tag)
         var patches: [MetadataPatch] = [
             MetadataPatch(
@@ -4062,6 +4083,43 @@ final class AppModel: ObservableObject {
         }
 
         return patches
+    }
+
+    private func gpsPatches(
+        rawValue: String,
+        valueKey: String,
+        refKey: String,
+        negativeRef: String,
+        positiveRef: String,
+        namespace: MetadataNamespace
+    ) -> [MetadataPatch] {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return [
+                MetadataPatch(key: valueKey, namespace: namespace, newValue: ""),
+                MetadataPatch(key: refKey, namespace: namespace, newValue: ""),
+            ]
+        }
+
+        if let signed = parseSignedCoordinateForWrite(trimmed, negativeRef: negativeRef, positiveRef: positiveRef) {
+            return [
+                MetadataPatch(
+                    key: valueKey,
+                    namespace: namespace,
+                    newValue: Self.compactDecimalString(abs(signed))
+                ),
+                MetadataPatch(
+                    key: refKey,
+                    namespace: namespace,
+                    newValue: signed < 0 ? negativeRef : positiveRef
+                ),
+            ]
+        }
+
+        // If coordinate parsing fails, preserve the original user/import value.
+        return [
+            MetadataPatch(key: valueKey, namespace: namespace, newValue: trimmed),
+        ]
     }
 
     private func normalizedWriteValue(_ value: String, for tag: EditableTag) -> String {
@@ -4293,6 +4351,43 @@ final class AppModel: ObservableObject {
             return first < 0 ? -composed : composed
         }
         return first
+    }
+
+    private func parseSignedCoordinateForWrite(
+        _ raw: String,
+        negativeRef: String,
+        positiveRef: String
+    ) -> Double? {
+        guard let parsed = parseCoordinateNumber(raw) else { return nil }
+        let uppercase = raw.uppercased()
+        let hasNegativeRef = containsStandaloneDirection(negativeRef, in: uppercase)
+        let hasPositiveRef = containsStandaloneDirection(positiveRef, in: uppercase)
+
+        if hasNegativeRef, !hasPositiveRef {
+            return -abs(parsed)
+        }
+        if hasPositiveRef, !hasNegativeRef {
+            return abs(parsed)
+        }
+        return parsed
+    }
+
+    private func containsStandaloneDirection(_ direction: String, in text: String) -> Bool {
+        guard let directionChar = direction.uppercased().first else { return false }
+        let chars = Array(text)
+        for index in chars.indices where chars[index] == directionChar {
+            let prevIsAlphaNum = index > chars.startIndex && isAlphanumeric(chars[index - 1])
+            let nextIndex = chars.index(after: index)
+            let nextIsAlphaNum = nextIndex < chars.endIndex && isAlphanumeric(chars[nextIndex])
+            if !prevIsAlphaNum, !nextIsAlphaNum {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func isAlphanumeric(_ character: Character) -> Bool {
+        character.unicodeScalars.allSatisfy { CharacterSet.alphanumerics.contains($0) }
     }
 
     private func recalculateInspectorState(forceNotify: Bool = false) {

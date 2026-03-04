@@ -32,4 +32,24 @@ final class ExifToolCommandBuilderTests: XCTestCase {
         XCTAssertTrue(args.contains("-XMP:Title=Sunset"))
         XCTAssertEqual(args.last, "/tmp/a.jpg")
     }
+
+    func testWriteArgumentsRouteGPSKeysToGPSGroup() {
+        let builder = ExifToolCommandBuilder()
+        let operation = EditOperation(
+            targetFiles: [URL(fileURLWithPath: "/tmp/a.jpg")],
+            changes: [
+                MetadataPatch(key: "GPSLatitude", namespace: .exif, newValue: "51.5007"),
+                MetadataPatch(key: "GPSLatitudeRef", namespace: .exif, newValue: "N"),
+                MetadataPatch(key: "GPSLongitude", namespace: .exif, newValue: "0.1246"),
+                MetadataPatch(key: "GPSLongitudeRef", namespace: .exif, newValue: "W"),
+            ]
+        )
+
+        let args = builder.writeArguments(for: operation, file: URL(fileURLWithPath: "/tmp/a.jpg"))
+
+        XCTAssertTrue(args.contains("-GPS:GPSLatitude=51.5007"))
+        XCTAssertTrue(args.contains("-GPS:GPSLatitudeRef=N"))
+        XCTAssertTrue(args.contains("-GPS:GPSLongitude=0.1246"))
+        XCTAssertTrue(args.contains("-GPS:GPSLongitudeRef=W"))
+    }
 }

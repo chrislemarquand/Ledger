@@ -359,6 +359,47 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.valueForTag(makeTag), "Canon")
     }
 
+    func testApplyingNegativeLongitudeWritesGPSLongitudeRefWest() async throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let fileURL = temp.appendingPathComponent("sample.jpg")
+        try Data().write(to: fileURL)
+
+        let service = RecordingExifToolService()
+        let model = AppModel(
+            exifToolService: service,
+            presetStore: InMemoryPresetStore(),
+            favoritesStore: InMemoryFavoritesStore(),
+            recentLocationsStore: InMemoryRecentLocationsStore()
+        )
+
+        _ = model.stageImportAssignments(
+            [ImportAssignment(targetURL: fileURL, fields: [.init(tagID: "exif-gps-lon", value: "-0.2159974")])],
+            sourceKind: .gpx,
+            emptyValuePolicy: .clear,
+            pendingPolicy: .merge
+        )
+        model.applyChanges(for: [fileURL])
+
+        for _ in 0..<300 {
+            if model.isApplyingMetadata == false {
+                break
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+
+        let operations = await service.recordedOperations
+        guard let operation = operations.last else {
+            XCTFail("Expected a recorded write operation")
+            return
+        }
+
+        let byKey = Dictionary(uniqueKeysWithValues: operation.changes.map { ("\($0.namespace.rawValue):\($0.key)", $0.newValue) })
+        XCTAssertEqual(byKey["EXIF:GPSLongitude"], "0.2159974")
+        XCTAssertEqual(byKey["EXIF:GPSLongitudeRef"], "W")
+    }
+
     // MARK: - Empty state and enumeration
 
     func testEmptyFolderBrowserItemsAreEmpty() throws {
@@ -576,6 +617,19 @@ private struct StubExifToolService: ExifToolServiceProtocol {
 
     func writeMetadata(operation: EditOperation) async -> OperationResult {
         OperationResult(operationID: operation.id, succeeded: operation.targetFiles, failed: [], backupLocation: nil, duration: 0)
+    }
+}
+
+private actor RecordingExifToolService: ExifToolServiceProtocol {
+    private(set) var recordedOperations: [EditOperation] = []
+
+    func readMetadata(files _: [URL]) async throws -> [FileMetadataSnapshot] {
+        []
+    }
+
+    func writeMetadata(operation: EditOperation) async -> OperationResult {
+        recordedOperations.append(operation)
+        return OperationResult(operationID: operation.id, succeeded: operation.targetFiles, failed: [], backupLocation: nil, duration: 0)
     }
 }
 

@@ -566,6 +566,24 @@ final class ImportSystemTests: XCTestCase {
         XCTAssertFalse(result.warnings.contains(where: { $0.message.contains("no supported image files") }))
     }
 
+    func testReferenceImportSupportSignsGPSLongitudeFromRef() {
+        let snapshot = FileMetadataSnapshot(
+            fileURL: URL(fileURLWithPath: "/tmp/001.jpg"),
+            fields: [
+                MetadataField(key: "GPSLongitude", namespace: .exif, value: "0.218891666666667"),
+                MetadataField(key: "GPSLongitudeRef", namespace: .exif, value: "W"),
+            ]
+        )
+        let descriptors: [ImportTagDescriptor] = [
+            .init(id: "exif-gps-lon", key: "GPSLongitude", namespace: .exif, label: "Longitude", section: "Location"),
+        ]
+
+        let fields = ReferenceImportSupport.fieldsFromSnapshot(snapshot: snapshot, descriptors: descriptors)
+        XCTAssertEqual(fields.count, 1)
+        XCTAssertEqual(fields[0].tagID, "exif-gps-lon")
+        XCTAssertEqual(fields[0].value, "-0.218891666667")
+    }
+
 
     func testStageImportAssignmentsRespectsEmptyPolicy() throws {
         let model = makeModel()
