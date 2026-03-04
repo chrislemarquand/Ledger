@@ -28,9 +28,15 @@ final class ImportCoordinator {
 
     func persist(options: ImportRunOptions) {
         let key = optionsPrefix + options.sourceKind.rawValue
-        if let encoded = try? JSONEncoder().encode(options) {
+        var persisted = options
+        persisted.csvColumnPlan = nil
+        if let encoded = try? JSONEncoder().encode(persisted) {
             UserDefaults.standard.set(encoded, forKey: key)
         }
+    }
+
+    func suggestCSVColumnPlan(sourceURL: URL, tagCatalog: [ImportTagDescriptor]) throws -> ImportCSVColumnPlan {
+        try csvAdapter.suggestColumnPlan(sourceURL: sourceURL, tagCatalog: tagCatalog)
     }
 
     func prepareRun(
@@ -54,9 +60,11 @@ final class ImportCoordinator {
         )
 
         let parseResult: ImportParseResult
+        let parsedAsSourceKind: ImportSourceKind
         if options.sourceKind == .eos1v {
             do {
                 parseResult = try eosAdapter.parse(context: context)
+                parsedAsSourceKind = .eos1v
             } catch let eosError as ImportAdapterError {
                 switch eosError {
                 case .invalidSchema:
@@ -67,6 +75,7 @@ final class ImportCoordinator {
                             warnings: [ImportWarning(sourceLine: nil, message: "EOS format validation failed; using generic CSV importer.", severity: .warning)] + fallback.warnings
                         )
                         parseResult = fallback
+                        parsedAsSourceKind = .csv
                     } catch let csvError {
                         _ = eosError
                         _ = csvError
@@ -80,6 +89,7 @@ final class ImportCoordinator {
             }
         } else {
             parseResult = try adapter(for: options.sourceKind).parse(context: context)
+            parsedAsSourceKind = options.sourceKind
         }
 
         let matchResult = matcher.match(parseResult: parseResult, targetFiles: targetFiles)
@@ -101,6 +111,7 @@ final class ImportCoordinator {
 
         return ImportPreparedRun(
             options: options,
+            parsedAsSourceKind: parsedAsSourceKind,
             parseResult: parseResult,
             matchResult: matchResult,
             previewSummary: summary,

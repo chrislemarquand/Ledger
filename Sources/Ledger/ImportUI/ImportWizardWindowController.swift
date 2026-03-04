@@ -47,25 +47,11 @@ final class ImportWizardWindowController: NSWindowController, NSWindowDelegate {
 private final class ImportWizardViewController: NSViewController {
     private enum Step: Int, CaseIterable {
         case source
+        case csvMapping
         case match
         case preview
         case conflicts
         case summary
-
-        var title: String {
-            switch self {
-            case .source:
-                return "1. Source and Options"
-            case .match:
-                return "2. Match"
-            case .preview:
-                return "3. Preview"
-            case .conflicts:
-                return "4. Resolve Conflicts"
-            case .summary:
-                return "5. Summary"
-            }
-        }
     }
 
     private weak var model: AppModel?
@@ -76,6 +62,7 @@ private final class ImportWizardViewController: NSViewController {
     private var conflictResolutions: [UUID: ImportConflictResolutionChoice] = [:]
     private var latestResolveResult: ImportConflictResolveResult?
     private var workingReport: ImportReport?
+    private var isEOSFallbackToCSV = false
     private var isBusy = false
 
     private let rootStack = NSStackView()
@@ -101,10 +88,13 @@ private final class ImportWizardViewController: NSViewController {
     private let selectedFieldsLabel = NSTextField(labelWithString: "")
     private let scopeSummaryLabel = NSTextField(labelWithString: "")
     private let chooseFieldsButton = NSButton(title: "Choose Fields…", target: nil, action: nil)
+    private let mappingStatusLabel = NSTextField(labelWithString: "")
     private let detailsTextView = NSTextView()
     private let detailsScrollView = NSScrollView()
 
     private var conflictControls: [UUID: NSComboBox] = [:]
+    private var csvMappingDestinationPopups: [Int: NSPopUpButton] = [:]
+    private var csvMappingStatusLabels: [Int: NSTextField] = [:]
 
     init(model: AppModel, initialSourceKind: ImportSourceKind) {
         self.model = model
@@ -275,11 +265,13 @@ private final class ImportWizardViewController: NSViewController {
     }
 
     private func render() {
-        stepLabel.stringValue = currentStep.title
+        stepLabel.stringValue = currentStepTitle()
         clearContentStack()
         switch currentStep {
         case .source:
             renderSourceStep()
+        case .csvMapping:
+            renderCSVMappingStep()
         case .match:
             renderMatchStep()
         case .preview:
@@ -339,9 +331,95 @@ private final class ImportWizardViewController: NSViewController {
             contentStack.addArrangedSubview(makeLabeledRow(label: "Fields", view: row))
         }
 
-        let hint = NSTextField(labelWithString: "Flow: Source/options -> Match -> Preview -> Conflicts -> Summary")
+        let flowText = usesCSVMappingStep
+            ? "Flow: Source/options -> Column Mapping -> Match -> Preview -> Conflicts -> Summary"
+            : "Flow: Source/options -> Match -> Preview -> Conflicts -> Summary"
+        let hint = NSTextField(labelWithString: flowText)
         hint.textColor = .secondaryLabelColor
         contentStack.addArrangedSubview(hint)
+    }
+
+    private func renderCSVMappingStep() {
+        guard let plan = options.csvColumnPlan, let model else {
+            contentStack.addArrangedSubview(NSTextField(labelWithString: "No CSV columns available to map."))
+            return
+        }
+
+        let info = NSTextField(wrappingLabelWithString: isEOSFallbackToCSV
+            ? "EOS format failed. Map this file as a generic CSV before continuing."
+            : "Map each CSV column to a Ledger field. Unmapped columns are ignored.")
+        info.textColor = .secondaryLabelColor
+        contentStack.addArrangedSubview(info)
+
+        mappingStatusLabel.stringValue = mappingValidationMessage(for: plan) ?? "Mapping is valid."
+        mappingStatusLabel.textColor = mappingValidationMessage(for: plan) == nil ? .secondaryLabelColor : .systemOrange
+        contentStack.addArrangedSubview(mappingStatusLabel)
+
+        csvMappingDestinationPopups.removeAll()
+        csvMappingStatusLabels.removeAll()
+
+        let rowsStack = NSStackView()
+        rowsStack.orientation = .vertical
+        rowsStack.alignment = .leading
+        rowsStack.spacing = 8
+        rowsStack.edgeInsets = NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
+        rowsStack.translatesAutoresizingMaskIntoConstraints = false
+
+        for (index, entry) in plan.entries.enumerated() {
+            let row = NSStackView()
+            row.orientation = .horizontal
+            row.alignment = .centerY
+            row.spacing = 8
+
+            let nameLabel = NSTextField(labelWithString: entry.displayName)
+            nameLabel.lineBreakMode = .byTruncatingTail
+            nameLabel.widthAnchor.constraint(equalToConstant: 200).isActive = true
+
+            let sampleLabel = NSTextField(labelWithString: entry.sampleValue ?? "—")
+            sampleLabel.textColor = .secondaryLabelColor
+            sampleLabel.lineBreakMode = .byTruncatingTail
+            sampleLabel.widthAnchor.constraint(equalToConstant: 180).isActive = true
+
+            let popup = NSPopUpButton()
+            popup.widthAnchor.constraint(equalToConstant: 220).isActive = true
+            configureMappingDestinationPopup(popup, selected: entry.selectedDestination, tagCatalog: model.importTagCatalog)
+            popup.tag = index
+            popup.target = self
+            popup.action = #selector(csvMappingDestinationChanged(_:))
+            csvMappingDestinationPopups[index] = popup
+
+            let status = NSTextField(labelWithString: csvMappingStatusText(for: entry, plan: plan))
+            status.textColor = csvMappingStatusColor(for: status.stringValue)
+            status.widthAnchor.constraint(greaterThanOrEqualToConstant: 120).isActive = true
+            csvMappingStatusLabels[index] = status
+
+            row.addArrangedSubview(nameLabel)
+            row.addArrangedSubview(sampleLabel)
+            row.addArrangedSubview(popup)
+            row.addArrangedSubview(status)
+            rowsStack.addArrangedSubview(row)
+        }
+
+        let documentView = NSView(frame: NSRect(x: 0, y: 0, width: 720, height: 320))
+        documentView.translatesAutoresizingMaskIntoConstraints = false
+        documentView.addSubview(rowsStack)
+        NSLayoutConstraint.activate([
+            rowsStack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
+            rowsStack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
+            rowsStack.topAnchor.constraint(equalTo: documentView.topAnchor),
+            rowsStack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor),
+            rowsStack.widthAnchor.constraint(equalTo: documentView.widthAnchor),
+        ])
+        documentView.layoutSubtreeIfNeeded()
+        let fittingHeight = rowsStack.fittingSize.height
+        documentView.frame = NSRect(x: 0, y: 0, width: 720, height: max(320, fittingHeight))
+
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.documentView = documentView
+        scroll.heightAnchor.constraint(equalToConstant: 320).isActive = true
+        scroll.widthAnchor.constraint(greaterThanOrEqualToConstant: 700).isActive = true
+        contentStack.addArrangedSubview(scroll)
     }
 
     private func renderMatchStep() {
@@ -508,6 +586,8 @@ private final class ImportWizardViewController: NSViewController {
         let selected = ImportSourceKind.allCases[sourceKindPopup.indexOfSelectedItem]
         options = coordinator.loadPersistedOptions(for: selected)
         options.sourceKind = selected
+        options.csvColumnPlan = nil
+        isEOSFallbackToCSV = false
         applySelectionDrivenDefaults()
         preparedRun = nil
         latestResolveResult = nil
@@ -556,6 +636,8 @@ private final class ImportWizardViewController: NSViewController {
         } else {
             return
         }
+        options.csvColumnPlan = nil
+        isEOSFallbackToCSV = false
         sourcePathField.stringValue = sourceSummaryText()
         preparedRun = nil
     }
@@ -590,6 +672,15 @@ private final class ImportWizardViewController: NSViewController {
                let model {
                 options.rowParityRowCount = model.selectedFileURLs.count
                 rowCountField.stringValue = String(max(0, options.rowParityRowCount))
+            }
+            if currentStep == .csvMapping, let plan = options.csvColumnPlan {
+                mappingStatusLabel.stringValue = mappingValidationMessage(for: plan) ?? "Mapping is valid."
+                mappingStatusLabel.textColor = mappingValidationMessage(for: plan) == nil ? .secondaryLabelColor : .systemOrange
+                for (entryIndex, entry) in plan.entries.enumerated() {
+                    guard let label = csvMappingStatusLabels[entryIndex] else { continue }
+                    label.stringValue = csvMappingStatusText(for: entry, plan: plan)
+                    label.textColor = csvMappingStatusColor(for: label.stringValue)
+                }
             }
             render()
         }
@@ -668,8 +759,10 @@ private final class ImportWizardViewController: NSViewController {
         switch currentStep {
         case .source:
             break
-        case .match:
+        case .csvMapping:
             currentStep = .source
+        case .match:
+            currentStep = usesCSVMappingStep ? .csvMapping : .source
         case .preview:
             currentStep = .match
         case .conflicts:
@@ -695,6 +788,13 @@ private final class ImportWizardViewController: NSViewController {
             options.gpxCameraOffsetSeconds = offsetField.integerValue
             options.rowParityStartRow = max(1, rowStartField.integerValue)
             options.rowParityRowCount = max(0, rowCountField.integerValue)
+            if options.sourceKind == .csv {
+                prepareCSVMappingStep()
+            } else {
+                prepareImportRun()
+            }
+        case .csvMapping:
+            guard validateCSVMappingStep() else { return }
             prepareImportRun()
         case .match:
             currentStep = .preview
@@ -857,10 +957,33 @@ private final class ImportWizardViewController: NSViewController {
                         await model.importMetadataSnapshots(for: files)
                     }
                 )
+                if currentStep == .source,
+                   options.sourceKind == .eos1v,
+                   prepared.parsedAsSourceKind == .csv {
+                    isEOSFallbackToCSV = true
+                    guard let sourceURL = options.sourceURL else {
+                        throw ImportAdapterError.missingSourceURL
+                    }
+                    options.csvColumnPlan = try coordinator.suggestCSVColumnPlan(
+                        sourceURL: sourceURL,
+                        tagCatalog: model.importTagCatalog
+                    )
+                    preparedRun = nil
+                    workingReport = nil
+                    conflictResolutions = [:]
+                    latestResolveResult = nil
+                    currentStep = .csvMapping
+                    isBusy = false
+                    render()
+                    return
+                }
                 preparedRun = prepared
                 workingReport = prepared.report
                 conflictResolutions = [:]
                 latestResolveResult = nil
+                if prepared.parsedAsSourceKind != .csv || options.sourceKind != .eos1v {
+                    isEOSFallbackToCSV = false
+                }
                 currentStep = .match
             } catch {
                 showAlert(title: "Import Setup Failed", message: error.localizedDescription)
@@ -884,6 +1007,173 @@ private final class ImportWizardViewController: NSViewController {
             return false
         }
         return true
+    }
+
+    private var usesCSVMappingStep: Bool {
+        options.sourceKind == .csv || isEOSFallbackToCSV
+    }
+
+    private func stepSequence() -> [Step] {
+        if usesCSVMappingStep {
+            return [.source, .csvMapping, .match, .preview, .conflicts, .summary]
+        }
+        return [.source, .match, .preview, .conflicts, .summary]
+    }
+
+    private func currentStepTitle() -> String {
+        let sequence = stepSequence()
+        guard let index = sequence.firstIndex(of: currentStep) else {
+            return "Import"
+        }
+        let number = index + 1
+        switch currentStep {
+        case .source:
+            return "\(number). Source and Options"
+        case .csvMapping:
+            return "\(number). Column Mapping"
+        case .match:
+            return "\(number). Match"
+        case .preview:
+            return "\(number). Preview"
+        case .conflicts:
+            return "\(number). Resolve Conflicts"
+        case .summary:
+            return "\(number). Summary"
+        }
+    }
+
+    private func prepareCSVMappingStep() {
+        guard let model, let sourceURL = options.sourceURL else {
+            showAlert(title: "Select Source", message: "Choose a source before continuing.")
+            return
+        }
+
+        do {
+            options.csvColumnPlan = try coordinator.suggestCSVColumnPlan(
+                sourceURL: sourceURL,
+                tagCatalog: model.importTagCatalog
+            )
+            currentStep = .csvMapping
+            render()
+        } catch {
+            showAlert(title: "Import Setup Failed", message: error.localizedDescription)
+        }
+    }
+
+    private func validateCSVMappingStep() -> Bool {
+        guard let plan = options.csvColumnPlan else {
+            showAlert(title: "Missing Mapping", message: "No CSV mapping plan is available.")
+            return false
+        }
+
+        guard mappingValidationMessage(for: plan) == nil else {
+            showAlert(title: "Fix Column Mapping", message: mappingValidationMessage(for: plan) ?? "Resolve mapping conflicts before continuing.")
+            return false
+        }
+        return true
+    }
+
+    private func mappingValidationMessage(for plan: ImportCSVColumnPlan) -> String? {
+        if !plan.hasMappedField {
+            return "Map at least one CSV column to a metadata field."
+        }
+        if options.matchStrategy == .filename, !plan.hasFilenameMapping {
+            return "Filename matching is selected. Map one column to Filename / SourceFile."
+        }
+        let filenameCount = plan.entries.filter { $0.selectedDestination == .filename }.count
+        if filenameCount > 1 {
+            return "Only one column can be mapped to Filename / SourceFile."
+        }
+        let duplicates = plan.duplicateTagDestinations
+        if !duplicates.isEmpty {
+            return "Each destination field can be mapped once. Resolve duplicate field mappings."
+        }
+        return nil
+    }
+
+    private func configureMappingDestinationPopup(
+        _ popup: NSPopUpButton,
+        selected: ImportColumnDestination,
+        tagCatalog: [ImportTagDescriptor]
+    ) {
+        popup.removeAllItems()
+        popup.addItem(withTitle: "Ignore")
+        popup.lastItem?.representedObject = "__ignore__"
+        popup.addItem(withTitle: "Filename / SourceFile")
+        popup.lastItem?.representedObject = "__filename__"
+        popup.menu?.addItem(.separator())
+        for descriptor in tagCatalog {
+            popup.addItem(withTitle: "\(descriptor.section): \(descriptor.label)")
+            popup.lastItem?.representedObject = descriptor.id
+        }
+
+        let object: Any
+        switch selected {
+        case .ignore:
+            object = "__ignore__"
+        case .filename:
+            object = "__filename__"
+        case let .tag(tagID):
+            object = tagID
+        }
+        if let selectedIndex = popup.itemArray.firstIndex(where: { String(describing: $0.representedObject ?? "") == String(describing: object) }) {
+            popup.selectItem(at: selectedIndex)
+        } else {
+            popup.selectItem(at: 0)
+        }
+    }
+
+    private func csvMappingStatusText(for entry: ImportColumnMappingEntry, plan: ImportCSVColumnPlan) -> String {
+        switch entry.selectedDestination {
+        case .ignore:
+            return "Ignored"
+        case .filename:
+            return options.matchStrategy == .filename ? "Mapped" : "Unused in row-order"
+        case let .tag(tagID):
+            if plan.duplicateTagDestinations.contains(tagID) {
+                return "Conflict"
+            }
+            return "Mapped"
+        }
+    }
+
+    private func csvMappingStatusColor(for status: String) -> NSColor {
+        switch status {
+        case "Conflict":
+            return .systemOrange
+        case "Ignored", "Unused in row-order":
+            return .secondaryLabelColor
+        default:
+            return .labelColor
+        }
+    }
+
+    @objc
+    private func csvMappingDestinationChanged(_ sender: NSPopUpButton) {
+        guard var plan = options.csvColumnPlan else { return }
+        let index = sender.tag
+        guard index >= 0, index < plan.entries.count else { return }
+
+        let selectedObject = String(describing: sender.selectedItem?.representedObject ?? "__ignore__")
+        let destination: ImportColumnDestination
+        switch selectedObject {
+        case "__ignore__":
+            destination = .ignore
+        case "__filename__":
+            destination = .filename
+        default:
+            destination = .tag(selectedObject)
+        }
+        plan.entries[index].selectedDestination = destination
+        options.csvColumnPlan = plan
+
+        mappingStatusLabel.stringValue = mappingValidationMessage(for: plan) ?? "Mapping is valid."
+        mappingStatusLabel.textColor = mappingValidationMessage(for: plan) == nil ? .secondaryLabelColor : .systemOrange
+        for (entryIndex, entry) in plan.entries.enumerated() {
+            guard let label = csvMappingStatusLabels[entryIndex] else { continue }
+            label.stringValue = csvMappingStatusText(for: entry, plan: plan)
+            label.textColor = csvMappingStatusColor(for: label.stringValue)
+        }
     }
 
     private func applySelectionDrivenDefaults() {

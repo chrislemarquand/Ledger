@@ -92,6 +92,79 @@ struct ImportTagDescriptor: Hashable, Sendable {
     let namespace: MetadataNamespace
     let label: String
     let section: String
+    let inputKind: ImportFieldInputKind
+
+    init(
+        id: String,
+        key: String,
+        namespace: MetadataNamespace,
+        label: String,
+        section: String,
+        inputKind: ImportFieldInputKind = .text
+    ) {
+        self.id = id
+        self.key = key
+        self.namespace = namespace
+        self.label = label
+        self.section = section
+        self.inputKind = inputKind
+    }
+}
+
+struct ImportEnumChoice: Hashable, Codable, Sendable {
+    let value: String
+    let label: String
+}
+
+enum ImportFieldInputKind: Hashable, Codable, Sendable {
+    case text
+    case dateTime
+    case decimal
+    case gpsCoordinate
+    case enumChoice([ImportEnumChoice])
+}
+
+enum ImportColumnDestination: Hashable, Codable, Sendable {
+    case ignore
+    case filename
+    case tag(String)
+}
+
+struct ImportColumnMappingEntry: Hashable, Codable, Sendable {
+    let columnIndex: Int
+    let header: String
+    let displayName: String
+    let normalizedHeader: String
+    let sampleValue: String?
+    let suggestedDestination: ImportColumnDestination
+    var selectedDestination: ImportColumnDestination
+}
+
+struct ImportCSVColumnPlan: Hashable, Codable, Sendable {
+    var entries: [ImportColumnMappingEntry]
+
+    var hasMappedField: Bool {
+        entries.contains {
+            if case .tag = $0.selectedDestination {
+                return true
+            }
+            return false
+        }
+    }
+
+    var hasFilenameMapping: Bool {
+        entries.contains { $0.selectedDestination == .filename }
+    }
+
+    var duplicateTagDestinations: [String] {
+        var counts: [String: Int] = [:]
+        for entry in entries {
+            if case let .tag(tagID) = entry.selectedDestination {
+                counts[tagID, default: 0] += 1
+            }
+        }
+        return counts.filter { $0.value > 1 }.map(\.key).sorted()
+    }
 }
 
 enum ImportTargetSelector: Hashable, Sendable {
@@ -208,6 +281,7 @@ struct ImportRunOptions: Hashable, Codable, Sendable {
     var sourceURLPath: String?
     var auxiliaryURLPaths: [String]
     var selectedTagIDs: [String]
+    var csvColumnPlan: ImportCSVColumnPlan?
     var gpxToleranceSeconds: Int
     var gpxCameraOffsetSeconds: Int
 
@@ -216,12 +290,13 @@ struct ImportRunOptions: Hashable, Codable, Sendable {
             sourceKind: sourceKind,
             scope: .folder,
             emptyValuePolicy: .clear,
-            matchStrategy: sourceKind == .eos1v ? .rowParity : .filename,
+            matchStrategy: sourceKind == .csv || sourceKind == .eos1v ? .rowParity : .filename,
             rowParityStartRow: 1,
             rowParityRowCount: 0,
             sourceURLPath: nil,
             auxiliaryURLPaths: [],
             selectedTagIDs: [],
+            csvColumnPlan: nil,
             gpxToleranceSeconds: 600,
             gpxCameraOffsetSeconds: 0
         )
@@ -239,6 +314,7 @@ struct ImportRunOptions: Hashable, Codable, Sendable {
 
 struct ImportPreparedRun: Hashable, Sendable {
     let options: ImportRunOptions
+    let parsedAsSourceKind: ImportSourceKind
     let parseResult: ImportParseResult
     let matchResult: ImportMatchResult
     let previewSummary: ImportPreviewSummary

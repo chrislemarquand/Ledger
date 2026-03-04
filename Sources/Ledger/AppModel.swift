@@ -350,6 +350,16 @@ final class AppModel: ObservableObject {
         ]
     }
 
+    struct FieldCatalogEntry: Hashable, Identifiable {
+        let id: String
+        let namespace: MetadataNamespace
+        let key: String
+        let label: String
+        let section: String
+        let inputKind: ImportFieldInputKind
+        let isEnabled: Bool
+    }
+
     struct PickerOption: Identifiable, Hashable {
         var id: String { value }
         let value: String
@@ -433,6 +443,7 @@ final class AppModel: ObservableObject {
         didSet { UserDefaults.standard.set(galleryGridLevel, forKey: Self.galleryGridLevelKey) }
     }
     @Published var metadataByFile: [URL: FileMetadataSnapshot] = [:]
+    @Published private(set) var activeInspectorFieldCatalog: [FieldCatalogEntry] = AppModel.defaultFieldCatalogEntries()
     @Published var draftValues: [EditableTag: String] = [:]
     @Published var baselineValues: [EditableTag: String?] = [:]
     @Published var presets: [MetadataPreset] = []
@@ -1512,7 +1523,7 @@ final class AppModel: ObservableObject {
         var includedTagIDs = Set<String>()
         var valuesByTagID: [String: String] = [:]
 
-        for tag in EditableTag.common {
+        for tag in activeEditableTags {
             let value = valueForTag(tag).trimmingCharacters(in: .whitespacesAndNewlines)
             valuesByTagID[tag.id] = value
             if !value.isEmpty, !isMixedValue(for: tag) {
@@ -1531,7 +1542,7 @@ final class AppModel: ObservableObject {
 
     func beginCreateBlankPreset() {
         var valuesByTagID: [String: String] = [:]
-        for tag in EditableTag.common {
+        for tag in activeEditableTags {
             valuesByTagID[tag.id] = ""
         }
 
@@ -1553,7 +1564,7 @@ final class AppModel: ObservableObject {
             includedTagIDs.insert(field.tagID)
             valuesByTagID[field.tagID] = field.value
         }
-        for tag in EditableTag.common where valuesByTagID[tag.id] == nil {
+        for tag in activeEditableTags where valuesByTagID[tag.id] == nil {
             valuesByTagID[tag.id] = ""
         }
 
@@ -1714,7 +1725,7 @@ final class AppModel: ObservableObject {
     }
 
     func editableTag(forID id: String) -> EditableTag? {
-        Self.editableTagsByID[id]
+        activeEditableTagsByID[id]
     }
 
     func parseEditableDateValue(_ raw: String) -> Date? {
@@ -1726,7 +1737,7 @@ final class AppModel: ObservableObject {
     }
 
     var mixedOverrideCount: Int {
-        EditableTag.common.reduce(0) { count, tag in
+        activeEditableTags.reduce(0) { count, tag in
             guard isMixedValue(for: tag) else { return count }
             let current = draftValues[tag]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return current.isEmpty ? count : count + 1
@@ -2570,7 +2581,7 @@ final class AppModel: ObservableObject {
 
     var groupedEditableTags: [(section: String, tags: [EditableTag])] {
         var result: [(section: String, tags: [EditableTag])] = []
-        for tag in EditableTag.common {
+        for tag in activeEditableTags {
             if let index = result.firstIndex(where: { $0.section == tag.section }) {
                 result[index].tags.append(tag)
             } else {
@@ -2581,13 +2592,14 @@ final class AppModel: ObservableObject {
     }
 
     var importTagCatalog: [ImportTagDescriptor] {
-        EditableTag.common.map {
+        activeInspectorFieldCatalog.filter(\.isEnabled).map {
             ImportTagDescriptor(
                 id: $0.id,
                 key: $0.key,
                 namespace: $0.namespace,
                 label: $0.label,
-                section: $0.section
+                section: $0.section,
+                inputKind: $0.inputKind
             )
         }
     }
@@ -4429,7 +4441,7 @@ final class AppModel: ObservableObject {
         var nextDraft: [EditableTag: String] = [:]
         var nextMixedTags = Set<EditableTag>()
 
-        for tag in EditableTag.common {
+        for tag in activeEditableTags {
             var baselineValuesForTag: [String] = []
             for url in selectedURLs {
                 guard let snapshot = availableSnapshot(for: url) else {
@@ -5331,9 +5343,98 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private static let editableTagsByID: [String: EditableTag] = {
-        Dictionary(uniqueKeysWithValues: EditableTag.common.map { ($0.id, $0) })
-    }()
+    private var activeEditableTags: [EditableTag] {
+        activeInspectorFieldCatalog.filter(\.isEnabled).map {
+            EditableTag(
+                id: $0.id,
+                namespace: $0.namespace,
+                key: $0.key,
+                label: $0.label,
+                section: $0.section
+            )
+        }
+    }
+
+    private var activeEditableTagsByID: [String: EditableTag] {
+        Dictionary(uniqueKeysWithValues: activeEditableTags.map { ($0.id, $0) })
+    }
+
+    private static func defaultFieldCatalogEntries() -> [FieldCatalogEntry] {
+        let enumExposureProgram: [ImportEnumChoice] = [
+            .init(value: "0", label: "Unknown"),
+            .init(value: "1", label: "Manual"),
+            .init(value: "2", label: "Program AE"),
+            .init(value: "3", label: "Aperture Priority"),
+            .init(value: "4", label: "Shutter Priority"),
+            .init(value: "5", label: "Creative"),
+            .init(value: "6", label: "Action"),
+            .init(value: "7", label: "Portrait"),
+            .init(value: "8", label: "Landscape"),
+        ]
+        let enumFlash: [ImportEnumChoice] = [
+            .init(value: "0", label: "No Flash"),
+            .init(value: "1", label: "Fired"),
+            .init(value: "5", label: "Fired, No Return"),
+            .init(value: "7", label: "Fired, Return Detected"),
+            .init(value: "9", label: "On, Did Not Fire"),
+            .init(value: "13", label: "On, No Return"),
+            .init(value: "15", label: "On, Return Detected"),
+            .init(value: "16", label: "Off"),
+            .init(value: "24", label: "Auto, Did Not Fire"),
+            .init(value: "25", label: "Auto, Fired"),
+            .init(value: "29", label: "Auto, Fired, No Return"),
+            .init(value: "31", label: "Auto, Fired, Return Detected"),
+            .init(value: "32", label: "No Flash"),
+            .init(value: "65", label: "Fired, Red-Eye Reduction"),
+            .init(value: "69", label: "Fired, Red-Eye, No Return"),
+            .init(value: "71", label: "Fired, Red-Eye, Return Detected"),
+            .init(value: "73", label: "On, Red-Eye, Did Not Fire"),
+            .init(value: "77", label: "On, Red-Eye, No Return"),
+            .init(value: "79", label: "On, Red-Eye, Return Detected"),
+            .init(value: "89", label: "Auto, Fired, Red-Eye"),
+            .init(value: "93", label: "Auto, Fired, Red-Eye, No Return"),
+            .init(value: "95", label: "Auto, Fired, Red-Eye, Return Detected"),
+        ]
+        let enumMeteringMode: [ImportEnumChoice] = [
+            .init(value: "0", label: "Unknown"),
+            .init(value: "1", label: "Average"),
+            .init(value: "2", label: "Center-Weighted Average"),
+            .init(value: "3", label: "Spot"),
+            .init(value: "4", label: "Multi-Spot"),
+            .init(value: "5", label: "Multi-Segment"),
+            .init(value: "6", label: "Partial"),
+            .init(value: "255", label: "Other"),
+        ]
+
+        return EditableTag.common.map { tag in
+            let inputKind: ImportFieldInputKind
+            switch tag.id {
+            case "exif-exposure-program":
+                inputKind = .enumChoice(enumExposureProgram)
+            case "exif-flash":
+                inputKind = .enumChoice(enumFlash)
+            case "exif-metering-mode":
+                inputKind = .enumChoice(enumMeteringMode)
+            case "datetime-modified", "datetime-digitized", "datetime-created":
+                inputKind = .dateTime
+            case "exif-aperture", "exif-shutter", "exif-iso", "exif-focal", "exif-exposure-comp", "exif-gps-alt", "exif-gps-direction":
+                inputKind = .decimal
+            case "exif-gps-lat", "exif-gps-lon":
+                inputKind = .gpsCoordinate
+            default:
+                inputKind = .text
+            }
+            return FieldCatalogEntry(
+                id: tag.id,
+                namespace: tag.namespace,
+                key: tag.key,
+                label: tag.label,
+                section: tag.section,
+                inputKind: inputKind,
+                isEnabled: true
+            )
+        }
+    }
 }
 
 @MainActor

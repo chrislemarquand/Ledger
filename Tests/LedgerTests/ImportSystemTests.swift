@@ -6,6 +6,35 @@ import XCTest
 
 @MainActor
 final class ImportSystemTests: XCTestCase {
+    func testCSVDefaultsToRowParity() {
+        let options = ImportRunOptions.defaults(for: .csv)
+        XCTAssertEqual(options.matchStrategy, .rowParity)
+    }
+
+    func testCSVSuggestColumnPlanDisambiguatesDuplicateHeaders() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let csv = temp.appendingPathComponent("dup-header.csv")
+        try """
+        Title,Title,ISO
+        A,B,400
+        """.write(to: csv, atomically: true, encoding: .utf8)
+
+        let plan = try CSVImportAdapter().suggestColumnPlan(
+            sourceURL: csv,
+            tagCatalog: [
+                .init(id: "xmp-title", key: "Title", namespace: .xmp, label: "Title", section: "Descriptive"),
+                .init(id: "exif-iso", key: "ISO", namespace: .exif, label: "ISO", section: "Capture"),
+            ]
+        )
+
+        XCTAssertEqual(plan.entries.count, 3)
+        XCTAssertEqual(plan.entries[0].displayName, "Title (col 1)")
+        XCTAssertEqual(plan.entries[1].displayName, "Title (col 2)")
+        XCTAssertEqual(plan.entries[2].displayName, "ISO")
+    }
+
     func testCSVImportAdapterParsesFilenameAliasAndMappedFields() throws {
         let temp = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: temp) }
@@ -16,8 +45,10 @@ final class ImportSystemTests: XCTestCase {
         a.jpg,Alpha,400
         """.write(to: csv, atomically: true, encoding: .utf8)
 
+        var options = ImportRunOptions.defaults(for: .csv)
+        options.matchStrategy = .filename
         let context = ImportParseContext(
-            options: ImportRunOptions.defaults(for: .csv),
+            options: options,
             sourceURL: csv,
             auxiliaryURLs: [],
             targetFiles: [],
@@ -64,6 +95,112 @@ final class ImportSystemTests: XCTestCase {
         XCTAssertEqual(result.rows.count, 2)
         XCTAssertEqual(result.rows[0].targetSelector, .rowNumber(1))
         XCTAssertEqual(result.rows[1].targetSelector, .rowNumber(2))
+    }
+
+    func testCSVImportAdapterUsesExplicitColumnPlan() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let csv = temp.appendingPathComponent("explicit-plan.csv")
+        try """
+        A,B,C
+        one,two,three
+        """.write(to: csv, atomically: true, encoding: .utf8)
+
+        var options = ImportRunOptions.defaults(for: .csv)
+        options.matchStrategy = .rowParity
+        options.csvColumnPlan = ImportCSVColumnPlan(entries: [
+            .init(columnIndex: 0, header: "A", displayName: "A", normalizedHeader: "a", sampleValue: "one", suggestedDestination: .ignore, selectedDestination: .tag("xmp-title")),
+            .init(columnIndex: 1, header: "B", displayName: "B", normalizedHeader: "b", sampleValue: "two", suggestedDestination: .ignore, selectedDestination: .ignore),
+            .init(columnIndex: 2, header: "C", displayName: "C", normalizedHeader: "c", sampleValue: "three", suggestedDestination: .ignore, selectedDestination: .tag("exif-iso")),
+        ])
+        let context = ImportParseContext(
+            options: options,
+            sourceURL: csv,
+            auxiliaryURLs: [],
+            targetFiles: [],
+            tagCatalog: [
+                .init(id: "xmp-title", key: "Title", namespace: .xmp, label: "Title", section: "Descriptive"),
+                .init(id: "exif-iso", key: "ISO", namespace: .exif, label: "ISO", section: "Capture", inputKind: .decimal),
+            ],
+            metadataByFile: [:]
+        )
+
+        let result = try CSVImportAdapter().parse(context: context)
+        XCTAssertEqual(result.rows.count, 1)
+        XCTAssertEqual(result.rows[0].fields.count, 1)
+        XCTAssertEqual(result.rows[0].fields[0].tagID, "xmp-title")
+        XCTAssertEqual(result.rows[0].fields[0].value, "one")
+    }
+
+    func testCSVImportAdapterFilenameModeRequiresFilenameMapping() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let csv = temp.appendingPathComponent("filename-required.csv")
+        try """
+        Title
+        A
+        """.write(to: csv, atomically: true, encoding: .utf8)
+
+        var options = ImportRunOptions.defaults(for: .csv)
+        options.matchStrategy = .filename
+        options.csvColumnPlan = ImportCSVColumnPlan(entries: [
+            .init(columnIndex: 0, header: "Title", displayName: "Title", normalizedHeader: "title", sampleValue: "A", suggestedDestination: .ignore, selectedDestination: .tag("xmp-title")),
+        ])
+        let context = ImportParseContext(
+            options: options,
+            sourceURL: csv,
+            auxiliaryURLs: [],
+            targetFiles: [],
+            tagCatalog: [
+                .init(id: "xmp-title", key: "Title", namespace: .xmp, label: "Title", section: "Descriptive"),
+            ],
+            metadataByFile: [:]
+        )
+
+        XCTAssertThrowsError(try CSVImportAdapter().parse(context: context))
+    }
+
+    func testCSVImportAdapterInvalidEnumValueSkipsFieldWithWarning() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let csv = temp.appendingPathComponent("enum-invalid.csv")
+        try """
+        filename,Flash
+        a.jpg,maybe
+        """.write(to: csv, atomically: true, encoding: .utf8)
+
+        var options = ImportRunOptions.defaults(for: .csv)
+        options.matchStrategy = .filename
+        options.csvColumnPlan = ImportCSVColumnPlan(entries: [
+            .init(columnIndex: 0, header: "filename", displayName: "filename", normalizedHeader: "filename", sampleValue: "a.jpg", suggestedDestination: .filename, selectedDestination: .filename),
+            .init(columnIndex: 1, header: "Flash", displayName: "Flash", normalizedHeader: "flash", sampleValue: "maybe", suggestedDestination: .ignore, selectedDestination: .tag("exif-flash")),
+        ])
+
+        let context = ImportParseContext(
+            options: options,
+            sourceURL: csv,
+            auxiliaryURLs: [],
+            targetFiles: [],
+            tagCatalog: [
+                .init(
+                    id: "exif-flash",
+                    key: "Flash",
+                    namespace: .exif,
+                    label: "Flash",
+                    section: "Capture",
+                    inputKind: .enumChoice([.init(value: "0", label: "No Flash"), .init(value: "1", label: "Fired")])
+                ),
+            ],
+            metadataByFile: [:]
+        )
+
+        let result = try CSVImportAdapter().parse(context: context)
+        XCTAssertEqual(result.rows.count, 1)
+        XCTAssertTrue(result.rows[0].fields.isEmpty)
+        XCTAssertTrue(result.warnings.contains(where: { $0.message.localizedCaseInsensitiveContains("invalid") }))
     }
 
     func testCSVImportAdapterRowParityRespectsStartAndCount() throws {
