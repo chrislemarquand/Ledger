@@ -90,9 +90,7 @@ private final class ImportWizardViewController: NSViewController {
 
     private let sourceKindPopup = NSPopUpButton()
     private let sourcePathField = NSTextField(labelWithString: "No source selected")
-    private let auxiliaryPathField = NSTextField(labelWithString: "No auxiliary files selected")
     private let chooseSourceButton = NSButton(title: "Choose…", target: nil, action: nil)
-    private let chooseAuxiliaryButton = NSButton(title: "Choose Auxiliary…", target: nil, action: nil)
     private let scopePopup = NSPopUpButton()
     private let emptyPolicyPopup = NSPopUpButton()
     private let matchStrategyPopup = NSPopUpButton()
@@ -176,8 +174,6 @@ private final class ImportWizardViewController: NSViewController {
 
         chooseSourceButton.target = self
         chooseSourceButton.action = #selector(chooseSourceAction(_:))
-        chooseAuxiliaryButton.target = self
-        chooseAuxiliaryButton.action = #selector(chooseAuxiliaryAction(_:))
 
         scopePopup.target = self
         scopePopup.action = #selector(scopeChanged(_:))
@@ -266,10 +262,7 @@ private final class ImportWizardViewController: NSViewController {
             matchStrategyPopup.selectItem(at: index)
         }
 
-        sourcePathField.stringValue = options.sourceURL?.path ?? "No source selected"
-        auxiliaryPathField.stringValue = options.auxiliaryURLPaths.isEmpty
-            ? "No auxiliary files selected"
-            : options.auxiliaryURLPaths.joined(separator: "\n")
+        sourcePathField.stringValue = sourceSummaryText()
         rowStartField.stringValue = String(max(1, options.rowParityStartRow))
         rowCountField.stringValue = String(max(0, options.rowParityRowCount))
         toleranceField.stringValue = String(options.gpxToleranceSeconds)
@@ -307,7 +300,6 @@ private final class ImportWizardViewController: NSViewController {
         nextButton.isEnabled = !isBusy
         stageButton.isEnabled = !isBusy
         chooseSourceButton.isEnabled = !isBusy
-        chooseAuxiliaryButton.isEnabled = !isBusy
         progressIndicator.isHidden = !isBusy
         if isBusy {
             progressIndicator.startAnimation(nil)
@@ -318,14 +310,8 @@ private final class ImportWizardViewController: NSViewController {
 
     private func renderSourceStep() {
         contentStack.addArrangedSubview(makeLabeledRow(label: "Import Type", view: sourceKindPopup))
-        contentStack.addArrangedSubview(makeLabeledPathRow(label: "Source", textField: sourcePathField, actionButton: chooseSourceButton))
-
-        if options.sourceKind == .gpx {
-            chooseAuxiliaryButton.isHidden = false
-            contentStack.addArrangedSubview(makeLabeledPathRow(label: "Auxiliary GPX", textField: auxiliaryPathField, actionButton: chooseAuxiliaryButton))
-        } else {
-            chooseAuxiliaryButton.isHidden = true
-        }
+        let sourceLabel = options.sourceKind == .gpx ? "Sources" : "Source"
+        contentStack.addArrangedSubview(makeLabeledPathRow(label: sourceLabel, textField: sourcePathField, actionButton: chooseSourceButton))
 
         contentStack.addArrangedSubview(makeLabeledRow(label: "Target Scope", view: scopePopup))
         contentStack.addArrangedSubview(makeLabeledRow(label: "Applying To", view: scopeSummaryLabel))
@@ -535,7 +521,7 @@ private final class ImportWizardViewController: NSViewController {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = options.sourceKind == .referenceFolder
-        panel.allowsMultipleSelection = false
+        panel.allowsMultipleSelection = options.sourceKind == .gpx
         panel.canChooseDirectories = options.sourceKind == .referenceFolder
         panel.canChooseFiles = options.sourceKind != .referenceFolder
         panel.allowsOtherFileTypes = false
@@ -551,32 +537,27 @@ private final class ImportWizardViewController: NSViewController {
             if let gpxType = UTType(filenameExtension: "gpx") {
                 panel.allowedContentTypes = [gpxType]
             }
-            panel.title = "Choose GPX Source"
+            panel.title = "Choose GPX Source Files"
         case .referenceFolder:
             panel.title = "Choose Reference Folder"
         case .referenceImage:
             panel.allowedContentTypes = ReferenceImportSupport.supportedImageExtensions.compactMap { UTType(filenameExtension: $0) }
             panel.title = "Choose Reference Image"
         }
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        options.sourceURLPath = url.path
-        sourcePathField.stringValue = url.path
-        preparedRun = nil
-    }
-
-    @objc
-    private func chooseAuxiliaryAction(_: Any?) {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = true
-        if let gpxType = UTType(filenameExtension: "gpx") {
-            panel.allowedContentTypes = [gpxType]
-        }
-        panel.title = "Choose Auxiliary GPX Files"
         guard panel.runModal() == .OK else { return }
-        options.auxiliaryURLPaths = panel.urls.map(\.path)
-        auxiliaryPathField.stringValue = options.auxiliaryURLPaths.isEmpty ? "No auxiliary files selected" : options.auxiliaryURLPaths.joined(separator: "\n")
+        if options.sourceKind == .gpx {
+            let urls = panel.urls
+            guard let primary = urls.first else { return }
+            options.sourceURLPath = primary.path
+            options.auxiliaryURLPaths = urls.dropFirst().map(\.path)
+        } else if let url = panel.url {
+            options.sourceURLPath = url.path
+            options.auxiliaryURLPaths = []
+        } else {
+            return
+        }
+        sourcePathField.stringValue = sourceSummaryText()
+        preparedRun = nil
     }
 
     @objc
@@ -903,6 +884,24 @@ private final class ImportWizardViewController: NSViewController {
             return "Selection (\(count) image\(count == 1 ? "" : "s"))"
         case .folder:
             return "Folder (\(count) image\(count == 1 ? "" : "s"))"
+        }
+    }
+
+    private func sourceSummaryText() -> String {
+        switch options.sourceKind {
+        case .gpx:
+            var urls: [URL] = []
+            if let primary = options.sourceURL {
+                urls.append(primary)
+            }
+            urls.append(contentsOf: options.auxiliaryURLs)
+            guard let first = urls.first else { return "No source selected" }
+            if urls.count == 1 {
+                return first.path
+            }
+            return "\(urls.count) GPX files selected (first: \(first.lastPathComponent))"
+        default:
+            return options.sourceURL?.path ?? "No source selected"
         }
     }
 
