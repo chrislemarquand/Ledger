@@ -3164,13 +3164,12 @@ final class AppModel: ObservableObject {
         let loadID = UUID()
         activeFolderLoadID = loadID
         let hydrationID = UUID()
-        browserItemHydrationID = hydrationID
 
         let shouldPublishHydratedOnly = browserSort != .name
         let prehydratedItems: [BrowserItem]?
         if shouldPublishHydratedOnly {
             let attributesByURL = await readBrowserFileAttributes(for: urls)
-            guard !Task.isCancelled, activeFolderLoadID == loadID, browserItemHydrationID == hydrationID else { return }
+            guard !Task.isCancelled, activeFolderLoadID == loadID else { return }
             prehydratedItems = urls.map { url in
                 let attrs = attributesByURL[url]
                 return BrowserItem(
@@ -3193,6 +3192,7 @@ final class AppModel: ObservableObject {
             preserveBrowserItemsDuringSwitch: true
         )
         browserEnumerationError = enumerationError
+        browserItemHydrationID = hydrationID
 
         if let prehydratedItems {
             browserItems = prehydratedItems
