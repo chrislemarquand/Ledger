@@ -8,6 +8,16 @@ All notable changes to Ledger are documented here.
 
 ---
 
+## [1.0.2] — 2026-03-04
+
+### Fixed
+- **List metadata columns/inspector subtitle missing values**: in the folder-load pipeline, `browserItemHydrationID` was assigned before `clearLoadedContentState()`, which immediately reset it. That caused async browser-item hydration to be dropped, leaving `Date Created`, `Size`, and `Kind` as `—` in list view and size/type missing in inspector subtitle. Fix: assign `browserItemHydrationID` after clearing state and keep the prehydrate guard tied to the active folder load lifecycle.
+
+### Changed
+- Marketing version bumped from `1.0.1` to `1.0.2`.
+
+---
+
 ## [1.0.1] — build 156 — 2026-03-04
 
 ### Fixed
