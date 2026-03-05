@@ -462,6 +462,9 @@ final class AppModel: ObservableObject {
             notifyInspectorDidChange()
         }
     }
+    @Published var pendingImportSourceKind: ImportSourceKind? {
+        didSet { notifyInspectorDidChange() }
+    }
     // Search UI removed for v1.0 (name-only, aesthetically wrong). Property kept
     // so filteredBrowserItems/rebuildFilteredBrowserItems can be wired up for R14
     // (metadata-aware search) without a data-model rewrite.
@@ -1096,17 +1099,6 @@ final class AppModel: ObservableObject {
         setStatusMessage("Discarded unsaved metadata changes.", autoClearAfterSuccess: true)
     }
 
-    private func clearPendingStateForImportReplacement() {
-        pendingEditsByFile.removeAll()
-        pendingImageOpsByFile.removeAll()
-        removeAllStagedQuickLookPreviewFiles()
-        stagedOpsDisplayToken &+= 1
-        invalidateAllBrowserThumbnails()
-        if !browserItems.isEmpty {
-            invalidateInspectorPreviews(for: browserItems.map(\.url))
-        }
-    }
-
     func clearPendingEdits(for fileURLs: [URL]) {
         let uniqueURLs = Array(Set(fileURLs))
         guard !uniqueURLs.isEmpty else { return }
@@ -1583,6 +1575,18 @@ final class AppModel: ObservableObject {
         DispatchQueue.main.async { [weak self] in
             self?.isManagePresetsPresented = true
         }
+    }
+
+    func requestImport(sourceKind: ImportSourceKind) {
+        guard !browserItems.isEmpty else {
+            statusMessage = "Open a folder with images before importing."
+            return
+        }
+        pendingImportSourceKind = sourceKind
+    }
+
+    func dismissImportSheet() {
+        pendingImportSourceKind = nil
     }
 
     func applyPreset(presetID: UUID) {
@@ -2702,17 +2706,13 @@ final class AppModel: ObservableObject {
     func stageImportAssignments(
         _ assignments: [ImportAssignment],
         sourceKind: ImportSourceKind,
-        emptyValuePolicy: ImportEmptyValuePolicy,
-        pendingPolicy: ImportPendingEditsPolicy
+        emptyValuePolicy: ImportEmptyValuePolicy
     ) -> ImportStageSummary {
         guard !assignments.isEmpty else {
             return ImportStageSummary(stagedFiles: 0, stagedFields: 0, skippedFields: 0, warnings: [])
         }
 
         let previousState = currentPendingEditState()
-        if pendingPolicy == .replace {
-            clearPendingStateForImportReplacement()
-        }
 
         var stagedFiles: Set<URL> = []
         var stagedFields = 0

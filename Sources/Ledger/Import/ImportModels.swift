@@ -67,10 +67,6 @@ enum ImportEmptyValuePolicy: String, CaseIterable, Codable, Sendable {
     }
 }
 
-enum ImportPendingEditsPolicy: String, CaseIterable, Codable, Sendable {
-    case merge
-    case replace
-}
 
 enum ImportMatchStrategy: String, CaseIterable, Codable, Sendable {
     case filename
@@ -124,48 +120,6 @@ enum ImportFieldInputKind: Hashable, Codable, Sendable {
     case enumChoice([ImportEnumChoice])
 }
 
-enum ImportColumnDestination: Hashable, Codable, Sendable {
-    case ignore
-    case filename
-    case tag(String)
-}
-
-struct ImportColumnMappingEntry: Hashable, Codable, Sendable {
-    let columnIndex: Int
-    let header: String
-    let displayName: String
-    let normalizedHeader: String
-    let sampleValue: String?
-    let suggestedDestination: ImportColumnDestination
-    var selectedDestination: ImportColumnDestination
-}
-
-struct ImportCSVColumnPlan: Hashable, Codable, Sendable {
-    var entries: [ImportColumnMappingEntry]
-
-    var hasMappedField: Bool {
-        entries.contains {
-            if case .tag = $0.selectedDestination {
-                return true
-            }
-            return false
-        }
-    }
-
-    var hasFilenameMapping: Bool {
-        entries.contains { $0.selectedDestination == .filename }
-    }
-
-    var duplicateTagDestinations: [String] {
-        var counts: [String: Int] = [:]
-        for entry in entries {
-            if case let .tag(tagID) = entry.selectedDestination {
-                counts[tagID, default: 0] += 1
-            }
-        }
-        return counts.filter { $0.value > 1 }.map(\.key).sorted()
-    }
-}
 
 enum ImportTargetSelector: Hashable, Sendable {
     case filename(String)
@@ -248,28 +202,6 @@ struct ImportPreviewSummary: Hashable, Sendable {
     let fieldWrites: Int
 }
 
-enum ImportReportStatus: String, Codable, Sendable {
-    case matched
-    case conflict
-    case skipped
-    case warning
-    case staged
-}
-
-struct ImportReportRow: Hashable, Sendable {
-    let sourceLine: Int?
-    let sourceIdentifier: String
-    let targetPath: String?
-    let status: ImportReportStatus
-    let message: String
-}
-
-struct ImportReport: Hashable, Sendable {
-    let sourceKind: ImportSourceKind
-    let generatedAt: Date
-    let summary: ImportPreviewSummary
-    let rows: [ImportReportRow]
-}
 
 struct ImportRunOptions: Hashable, Codable, Sendable {
     var sourceKind: ImportSourceKind
@@ -281,7 +213,6 @@ struct ImportRunOptions: Hashable, Codable, Sendable {
     var sourceURLPath: String?
     var auxiliaryURLPaths: [String]
     var selectedTagIDs: [String]
-    var csvColumnPlan: ImportCSVColumnPlan?
     var gpxToleranceSeconds: Int
     var gpxCameraOffsetSeconds: Int
 
@@ -296,7 +227,6 @@ struct ImportRunOptions: Hashable, Codable, Sendable {
             sourceURLPath: nil,
             auxiliaryURLPaths: [],
             selectedTagIDs: [],
-            csvColumnPlan: nil,
             gpxToleranceSeconds: 600,
             gpxCameraOffsetSeconds: 0
         )
@@ -318,7 +248,6 @@ struct ImportPreparedRun: Hashable, Sendable {
     let parseResult: ImportParseResult
     let matchResult: ImportMatchResult
     let previewSummary: ImportPreviewSummary
-    let report: ImportReport
 }
 
 struct ImportStageSummary: Hashable, Sendable {
@@ -326,4 +255,8 @@ struct ImportStageSummary: Hashable, Sendable {
     let stagedFields: Int
     let skippedFields: Int
     let warnings: [String]
+}
+
+extension ImportSourceKind: Identifiable {
+    var id: String { rawValue }
 }

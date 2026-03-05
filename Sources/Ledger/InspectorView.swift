@@ -469,6 +469,16 @@ struct InspectorView: View {
         )) {
             PresetManagerSheet(model: model)
         }
+        .sheet(item: Binding(
+            get: { model.pendingImportSourceKind },
+            set: { newValue in
+                Task { @MainActor in
+                    model.pendingImportSourceKind = newValue
+                }
+            }
+        )) { sourceKind in
+            ImportSheetView(model: model, sourceKind: sourceKind)
+        }
     }
 
     private var photoCoordinate: CLLocationCoordinate2D? {

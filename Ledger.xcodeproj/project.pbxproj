@@ -39,12 +39,11 @@
 		C20002060000000000000001 /* Sources/Ledger/Import/ImportCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001060000000000000001 /* Sources/Ledger/Import/ImportCoordinator.swift */; };
 		C20002070000000000000001 /* Sources/Ledger/Import/ImportMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001070000000000000001 /* Sources/Ledger/Import/ImportMatcher.swift */; };
 		C20002080000000000000001 /* Sources/Ledger/Import/ImportModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001080000000000000001 /* Sources/Ledger/Import/ImportModels.swift */; };
-		C20002090000000000000001 /* Sources/Ledger/Import/ImportReportWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001090000000000000001 /* Sources/Ledger/Import/ImportReportWriter.swift */; };
 		C200020A0000000000000001 /* Sources/Ledger/Import/ImportSourceAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010A0000000000000001 /* Sources/Ledger/Import/ImportSourceAdapter.swift */; };
 		C200020B0000000000000001 /* Sources/Ledger/Import/ReferenceFolderImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010B0000000000000001 /* Sources/Ledger/Import/ReferenceFolderImportAdapter.swift */; };
 		C200020C0000000000000001 /* Sources/Ledger/Import/ReferenceImageImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010C0000000000000001 /* Sources/Ledger/Import/ReferenceImageImportAdapter.swift */; };
 		C200020D0000000000000001 /* Sources/Ledger/Import/ReferenceImportSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010D0000000000000001 /* Sources/Ledger/Import/ReferenceImportSupport.swift */; };
-		C200020E0000000000000001 /* Sources/Ledger/ImportUI/ImportWizardWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010E0000000000000001 /* Sources/Ledger/ImportUI/ImportWizardWindowController.swift */; };
+		C200020E0000000000000001 /* Sources/Ledger/ImportUI/ImportSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010E0000000000000001 /* Sources/Ledger/ImportUI/ImportSheetView.swift */; };
 		C200020F0000000000000001 /* Sources/Ledger/Import/ExifToolCSVExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010F0000000000000001 /* Sources/Ledger/Import/ExifToolCSVExportService.swift */; };
 /* End PBXBuildFile section */
 
@@ -107,12 +106,11 @@
 		C20001060000000000000001 /* Sources/Ledger/Import/ImportCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/ImportCoordinator.swift; sourceTree = SOURCE_ROOT; };
 		C20001070000000000000001 /* Sources/Ledger/Import/ImportMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/ImportMatcher.swift; sourceTree = SOURCE_ROOT; };
 		C20001080000000000000001 /* Sources/Ledger/Import/ImportModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/ImportModels.swift; sourceTree = SOURCE_ROOT; };
-		C20001090000000000000001 /* Sources/Ledger/Import/ImportReportWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/ImportReportWriter.swift; sourceTree = SOURCE_ROOT; };
 		C200010A0000000000000001 /* Sources/Ledger/Import/ImportSourceAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/ImportSourceAdapter.swift; sourceTree = SOURCE_ROOT; };
 		C200010B0000000000000001 /* Sources/Ledger/Import/ReferenceFolderImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/ReferenceFolderImportAdapter.swift; sourceTree = SOURCE_ROOT; };
 		C200010C0000000000000001 /* Sources/Ledger/Import/ReferenceImageImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/ReferenceImageImportAdapter.swift; sourceTree = SOURCE_ROOT; };
 		C200010D0000000000000001 /* Sources/Ledger/Import/ReferenceImportSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/ReferenceImportSupport.swift; sourceTree = SOURCE_ROOT; };
-		C200010E0000000000000001 /* Sources/Ledger/ImportUI/ImportWizardWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/ImportUI/ImportWizardWindowController.swift; sourceTree = SOURCE_ROOT; };
+		C200010E0000000000000001 /* Sources/Ledger/ImportUI/ImportSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/ImportUI/ImportSheetView.swift; sourceTree = SOURCE_ROOT; };
 		C200010F0000000000000001 /* Sources/Ledger/Import/ExifToolCSVExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/ExifToolCSVExportService.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
@@ -259,7 +257,6 @@
 				C20001060000000000000001 /* Sources/Ledger/Import/ImportCoordinator.swift */,
 				C20001070000000000000001 /* Sources/Ledger/Import/ImportMatcher.swift */,
 				C20001080000000000000001 /* Sources/Ledger/Import/ImportModels.swift */,
-				C20001090000000000000001 /* Sources/Ledger/Import/ImportReportWriter.swift */,
 				C200010A0000000000000001 /* Sources/Ledger/Import/ImportSourceAdapter.swift */,
 				C200010B0000000000000001 /* Sources/Ledger/Import/ReferenceFolderImportAdapter.swift */,
 				C200010C0000000000000001 /* Sources/Ledger/Import/ReferenceImageImportAdapter.swift */,
@@ -272,7 +269,7 @@
 		C20000F10000000000000001 /* Sources/Ledger/ImportUI */ = {
 			isa = PBXGroup;
 			children = (
-				C200010E0000000000000001 /* Sources/Ledger/ImportUI/ImportWizardWindowController.swift */,
+				C200010E0000000000000001 /* Sources/Ledger/ImportUI/ImportSheetView.swift */,
 			);
 			path = Sources/Ledger/ImportUI;
 			sourceTree = SOURCE_ROOT;
@@ -431,13 +428,12 @@
 				C20002060000000000000001 /* Sources/Ledger/Import/ImportCoordinator.swift in Sources */,
 				C20002070000000000000001 /* Sources/Ledger/Import/ImportMatcher.swift in Sources */,
 				C20002080000000000000001 /* Sources/Ledger/Import/ImportModels.swift in Sources */,
-				C20002090000000000000001 /* Sources/Ledger/Import/ImportReportWriter.swift in Sources */,
 				C200020A0000000000000001 /* Sources/Ledger/Import/ImportSourceAdapter.swift in Sources */,
 				C200020B0000000000000001 /* Sources/Ledger/Import/ReferenceFolderImportAdapter.swift in Sources */,
 				C200020C0000000000000001 /* Sources/Ledger/Import/ReferenceImageImportAdapter.swift in Sources */,
 				C200020D0000000000000001 /* Sources/Ledger/Import/ReferenceImportSupport.swift in Sources */,
 				C200020F0000000000000001 /* Sources/Ledger/Import/ExifToolCSVExportService.swift in Sources */,
-				C200020E0000000000000001 /* Sources/Ledger/ImportUI/ImportWizardWindowController.swift in Sources */,
+				C200020E0000000000000001 /* Sources/Ledger/ImportUI/ImportSheetView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

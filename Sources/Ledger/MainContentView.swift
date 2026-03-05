@@ -115,8 +115,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     private var lastWindowTitleText = ""
     private var lastWindowSubtitleText = ""
     private var isPaneStateSyncScheduled = false
-    private var importWizardController: ImportWizardWindowController?
-
     init(model: AppModel) {
         self.model = model
 
@@ -1459,53 +1457,20 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         model.openFolder()
     }
 
-    private func presentImportWizard(sourceKind: ImportSourceKind) {
-        guard !model.browserItems.isEmpty else {
-            model.statusMessage = "Open a folder with images before importing."
-            return
-        }
-        guard let parentWindow = view.window else { return }
-        if parentWindow.attachedSheet != nil,
-           parentWindow.attachedSheet !== importWizardController?.window {
-            model.statusMessage = "Close the current sheet before opening import."
-            return
-        }
-
-        if importWizardController == nil {
-            let controller = ImportWizardWindowController(model: model, initialSourceKind: sourceKind)
-            controller.onClose = { [weak self] in
-                self?.importWizardController = nil
-            }
-            importWizardController = controller
-        }
-        importWizardController?.updateInitialSourceKind(sourceKind)
-        importWizardController?.presentSheet(for: parentWindow)
-    }
+    @objc
+    func importCSVAction(_: Any?) { model.requestImport(sourceKind: .csv) }
 
     @objc
-    func importCSVAction(_: Any?) {
-        presentImportWizard(sourceKind: .csv)
-    }
+    func importGPXAction(_: Any?) { model.requestImport(sourceKind: .gpx) }
 
     @objc
-    func importGPXAction(_: Any?) {
-        presentImportWizard(sourceKind: .gpx)
-    }
+    func importReferenceFolderAction(_: Any?) { model.requestImport(sourceKind: .referenceFolder) }
 
     @objc
-    func importReferenceFolderAction(_: Any?) {
-        presentImportWizard(sourceKind: .referenceFolder)
-    }
+    func importReferenceImageAction(_: Any?) { model.requestImport(sourceKind: .referenceImage) }
 
     @objc
-    func importReferenceImageAction(_: Any?) {
-        presentImportWizard(sourceKind: .referenceImage)
-    }
-
-    @objc
-    func importEOS1VAction(_: Any?) {
-        presentImportWizard(sourceKind: .eos1v)
-    }
+    func importEOS1VAction(_: Any?) { model.requestImport(sourceKind: .eos1v) }
 
     @objc
     func exportExifToolCSVAction(_: Any?) {

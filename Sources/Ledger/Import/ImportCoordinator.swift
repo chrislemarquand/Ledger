@@ -7,7 +7,6 @@ final class ImportCoordinator {
 
     private let matcher = ImportMatcher()
     private let resolver = ImportConflictResolver()
-    private let reportWriter = ImportReportWriter()
     private let csvAdapter = CSVImportAdapter()
     private let gpxAdapter = GPXImportAdapter()
     private let referenceFolderAdapter = ReferenceFolderImportAdapter()
@@ -28,9 +27,7 @@ final class ImportCoordinator {
 
     func persist(options: ImportRunOptions) {
         let key = optionsPrefix + options.sourceKind.rawValue
-        var persisted = options
-        persisted.csvColumnPlan = nil
-        if let encoded = try? JSONEncoder().encode(persisted) {
+        if let encoded = try? JSONEncoder().encode(options) {
             UserDefaults.standard.set(encoded, forKey: key)
         }
     }
@@ -69,12 +66,6 @@ final class ImportCoordinator {
             warnings: matchResult.warnings.count,
             fieldWrites: matchResult.matched.reduce(0) { $0 + $1.row.fields.count }
         )
-        let report = reportWriter.makeInitialReport(
-            sourceKind: options.sourceKind,
-            parseResult: parseResult,
-            matchResult: matchResult
-        )
-
         persist(options: options)
 
         return ImportPreparedRun(
@@ -82,8 +73,7 @@ final class ImportCoordinator {
             parsedAsSourceKind: parsedAsSourceKind,
             parseResult: parseResult,
             matchResult: matchResult,
-            previewSummary: summary,
-            report: report
+            previewSummary: summary
         )
     }
 
@@ -92,22 +82,6 @@ final class ImportCoordinator {
         resolutions: [UUID: ImportConflictResolutionChoice]
     ) -> ImportConflictResolveResult {
         resolver.resolve(matchResult: preparedRun.matchResult, resolutions: resolutions)
-    }
-
-    func appendStagingRows(
-        report: ImportReport,
-        stagedAssignments: [ImportAssignment],
-        skippedConflicts: [ImportConflict]
-    ) -> ImportReport {
-        reportWriter.appendStagingRows(
-            report: report,
-            stagedAssignments: stagedAssignments,
-            skippedConflicts: skippedConflicts
-        )
-    }
-
-    func export(report: ImportReport, to url: URL) throws {
-        try reportWriter.writeCSV(report: report, to: url)
     }
 
     private func adapter(for sourceKind: ImportSourceKind) -> ImportSourceAdapter {
