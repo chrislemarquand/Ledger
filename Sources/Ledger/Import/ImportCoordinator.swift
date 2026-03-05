@@ -35,10 +35,6 @@ final class ImportCoordinator {
         }
     }
 
-    func suggestCSVColumnPlan(sourceURL: URL, tagCatalog: [ImportTagDescriptor]) throws -> ImportCSVColumnPlan {
-        try csvAdapter.suggestColumnPlan(sourceURL: sourceURL, tagCatalog: tagCatalog)
-    }
-
     func prepareRun(
         options: ImportRunOptions,
         targetFiles: [URL],
@@ -61,36 +57,8 @@ final class ImportCoordinator {
 
         let parseResult: ImportParseResult
         let parsedAsSourceKind: ImportSourceKind
-        if options.sourceKind == .eos1v {
-            do {
-                parseResult = try eosAdapter.parse(context: context)
-                parsedAsSourceKind = .eos1v
-            } catch let eosError as ImportAdapterError {
-                switch eosError {
-                case .invalidSchema:
-                    do {
-                        var fallback = try csvAdapter.parse(context: context)
-                        fallback = ImportParseResult(
-                            rows: fallback.rows,
-                            warnings: [ImportWarning(sourceLine: nil, message: "EOS format validation failed; using generic CSV importer.", severity: .warning)] + fallback.warnings
-                        )
-                        parseResult = fallback
-                        parsedAsSourceKind = .csv
-                    } catch let csvError {
-                        _ = eosError
-                        _ = csvError
-                        throw ImportAdapterError.invalidSchema(
-                            "Couldn’t parse this file as EOS or generic CSV. Verify file format and try a different Matching option."
-                        )
-                    }
-                default:
-                    throw eosError
-                }
-            }
-        } else {
-            parseResult = try adapter(for: options.sourceKind).parse(context: context)
-            parsedAsSourceKind = options.sourceKind
-        }
+        parseResult = try adapter(for: options.sourceKind).parse(context: context)
+        parsedAsSourceKind = options.sourceKind
 
         let matchResult = matcher.match(parseResult: parseResult, targetFiles: targetFiles)
         let summary = ImportPreviewSummary(

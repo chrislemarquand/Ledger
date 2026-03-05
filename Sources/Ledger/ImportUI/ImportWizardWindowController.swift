@@ -13,10 +13,13 @@ final class ImportWizardWindowController: NSWindowController, NSWindowDelegate {
         let window = NSWindow(contentViewController: wizardController)
         window.title = "Import"
         window.styleMask = [.titled, .closable]
-        window.setContentSize(NSSize(width: 760, height: 560))
+        let defaultSize = NSSize(width: 920, height: 640)
+        window.setContentSize(defaultSize)
+        window.minSize = NSSize(width: 860, height: 560)
         window.isReleasedWhenClosed = false
         window.titleVisibility = .visible
         super.init(window: window)
+        wizardController.preferredContentSize = defaultSize
         window.delegate = self
     }
 
@@ -27,6 +30,10 @@ final class ImportWizardWindowController: NSWindowController, NSWindowDelegate {
 
     func presentSheet(for parentWindow: NSWindow) {
         guard let window else { return }
+        let preferred = wizardController.preferredContentSize
+        if preferred.width > 0, preferred.height > 0 {
+            window.setContentSize(preferred)
+        }
         if parentWindow.attachedSheet == window {
             parentWindow.makeKeyAndOrderFront(nil)
             return
@@ -45,9 +52,17 @@ final class ImportWizardWindowController: NSWindowController, NSWindowDelegate {
 
 @MainActor
 private final class ImportWizardViewController: NSViewController {
+    private enum UI {
+        static let headerInset: CGFloat = 18
+        static let contentInset: CGFloat = 18
+        static let footerInset: CGFloat = 14
+        static let labelWidth: CGFloat = 150
+        static let contentWidth: CGFloat = 520
+        static let bodyHeight: CGFloat = 320
+    }
+
     private enum Step: Int, CaseIterable {
         case source
-        case csvMapping
         case match
         case preview
         case conflicts
@@ -62,12 +77,16 @@ private final class ImportWizardViewController: NSViewController {
     private var conflictResolutions: [UUID: ImportConflictResolutionChoice] = [:]
     private var latestResolveResult: ImportConflictResolveResult?
     private var workingReport: ImportReport?
-    private var isEOSFallbackToCSV = false
     private var isBusy = false
+    private var showsAdvancedOptions = false
 
-    private let rootStack = NSStackView()
+    private let rootView = NSView()
+    private let headerStack = NSStackView()
+    private let stepTitleLabel = NSTextField(labelWithString: "")
+    private let stepSubtitleLabel = NSTextField(labelWithString: "")
+    private let contentContainer = NSView()
+    private let footerContainer = NSView()
     private let contentStack = NSStackView()
-    private let stepLabel = NSTextField(labelWithString: "")
     private let backButton = NSButton(title: "Back", target: nil, action: nil)
     private let nextButton = NSButton(title: "Next", target: nil, action: nil)
     private let cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
@@ -88,13 +107,15 @@ private final class ImportWizardViewController: NSViewController {
     private let selectedFieldsLabel = NSTextField(labelWithString: "")
     private let scopeSummaryLabel = NSTextField(labelWithString: "")
     private let chooseFieldsButton = NSButton(title: "Choose Fields…", target: nil, action: nil)
-    private let mappingStatusLabel = NSTextField(labelWithString: "")
+    private let advancedOptionsButton = NSButton(title: "Advanced…", target: nil, action: nil)
+    private let matchFilenameRadio = NSButton(radioButtonWithTitle: "Filename", target: nil, action: nil)
+    private let matchRowParityRadio = NSButton(radioButtonWithTitle: "Row", target: nil, action: nil)
+    private let emptyClearRadio = NSButton(radioButtonWithTitle: "Clear", target: nil, action: nil)
+    private let emptySkipRadio = NSButton(radioButtonWithTitle: "Skip", target: nil, action: nil)
     private let detailsTextView = NSTextView()
     private let detailsScrollView = NSScrollView()
 
     private var conflictControls: [UUID: NSComboBox] = [:]
-    private var csvMappingDestinationPopups: [Int: NSPopUpButton] = [:]
-    private var csvMappingStatusLabels: [Int: NSTextField] = [:]
 
     init(model: AppModel, initialSourceKind: ImportSourceKind) {
         self.model = model
@@ -112,7 +133,7 @@ private final class ImportWizardViewController: NSViewController {
     }
 
     override func loadView() {
-        view = NSView()
+        view = rootView
         view.wantsLayer = true
     }
 
@@ -126,6 +147,7 @@ private final class ImportWizardViewController: NSViewController {
     func selectSourceKind(_ sourceKind: ImportSourceKind) {
         options = coordinator.loadPersistedOptions(for: sourceKind)
         options.sourceKind = sourceKind
+        showsAdvancedOptions = false
         applySelectionDrivenDefaults()
         preparedRun = nil
         latestResolveResult = nil
@@ -137,31 +159,45 @@ private final class ImportWizardViewController: NSViewController {
     }
 
     private func configureUI() {
-        rootStack.orientation = .vertical
-        rootStack.alignment = .leading
-        rootStack.spacing = 12
-        rootStack.translatesAutoresizingMaskIntoConstraints = false
+        headerStack.orientation = .vertical
+        headerStack.alignment = .leading
+        headerStack.spacing = 8
+        headerStack.translatesAutoresizingMaskIntoConstraints = false
 
-        stepLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+        stepTitleLabel.font = .systemFont(ofSize: 32, weight: .bold)
+        stepSubtitleLabel.textColor = .secondaryLabelColor
+        stepSubtitleLabel.maximumNumberOfLines = 2
+        stepSubtitleLabel.lineBreakMode = .byTruncatingTail
 
         contentStack.orientation = .vertical
         contentStack.alignment = .leading
-        contentStack.spacing = 10
+        contentStack.spacing = 12
         contentStack.translatesAutoresizingMaskIntoConstraints = false
+        contentStack.setContentHuggingPriority(.required, for: .vertical)
+        contentStack.setContentCompressionResistancePriority(.required, for: .vertical)
+
+        contentContainer.wantsLayer = true
+        contentContainer.layer?.cornerRadius = 10
+        contentContainer.layer?.borderWidth = 0
+        contentContainer.layer?.borderColor = NSColor.clear.cgColor
+        contentContainer.translatesAutoresizingMaskIntoConstraints = false
 
         detailsTextView.isEditable = false
         detailsTextView.isVerticallyResizable = true
         detailsTextView.isHorizontallyResizable = false
         detailsTextView.textContainerInset = NSSize(width: 8, height: 8)
+        detailsTextView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         detailsScrollView.hasVerticalScroller = true
         detailsScrollView.documentView = detailsTextView
         detailsScrollView.translatesAutoresizingMaskIntoConstraints = false
-        detailsScrollView.heightAnchor.constraint(equalToConstant: 300).isActive = true
-        detailsScrollView.widthAnchor.constraint(greaterThanOrEqualToConstant: 700).isActive = true
+        detailsScrollView.heightAnchor.constraint(equalToConstant: 320).isActive = true
+        detailsScrollView.widthAnchor.constraint(greaterThanOrEqualToConstant: 760).isActive = true
+        detailsScrollView.borderType = .bezelBorder
 
         sourceKindPopup.target = self
         sourceKindPopup.action = #selector(sourceKindChanged(_:))
 
+        chooseSourceButton.title = "Open…"
         chooseSourceButton.target = self
         chooseSourceButton.action = #selector(chooseSourceAction(_:))
 
@@ -173,6 +209,16 @@ private final class ImportWizardViewController: NSViewController {
         matchStrategyPopup.action = #selector(matchStrategyChanged(_:))
         chooseFieldsButton.target = self
         chooseFieldsButton.action = #selector(chooseFieldsAction(_:))
+        advancedOptionsButton.target = self
+        advancedOptionsButton.action = #selector(advancedOptionsToggled(_:))
+        matchFilenameRadio.target = self
+        matchFilenameRadio.action = #selector(matchRadioChanged(_:))
+        matchRowParityRadio.target = self
+        matchRowParityRadio.action = #selector(matchRadioChanged(_:))
+        emptyClearRadio.target = self
+        emptyClearRadio.action = #selector(emptyValueRadioChanged(_:))
+        emptySkipRadio.target = self
+        emptySkipRadio.action = #selector(emptyValueRadioChanged(_:))
 
         backButton.target = self
         backButton.action = #selector(backAction(_:))
@@ -180,6 +226,7 @@ private final class ImportWizardViewController: NSViewController {
         nextButton.action = #selector(nextAction(_:))
         cancelButton.target = self
         cancelButton.action = #selector(cancelAction(_:))
+        cancelButton.keyEquivalent = "\u{1b}"
         stageButton.target = self
         stageButton.action = #selector(stageAction(_:))
         exportButton.target = self
@@ -189,29 +236,95 @@ private final class ImportWizardViewController: NSViewController {
         progressIndicator.controlSize = .small
         progressIndicator.isDisplayedWhenStopped = false
 
-        view.addSubview(rootStack)
-        rootStack.addArrangedSubview(stepLabel)
-        rootStack.addArrangedSubview(contentStack)
-        rootStack.setCustomSpacing(18, after: contentStack)
+        view.addSubview(headerStack)
+        headerStack.addArrangedSubview(stepTitleLabel)
+        headerStack.addArrangedSubview(stepSubtitleLabel)
 
-        let buttonRow = NSStackView()
-        buttonRow.orientation = .horizontal
-        buttonRow.alignment = .centerY
-        buttonRow.spacing = 8
-        buttonRow.addArrangedSubview(progressIndicator)
-        buttonRow.addArrangedSubview(NSView())
-        buttonRow.addArrangedSubview(exportButton)
-        buttonRow.addArrangedSubview(backButton)
-        buttonRow.addArrangedSubview(nextButton)
-        buttonRow.addArrangedSubview(stageButton)
-        buttonRow.addArrangedSubview(cancelButton)
-        rootStack.addArrangedSubview(buttonRow)
+        view.addSubview(contentContainer)
+        contentContainer.addSubview(contentStack)
+
+        footerContainer.wantsLayer = true
+        footerContainer.layer?.borderWidth = 0
+        footerContainer.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(footerContainer)
+
+        let footerSeparator = NSBox()
+        footerSeparator.boxType = .separator
+        footerSeparator.translatesAutoresizingMaskIntoConstraints = false
+        footerContainer.addSubview(footerSeparator)
+
+        let leftButtons = NSStackView()
+        leftButtons.orientation = .horizontal
+        leftButtons.alignment = .centerY
+        leftButtons.spacing = 8
+        leftButtons.translatesAutoresizingMaskIntoConstraints = false
+        leftButtons.addArrangedSubview(cancelButton)
+
+        let rightButtons = NSStackView()
+        rightButtons.orientation = .horizontal
+        rightButtons.alignment = .centerY
+        rightButtons.spacing = 8
+        rightButtons.translatesAutoresizingMaskIntoConstraints = false
+        rightButtons.addArrangedSubview(progressIndicator)
+        rightButtons.addArrangedSubview(exportButton)
+        rightButtons.addArrangedSubview(backButton)
+        rightButtons.addArrangedSubview(nextButton)
+        rightButtons.addArrangedSubview(stageButton)
+
+        footerContainer.addSubview(leftButtons)
+        footerContainer.addSubview(rightButtons)
+
+        sourceKindPopup.translatesAutoresizingMaskIntoConstraints = false
+        scopePopup.translatesAutoresizingMaskIntoConstraints = false
+        emptyPolicyPopup.translatesAutoresizingMaskIntoConstraints = false
+        matchStrategyPopup.translatesAutoresizingMaskIntoConstraints = false
+        rowStartField.translatesAutoresizingMaskIntoConstraints = false
+        rowCountField.translatesAutoresizingMaskIntoConstraints = false
+        toleranceField.translatesAutoresizingMaskIntoConstraints = false
+        offsetField.translatesAutoresizingMaskIntoConstraints = false
+
+        let minContentHeight = contentContainer.heightAnchor.constraint(greaterThanOrEqualToConstant: UI.bodyHeight)
+        minContentHeight.priority = .defaultHigh
 
         NSLayoutConstraint.activate([
-            rootStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 18),
-            rootStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -18),
-            rootStack.topAnchor.constraint(equalTo: view.topAnchor, constant: 18),
-            rootStack.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -18),
+            headerStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: UI.headerInset),
+            headerStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -UI.headerInset),
+            headerStack.topAnchor.constraint(equalTo: view.topAnchor, constant: UI.headerInset),
+
+            contentContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: UI.contentInset),
+            contentContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -UI.contentInset),
+            contentContainer.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 14),
+            minContentHeight,
+
+            contentStack.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor, constant: UI.contentInset),
+            contentStack.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor, constant: -UI.contentInset),
+            contentStack.topAnchor.constraint(equalTo: contentContainer.topAnchor, constant: UI.contentInset),
+            contentStack.bottomAnchor.constraint(lessThanOrEqualTo: contentContainer.bottomAnchor, constant: -UI.contentInset),
+
+            footerContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            footerContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            footerContainer.heightAnchor.constraint(equalToConstant: 64),
+            footerContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            contentContainer.bottomAnchor.constraint(equalTo: footerContainer.topAnchor, constant: -12),
+
+            footerSeparator.leadingAnchor.constraint(equalTo: footerContainer.leadingAnchor),
+            footerSeparator.trailingAnchor.constraint(equalTo: footerContainer.trailingAnchor),
+            footerSeparator.topAnchor.constraint(equalTo: footerContainer.topAnchor),
+
+            leftButtons.leadingAnchor.constraint(equalTo: footerContainer.leadingAnchor, constant: UI.footerInset),
+            leftButtons.centerYAnchor.constraint(equalTo: footerContainer.centerYAnchor, constant: 2),
+
+            rightButtons.trailingAnchor.constraint(equalTo: footerContainer.trailingAnchor, constant: -UI.footerInset),
+            rightButtons.centerYAnchor.constraint(equalTo: footerContainer.centerYAnchor, constant: 2),
+
+            sourceKindPopup.widthAnchor.constraint(equalToConstant: UI.contentWidth),
+            scopePopup.widthAnchor.constraint(equalToConstant: UI.contentWidth),
+            emptyPolicyPopup.widthAnchor.constraint(equalToConstant: UI.contentWidth),
+            matchStrategyPopup.widthAnchor.constraint(equalToConstant: UI.contentWidth),
+            rowStartField.widthAnchor.constraint(equalToConstant: 120),
+            rowCountField.widthAnchor.constraint(equalToConstant: 120),
+            toleranceField.widthAnchor.constraint(equalToConstant: 120),
+            offsetField.widthAnchor.constraint(equalToConstant: 120),
         ])
     }
 
@@ -251,6 +364,10 @@ private final class ImportWizardViewController: NSViewController {
         if let index = ImportMatchStrategy.allCases.firstIndex(of: options.matchStrategy) {
             matchStrategyPopup.selectItem(at: index)
         }
+        matchRowParityRadio.state = options.matchStrategy == .rowParity ? .on : .off
+        matchFilenameRadio.state = options.matchStrategy == .filename ? .on : .off
+        emptyClearRadio.state = options.emptyValuePolicy == .clear ? .on : .off
+        emptySkipRadio.state = options.emptyValuePolicy == .skip ? .on : .off
 
         sourcePathField.stringValue = sourceSummaryText()
         rowStartField.stringValue = String(max(1, options.rowParityStartRow))
@@ -265,13 +382,12 @@ private final class ImportWizardViewController: NSViewController {
     }
 
     private func render() {
-        stepLabel.stringValue = currentStepTitle()
+        stepTitleLabel.stringValue = currentStepTitle()
+        stepSubtitleLabel.stringValue = currentStepSubtitle()
         clearContentStack()
         switch currentStep {
         case .source:
             renderSourceStep()
-        case .csvMapping:
-            renderCSVMappingStep()
         case .match:
             renderMatchStep()
         case .preview:
@@ -301,125 +417,53 @@ private final class ImportWizardViewController: NSViewController {
     }
 
     private func renderSourceStep() {
-        contentStack.addArrangedSubview(makeLabeledRow(label: "Import Type", view: sourceKindPopup))
-        let sourceLabel = options.sourceKind == .gpx ? "Sources" : "Source"
-        contentStack.addArrangedSubview(makeLabeledPathRow(label: sourceLabel, textField: sourcePathField, actionButton: chooseSourceButton))
+        contentStack.addArrangedSubview(makeLabeledRow(label: "Select file:", view: makeSourceChooserView()))
 
-        contentStack.addArrangedSubview(makeLabeledRow(label: "Target Scope", view: scopePopup))
-        contentStack.addArrangedSubview(makeLabeledRow(label: "Applying To", view: scopeSummaryLabel))
-        contentStack.addArrangedSubview(makeLabeledRow(label: "Empty Values", view: emptyPolicyPopup))
-        if options.sourceKind == .csv || options.sourceKind == .eos1v {
-            contentStack.addArrangedSubview(makeLabeledRow(label: "Matching", view: matchStrategyPopup))
+        matchRowParityRadio.state = options.matchStrategy == .rowParity ? .on : .off
+        matchFilenameRadio.state = options.matchStrategy == .filename ? .on : .off
+        emptyClearRadio.state = options.emptyValuePolicy == .clear ? .on : .off
+        emptySkipRadio.state = options.emptyValuePolicy == .skip ? .on : .off
+        advancedOptionsButton.title = showsAdvancedOptions ? "Hide Advanced" : "Advanced…"
+
+        let choicesRow = NSStackView()
+        choicesRow.orientation = .horizontal
+        choicesRow.alignment = .top
+        choicesRow.spacing = 30
+        choicesRow.addArrangedSubview(makeRadioGroup(title: "Match by...", radios: [matchRowParityRadio, matchFilenameRadio]))
+        choicesRow.addArrangedSubview(makeRadioGroup(title: "If field is empty...", radios: [emptyClearRadio, emptySkipRadio]))
+        contentStack.addArrangedSubview(choicesRow)
+
+        let advancedRow = NSStackView()
+        advancedRow.orientation = .horizontal
+        advancedRow.alignment = .centerY
+        advancedRow.spacing = 8
+        advancedRow.addArrangedSubview(advancedOptionsButton)
+        advancedRow.addArrangedSubview(NSView())
+        contentStack.addArrangedSubview(advancedRow)
+
+        if showsAdvancedOptions {
+            var advancedRows: [(String, NSView)] = []
+            advancedRows.append(("Target Scope", scopePopup))
+            advancedRows.append(("Applying To", scopeSummaryLabel))
             if options.matchStrategy == .rowParity {
-                contentStack.addArrangedSubview(makeLabeledRow(label: "Start Row", view: rowStartField))
-                contentStack.addArrangedSubview(makeLabeledRow(label: "Row Count", view: rowCountField))
+                advancedRows.append(("Start Row", rowStartField))
+                advancedRows.append(("Row Count", rowCountField))
             }
+            if options.sourceKind == .gpx {
+                advancedRows.append(("Tolerance (sec)", toleranceField))
+                advancedRows.append(("Camera Offset (sec)", offsetField))
+            }
+            if options.sourceKind == .referenceFolder || options.sourceKind == .referenceImage {
+                let row = NSStackView()
+                row.orientation = .horizontal
+                row.alignment = .centerY
+                row.spacing = 8
+                row.addArrangedSubview(selectedFieldsLabel)
+                row.addArrangedSubview(chooseFieldsButton)
+                advancedRows.append(("Fields", row))
+            }
+            contentStack.addArrangedSubview(makeFormGrid(rows: advancedRows))
         }
-
-        if options.sourceKind == .gpx {
-            contentStack.addArrangedSubview(makeLabeledRow(label: "Tolerance (sec)", view: toleranceField))
-            contentStack.addArrangedSubview(makeLabeledRow(label: "Camera Offset (sec)", view: offsetField))
-        }
-
-        if options.sourceKind == .referenceFolder || options.sourceKind == .referenceImage {
-            let row = NSStackView()
-            row.orientation = .horizontal
-            row.alignment = .centerY
-            row.spacing = 8
-            row.addArrangedSubview(selectedFieldsLabel)
-            row.addArrangedSubview(chooseFieldsButton)
-            contentStack.addArrangedSubview(makeLabeledRow(label: "Fields", view: row))
-        }
-
-        let flowText = usesCSVMappingStep
-            ? "Flow: Source/options -> Column Mapping -> Match -> Preview -> Conflicts -> Summary"
-            : "Flow: Source/options -> Match -> Preview -> Conflicts -> Summary"
-        let hint = NSTextField(labelWithString: flowText)
-        hint.textColor = .secondaryLabelColor
-        contentStack.addArrangedSubview(hint)
-    }
-
-    private func renderCSVMappingStep() {
-        guard let plan = options.csvColumnPlan, let model else {
-            contentStack.addArrangedSubview(NSTextField(labelWithString: "No CSV columns available to map."))
-            return
-        }
-
-        let info = NSTextField(wrappingLabelWithString: isEOSFallbackToCSV
-            ? "EOS format failed. Map this file as a generic CSV before continuing."
-            : "Map each CSV column to a Ledger field. Unmapped columns are ignored.")
-        info.textColor = .secondaryLabelColor
-        contentStack.addArrangedSubview(info)
-
-        mappingStatusLabel.stringValue = mappingValidationMessage(for: plan) ?? "Mapping is valid."
-        mappingStatusLabel.textColor = mappingValidationMessage(for: plan) == nil ? .secondaryLabelColor : .systemOrange
-        contentStack.addArrangedSubview(mappingStatusLabel)
-
-        csvMappingDestinationPopups.removeAll()
-        csvMappingStatusLabels.removeAll()
-
-        let rowsStack = NSStackView()
-        rowsStack.orientation = .vertical
-        rowsStack.alignment = .leading
-        rowsStack.spacing = 8
-        rowsStack.edgeInsets = NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
-        rowsStack.translatesAutoresizingMaskIntoConstraints = false
-
-        for (index, entry) in plan.entries.enumerated() {
-            let row = NSStackView()
-            row.orientation = .horizontal
-            row.alignment = .centerY
-            row.spacing = 8
-
-            let nameLabel = NSTextField(labelWithString: entry.displayName)
-            nameLabel.lineBreakMode = .byTruncatingTail
-            nameLabel.widthAnchor.constraint(equalToConstant: 200).isActive = true
-
-            let sampleLabel = NSTextField(labelWithString: entry.sampleValue ?? "—")
-            sampleLabel.textColor = .secondaryLabelColor
-            sampleLabel.lineBreakMode = .byTruncatingTail
-            sampleLabel.widthAnchor.constraint(equalToConstant: 180).isActive = true
-
-            let popup = NSPopUpButton()
-            popup.widthAnchor.constraint(equalToConstant: 220).isActive = true
-            configureMappingDestinationPopup(popup, selected: entry.selectedDestination, tagCatalog: model.importTagCatalog)
-            popup.tag = index
-            popup.target = self
-            popup.action = #selector(csvMappingDestinationChanged(_:))
-            csvMappingDestinationPopups[index] = popup
-
-            let status = NSTextField(labelWithString: csvMappingStatusText(for: entry, plan: plan))
-            status.textColor = csvMappingStatusColor(for: status.stringValue)
-            status.widthAnchor.constraint(greaterThanOrEqualToConstant: 120).isActive = true
-            csvMappingStatusLabels[index] = status
-
-            row.addArrangedSubview(nameLabel)
-            row.addArrangedSubview(sampleLabel)
-            row.addArrangedSubview(popup)
-            row.addArrangedSubview(status)
-            rowsStack.addArrangedSubview(row)
-        }
-
-        let documentView = NSView(frame: NSRect(x: 0, y: 0, width: 720, height: 320))
-        documentView.translatesAutoresizingMaskIntoConstraints = false
-        documentView.addSubview(rowsStack)
-        NSLayoutConstraint.activate([
-            rowsStack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
-            rowsStack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
-            rowsStack.topAnchor.constraint(equalTo: documentView.topAnchor),
-            rowsStack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor),
-            rowsStack.widthAnchor.constraint(equalTo: documentView.widthAnchor),
-        ])
-        documentView.layoutSubtreeIfNeeded()
-        let fittingHeight = rowsStack.fittingSize.height
-        documentView.frame = NSRect(x: 0, y: 0, width: 720, height: max(320, fittingHeight))
-
-        let scroll = NSScrollView()
-        scroll.hasVerticalScroller = true
-        scroll.documentView = documentView
-        scroll.heightAnchor.constraint(equalToConstant: 320).isActive = true
-        scroll.widthAnchor.constraint(greaterThanOrEqualToConstant: 700).isActive = true
-        contentStack.addArrangedSubview(scroll)
     }
 
     private func renderMatchStep() {
@@ -554,6 +598,44 @@ private final class ImportWizardViewController: NSViewController {
         }
     }
 
+    private func makeSourceChooserView() -> NSView {
+        sourcePathField.lineBreakMode = .byTruncatingMiddle
+        sourcePathField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let container = NSStackView()
+        container.orientation = .horizontal
+        container.alignment = .centerY
+        container.spacing = 8
+        container.distribution = .fill
+        container.addArrangedSubview(sourcePathField)
+        container.addArrangedSubview(chooseSourceButton)
+        container.translatesAutoresizingMaskIntoConstraints = false
+        container.widthAnchor.constraint(equalToConstant: UI.contentWidth).isActive = true
+        sourcePathField.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        chooseSourceButton.setContentHuggingPriority(.required, for: .horizontal)
+        return container
+    }
+
+    private func makeFormGrid(rows: [(String, NSView)]) -> NSGridView {
+        let rowViews: [[NSView]] = rows.map { row in
+            let label = NSTextField(labelWithString: row.0)
+            label.alignment = .right
+            label.font = .systemFont(ofSize: 13)
+            row.1.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            row.1.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            return [label, row.1]
+        }
+        let grid = NSGridView(views: rowViews)
+        grid.rowSpacing = 12
+        grid.columnSpacing = 14
+        grid.setContentHuggingPriority(.required, for: .vertical)
+        grid.setContentCompressionResistancePriority(.required, for: .vertical)
+        grid.column(at: 0).xPlacement = .trailing
+        grid.column(at: 0).width = UI.labelWidth
+        grid.column(at: 1).xPlacement = .fill
+        grid.column(at: 1).width = UI.contentWidth
+        return grid
+    }
+
     private func makeLabeledRow(label: String, view: NSView) -> NSView {
         let row = NSStackView()
         row.orientation = .horizontal
@@ -568,16 +650,19 @@ private final class ImportWizardViewController: NSViewController {
         return row
     }
 
-    private func makeLabeledPathRow(label: String, textField: NSTextField, actionButton: NSButton) -> NSView {
-        textField.lineBreakMode = .byTruncatingMiddle
-        textField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let container = NSStackView()
-        container.orientation = .horizontal
-        container.alignment = .centerY
-        container.spacing = 8
-        container.addArrangedSubview(textField)
-        container.addArrangedSubview(actionButton)
-        return makeLabeledRow(label: label, view: container)
+    private func makeRadioGroup(title: String, radios: [NSButton]) -> NSView {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 8
+
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        stack.addArrangedSubview(titleLabel)
+        for radio in radios {
+            stack.addArrangedSubview(radio)
+        }
+        return stack
     }
 
     @objc
@@ -586,8 +671,7 @@ private final class ImportWizardViewController: NSViewController {
         let selected = ImportSourceKind.allCases[sourceKindPopup.indexOfSelectedItem]
         options = coordinator.loadPersistedOptions(for: selected)
         options.sourceKind = selected
-        options.csvColumnPlan = nil
-        isEOSFallbackToCSV = false
+        showsAdvancedOptions = false
         applySelectionDrivenDefaults()
         preparedRun = nil
         latestResolveResult = nil
@@ -636,8 +720,6 @@ private final class ImportWizardViewController: NSViewController {
         } else {
             return
         }
-        options.csvColumnPlan = nil
-        isEOSFallbackToCSV = false
         sourcePathField.stringValue = sourceSummaryText()
         preparedRun = nil
     }
@@ -664,6 +746,33 @@ private final class ImportWizardViewController: NSViewController {
     }
 
     @objc
+    private func advancedOptionsToggled(_: Any?) {
+        showsAdvancedOptions.toggle()
+        render()
+    }
+
+    @objc
+    private func matchRadioChanged(_ sender: NSButton) {
+        options.matchStrategy = (sender == matchFilenameRadio) ? .filename : .rowParity
+        matchRowParityRadio.state = options.matchStrategy == .rowParity ? .on : .off
+        matchFilenameRadio.state = options.matchStrategy == .filename ? .on : .off
+        if options.matchStrategy == .rowParity,
+           options.scope == .selection,
+           let model {
+            options.rowParityRowCount = model.selectedFileURLs.count
+            rowCountField.stringValue = String(max(0, options.rowParityRowCount))
+        }
+        render()
+    }
+
+    @objc
+    private func emptyValueRadioChanged(_ sender: NSButton) {
+        options.emptyValuePolicy = (sender == emptySkipRadio) ? .skip : .clear
+        emptyClearRadio.state = options.emptyValuePolicy == .clear ? .on : .off
+        emptySkipRadio.state = options.emptyValuePolicy == .skip ? .on : .off
+    }
+
+    @objc
     private func matchStrategyChanged(_: Any?) {
         if matchStrategyPopup.indexOfSelectedItem >= 0 {
             options.matchStrategy = ImportMatchStrategy.allCases[matchStrategyPopup.indexOfSelectedItem]
@@ -672,15 +781,6 @@ private final class ImportWizardViewController: NSViewController {
                let model {
                 options.rowParityRowCount = model.selectedFileURLs.count
                 rowCountField.stringValue = String(max(0, options.rowParityRowCount))
-            }
-            if currentStep == .csvMapping, let plan = options.csvColumnPlan {
-                mappingStatusLabel.stringValue = mappingValidationMessage(for: plan) ?? "Mapping is valid."
-                mappingStatusLabel.textColor = mappingValidationMessage(for: plan) == nil ? .secondaryLabelColor : .systemOrange
-                for (entryIndex, entry) in plan.entries.enumerated() {
-                    guard let label = csvMappingStatusLabels[entryIndex] else { continue }
-                    label.stringValue = csvMappingStatusText(for: entry, plan: plan)
-                    label.textColor = csvMappingStatusColor(for: label.stringValue)
-                }
             }
             render()
         }
@@ -759,10 +859,8 @@ private final class ImportWizardViewController: NSViewController {
         switch currentStep {
         case .source:
             break
-        case .csvMapping:
-            currentStep = .source
         case .match:
-            currentStep = usesCSVMappingStep ? .csvMapping : .source
+            currentStep = .source
         case .preview:
             currentStep = .match
         case .conflicts:
@@ -788,13 +886,6 @@ private final class ImportWizardViewController: NSViewController {
             options.gpxCameraOffsetSeconds = offsetField.integerValue
             options.rowParityStartRow = max(1, rowStartField.integerValue)
             options.rowParityRowCount = max(0, rowCountField.integerValue)
-            if options.sourceKind == .csv {
-                prepareCSVMappingStep()
-            } else {
-                prepareImportRun()
-            }
-        case .csvMapping:
-            guard validateCSVMappingStep() else { return }
             prepareImportRun()
         case .match:
             currentStep = .preview
@@ -834,6 +925,10 @@ private final class ImportWizardViewController: NSViewController {
             return
         }
         view.window?.close()
+    }
+
+    override func cancelOperation(_: Any?) {
+        cancelAction(self)
     }
 
     @objc
@@ -957,36 +1052,21 @@ private final class ImportWizardViewController: NSViewController {
                         await model.importMetadataSnapshots(for: files)
                     }
                 )
-                if currentStep == .source,
-                   options.sourceKind == .eos1v,
-                   prepared.parsedAsSourceKind == .csv {
-                    isEOSFallbackToCSV = true
-                    guard let sourceURL = options.sourceURL else {
-                        throw ImportAdapterError.missingSourceURL
-                    }
-                    options.csvColumnPlan = try coordinator.suggestCSVColumnPlan(
-                        sourceURL: sourceURL,
-                        tagCatalog: model.importTagCatalog
-                    )
-                    preparedRun = nil
-                    workingReport = nil
-                    conflictResolutions = [:]
-                    latestResolveResult = nil
-                    currentStep = .csvMapping
-                    isBusy = false
-                    render()
-                    return
-                }
                 preparedRun = prepared
                 workingReport = prepared.report
                 conflictResolutions = [:]
                 latestResolveResult = nil
-                if prepared.parsedAsSourceKind != .csv || options.sourceKind != .eos1v {
-                    isEOSFallbackToCSV = false
-                }
                 currentStep = .match
             } catch {
+                if options.sourceKind == .csv,
+                   case ImportAdapterError.invalidSchema = error {
+                    showAlert(
+                        title: "Import Setup Failed",
+                        message: "This CSV is not in ExifTool format. Export using ExifTool/Ledger ExifTool CSV and retry."
+                    )
+                } else {
                 showAlert(title: "Import Setup Failed", message: error.localizedDescription)
+                }
             }
             isBusy = false
             render()
@@ -1009,14 +1089,7 @@ private final class ImportWizardViewController: NSViewController {
         return true
     }
 
-    private var usesCSVMappingStep: Bool {
-        options.sourceKind == .csv || isEOSFallbackToCSV
-    }
-
     private func stepSequence() -> [Step] {
-        if usesCSVMappingStep {
-            return [.source, .csvMapping, .match, .preview, .conflicts, .summary]
-        }
         return [.source, .match, .preview, .conflicts, .summary]
     }
 
@@ -1029,8 +1102,6 @@ private final class ImportWizardViewController: NSViewController {
         switch currentStep {
         case .source:
             return "\(number). Source and Options"
-        case .csvMapping:
-            return "\(number). Column Mapping"
         case .match:
             return "\(number). Match"
         case .preview:
@@ -1042,137 +1113,18 @@ private final class ImportWizardViewController: NSViewController {
         }
     }
 
-    private func prepareCSVMappingStep() {
-        guard let model, let sourceURL = options.sourceURL else {
-            showAlert(title: "Select Source", message: "Choose a source before continuing.")
-            return
-        }
-
-        do {
-            options.csvColumnPlan = try coordinator.suggestCSVColumnPlan(
-                sourceURL: sourceURL,
-                tagCatalog: model.importTagCatalog
-            )
-            currentStep = .csvMapping
-            render()
-        } catch {
-            showAlert(title: "Import Setup Failed", message: error.localizedDescription)
-        }
-    }
-
-    private func validateCSVMappingStep() -> Bool {
-        guard let plan = options.csvColumnPlan else {
-            showAlert(title: "Missing Mapping", message: "No CSV mapping plan is available.")
-            return false
-        }
-
-        guard mappingValidationMessage(for: plan) == nil else {
-            showAlert(title: "Fix Column Mapping", message: mappingValidationMessage(for: plan) ?? "Resolve mapping conflicts before continuing.")
-            return false
-        }
-        return true
-    }
-
-    private func mappingValidationMessage(for plan: ImportCSVColumnPlan) -> String? {
-        if !plan.hasMappedField {
-            return "Map at least one CSV column to a metadata field."
-        }
-        if options.matchStrategy == .filename, !plan.hasFilenameMapping {
-            return "Filename matching is selected. Map one column to Filename / SourceFile."
-        }
-        let filenameCount = plan.entries.filter { $0.selectedDestination == .filename }.count
-        if filenameCount > 1 {
-            return "Only one column can be mapped to Filename / SourceFile."
-        }
-        let duplicates = plan.duplicateTagDestinations
-        if !duplicates.isEmpty {
-            return "Each destination field can be mapped once. Resolve duplicate field mappings."
-        }
-        return nil
-    }
-
-    private func configureMappingDestinationPopup(
-        _ popup: NSPopUpButton,
-        selected: ImportColumnDestination,
-        tagCatalog: [ImportTagDescriptor]
-    ) {
-        popup.removeAllItems()
-        popup.addItem(withTitle: "Ignore")
-        popup.lastItem?.representedObject = "__ignore__"
-        popup.addItem(withTitle: "Filename / SourceFile")
-        popup.lastItem?.representedObject = "__filename__"
-        popup.menu?.addItem(.separator())
-        for descriptor in tagCatalog {
-            popup.addItem(withTitle: "\(descriptor.section): \(descriptor.label)")
-            popup.lastItem?.representedObject = descriptor.id
-        }
-
-        let object: Any
-        switch selected {
-        case .ignore:
-            object = "__ignore__"
-        case .filename:
-            object = "__filename__"
-        case let .tag(tagID):
-            object = tagID
-        }
-        if let selectedIndex = popup.itemArray.firstIndex(where: { String(describing: $0.representedObject ?? "") == String(describing: object) }) {
-            popup.selectItem(at: selectedIndex)
-        } else {
-            popup.selectItem(at: 0)
-        }
-    }
-
-    private func csvMappingStatusText(for entry: ImportColumnMappingEntry, plan: ImportCSVColumnPlan) -> String {
-        switch entry.selectedDestination {
-        case .ignore:
-            return "Ignored"
-        case .filename:
-            return options.matchStrategy == .filename ? "Mapped" : "Unused in row-order"
-        case let .tag(tagID):
-            if plan.duplicateTagDestinations.contains(tagID) {
-                return "Conflict"
-            }
-            return "Mapped"
-        }
-    }
-
-    private func csvMappingStatusColor(for status: String) -> NSColor {
-        switch status {
-        case "Conflict":
-            return .systemOrange
-        case "Ignored", "Unused in row-order":
-            return .secondaryLabelColor
-        default:
-            return .labelColor
-        }
-    }
-
-    @objc
-    private func csvMappingDestinationChanged(_ sender: NSPopUpButton) {
-        guard var plan = options.csvColumnPlan else { return }
-        let index = sender.tag
-        guard index >= 0, index < plan.entries.count else { return }
-
-        let selectedObject = String(describing: sender.selectedItem?.representedObject ?? "__ignore__")
-        let destination: ImportColumnDestination
-        switch selectedObject {
-        case "__ignore__":
-            destination = .ignore
-        case "__filename__":
-            destination = .filename
-        default:
-            destination = .tag(selectedObject)
-        }
-        plan.entries[index].selectedDestination = destination
-        options.csvColumnPlan = plan
-
-        mappingStatusLabel.stringValue = mappingValidationMessage(for: plan) ?? "Mapping is valid."
-        mappingStatusLabel.textColor = mappingValidationMessage(for: plan) == nil ? .secondaryLabelColor : .systemOrange
-        for (entryIndex, entry) in plan.entries.enumerated() {
-            guard let label = csvMappingStatusLabels[entryIndex] else { continue }
-            label.stringValue = csvMappingStatusText(for: entry, plan: plan)
-            label.textColor = csvMappingStatusColor(for: label.stringValue)
+    private func currentStepSubtitle() -> String {
+        switch currentStep {
+        case .source:
+            return "Choose source, scope, and import options."
+        case .match:
+            return "Review how source rows map to files."
+        case .preview:
+            return "Preview the metadata changes before staging."
+        case .conflicts:
+            return "Resolve ambiguous matches before staging."
+        case .summary:
+            return "Confirm summary and stage import."
         }
     }
 

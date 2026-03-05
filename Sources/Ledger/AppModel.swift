@@ -2619,6 +2619,30 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func hasPendingEdits(inImportScope scope: ImportScope) -> Bool {
+        importTargetFiles(for: scope).contains(where: { hasPendingEdits(for: $0) })
+    }
+
+    func exportExifToolCSV(scope: ImportScope, destinationURL: URL) async throws -> Int {
+        let files = importTargetFiles(for: scope)
+        guard !files.isEmpty else {
+            throw ImportAdapterError.unsupported("No files are available to export.")
+        }
+
+        let fileCount = files.count
+        let filesSnapshot = files
+        let destinationSnapshot = destinationURL
+        try await Task.detached(priority: .userInitiated) {
+            try ExifToolCSVExportService().export(fileURLs: filesSnapshot, destinationURL: destinationSnapshot)
+        }.value
+
+        setStatusMessage(
+            "Exported ExifTool CSV for \(fileCount) file(s).",
+            autoClearAfterSuccess: true
+        )
+        return fileCount
+    }
+
     func importMetadataSnapshots(for files: [URL]) async -> [URL: FileMetadataSnapshot] {
         let unique = Array(Set(files)).sorted(by: { $0.path < $1.path })
         guard !unique.isEmpty else { return [:] }

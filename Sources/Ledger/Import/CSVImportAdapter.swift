@@ -3,50 +3,7 @@ import Foundation
 struct CSVImportAdapter: ImportSourceAdapter {
     let sourceKind: ImportSourceKind = .csv
 
-    private static let filenameAliases: Set<String> = [
-        "filename",
-        "file",
-        "name",
-        "sourcefile",
-        "image",
-        "imagefile",
-        "photo",
-    ]
-
-    func suggestColumnPlan(sourceURL: URL, tagCatalog: [ImportTagDescriptor]) throws -> ImportCSVColumnPlan {
-        let rows = try loadRows(sourceURL: sourceURL)
-        guard let headerRow = rows.first, !headerRow.isEmpty else {
-            throw ImportAdapterError.invalidSchema("CSV is empty.")
-        }
-
-        let suggestions = buildSuggestedDestinations(headerRow: headerRow, tagCatalog: tagCatalog)
-        let duplicateNormalizedHeaders = duplicateHeaderKeys(in: headerRow)
-        let sampleRows = Array(rows.dropFirst())
-        let entries: [ImportColumnMappingEntry] = headerRow.enumerated().map { index, header in
-            let trimmedHeader = CSVSupport.trim(header)
-            let normalized = CSVSupport.normalizedHeader(header)
-            let displayName: String
-            if trimmedHeader.isEmpty {
-                displayName = "Column \(index + 1)"
-            } else if duplicateNormalizedHeaders.contains(normalized) {
-                displayName = "\(trimmedHeader) (col \(index + 1))"
-            } else {
-                displayName = trimmedHeader
-            }
-            let sample = firstNonEmptyValue(at: index, rows: sampleRows)
-            let suggested = suggestions[index] ?? .ignore
-            return ImportColumnMappingEntry(
-                columnIndex: index,
-                header: header,
-                displayName: displayName,
-                normalizedHeader: normalized,
-                sampleValue: sample,
-                suggestedDestination: suggested,
-                selectedDestination: suggested
-            )
-        }
-        return ImportCSVColumnPlan(entries: entries)
-    }
+    private static let invalidSchemaGuidance = "This CSV is not in ExifTool format. Export using ExifTool/Ledger ExifTool CSV and retry."
 
     func parse(context: ImportParseContext) throws -> ImportParseResult {
         let rows = try loadRows(sourceURL: context.sourceURL)
@@ -54,25 +11,17 @@ struct CSVImportAdapter: ImportSourceAdapter {
             throw ImportAdapterError.invalidSchema("CSV is empty.")
         }
 
-        let plan: ImportCSVColumnPlan
-        if let existing = context.options.csvColumnPlan {
-            plan = existing
-        } else {
-            plan = try suggestColumnPlan(sourceURL: context.sourceURL, tagCatalog: context.tagCatalog)
+        let sourceFileColumnIndex = sourceFileColumn(in: headerRow)
+        guard isLikelyExifToolCSV(headerRow: headerRow, sourceFileColumnIndex: sourceFileColumnIndex) else {
+            throw ImportAdapterError.invalidSchema(Self.invalidSchemaGuidance)
         }
-        let activeEntries = plan.entries
-            .filter { $0.columnIndex >= 0 && $0.columnIndex < headerRow.count }
-            .sorted(by: { $0.columnIndex < $1.columnIndex })
-        let tagByID = Dictionary(uniqueKeysWithValues: context.tagCatalog.map { ($0.id, $0) })
+        if context.options.matchStrategy == .filename, sourceFileColumnIndex == nil {
+            throw ImportAdapterError.invalidSchema("Filename matching requires an ExifTool SourceFile column. \(Self.invalidSchemaGuidance)")
+        }
 
-        let filenameEntries = activeEntries.filter { $0.selectedDestination == .filename }
-        if context.options.matchStrategy == .filename {
-            if filenameEntries.isEmpty {
-                throw ImportAdapterError.invalidSchema("Filename matching selected, but no column is mapped to Filename.")
-            }
-            if filenameEntries.count > 1 {
-                throw ImportAdapterError.invalidSchema("Multiple columns are mapped to Filename. Choose exactly one.")
-            }
+        let mappedColumns = mappedTagColumns(headerRow: headerRow, tagCatalog: context.tagCatalog)
+        guard !mappedColumns.isEmpty else {
+            throw ImportAdapterError.invalidSchema("No Ledger-supported ExifTool columns were found. \(Self.invalidSchemaGuidance)")
         }
 
         var warnings: [ImportWarning] = []
@@ -87,36 +36,43 @@ struct CSVImportAdapter: ImportSourceAdapter {
             if row.allSatisfy({ CSVSupport.trim($0).isEmpty }) {
                 continue
             }
+
+            let sourceFileRaw: String
+            if let sourceFileColumnIndex, sourceFileColumnIndex < row.count {
+                sourceFileRaw = CSVSupport.trim(row[sourceFileColumnIndex])
+            } else {
+                sourceFileRaw = ""
+            }
+            if sourceFileRaw == "*" {
+                warnings.append(
+                    ImportWarning(
+                        sourceLine: rowIndex + 1,
+                        message: "SourceFile \"*\" default row is not supported in Ledger CSV import. Row skipped.",
+                        severity: .warning
+                    )
+                )
+                continue
+            }
+
+            let sourceIdentifierFromPath = normalizedSourceIdentifier(from: sourceFileRaw)
             let identifier: String
             let selector: ImportTargetSelector
+
             switch context.options.matchStrategy {
             case .filename:
-                guard let filenameColumn = filenameEntries.first?.columnIndex else {
-                    throw ImportAdapterError.invalidSchema("Filename matching selected, but no column is mapped to Filename.")
-                }
-                guard filenameColumn < row.count else {
+                guard !sourceFileRaw.isEmpty else {
                     warnings.append(
                         ImportWarning(
                             sourceLine: rowIndex + 1,
-                            message: "Missing filename value.",
+                            message: "Missing SourceFile value for filename matching.",
                             severity: .warning
                         )
                     )
                     continue
                 }
-                let filename = CSVSupport.trim(row[filenameColumn])
-                guard !filename.isEmpty else {
-                    warnings.append(
-                        ImportWarning(
-                            sourceLine: rowIndex + 1,
-                            message: "Empty filename value.",
-                            severity: .warning
-                        )
-                    )
-                    continue
-                }
-                identifier = filename
-                selector = .filename(filename)
+                let fileIdentifier = sourceIdentifierFromPath.isEmpty ? sourceFileRaw : sourceIdentifierFromPath
+                identifier = fileIdentifier
+                selector = .filename(fileIdentifier)
             case .rowParity:
                 paritySourceRowNumber += 1
                 guard paritySourceRowNumber >= parityStartRow else {
@@ -126,35 +82,36 @@ struct CSVImportAdapter: ImportSourceAdapter {
                     continue
                 }
                 parityMappedCount += 1
-                identifier = String(format: "Row %03d", paritySourceRowNumber)
+                if !sourceIdentifierFromPath.isEmpty {
+                    identifier = sourceIdentifierFromPath
+                } else {
+                    identifier = String(format: "Row %03d", paritySourceRowNumber)
+                }
                 selector = .rowNumber(parityMappedCount)
             }
 
             var fields: [ImportFieldValue] = []
-            for entry in activeEntries {
-                guard case let .tag(tagID) = entry.selectedDestination else { continue }
-                let columnIndex = entry.columnIndex
+            for (columnIndex, descriptor) in mappedColumns {
                 guard columnIndex < row.count else { continue }
                 let rawValue = CSVSupport.trim(row[columnIndex])
-                guard let descriptor = tagByID[tagID] else { continue }
                 guard let normalized = normalizeImportedValue(rawValue, for: descriptor) else {
                     warnings.append(
                         ImportWarning(
                             sourceLine: rowIndex + 1,
-                            message: "Row \(rowIndex + 1), Column \"\(entry.displayName)\": value \"\(rawValue)\" is invalid for field \"\(descriptor.label)\". Field skipped.",
+                            message: "Row \(rowIndex + 1), Column \"\(headerRow[columnIndex])\": value \"\(rawValue)\" is invalid for field \"\(descriptor.label)\". Field skipped.",
                             severity: .warning
                         )
                     )
                     continue
                 }
-                fields.append(ImportFieldValue(tagID: tagID, value: normalized))
+                fields.append(ImportFieldValue(tagID: descriptor.id, value: normalized))
             }
 
             if fields.isEmpty {
                 warnings.append(
                     ImportWarning(
                         sourceLine: rowIndex + 1,
-                        message: "No mapped metadata fields found for “\(identifier)”.",
+                        message: "No Ledger-supported metadata values found for \"\(identifier)\".",
                         severity: .info
                     )
                 )
@@ -173,65 +130,106 @@ struct CSVImportAdapter: ImportSourceAdapter {
         return ImportParseResult(rows: parsedRows, warnings: warnings)
     }
 
-    private func buildSuggestedDestinations(
+    private func sourceFileColumn(in headerRow: [String]) -> Int? {
+        headerRow.firstIndex { CSVSupport.normalizedHeader($0) == "sourcefile" }
+    }
+
+    private func isLikelyExifToolCSV(headerRow: [String], sourceFileColumnIndex: Int?) -> Bool {
+        if sourceFileColumnIndex != nil {
+            return true
+        }
+        return headerRow.contains { header in
+            let trimmed = CSVSupport.trim(header)
+            guard !trimmed.isEmpty else { return false }
+            return trimmed.contains(":") || trimmed.contains("[") || trimmed.contains("]")
+        }
+    }
+
+    private func mappedTagColumns(
         headerRow: [String],
         tagCatalog: [ImportTagDescriptor]
-    ) -> [Int: ImportColumnDestination] {
-        var mapped: [Int: ImportColumnDestination] = [:]
-        let tagMappings = buildTagHeaderMap(tagCatalog: tagCatalog)
+    ) -> [(Int, ImportTagDescriptor)] {
+        let descriptorIndex = buildTagDescriptorIndex(tagCatalog: tagCatalog)
+        var mapped: [(Int, ImportTagDescriptor)] = []
+
         for (index, header) in headerRow.enumerated() {
-            let normalized = CSVSupport.normalizedHeader(header)
-            if Self.filenameAliases.contains(normalized) {
-                mapped[index] = .filename
+            let normalizedHeader = CSVSupport.normalizedHeader(header)
+            if normalizedHeader == "sourcefile" {
                 continue
             }
-            if let tagID = tagMappings[normalized] {
-                mapped[index] = .tag(tagID)
-            } else {
-                mapped[index] = .ignore
+
+            let candidates = [
+                normalizedHeader,
+                normalizedTagName(fromHeader: header),
+            ].filter { !$0.isEmpty }
+
+            var descriptor: ImportTagDescriptor?
+            for candidate in candidates {
+                if let matched = descriptorIndex[candidate] {
+                    descriptor = matched
+                    break
+                }
+            }
+
+            if let descriptor {
+                mapped.append((index, descriptor))
             }
         }
+
         return mapped
     }
 
-    private func buildTagHeaderMap(tagCatalog: [ImportTagDescriptor]) -> [String: String] {
-        var map: [String: String] = [:]
+    private func buildTagDescriptorIndex(tagCatalog: [ImportTagDescriptor]) -> [String: ImportTagDescriptor] {
+        var index: [String: ImportTagDescriptor] = [:]
         for descriptor in tagCatalog {
-            let namespaceKey = "\(descriptor.namespace.rawValue):\(descriptor.key)"
-            let namespaceDashKey = "\(descriptor.namespace.rawValue)-\(descriptor.key)"
             let candidates = [
                 descriptor.id,
                 descriptor.key,
                 descriptor.label,
-                namespaceKey,
-                namespaceDashKey,
+                "\(descriptor.namespace.rawValue):\(descriptor.key)",
+                "\(descriptor.namespace.rawValue)-\(descriptor.key)",
             ]
             for candidate in candidates {
-                map[CSVSupport.normalizedHeader(candidate)] = descriptor.id
+                let normalized = CSVSupport.normalizedHeader(candidate)
+                if normalized.isEmpty { continue }
+                if index[normalized] == nil {
+                    index[normalized] = descriptor
+                }
             }
         }
-        return map
+        return index
     }
 
-    private func duplicateHeaderKeys(in headerRow: [String]) -> Set<String> {
-        var counts: [String: Int] = [:]
-        for header in headerRow {
-            let key = CSVSupport.normalizedHeader(header)
-            guard !key.isEmpty else { continue }
-            counts[key, default: 0] += 1
+    private func normalizedTagName(fromHeader header: String) -> String {
+        let trimmed = CSVSupport.trim(header)
+        guard !trimmed.isEmpty else { return "" }
+
+        if let range = trimmed.range(of: ":", options: .backwards) {
+            return CSVSupport.normalizedHeader(String(trimmed[range.upperBound...]))
         }
-        return Set(counts.filter { $0.value > 1 }.map(\.key))
+
+        if let range = trimmed.range(of: "]", options: .backwards),
+           range.upperBound < trimmed.endIndex {
+            return CSVSupport.normalizedHeader(String(trimmed[range.upperBound...]))
+        }
+
+        return CSVSupport.normalizedHeader(trimmed)
     }
 
-    private func firstNonEmptyValue(at index: Int, rows: [[String]]) -> String? {
-        for row in rows {
-            guard index < row.count else { continue }
-            let value = CSVSupport.trim(row[index])
-            if !value.isEmpty {
-                return value
-            }
+    private func normalizedSourceIdentifier(from sourceFile: String) -> String {
+        let trimmed = CSVSupport.trim(sourceFile)
+        guard !trimmed.isEmpty else { return "" }
+
+        if trimmed.hasPrefix("/") {
+            return URL(fileURLWithPath: trimmed).lastPathComponent
         }
-        return nil
+
+        if trimmed.contains("\\") {
+            let normalized = trimmed.replacingOccurrences(of: "\\", with: "/")
+            return URL(fileURLWithPath: normalized).lastPathComponent
+        }
+
+        return URL(fileURLWithPath: trimmed).lastPathComponent
     }
 
     private func loadRows(sourceURL: URL) throws -> [[String]] {

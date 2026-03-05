@@ -11,37 +11,13 @@ final class ImportSystemTests: XCTestCase {
         XCTAssertEqual(options.matchStrategy, .rowParity)
     }
 
-    func testCSVSuggestColumnPlanDisambiguatesDuplicateHeaders() throws {
-        let temp = makeTempDirectory()
-        defer { try? FileManager.default.removeItem(at: temp) }
-
-        let csv = temp.appendingPathComponent("dup-header.csv")
-        try """
-        Title,Title,ISO
-        A,B,400
-        """.write(to: csv, atomically: true, encoding: .utf8)
-
-        let plan = try CSVImportAdapter().suggestColumnPlan(
-            sourceURL: csv,
-            tagCatalog: [
-                .init(id: "xmp-title", key: "Title", namespace: .xmp, label: "Title", section: "Descriptive"),
-                .init(id: "exif-iso", key: "ISO", namespace: .exif, label: "ISO", section: "Capture"),
-            ]
-        )
-
-        XCTAssertEqual(plan.entries.count, 3)
-        XCTAssertEqual(plan.entries[0].displayName, "Title (col 1)")
-        XCTAssertEqual(plan.entries[1].displayName, "Title (col 2)")
-        XCTAssertEqual(plan.entries[2].displayName, "ISO")
-    }
-
     func testCSVImportAdapterParsesFilenameAliasAndMappedFields() throws {
         let temp = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: temp) }
 
         let csv = temp.appendingPathComponent("input.csv")
         try """
-        filename,Title,ISO
+        SourceFile,[XMP] Title,[EXIF] ISO
         a.jpg,Alpha,400
         """.write(to: csv, atomically: true, encoding: .utf8)
 
@@ -72,7 +48,7 @@ final class ImportSystemTests: XCTestCase {
 
         let csv = temp.appendingPathComponent("input.csv")
         try """
-        Title,ISO
+        [XMP] Title,[EXIF] ISO
         Alpha,400
         Beta,200
         """.write(to: csv, atomically: true, encoding: .utf8)
@@ -97,23 +73,18 @@ final class ImportSystemTests: XCTestCase {
         XCTAssertEqual(result.rows[1].targetSelector, .rowNumber(2))
     }
 
-    func testCSVImportAdapterUsesExplicitColumnPlan() throws {
+    func testCSVImportAdapterRejectsNonExifToolSchema() throws {
         let temp = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: temp) }
 
-        let csv = temp.appendingPathComponent("explicit-plan.csv")
+        let csv = temp.appendingPathComponent("non-exiftool.csv")
         try """
-        A,B,C
-        one,two,three
+        Title,ISO
+        Alpha,400
         """.write(to: csv, atomically: true, encoding: .utf8)
 
         var options = ImportRunOptions.defaults(for: .csv)
         options.matchStrategy = .rowParity
-        options.csvColumnPlan = ImportCSVColumnPlan(entries: [
-            .init(columnIndex: 0, header: "A", displayName: "A", normalizedHeader: "a", sampleValue: "one", suggestedDestination: .ignore, selectedDestination: .tag("xmp-title")),
-            .init(columnIndex: 1, header: "B", displayName: "B", normalizedHeader: "b", sampleValue: "two", suggestedDestination: .ignore, selectedDestination: .ignore),
-            .init(columnIndex: 2, header: "C", displayName: "C", normalizedHeader: "c", sampleValue: "three", suggestedDestination: .ignore, selectedDestination: .tag("exif-iso")),
-        ])
         let context = ImportParseContext(
             options: options,
             sourceURL: csv,
@@ -121,7 +92,35 @@ final class ImportSystemTests: XCTestCase {
             targetFiles: [],
             tagCatalog: [
                 .init(id: "xmp-title", key: "Title", namespace: .xmp, label: "Title", section: "Descriptive"),
-                .init(id: "exif-iso", key: "ISO", namespace: .exif, label: "ISO", section: "Capture", inputKind: .decimal),
+                .init(id: "exif-iso", key: "ISO", namespace: .exif, label: "ISO", section: "Capture"),
+            ],
+            metadataByFile: [:]
+        )
+
+        XCTAssertThrowsError(try CSVImportAdapter().parse(context: context)) { error in
+            XCTAssertTrue(error.localizedDescription.localizedCaseInsensitiveContains("exiftool format"))
+        }
+    }
+
+    func testCSVImportAdapterIgnoresUnknownExifToolColumns() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let csv = temp.appendingPathComponent("unknown-columns.csv")
+        try """
+        SourceFile,[XMP] Title,[MakerNotes] Unexpected
+        /tmp/a.jpg,Alpha,ignored
+        """.write(to: csv, atomically: true, encoding: .utf8)
+
+        var options = ImportRunOptions.defaults(for: .csv)
+        options.matchStrategy = .filename
+        let context = ImportParseContext(
+            options: options,
+            sourceURL: csv,
+            auxiliaryURLs: [],
+            targetFiles: [],
+            tagCatalog: [
+                .init(id: "xmp-title", key: "Title", namespace: .xmp, label: "Title", section: "Descriptive"),
             ],
             metadataByFile: [:]
         )
@@ -130,24 +129,21 @@ final class ImportSystemTests: XCTestCase {
         XCTAssertEqual(result.rows.count, 1)
         XCTAssertEqual(result.rows[0].fields.count, 1)
         XCTAssertEqual(result.rows[0].fields[0].tagID, "xmp-title")
-        XCTAssertEqual(result.rows[0].fields[0].value, "one")
+        XCTAssertEqual(result.rows[0].fields[0].value, "Alpha")
     }
 
-    func testCSVImportAdapterFilenameModeRequiresFilenameMapping() throws {
+    func testCSVImportAdapterFilenameModeRequiresSourceFileColumn() throws {
         let temp = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: temp) }
 
         let csv = temp.appendingPathComponent("filename-required.csv")
         try """
-        Title
+        [XMP] Title
         A
         """.write(to: csv, atomically: true, encoding: .utf8)
 
         var options = ImportRunOptions.defaults(for: .csv)
         options.matchStrategy = .filename
-        options.csvColumnPlan = ImportCSVColumnPlan(entries: [
-            .init(columnIndex: 0, header: "Title", displayName: "Title", normalizedHeader: "title", sampleValue: "A", suggestedDestination: .ignore, selectedDestination: .tag("xmp-title")),
-        ])
         let context = ImportParseContext(
             options: options,
             sourceURL: csv,
@@ -159,7 +155,10 @@ final class ImportSystemTests: XCTestCase {
             metadataByFile: [:]
         )
 
-        XCTAssertThrowsError(try CSVImportAdapter().parse(context: context))
+        XCTAssertThrowsError(try CSVImportAdapter().parse(context: context)) { error in
+            let message = error.localizedDescription.lowercased()
+            XCTAssertTrue(message.contains("exiftool format"))
+        }
     }
 
     func testCSVImportAdapterInvalidEnumValueSkipsFieldWithWarning() throws {
@@ -168,16 +167,12 @@ final class ImportSystemTests: XCTestCase {
 
         let csv = temp.appendingPathComponent("enum-invalid.csv")
         try """
-        filename,Flash
+        SourceFile,Flash
         a.jpg,maybe
         """.write(to: csv, atomically: true, encoding: .utf8)
 
         var options = ImportRunOptions.defaults(for: .csv)
         options.matchStrategy = .filename
-        options.csvColumnPlan = ImportCSVColumnPlan(entries: [
-            .init(columnIndex: 0, header: "filename", displayName: "filename", normalizedHeader: "filename", sampleValue: "a.jpg", suggestedDestination: .filename, selectedDestination: .filename),
-            .init(columnIndex: 1, header: "Flash", displayName: "Flash", normalizedHeader: "flash", sampleValue: "maybe", suggestedDestination: .ignore, selectedDestination: .tag("exif-flash")),
-        ])
 
         let context = ImportParseContext(
             options: options,
@@ -209,11 +204,11 @@ final class ImportSystemTests: XCTestCase {
 
         let csv = temp.appendingPathComponent("input.csv")
         try """
-        Title
-        A
-        B
-        C
-        D
+        SourceFile,[XMP] Title
+        001.jpg,A
+        002.jpg,B
+        003.jpg,C
+        004.jpg,D
         """.write(to: csv, atomically: true, encoding: .utf8)
 
         var options = ImportRunOptions.defaults(for: .csv)
@@ -233,9 +228,9 @@ final class ImportSystemTests: XCTestCase {
 
         let result = try CSVImportAdapter().parse(context: context)
         XCTAssertEqual(result.rows.count, 2)
-        XCTAssertEqual(result.rows[0].sourceIdentifier, "Row 002")
+        XCTAssertEqual(result.rows[0].sourceIdentifier, "002.jpg")
         XCTAssertEqual(result.rows[0].targetSelector, .rowNumber(1))
-        XCTAssertEqual(result.rows[1].sourceIdentifier, "Row 003")
+        XCTAssertEqual(result.rows[1].sourceIdentifier, "003.jpg")
         XCTAssertEqual(result.rows[1].targetSelector, .rowNumber(2))
     }
 
@@ -288,7 +283,7 @@ final class ImportSystemTests: XCTestCase {
         XCTAssertEqual(match.matched[1].targetURL.lastPathComponent, "001.jpg")
     }
 
-    func testCoordinatorFallsBackToGenericCSVWhenEOSSchemaInvalid() async throws {
+    func testCoordinatorEOSSchemaInvalidDoesNotFallbackToCSV() async throws {
         let temp = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: temp) }
 
@@ -306,19 +301,20 @@ final class ImportSystemTests: XCTestCase {
         options.matchStrategy = .filename
         options.scope = .folder
 
-        let prepared = try await coordinator.prepareRun(
-            options: options,
-            targetFiles: [target],
-            tagCatalog: model.importTagCatalog,
-            metadataProvider: { _ in [:] }
-        )
-
-        XCTAssertEqual(prepared.options.sourceKind, .eos1v)
-        XCTAssertEqual(prepared.parseResult.rows.count, 1)
-        XCTAssertTrue(prepared.parseResult.warnings.contains(where: {
-            $0.message.localizedCaseInsensitiveContains("fallback")
-                || $0.message.localizedCaseInsensitiveContains("generic csv")
-        }))
+        do {
+            _ = try await coordinator.prepareRun(
+                options: options,
+                targetFiles: [target],
+                tagCatalog: model.importTagCatalog,
+                metadataProvider: { _ in [:] }
+            )
+            XCTFail("Expected EOS parse to fail without CSV fallback")
+        } catch {
+            let message = error.localizedDescription.lowercased()
+            XCTAssertTrue(message.contains("eos"))
+            XCTAssertFalse(message.contains("fallback"))
+            XCTAssertFalse(message.contains("generic csv"))
+        }
     }
 
     func testEOSAdapterParsesCanonLayoutWithLeadingBlankColumn() async throws {
@@ -411,7 +407,8 @@ final class ImportSystemTests: XCTestCase {
             XCTFail("Expected invalid schema error")
         } catch {
             let message = error.localizedDescription.lowercased()
-            XCTAssertTrue(message.contains("couldn’t parse this file as eos or generic csv"))
+            XCTAssertTrue(message.contains("eos"))
+            XCTAssertFalse(message.contains("generic csv"))
         }
     }
 

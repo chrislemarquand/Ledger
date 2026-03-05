@@ -3,6 +3,7 @@ import Combine
 import ExifEditCore
 import MapKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 extension Notification.Name {
     static let inspectorDidRequestBrowserFocus = Notification.Name("\(AppBrand.identifierPrefix).InspectorDidRequestBrowserFocus")
@@ -591,6 +592,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         static let fileImportReferenceFolder = 9_113
         static let fileImportReferenceImage = 9_114
         static let fileImportEOS1V = 9_115
+        static let fileExportRoot = 9_116
+        static let fileExportExifToolCSV = 9_117
 
         static let editRotate = 9_201
         static let editFlip = 9_202
@@ -795,7 +798,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
     private func rebuildFileMenu(_ menu: NSMenu) {
         let systemItems = menu.items.filter { item in
-            item.tag < 9_100 && !item.isSeparatorItem && item.title != "New" && item.title != "Open…" && item.title != "Import"
+            item.tag < 9_100 && !item.isSeparatorItem && item.title != "New" && item.title != "Open…" && item.title != "Import" && item.title != "Export"
         }
 
         menu.removeAllItems()
@@ -811,6 +814,12 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         importItem.tag = MenuTag.fileImportRoot
         importItem.submenu = makeImportSubmenu()
         menu.addItem(importItem)
+
+        let exportItem = NSMenuItem(title: "Export", action: nil, keyEquivalent: "")
+        exportItem.image = NSImage(systemSymbolName: "square.and.arrow.up.on.square", accessibilityDescription: nil)
+        exportItem.tag = MenuTag.fileExportRoot
+        exportItem.submenu = makeExportSubmenu()
+        menu.addItem(exportItem)
 
         menu.addItem(.separator())
 
@@ -1008,6 +1017,19 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             item.isEnabled = !model.browserItems.isEmpty
             submenu.addItem(item)
         }
+        return submenu
+    }
+
+    private func makeExportSubmenu() -> NSMenu {
+        let submenu = NSMenu(title: "Export")
+        submenu.autoenablesItems = false
+
+        let item = NSMenuItem(title: "ExifTool CSV…", action: #selector(exportExifToolCSVAction(_:)), keyEquivalent: "")
+        item.target = self
+        item.image = NSImage(systemSymbolName: "tablecells.badge.ellipsis", accessibilityDescription: nil)
+        item.tag = MenuTag.fileExportExifToolCSV
+        item.isEnabled = !model.browserItems.isEmpty
+        submenu.addItem(item)
         return submenu
     }
 
@@ -1255,6 +1277,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             || menuItem.action == #selector(importReferenceImageAction(_:))
             || menuItem.action == #selector(importEOS1VAction(_:)) {
             return !model.browserItems.isEmpty
+        } else if menuItem.action == #selector(exportExifToolCSVAction(_:)) {
+            return !model.browserItems.isEmpty
         } else if menuItem.action == #selector(pinFolderToSidebarAction(_:)) {
             return model.canPinSelectedSidebarLocation
         } else if menuItem.action == #selector(unpinFolderFromSidebarAction(_:)) {
@@ -1481,6 +1505,43 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     @objc
     func importEOS1VAction(_: Any?) {
         presentImportWizard(sourceKind: .eos1v)
+    }
+
+    @objc
+    func exportExifToolCSVAction(_: Any?) {
+        let scope: ImportScope = model.selectedFileURLs.isEmpty ? .folder : .selection
+        if model.hasPendingEdits(inImportScope: scope) {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Staged edits are not included in ExifTool CSV export."
+            alert.informativeText = "Export reads current file metadata from disk. Apply staged edits first if you want them included."
+            alert.addButton(withTitle: "Cancel")
+            alert.addButton(withTitle: "Export Anyway")
+            let response = alert.runModal()
+            guard response == .alertSecondButtonReturn else { return }
+        }
+
+        let panel = NSSavePanel()
+        if let csvType = UTType(filenameExtension: "csv") {
+            panel.allowedContentTypes = [csvType]
+        }
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "exiftool-export.csv"
+        guard panel.runModal() == .OK, let destinationURL = panel.url else { return }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                _ = try await self.model.exportExifToolCSV(scope: scope, destinationURL: destinationURL)
+            } catch {
+                let alert = NSAlert()
+                alert.alertStyle = .warning
+                alert.messageText = "Export Failed"
+                alert.informativeText = error.localizedDescription
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
+            }
+        }
     }
 
     @objc
