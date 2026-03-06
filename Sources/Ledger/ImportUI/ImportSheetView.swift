@@ -25,9 +25,10 @@ final class ImportSession: ObservableObject {
             // When defaulting to Selection scope (2+ files selected), cap to the selection size.
             opts.rowParityRowCount = selectedCount >= 2 ? selectedCount : 0
         }
-        // Always start with no source file — don't restore the last-used path
+        // Always start fresh — don't restore the last-used source or field selection
         opts.sourceURLPath = nil
         opts.auxiliaryURLPaths = []
+        opts.selectedTagIDs = []
         options = opts
     }
 
