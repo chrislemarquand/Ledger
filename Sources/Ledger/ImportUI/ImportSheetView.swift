@@ -17,14 +17,15 @@ final class ImportSession: ObservableObject {
         var opts = coordinator.loadPersistedOptions(for: sourceKind)
         opts.sourceKind = sourceKind
         let selectedCount = model.selectedFileURLs.count
-        opts.scope = selectedCount > 0 ? .selection : .folder
+        opts.scope = selectedCount >= 2 ? .selection : .folder
+        opts.emptyValuePolicy = .clear
         if opts.matchStrategy == .rowParity {
             opts.rowParityStartRow = max(1, opts.rowParityStartRow)
             if sourceKind == .eos1v {
                 // EOS 1V: frame count is always dictated by the CSV, never capped.
                 opts.rowParityRowCount = 0
             } else {
-                opts.rowParityRowCount = selectedCount > 0 ? selectedCount : opts.rowParityRowCount
+                opts.rowParityRowCount = selectedCount >= 2 ? selectedCount : opts.rowParityRowCount
             }
         }
         // Always start with no source file — don't restore the last-used path
@@ -205,8 +206,8 @@ struct ImportSheetView: View {
 
                 optionGroup("If no match:") {
                     Picker("", selection: $session.options.emptyValuePolicy) {
-                        Text("Skip").tag(ImportEmptyValuePolicy.skip)
                         Text("Clear").tag(ImportEmptyValuePolicy.clear)
+                        Text("Skip").tag(ImportEmptyValuePolicy.skip)
                     }
                     .pickerStyle(.radioGroup)
                     .labelsHidden()
