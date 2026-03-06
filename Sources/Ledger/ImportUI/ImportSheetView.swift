@@ -289,6 +289,11 @@ struct ImportSheetView: View {
         .onChange(of: session.options.matchStrategy) { _, _ in
             session.schedulePreviewRefresh(model: model)
         }
+        .onChange(of: model.selectedFileURLs.count) { _, newCount in
+            if newCount == 0, session.options.scope == .selection {
+                session.options.scope = .folder
+            }
+        }
     }
 
     // MARK: - Computed
