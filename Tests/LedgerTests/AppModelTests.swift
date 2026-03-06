@@ -384,8 +384,7 @@ final class AppModelTests: XCTestCase {
         _ = model.stageImportAssignments(
             [ImportAssignment(targetURL: fileURL, fields: [.init(tagID: "exif-gps-lon", value: "-0.2159974")])],
             sourceKind: .gpx,
-            emptyValuePolicy: .clear,
-            pendingPolicy: .merge
+            emptyValuePolicy: .clear
         )
         model.applyChanges(for: [fileURL])
 

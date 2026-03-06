@@ -759,8 +759,7 @@ final class ImportSystemTests: XCTestCase {
         let clearSummary = model.stageImportAssignments(
             [ImportAssignment(targetURL: file, fields: [.init(tagID: "xmp-title", value: "")])],
             sourceKind: .csv,
-            emptyValuePolicy: .clear,
-            pendingPolicy: .merge
+            emptyValuePolicy: .clear
         )
         XCTAssertEqual(clearSummary.skippedFields, 0)
 
@@ -769,8 +768,7 @@ final class ImportSystemTests: XCTestCase {
         let skipSummary = model.stageImportAssignments(
             [ImportAssignment(targetURL: file, fields: [.init(tagID: "xmp-title", value: "")])],
             sourceKind: .csv,
-            emptyValuePolicy: .skip,
-            pendingPolicy: .merge
+            emptyValuePolicy: .skip
         )
         XCTAssertEqual(skipSummary.skippedFields, 1)
     }
@@ -790,8 +788,7 @@ final class ImportSystemTests: XCTestCase {
         _ = model.stageImportAssignments(
             [ImportAssignment(targetURL: file, fields: [.init(tagID: "datetime-created", value: "2026:01:04 14:24:03")])],
             sourceKind: .eos1v,
-            emptyValuePolicy: .clear,
-            pendingPolicy: .merge
+            emptyValuePolicy: .clear
         )
 
         let snapshots = await model.importMetadataSnapshots(for: [file])
