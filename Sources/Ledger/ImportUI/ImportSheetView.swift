@@ -20,7 +20,12 @@ final class ImportSession: ObservableObject {
         opts.scope = selectedCount > 0 ? .selection : .folder
         if opts.matchStrategy == .rowParity {
             opts.rowParityStartRow = max(1, opts.rowParityStartRow)
-            opts.rowParityRowCount = selectedCount > 0 ? selectedCount : opts.rowParityRowCount
+            if sourceKind == .eos1v {
+                // EOS 1V: frame count is always dictated by the CSV, never capped.
+                opts.rowParityRowCount = 0
+            } else {
+                opts.rowParityRowCount = selectedCount > 0 ? selectedCount : opts.rowParityRowCount
+            }
         }
         // Always start with no source file — don't restore the last-used path
         opts.sourceURLPath = nil
