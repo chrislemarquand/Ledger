@@ -103,7 +103,7 @@ final class ImportSession: ObservableObject {
         }
 
         let stageSummary = model.stageImportAssignments(
-            resolve.assignments,
+            filterAssignments(resolve.assignments, selectedTagIDs: run.options.selectedTagIDs),
             sourceKind: run.options.sourceKind,
             emptyValuePolicy: run.options.emptyValuePolicy
         )
@@ -124,12 +124,25 @@ final class ImportSession: ObservableObject {
         return ids
     }
 
+    private func filterAssignments(_ assignments: [ImportAssignment], selectedTagIDs: [String]) -> [ImportAssignment] {
+        guard !selectedTagIDs.isEmpty else { return assignments }
+        let selected = Set(selectedTagIDs)
+        return assignments.map { ImportAssignment(targetURL: $0.targetURL, fields: $0.fields.filter { selected.contains($0.tagID) }) }
+    }
+
+    private func effectiveFieldCount(for fields: [ImportFieldValue]) -> Int {
+        let ids = options.selectedTagIDs
+        guard !ids.isEmpty else { return fields.count }
+        let selected = Set(ids)
+        return fields.filter { selected.contains($0.tagID) }.count
+    }
+
     var previewText: String {
         if let error = previewError { return error }
         guard let run = preparedRun else { return "" }
         var lines: [String] = []
         for match in run.matchResult.matched.prefix(200) {
-            lines.append("\(match.row.sourceIdentifier) → \(match.targetURL.lastPathComponent) (\(match.row.fields.count) fields)")
+            lines.append("\(match.row.sourceIdentifier) → \(match.targetURL.lastPathComponent) (\(effectiveFieldCount(for: match.row.fields)) fields)")
         }
         if run.matchResult.matched.count > 200 {
             lines.append("… \(run.matchResult.matched.count - 200) more rows")
