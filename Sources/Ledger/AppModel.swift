@@ -2737,8 +2737,10 @@ final class AppModel: ObservableObject {
                     fileURLs: [assignment.targetURL],
                     source: .importSource(sourceKind)
                 )
-                stagedFields += 1
-                stagedFiles.insert(assignment.targetURL)
+                if pendingEditsByFile[assignment.targetURL]?[tag] != nil {
+                    stagedFields += 1
+                    stagedFiles.insert(assignment.targetURL)
+                }
             }
         }
 
