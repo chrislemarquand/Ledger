@@ -48,7 +48,7 @@ Source: `docs/import-manual-smoke-checklist.md`
 - Evidence: checklist note at line 51 (`#THE FOCAL LENGTHS ARE NOT TRIGGERING THE CORRECT LENSES ...`)
 - Observed impact: wrong lens metadata risk; import trust regression.
 - Implemented now:
-  - Uses `~/Desktop/lensfocalength.csv` focal-length mapping during EOS import.
+  - Uses an app-bundled focal-length mapping table during EOS import.
   - If one candidate lens exists for a focal length, stages lens automatically.
   - If multiple candidates exist, prompts user to choose per matched row.
   - If prompt is cancelled, import is cancelled.

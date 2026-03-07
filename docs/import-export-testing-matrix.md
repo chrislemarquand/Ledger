@@ -9,7 +9,7 @@ Purpose: Full manual retest matrix including latest import bug fixes/amendments.
 | ID | Check | Steps | Expected |
 |----|-------|-------|----------|
 | P1 | Clean test context | Open a test folder with at least `001.jpg`, `002.jpg`, `003.jpg`; clear staged edits | No orange dots before starting |
-| P2 | EOS lens map present | Confirm `~/Desktop/lensfocalength.csv` exists and contains focal-length rows | EOS lens inference can run |
+| P2 | EOS lens map available | Use a focal length known to be in the bundled EOS lens map | EOS lens inference can run without external files |
 | P3 | Fixture availability | Confirm fixtures under `docs/fixtures/import-smoke/` are present | All matrix cases runnable |
 | P4 | Sort-order awareness | Note current Ledger main pane sort (for row-order tests) | Row-order expectations are deterministic |
 
@@ -44,7 +44,7 @@ Encoding note: import decoding is deterministic (`UTF-*` first, then `CP1252`/`I
 | E2 | Selection row cap | Select 5 files, open EOS import, scope `Selection`, preview | 5 rows parsed/matched |
 | E3 | Folder unlimited rows | Open EOS import with scope `Folder`, preview | All rows parsed (`rowParityRowCount = 0`) |
 | E4 | EOS field filter | Use `Fields...` to include subset only, import | Only selected fields stage |
-| E5 | Single-candidate lens auto-stage (bug fix) | Use focal length with exactly one lens in `lensfocalength.csv`, import | `Lens Model` is staged automatically |
+| E5 | Single-candidate lens auto-stage (bug fix) | Use focal length with exactly one bundled lens candidate, import | `Lens Model` is staged automatically |
 | E6 | Multi-candidate lens prompts per row (bug fix) | Use focal length with 2-3 lens candidates across multiple rows, import | Prompt shown per ambiguous row |
 | E7 | Multi-candidate lens choice applied (bug fix) | In E6, choose different lenses for different rows | Each row stages the chosen lens |
 | E8 | Lens prompt cancel aborts import (bug fix) | In E6, cancel on prompt | Import is cancelled; no fields staged |

@@ -14,7 +14,7 @@ final class ImportSession: ObservableObject {
     }
 
     private let coordinator = ImportCoordinator()
-    private let eosLensMappingURL: URL
+    private let eosLensMappingURLOverride: URL?
     private let lensChoiceProvider: ((EOSLensChoiceRequest) -> String?)?
     private var eosLensMappingCache: [Int: [String]]?
     @Published var options: ImportRunOptions
@@ -30,8 +30,7 @@ final class ImportSession: ObservableObject {
         lensChoiceProvider: ((EOSLensChoiceRequest) -> String?)? = nil
     ) {
         var opts = coordinator.loadPersistedOptions(for: sourceKind)
-        self.eosLensMappingURL = eosLensMappingURL
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Desktop/lensfocalength.csv")
+        self.eosLensMappingURLOverride = eosLensMappingURL
         self.lensChoiceProvider = lensChoiceProvider
         opts.sourceKind = sourceKind
         if sourceKind == .csv {
@@ -239,8 +238,15 @@ final class ImportSession: ObservableObject {
         if let cached = eosLensMappingCache {
             return cached
         }
-        guard let data = try? Data(contentsOf: eosLensMappingURL),
-              let rows = try? CSVSupport.parseRows(from: data),
+        let data: Data
+        if let overrideURL = eosLensMappingURLOverride,
+           let overrideData = try? Data(contentsOf: overrideURL) {
+            data = overrideData
+        } else {
+            data = Data(EOSLensMappingEmbedded.csv.utf8)
+        }
+
+        guard let rows = try? CSVSupport.parseRows(from: data),
               let header = rows.first
         else {
             eosLensMappingCache = [:]
