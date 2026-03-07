@@ -5,6 +5,13 @@ struct GPXImportAdapter: ImportSourceAdapter {
     let sourceKind: ImportSourceKind = .gpx
 
     func parse(context: ImportParseContext) throws -> ImportParseResult {
+        let exifDateFormatter: DateFormatter = {
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "en_US_POSIX")
+            f.timeZone = context.options.cameraTimezone
+            f.dateFormat = "yyyy:MM:dd HH:mm:ss"
+            return f
+        }()
         let parser = GPXTrackParser()
         let files = [context.sourceURL] + context.auxiliaryURLs
         var points: [GPXTrackPoint] = []
@@ -38,7 +45,7 @@ struct GPXImportAdapter: ImportSourceAdapter {
                 continue
             }
 
-            guard let captureDate = captureDate(from: snapshot) else {
+            guard let captureDate = captureDate(from: snapshot, exifFormatter: exifDateFormatter) else {
                 warnings.append(
                     ImportWarning(
                         sourceLine: nil,
@@ -94,19 +101,19 @@ struct GPXImportAdapter: ImportSourceAdapter {
         return ImportParseResult(rows: rows, warnings: warnings)
     }
 
-    private func captureDate(from snapshot: FileMetadataSnapshot) -> Date? {
+    private func captureDate(from snapshot: FileMetadataSnapshot, exifFormatter: DateFormatter) -> Date? {
         let keys = ["DateTimeOriginal", "CreateDate", "ModifyDate"]
         for key in keys {
             if let field = snapshot.fields.first(where: { $0.namespace == .exif && $0.key == key }),
-               let parsed = parseDate(field.value) {
+               let parsed = parseDate(field.value, exifFormatter: exifFormatter) {
                 return parsed
             }
         }
         return nil
     }
 
-    private func parseDate(_ raw: String) -> Date? {
-        if let parsed = Self.exifDateFormatter.date(from: raw) {
+    private func parseDate(_ raw: String, exifFormatter: DateFormatter) -> Date? {
+        if let parsed = exifFormatter.date(from: raw) {
             return parsed
         }
         if let parsed = Self.iso8601Formatter.date(from: raw) {
@@ -126,13 +133,6 @@ struct GPXImportAdapter: ImportSourceAdapter {
             .replacingOccurrences(of: #"\.0+$"#, with: "", options: .regularExpression)
     }
 
-    private static let exifDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
-        formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
-        return formatter
-    }()
 
     private nonisolated(unsafe) static let iso8601Formatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()

@@ -6,6 +6,13 @@ struct CSVImportAdapter: ImportSourceAdapter {
     private static let invalidSchemaGuidance = "This CSV is not in ExifTool format. Export using ExifTool/Ledger ExifTool CSV and retry."
 
     func parse(context: ImportParseContext) throws -> ImportParseResult {
+        let exifDateFormatter: DateFormatter = {
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "en_US_POSIX")
+            f.timeZone = context.options.cameraTimezone
+            f.dateFormat = "yyyy:MM:dd HH:mm:ss"
+            return f
+        }()
         let rows = try loadRows(sourceURL: context.sourceURL)
         guard let headerRow = rows.first, !headerRow.isEmpty else {
             throw ImportAdapterError.invalidSchema("CSV is empty.")
@@ -94,7 +101,7 @@ struct CSVImportAdapter: ImportSourceAdapter {
             for (columnIndex, descriptor) in mappedColumns {
                 guard columnIndex < row.count else { continue }
                 let rawValue = CSVSupport.trim(row[columnIndex])
-                guard let normalized = normalizeImportedValue(rawValue, for: descriptor) else {
+                guard let normalized = normalizeImportedValue(rawValue, for: descriptor, dateFormatter: exifDateFormatter) else {
                     warnings.append(
                         ImportWarning(
                             sourceLine: rowIndex + 1,
@@ -243,7 +250,7 @@ struct CSVImportAdapter: ImportSourceAdapter {
         }
     }
 
-    private func normalizeImportedValue(_ value: String, for descriptor: ImportTagDescriptor) -> String? {
+    private func normalizeImportedValue(_ value: String, for descriptor: ImportTagDescriptor, dateFormatter: DateFormatter) -> String? {
         let trimmed = CSVSupport.trim(value)
         guard !trimmed.isEmpty else { return "" }
 
@@ -251,11 +258,11 @@ struct CSVImportAdapter: ImportSourceAdapter {
         case .text:
             return trimmed
         case .dateTime:
-            if Self.exifDateFormatter.date(from: trimmed) != nil {
+            if dateFormatter.date(from: trimmed) != nil {
                 return trimmed
             }
             if let parsed = Self.iso8601WithFraction.date(from: trimmed) ?? Self.iso8601WithoutFraction.date(from: trimmed) {
-                return Self.exifDateFormatter.string(from: parsed)
+                return dateFormatter.string(from: parsed)
             }
             return nil
         case .decimal:
@@ -335,13 +342,6 @@ struct CSVImportAdapter: ImportSourceAdapter {
             .replacingOccurrences(of: #"\.0+$"#, with: "", options: .regularExpression)
     }
 
-    private static let exifDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
-        formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
-        return formatter
-    }()
 
     private nonisolated(unsafe) static let iso8601WithFraction: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()

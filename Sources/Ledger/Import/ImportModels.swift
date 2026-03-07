@@ -215,6 +215,19 @@ struct ImportRunOptions: Hashable, Codable, Sendable {
     var selectedTagIDs: [String]
     var gpxToleranceSeconds: Int
     var gpxCameraOffsetSeconds: Int
+    /// IANA timezone identifier for the timezone the camera clock was set to.
+    /// Defaults to the current system timezone. Stored as a string so the struct
+    /// remains `Codable` and `Sendable`. Use the `cameraTimezone` computed
+    /// property for a typed `TimeZone` value.
+    var cameraTimezoneIdentifier: String
+
+    /// The timezone the camera clock was set to when the images were captured.
+    /// Used by adapters to interpret bare EXIF date strings (which carry no UTC
+    /// offset) as absolute points in time — most importantly for GPX matching.
+    var cameraTimezone: TimeZone {
+        get { TimeZone(identifier: cameraTimezoneIdentifier) ?? .current }
+        set { cameraTimezoneIdentifier = newValue.identifier }
+    }
 
     static func defaults(for sourceKind: ImportSourceKind) -> ImportRunOptions {
         ImportRunOptions(
@@ -228,7 +241,8 @@ struct ImportRunOptions: Hashable, Codable, Sendable {
             auxiliaryURLPaths: [],
             selectedTagIDs: [],
             gpxToleranceSeconds: 600,
-            gpxCameraOffsetSeconds: 0
+            gpxCameraOffsetSeconds: 0,
+            cameraTimezoneIdentifier: TimeZone.current.identifier
         )
     }
 

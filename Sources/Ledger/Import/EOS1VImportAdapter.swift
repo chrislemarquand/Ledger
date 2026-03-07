@@ -13,12 +13,6 @@ struct EOS1VImportAdapter: ImportSourceAdapter {
         return formatter
     }()
 
-    private static let outputDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
-        return formatter
-    }()
 
     private static let inputDateFormats = [
         "dd/MM/yyyy HH:mm:ss",
@@ -27,7 +21,27 @@ struct EOS1VImportAdapter: ImportSourceAdapter {
         "yyyy-MM-dd HH:mm:ss",
     ]
 
+    // Build one set of date formatters per parse run, using the camera's timezone.
+    // Creating them once per parse (not per row) fixes the allocation hot-path,
+    // while passing the timezone in (rather than baking TimeZone.current into a
+    // static) keeps interpretation correct when the user specifies a camera timezone.
+    private static func makeDateFormatters(timezone: TimeZone) -> (input: [DateFormatter], output: DateFormatter) {
+        let input = inputDateFormats.map { format -> DateFormatter in
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "en_US_POSIX")
+            f.timeZone = timezone
+            f.dateFormat = format
+            return f
+        }
+        let output = DateFormatter()
+        output.locale = Locale(identifier: "en_US_POSIX")
+        output.timeZone = timezone
+        output.dateFormat = "yyyy:MM:dd HH:mm:ss"
+        return (input, output)
+    }
+
     func parse(context: ImportParseContext) throws -> ImportParseResult {
+        let (inputFormatters, outputFormatter) = Self.makeDateFormatters(timezone: context.options.cameraTimezone)
         let data: Data
         do {
             data = try Data(contentsOf: context.sourceURL)
@@ -86,7 +100,7 @@ struct EOS1VImportAdapter: ImportSourceAdapter {
             )
             var fields: [ImportFieldValue] = []
 
-            if let dto = buildDateTimeOriginal(row: map) {
+            if let dto = buildDateTimeOriginal(row: map, inputFormatters: inputFormatters, outputFormatter: outputFormatter) {
                 fields.append(ImportFieldValue(tagID: "datetime-created", value: dto))
             } else {
                 warnings.append(
@@ -224,23 +238,21 @@ struct EOS1VImportAdapter: ImportSourceAdapter {
         return result
     }
 
-    private func buildDateTimeOriginal(row: [String: String]) -> String? {
+    private func buildDateTimeOriginal(
+        row: [String: String],
+        inputFormatters: [DateFormatter],
+        outputFormatter: DateFormatter
+    ) -> String? {
         let date = columnValue(in: row, matching: ["Date"])
         let time = columnValue(in: row, matching: ["Time"])
         guard !date.isEmpty, !time.isEmpty else { return nil }
         let input = "\(date) \(time)"
-        var parsedDate: Date?
-        for format in Self.inputDateFormats {
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.dateFormat = format
-            if let date = formatter.date(from: input) {
-                parsedDate = date
-                break
+        for formatter in inputFormatters {
+            if let parsed = formatter.date(from: input) {
+                return outputFormatter.string(from: parsed)
             }
         }
-        guard let parsed = parsedDate else { return nil }
-        return Self.outputDateFormatter.string(from: parsed)
+        return nil
     }
 
     private func looksLikeEOSDataRow(_ row: [String: String]) -> Bool {
