@@ -7,11 +7,6 @@ final class ImportCoordinator {
 
     private let matcher = ImportMatcher()
     private let resolver = ImportConflictResolver()
-    private let csvAdapter = CSVImportAdapter()
-    private let gpxAdapter = GPXImportAdapter()
-    private let referenceFolderAdapter = ReferenceFolderImportAdapter()
-    private let referenceImageAdapter = ReferenceImageImportAdapter()
-    private let eosAdapter = EOS1VImportAdapter()
     private let optionsPrefix = "\(AppBrand.identifierPrefix).import.options."
 
     func loadPersistedOptions(for sourceKind: ImportSourceKind) -> ImportRunOptions {
@@ -41,23 +36,29 @@ final class ImportCoordinator {
         guard let sourceURL = options.sourceURL else {
             throw ImportAdapterError.missingSourceURL
         }
-        let metadataFiles = metadataFilesNeeded(options: options, targetFiles: targetFiles)
+        let metadataFiles = await Task.detached(priority: .userInitiated) {
+            Self.metadataFilesNeeded(options: options, targetFiles: targetFiles)
+        }.value
         let metadata = await metadataProvider(Array(metadataFiles))
+        let tagDescriptorIndex = CSVSupport.buildTagDescriptorIndex(tagCatalog: tagCatalog)
         let context = ImportParseContext(
             options: options,
             sourceURL: sourceURL,
             auxiliaryURLs: options.auxiliaryURLs,
             targetFiles: targetFiles,
             tagCatalog: tagCatalog,
-            metadataByFile: metadata
+            metadataByFile: metadata,
+            tagDescriptorIndex: tagDescriptorIndex
         )
 
         let parseResult: ImportParseResult
         let parsedAsSourceKind: ImportSourceKind
-        parseResult = try adapter(for: options.sourceKind).parse(context: context)
+        parseResult = try await Task.detached(priority: .userInitiated) {
+            try Self.parse(sourceKind: options.sourceKind, context: context)
+        }.value
         parsedAsSourceKind = options.sourceKind
 
-        let matchResult = matcher.match(parseResult: parseResult, targetFiles: targetFiles)
+        let matchResult = matcher.match(parseResult: parseResult, targetFiles: targetFiles, options: options)
         let summary = ImportPreviewSummary(
             sourceKind: options.sourceKind,
             parsedRows: parseResult.rows.count,
@@ -84,22 +85,22 @@ final class ImportCoordinator {
         resolver.resolve(matchResult: preparedRun.matchResult, resolutions: resolutions)
     }
 
-    private func adapter(for sourceKind: ImportSourceKind) -> ImportSourceAdapter {
+    private nonisolated static func parse(sourceKind: ImportSourceKind, context: ImportParseContext) throws -> ImportParseResult {
         switch sourceKind {
         case .csv:
-            return csvAdapter
+            return try CSVImportAdapter().parse(context: context)
         case .gpx:
-            return gpxAdapter
+            return try GPXImportAdapter().parse(context: context)
         case .referenceFolder:
-            return referenceFolderAdapter
+            return try ReferenceFolderImportAdapter().parse(context: context)
         case .referenceImage:
-            return referenceImageAdapter
+            return try ReferenceImageImportAdapter().parse(context: context)
         case .eos1v:
-            return eosAdapter
+            return try EOS1VImportAdapter().parse(context: context)
         }
     }
 
-    private func metadataFilesNeeded(options: ImportRunOptions, targetFiles: [URL]) -> Set<URL> {
+    private nonisolated static func metadataFilesNeeded(options: ImportRunOptions, targetFiles: [URL]) -> Set<URL> {
         var files: Set<URL> = []
         switch options.sourceKind {
         case .gpx:

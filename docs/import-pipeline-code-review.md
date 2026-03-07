@@ -12,6 +12,7 @@ Files: `Sources/Ledger/Import/` + `ImportUI/ImportSheetView.swift`
 | 🔴 High | Correctness bug or significant performance/UX regression |
 | 🟡 Medium | Real problem, but narrow blast radius or has a workaround |
 | 🔵 Low | Code smell, dead code, or minor inconsistency |
+| ✅ Fixed | Issue resolved; commit noted inline |
 
 ---
 
@@ -61,7 +62,7 @@ Most real-world GPX files put `ele` before `time`, so this is latent rather than
 
 ---
 
-### H3 · `EOS1VImportAdapter.buildDateTimeOriginal` creates `DateFormatter` instances per row
+### ~~H3 · `EOS1VImportAdapter.buildDateTimeOriginal` creates `DateFormatter` instances per row~~ ✅ Fixed — `40088be`
 
 **File:** `EOS1VImportAdapter.swift:227–244`
 
@@ -136,7 +137,7 @@ The identical pattern also appears in `ReferenceImportSupport.parseCoordinateNum
 
 ---
 
-### M4 · Static `DateFormatter`s use `TimeZone.current` — fragile across timezone changes
+### ~~M4 · Static `DateFormatter`s use `TimeZone.current` — fragile across timezone changes~~ ✅ Fixed — `40088be`
 
 **Files:** `CSVImportAdapter.swift:341`, `GPXImportAdapter.swift:130`
 
@@ -243,17 +244,280 @@ UTF-8 is tried before CP1252. A CP1252 file whose content happens to be valid UT
 
 | # | File | Issue | Severity |
 |---|------|-------|----------|
-| H1 | `ImportCoordinator` | Sync disk I/O on `@MainActor` blocks UI | 🔴 |
-| H2 | `GPXImportAdapter` | `<time>` before `<ele>` corrupts timestamp | 🔴 |
-| H3 | `EOS1VImportAdapter` | `DateFormatter` allocated per row | 🔴 |
-| M1 | `ExifToolCSVExportService` | Blocking synchronous export | 🟡 |
-| M2 | `EOS1VImportAdapter` | Hardcoded lens inference writes wrong metadata | 🟡 |
-| M3 | `CSVImportAdapter` | Regex recompiled per GPS field | 🟡 |
-| M4 | Both CSV/GPX adapters | Static `DateFormatter` bakes in timezone at launch | 🟡 |
-| M5 | `ImportConflictResolver` | Silent last-write-wins on field collision | 🟡 |
-| L1 | `EOS1VImportAdapter` | Unused `extensionProbeOrder` candidates array | 🔵 |
-| L2 | `CSVImportAdapter` | Tag descriptor index rebuilt per parse | 🔵 |
-| L3 | `CSVSupport` | `normalizedHeader` regex re-parsed every call | 🔵 |
-| L4 | `ImportMatcher` | Row-parity target ordering undocumented | 🔵 |
-| L5 | `GPXImportAdapter` | Non-deterministic nearest-point on ties | 🔵 |
-| L6 | `CSVSupport` | Encoding detection ambiguity (CP1252 vs UTF-8) | 🔵 |
+| ~~H1~~ | ~~`ImportCoordinator`~~ | ~~Sync disk I/O on `@MainActor` blocks UI~~ | ✅ |
+| ~~H2~~ | ~~`GPXImportAdapter`~~ | ~~`<time>` before `<ele>` corrupts timestamp~~ | ✅ |
+| ~~H3~~ | ~~`EOS1VImportAdapter`~~ | ~~`DateFormatter` allocated per row~~ | ✅ |
+| ~~M1~~ | ~~`ExifToolCSVExportService`~~ | ~~Blocking synchronous export~~ | ✅ |
+| ~~M2~~ | ~~`EOS1VImportAdapter`~~ | ~~Hardcoded lens inference writes wrong metadata~~ | ✅ |
+| ~~M3~~ | ~~`CSVImportAdapter`~~ | ~~Regex recompiled per GPS field~~ | ✅ |
+| ~~M4~~ | ~~Both CSV/GPX adapters~~ | ~~Static `DateFormatter` bakes in timezone at launch~~ | ✅ |
+| ~~M5~~ | ~~`ImportConflictResolver`~~ | ~~Silent last-write-wins on field collision~~ | ✅ |
+| ~~L1~~ | ~~`EOS1VImportAdapter`~~ | ~~Unused `extensionProbeOrder` candidates array~~ | ✅ |
+| ~~L2~~ | ~~`CSVImportAdapter`~~ | ~~Tag descriptor index rebuilt per parse~~ | ✅ |
+| ~~L3~~ | ~~`CSVSupport`~~ | ~~`normalizedHeader` regex re-parsed every call~~ | ✅ |
+| ~~L4~~ | ~~`ImportMatcher`~~ | ~~Row-parity target ordering undocumented~~ | ✅ |
+| ~~L5~~ | ~~`GPXImportAdapter`~~ | ~~Non-deterministic nearest-point on ties~~ | ✅ |
+| ~~L6~~ | ~~`CSVSupport`~~ | ~~Encoding detection ambiguity (CP1252 vs UTF-8)~~ | ✅ (documented) |
+
+---
+
+## Execution Plan (Dependency-Aware)
+
+This section translates open findings into an implementation sequence with concrete file/test touchpoints.
+
+### PR-A · GPX correctness (`H2` + `L5`)
+
+**Status:** ✅ Completed on 2026-03-07.
+
+**Goal:** Fix GPX parsing correctness before broader pipeline changes.
+
+**Code files**
+- `Sources/Ledger/Import/GPXImportAdapter.swift`
+
+**Test files**
+- `Tests/LedgerTests/ImportSystemTests.swift`
+- Optional: `Tests/LedgerTests/ImportMatrixTests.swift`
+
+**Checklist**
+- Split GPX parser accumulators into `currentEleText` and `currentTimeText`.
+- Ensure `<time>...</time><ele>...</ele>` ordering parses correctly.
+- Make `nearestPoint` deterministic on ties (prefer earlier timestamp).
+
+**Acceptance**
+- Valid GPX points are not dropped when `time` precedes `ele`.
+- Tie cases yield stable results across runs.
+
+**Completion notes**
+- Implemented in `Sources/Ledger/Import/GPXImportAdapter.swift`:
+  - deterministic tie-break in `nearestPoint` (earlier timestamp wins),
+  - separate GPX parser accumulators for `time` and `ele`.
+- Added regression tests in `Tests/LedgerTests/ImportSystemTests.swift`:
+  - `testGPXImportAdapterParsesTrackPointWhenTimePrecedesEle`
+  - `testGPXImportAdapterPrefersEarlierPointWhenEquidistant`
+- Verified via `swift test --filter ImportSystemTests`.
+
+---
+
+### PR-B · Off-main-thread import/export I/O (`H1` + `M1`)
+
+**Status:** ✅ Completed on 2026-03-07.
+
+**Goal:** Remove UI-thread blocking from import preparation and ExifTool export.
+
+**Code files**
+- `Sources/Ledger/Import/ImportCoordinator.swift`
+- `Sources/Ledger/Import/ExifToolCSVExportService.swift`
+- If needed by signature changes: `Sources/Ledger/ImportUI/ImportSheetView.swift`
+
+**Test files**
+- `Tests/LedgerTests/ImportSystemTests.swift`
+- `Tests/LedgerTests/ImportMatrixTests.swift` (regression run)
+
+**Checklist**
+- Move folder enumeration in `metadataFilesNeeded` off main actor.
+- Run adapter parse off main actor (for file-backed adapters).
+- Convert `ExifToolCSVExportService.export` to `async throws` (or enforce background execution at the API boundary).
+- Update call sites to await async behavior and keep UI responsive.
+
+**Acceptance**
+- No synchronous disk read path remains on `@MainActor` in `prepareRun`.
+- Export path is non-blocking by default from caller perspective.
+
+**Completion notes**
+- Implemented in `Sources/Ledger/Import/ImportCoordinator.swift`:
+  - metadata file discovery runs in detached work,
+  - adapter parsing runs in detached work (off `@MainActor`).
+- Implemented in `Sources/Ledger/Import/ExifToolCSVExportService.swift`:
+  - `export` is now `async throws`,
+  - process execution and file write run via detached work.
+- Updated caller in `Sources/Ledger/AppModel.swift` to await async export directly.
+- Added regression test:
+  - `Tests/LedgerTests/ImportSystemTests.swift` → `testExifToolCSVExportServiceRejectsEmptyInput`.
+- Verified via:
+  - `swift test --filter ImportSystemTests`
+  - `swift test --filter ImportMatrixTests`
+
+**Policy-compatibility note**
+- This PR intentionally avoids introducing new EOS-specific metadata policy decisions.
+- The off-main parse flow still goes through `ImportParseContext`, which remains the integration seam for future EOS lens policy/settings work in v1.1.
+
+---
+
+### PR-C · Metadata integrity policy (`M2` + `M5`)
+
+**Status:** ✅ Completed on 2026-03-07.
+
+**Goal:** Eliminate silent wrong metadata and define deterministic collision behavior.
+
+**Code files**
+- `Sources/Ledger/Import/EOS1VImportAdapter.swift`
+- `Sources/Ledger/Import/ImportConflictResolver.swift`
+- Possibly `Sources/Ledger/Import/ImportModels.swift` (if diagnostics are expanded)
+
+**Test files**
+- `Tests/LedgerTests/ImportSystemTests.swift`
+
+**Checklist**
+- Remove/disable hardcoded `inferLens` output when lens is unknown.
+- Define merge precedence for field collisions (matched vs resolved conflicts).
+- Emit a warning/diagnostic on overwrite instead of silent last-write behavior.
+
+**Acceptance**
+- EOS import no longer writes synthetic lens model values by focal length.
+- Collision behavior is explicit, deterministic, and test-covered.
+
+**Completion notes**
+- Implemented in `Sources/Ledger/Import/EOS1VImportAdapter.swift`:
+  - removed hardcoded lens inference output,
+  - added `resolvedLensTag(...)` seam that currently returns `nil` (ready for future settings-driven policy and import overrides).
+- Implemented in `Sources/Ledger/Import/ImportConflictResolver.swift`:
+  - explicit merge warning capture on per-target/per-tag value collision,
+  - deterministic precedence retained (later resolved conflict value overwrites earlier matched value),
+  - warnings returned in `ImportConflictResolveResult`.
+- Updated `Sources/Ledger/ImportUI/ImportSheetView.swift`:
+  - status message now includes merge warning count when collisions were resolved by overwrite.
+- Added regression tests in `Tests/LedgerTests/ImportSystemTests.swift`:
+  - `testConflictResolverResolvedConflictOverwritesMatchedFieldWithWarning`
+  - EOS parse assertion that `exif-lens` is not auto-authored.
+- Verified via:
+  - `swift test --filter ImportSystemTests`
+  - `swift test --filter ImportMatrixTests`
+
+**Policy-compatibility note**
+- This keeps lens behavior policy-free at runtime today while preserving an adapter-level hook to read future v1.1 Settings policy (global defaults + per-import override).
+
+---
+
+### PR-D · Perf and cleanup batch (`M3` + `L3` + `L2` + `L1`)
+
+**Status:** ✅ Completed on 2026-03-07.
+
+**Goal:** Reduce repeated work in hot paths without changing behavior.
+
+**Code files**
+- `Sources/Ledger/Import/CSVImportAdapter.swift`
+- `Sources/Ledger/Import/ReferenceImportSupport.swift`
+- `Sources/Ledger/Import/CSVSupport.swift`
+- `Sources/Ledger/Import/ImportCoordinator.swift` (if precomputing index there)
+- `Sources/Ledger/Import/EOS1VImportAdapter.swift`
+
+**Test files**
+- `Tests/LedgerTests/ImportSystemTests.swift`
+- `Tests/LedgerTests/ImportMatrixTests.swift` (regression run)
+
+**Checklist**
+- Promote coordinate regex to shared static compiled regex/parser.
+- Avoid regex re-parsing in `normalizedHeader` (cached regex or character filter).
+- Build tag descriptor index once per run/session instead of per parse.
+- Remove unused `extensionProbeOrder` candidate array allocation.
+
+**Acceptance**
+- Existing behavior unchanged with lower per-row overhead.
+- Shared parsing logic is centralized where practical.
+
+**Completion notes**
+- Implemented in `Sources/Ledger/Import/CSVSupport.swift`:
+  - replaced `normalizedHeader` regex-based normalization with an allocation-light ASCII filter path,
+  - added shared `parseCoordinateNumber(...)` with a static compiled regex,
+  - added shared `buildTagDescriptorIndex(...)` utility.
+- Implemented in `Sources/Ledger/Import/CSVImportAdapter.swift`:
+  - switched coordinate parsing to shared `CSVSupport.parseCoordinateNumber(...)`,
+  - removed adapter-local per-call regex and duplicate coordinate parser,
+  - switched mapped-column descriptor lookup to context-provided prebuilt index.
+- Implemented in `Sources/Ledger/Import/ReferenceImportSupport.swift`:
+  - removed duplicate coordinate parser and re-used `CSVSupport.parseCoordinateNumber(...)`.
+- Implemented in `Sources/Ledger/Import/ImportSourceAdapter.swift` and `Sources/Ledger/Import/ImportCoordinator.swift`:
+  - added `tagDescriptorIndex` to `ImportParseContext`,
+  - coordinator now precomputes descriptor index once per run and injects it into parse context.
+- Implemented in `Sources/Ledger/Import/EOS1VImportAdapter.swift`:
+  - removed unused `extensionProbeOrder` candidates array allocation from row selector fallback logic.
+- Verified via:
+  - `swift test --filter ImportSystemTests`
+  - `swift test --filter ImportMatrixTests`
+
+---
+
+### PR-E · Contracts and documentation (`L4` + `L6`)
+
+**Status:** ✅ Completed on 2026-03-07.
+
+**Goal:** Lock ordering assumptions and document encoding ambiguity.
+
+**Code files**
+- `Sources/Ledger/Import/ImportMatcher.swift`
+- Upstream ordering source in `AppModel.importTargetFiles(for:)`
+- `Sources/Ledger/Import/CSVSupport.swift`
+
+**Docs**
+- `docs/ARCHITECTURE.md` and/or `docs/import-export-testing-matrix.md`
+
+**Test files**
+- `Tests/LedgerTests/ImportSystemTests.swift`
+
+**Checklist**
+- Add explicit row-parity ordering contract comment/assertion in matcher path.
+- Ensure a test locks row-parity mapping to provided target ordering.
+- Document UTF-8 vs CP1252 ambiguity and fallback strategy.
+
+**Acceptance**
+- Ordering assumptions are explicit and guarded against silent regressions.
+- Encoding behavior is intentional and documented.
+
+**Completion notes**
+- Implemented in `Sources/Ledger/Import/ImportMatcher.swift`:
+  - explicit row-parity ordering contract comment added (`targetFiles` order is caller-defined and preserved),
+  - debug assertion added for duplicate target URLs in row-parity path.
+- Implemented in `Sources/Ledger/AppModel.swift`:
+  - documented that `importTargetFiles(for:)` returns stable browser-visible ordering used by row-parity matching.
+- Implemented in `Sources/Ledger/Import/CSVSupport.swift`:
+  - documented deterministic decoder order and explicit UTF-first behavior for ambiguous no-BOM cases.
+- Implemented in `docs/import-export-testing-matrix.md`:
+  - added encoding behavior note under ExifTool CSV import coverage.
+- Existing row-order contract test retained:
+  - `Tests/LedgerTests/ImportSystemTests.swift` → `testMatcherMapsRowParityToProvidedTargetOrder`.
+- Verified via:
+  - `swift test --filter ImportSystemTests`
+  - `swift test --filter ImportMatrixTests`
+
+---
+
+### Follow-up · CSV matching simplification (post-review)
+
+**Status:** ✅ Completed on 2026-03-07.
+
+**Goal:** Remove user-facing CSV match mode switching while keeping deterministic behavior.
+
+**Decision**
+- CSV import now auto-selects strategy:
+  - use filename matching only when `SourceFile` values are complete and uniquely map to in-scope targets,
+  - otherwise fall back to row-order matching with an info warning.
+- The sheet no longer exposes a CSV “Match by” toggle.
+
+**Implemented**
+- `Sources/Ledger/Import/CSVImportAdapter.swift`
+  - added `effectiveMatchingStrategy(...)` and fallback diagnostics.
+- `Sources/Ledger/ImportUI/ImportSheetView.swift`
+  - removed CSV match-mode picker, updated copy to describe auto behavior.
+- `Tests/LedgerTests/ImportSystemTests.swift`
+  - added fallback regression coverage for incomplete `SourceFile` values.
+- `docs/import-export-testing-matrix.md`
+  - updated C4/C5 scenarios to reflect auto strategy.
+
+**Verification**
+- `swift test --filter ImportSystemTests`
+- `swift test --filter ImportMatrixTests`
+
+---
+
+## Recommended PR Order
+
+1. `PR-A` (GPX correctness)
+2. `PR-B` (threading / async I/O)
+3. `PR-C` (metadata policy)
+4. `PR-D` (performance cleanup)
+5. `PR-E` (contracts/docs)
+
+## Notes
+
+- Already fixed per this review: `H3`, `M4` (commit `40088be`).
+- Highest regression risk is in `PR-B` and `PR-C`; keep those isolated from cleanup work.

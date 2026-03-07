@@ -134,7 +134,9 @@ struct EOS1VImportAdapter: ImportSourceAdapter {
             appendIfNotEmpty(&fields, tagID: "exif-model", value: "EOS 1V")
             appendIfNotEmpty(&fields, tagID: "xmp-subject", value: "Film")
 
-            appendIfNotEmpty(&fields, tagID: "exif-lens", value: inferLens(focalLength: focal))
+            if let lens = resolvedLensTag(focalLength: focal, options: context.options) {
+                appendIfNotEmpty(&fields, tagID: "exif-lens", value: lens)
+            }
 
             parsedRows.append(
                 ImportRow(
@@ -299,8 +301,8 @@ struct EOS1VImportAdapter: ImportSourceAdapter {
     ) -> (selector: ImportTargetSelector, identifier: String) {
         let sourceRowValue = sourceRowNumber > 0 ? sourceRowNumber : outputRowNumber
         let rowString = Self.rowFormatter.string(from: NSNumber(value: sourceRowValue)) ?? String(format: "%03d", sourceRowValue)
-        let candidates = Self.extensionProbeOrder.map { "\(rowString)\($0)" }
-        let fallback = candidates.first ?? "\(rowString).jpg"
+        let firstExtension = Self.extensionProbeOrder.first ?? ".jpg"
+        let fallback = "\(rowString)\(firstExtension)"
         switch strategy {
         case .filename:
             return (.filename(fallback), fallback)
@@ -426,18 +428,10 @@ struct EOS1VImportAdapter: ImportSourceAdapter {
             .replacingOccurrences(of: #"\.0+$"#, with: "", options: .regularExpression)
     }
 
-    private func inferLens(focalLength: String) -> String {
-        let number = Int(focalLength.prefix { $0.isNumber })
-        switch number {
-        case 28:
-            return "EF28mm ƒ2.8 IS USM"
-        case 40:
-            return "EF40mm ƒ2.8 STM"
-        case 50:
-            return "EF50mm ƒ1.8 STM"
-        default:
-            return "EF24-105mm ƒ4L IS USM"
-        }
+    private func resolvedLensTag(focalLength _: String, options _: ImportRunOptions) -> String? {
+        // EOS 1V CSV does not provide reliable lens metadata. Keep this as a seam
+        // for future settings-driven lens policy (global defaults + import overrides).
+        nil
     }
 
     private func appendIfNotEmpty(_ fields: inout [ImportFieldValue], tagID: String, value: String) {

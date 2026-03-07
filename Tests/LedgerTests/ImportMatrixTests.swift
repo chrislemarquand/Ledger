@@ -156,7 +156,7 @@ final class ImportMatrixTests: XCTestCase {
 
     // MARK: - ExifTool CSV Import
 
-    /// C1 – Basic import, all rows, folder scope, match by filename
+    /// C1 – Basic import, all rows, folder scope (auto-strategy selects filename mode)
     func testC1_CSVBasicImportAllRowsFolderScope() throws {
         let temp = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: temp) }
@@ -169,8 +169,7 @@ final class ImportMatrixTests: XCTestCase {
         /tmp/c1c.jpg,Gamma,400
         """.write(to: csv, atomically: true, encoding: .utf8)
 
-        var options = ImportRunOptions.defaults(for: .csv)
-        options.matchStrategy = .filename
+        let options = ImportRunOptions.defaults(for: .csv)
         let context = ImportParseContext(
             options: options,
             sourceURL: csv,
@@ -215,7 +214,6 @@ final class ImportMatrixTests: XCTestCase {
         """.write(to: csv, atomically: true, encoding: .utf8)
 
         var options = ImportRunOptions.defaults(for: .csv)
-        options.matchStrategy = .filename
         options.selectedTagIDs = ["xmp-title"]
         let context = ImportParseContext(
             options: options,
@@ -518,6 +516,52 @@ final class ImportMatrixTests: XCTestCase {
         XCTAssertEqual(matchResult.matched.count, 1, "R4: the matched file should be staged")
         XCTAssertEqual(matchResult.matched[0].targetURL.lastPathComponent, "match.jpg")
         XCTAssertFalse(matchResult.conflicts.isEmpty, "R4: the unmatched reference file should produce a conflict")
+    }
+
+    /// R5 – Optional fallback mode: filename-first, then row-order for unmatched rows/files
+    func testR5_ReferenceFolderFilenameThenRowFallback() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let (refFolder, fileURLs) = try makeRefFolder(in: temp, name: "ref-r5", files: ["b.jpg", "a.jpg"])
+        let refA = fileURLs["a.jpg"]!
+        let refB = fileURLs["b.jpg"]!
+
+        var options = ImportRunOptions.defaults(for: .referenceFolder)
+        options.sourceURLPath = refFolder.path
+        options.referenceFolderRowFallbackEnabled = true
+
+        let target1 = URL(fileURLWithPath: "/tmp/target-1.jpg")
+        let target2 = URL(fileURLWithPath: "/tmp/target-2.jpg")
+        let context = ImportParseContext(
+            options: options,
+            sourceURL: refFolder,
+            auxiliaryURLs: [],
+            targetFiles: [target2, target1], // explicit row-order contract from caller
+            tagCatalog: standardCSVCatalog(),
+            metadataByFile: [
+                refA: FileMetadataSnapshot(
+                    fileURL: refA,
+                    fields: [MetadataField(key: "Title", namespace: .xmp, value: "A")]
+                ),
+                refB: FileMetadataSnapshot(
+                    fileURL: refB,
+                    fields: [MetadataField(key: "Title", namespace: .xmp, value: "B")]
+                ),
+            ]
+        )
+
+        let parseResult = try ReferenceFolderImportAdapter().parse(context: context)
+        let matchResult = ImportMatcher().match(parseResult: parseResult, targetFiles: [target2, target1], options: options)
+
+        XCTAssertEqual(parseResult.rows.map(\.sourceIdentifier), ["a.jpg", "b.jpg"], "R5: source order must be filename A-Z before fallback")
+        XCTAssertEqual(matchResult.matched.count, 2)
+        XCTAssertTrue(matchResult.conflicts.isEmpty)
+        XCTAssertEqual(matchResult.matched[0].row.sourceIdentifier, "a.jpg")
+        XCTAssertEqual(matchResult.matched[0].targetURL, target2)
+        XCTAssertEqual(matchResult.matched[1].row.sourceIdentifier, "b.jpg")
+        XCTAssertEqual(matchResult.matched[1].targetURL, target1)
+        XCTAssertTrue(matchResult.warnings.contains(where: { $0.message.localizedCaseInsensitiveContains("row-order fallback") }))
     }
 
     // MARK: - Reference Image Import

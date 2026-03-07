@@ -123,7 +123,11 @@ struct GPXImportAdapter: ImportSourceAdapter {
     }
 
     private func nearestPoint(to date: Date, in points: [GPXTrackPoint]) -> GPXTrackPoint? {
-        points.min(by: { abs($0.timestamp.timeIntervalSince(date)) < abs($1.timestamp.timeIntervalSince(date)) })
+        points.min(by: {
+            let d0 = abs($0.timestamp.timeIntervalSince(date))
+            let d1 = abs($1.timestamp.timeIntervalSince(date))
+            return d0 == d1 ? $0.timestamp < $1.timestamp : d0 < d1
+        })
     }
 
     private func compactDecimal(_ value: Double) -> String {
@@ -153,6 +157,7 @@ private final class GPXTrackParser: NSObject, XMLParserDelegate {
     private var currentLat: Double?
     private var currentLon: Double?
     private var currentEle: Double?
+    private var currentEleText = ""
     private var currentTimeText = ""
     private var currentElement = ""
 
@@ -161,6 +166,7 @@ private final class GPXTrackParser: NSObject, XMLParserDelegate {
         currentLat = nil
         currentLon = nil
         currentEle = nil
+        currentEleText = ""
         currentTimeText = ""
         currentElement = ""
 
@@ -185,13 +191,16 @@ private final class GPXTrackParser: NSObject, XMLParserDelegate {
             currentLat = Double(attributeDict["lat"] ?? "")
             currentLon = Double(attributeDict["lon"] ?? "")
             currentEle = nil
+            currentEleText = ""
             currentTimeText = ""
         }
     }
 
     func parser(_: XMLParser, foundCharacters string: String) {
         switch currentElement {
-        case "ele", "time":
+        case "ele":
+            currentEleText += string
+        case "time":
             currentTimeText += string
         default:
             break
@@ -206,8 +215,8 @@ private final class GPXTrackParser: NSObject, XMLParserDelegate {
     ) {
         let name = Self.localName(for: elementName)
         if name == "ele" {
-            currentEle = Double(CSVSupport.trim(currentTimeText))
-            currentTimeText = ""
+            currentEle = Double(CSVSupport.trim(currentEleText))
+            currentEleText = ""
         } else if name == "time" {
             currentTimeText = CSVSupport.trim(currentTimeText)
         } else if name == "trkpt" {
@@ -215,6 +224,7 @@ private final class GPXTrackParser: NSObject, XMLParserDelegate {
                 currentLat = nil
                 currentLon = nil
                 currentEle = nil
+                currentEleText = ""
                 currentTimeText = ""
                 currentElement = ""
             }

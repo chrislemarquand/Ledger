@@ -2,6 +2,7 @@ import Foundation
 
 enum CSVSupport {
     static let candidateDelimiters: [Character] = [",", ";", "\t", "|"]
+    private static let coordinateNumberRegex = try! NSRegularExpression(pattern: "-?\\d+(?:\\.\\d+)?")
 
     static func parseRows(from data: Data) throws -> [[String]] {
         guard let content = decodedString(from: data) else {
@@ -83,6 +84,11 @@ enum CSVSupport {
     }
 
     static func decodedString(from data: Data) -> String? {
+        // Deterministic decoder order:
+        // 1) UTF variants first (preferred for modern exports),
+        // 2) legacy single-byte fallbacks.
+        // Note: without a BOM, some CP1252 byte sequences can be valid UTF-8 bytes.
+        // In such ambiguous cases we intentionally keep UTF-first behavior.
         let decoders: [String.Encoding] = [
             .utf8,
             .utf16,
@@ -127,10 +133,63 @@ enum CSVSupport {
     }
 
     static func normalizedHeader(_ value: String) -> String {
-        value
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-            .replacingOccurrences(of: "[^a-z0-9]+", with: "", options: .regularExpression)
+        let lowercased = trim(value).lowercased()
+        guard !lowercased.isEmpty else { return "" }
+
+        var normalized = String()
+        normalized.reserveCapacity(lowercased.count)
+        for scalar in lowercased.unicodeScalars {
+            switch scalar.value {
+            case 48...57, 97...122:
+                normalized.unicodeScalars.append(scalar)
+            default:
+                continue
+            }
+        }
+        return normalized
+    }
+
+    static func buildTagDescriptorIndex(tagCatalog: [ImportTagDescriptor]) -> [String: ImportTagDescriptor] {
+        var index: [String: ImportTagDescriptor] = [:]
+        for descriptor in tagCatalog {
+            let candidates = [
+                descriptor.id,
+                descriptor.key,
+                descriptor.label,
+                "\(descriptor.namespace.rawValue):\(descriptor.key)",
+                "\(descriptor.namespace.rawValue)-\(descriptor.key)",
+            ]
+            for candidate in candidates {
+                let normalized = normalizedHeader(candidate)
+                if normalized.isEmpty { continue }
+                if index[normalized] == nil {
+                    index[normalized] = descriptor
+                }
+            }
+        }
+        return index
+    }
+
+    static func parseCoordinateNumber(_ raw: String) -> Double? {
+        let trimmed = trim(raw)
+        guard !trimmed.isEmpty else { return nil }
+        if let direct = Double(trimmed), direct.isFinite {
+            return direct
+        }
+
+        let ns = trimmed as NSString
+        let matches = coordinateNumberRegex.matches(in: trimmed, range: NSRange(location: 0, length: ns.length))
+        let numbers: [Double] = matches.compactMap { Double(ns.substring(with: $0.range)) }
+
+        guard let first = numbers.first else { return nil }
+        if numbers.count >= 3 {
+            let degrees = abs(first)
+            let minutes = abs(numbers[1])
+            let seconds = abs(numbers[2])
+            let composed = degrees + (minutes / 60) + (seconds / 3600)
+            return first < 0 ? -composed : composed
+        }
+        return first
     }
 
     static func trim(_ value: String) -> String {

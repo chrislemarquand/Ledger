@@ -41,6 +41,7 @@ Primary objective: get import right end-to-end.
   - [ ] EOS 1V CSV
 - [ ] Single import flow: load source -> match/preview/conflicts -> target scope (selection/folder) -> apply.
 - [ ] EOS 1V ingest parity in Swift (mapping/normalization/matching semantics from existing EOS 1V tool).
+- [ ] EOS 1V lens-tag resolver architecture: remove hardcoded lens inference and route through a policy layer that can read future Settings defaults plus per-import overrides.
 - [ ] Import conflict-resolution UX (unmatched/conflict buckets, explicit user resolution).
 - [ ] Deterministic import reporting and dry-run parity.
 - [ ] **Reference-based metadata apply**: select one image as reference, apply chosen metadata fields to a selection. Uses ExifTool `-tagsFromFile`. Sheet UI: select reference file → choose field groups → preview diff → confirm.
@@ -53,6 +54,10 @@ Primary objective: get import right end-to-end.
 - [ ] Backup enable/disable controls with menu/context behavior alignment.
 - [ ] Backup retention policy.
 - [ ] Clear recent folders action.
+- [ ] EOS 1V import lens-tag policy controls:
+  - [ ] Policy mode: `Do not write lens`, `Single lens for import`, `Focal-length mapping table`.
+  - [ ] Unknown focal length behavior: `Leave empty`, `Use fallback`, or `Warn/skip`.
+  - [ ] Named lens profiles + import-sheet override selector.
 
 ---
 
@@ -115,6 +120,7 @@ Moves before performance: search will expose large-folder performance gaps, maki
 - [ ] Sidebar rewritten in AppKit.
 - [ ] **Finder-style gallery view**: filmstrip along bottom, large preview at top — third browser mode alongside list and grid.
 - [ ] **Metadata export CSV/JSON**: select fields, export to CSV or JSON for spreadsheet editing or audit reporting.
+- [ ] **Import conflict-resolution UI (power-user)**: dedicated conflict workspace for unresolved/ambiguous import rows with per-row target choice, side-by-side field diff, and bulk resolve actions.
 - [ ] **Sidecar management**: XMP sidecar create/rebuild/apply; browser badges for sidecar-exists and sidecar-differs-from-embedded states.
 - [ ] ExifTool console: live readout of ExifTool commands and output as operations run, mirroring what would appear if running ExifTool directly in the terminal.
 - [ ] Architecture reference docs:
