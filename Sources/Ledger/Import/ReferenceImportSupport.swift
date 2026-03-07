@@ -69,7 +69,7 @@ enum ReferenceImportSupport {
         let trimmed = CSVSupport.trim(raw)
         guard !trimmed.isEmpty else { return nil }
 
-        guard let parsed = parseCoordinateNumber(trimmed) else {
+        guard let parsed = CSVSupport.parseCoordinateNumber(trimmed) else {
             return trimmed
         }
 
@@ -78,29 +78,6 @@ enum ReferenceImportSupport {
         })?.value.uppercased() ?? ""
         let signed = ref.contains(negativeRef) ? -abs(parsed) : parsed
         return compactDecimal(signed)
-    }
-
-    private static func parseCoordinateNumber(_ raw: String) -> Double? {
-        let trimmed = CSVSupport.trim(raw)
-        guard !trimmed.isEmpty else { return nil }
-        if let direct = Double(trimmed) {
-            return direct
-        }
-
-        let ns = trimmed as NSString
-        let regex = try? NSRegularExpression(pattern: "-?\\d+(?:\\.\\d+)?")
-        let matches = regex?.matches(in: trimmed, range: NSRange(location: 0, length: ns.length)) ?? []
-        let numbers = matches.compactMap { Double(ns.substring(with: $0.range)) }
-
-        guard let first = numbers.first else { return nil }
-        if numbers.count >= 3 {
-            let degrees = abs(first)
-            let minutes = abs(numbers[1])
-            let seconds = abs(numbers[2])
-            let composed = degrees + (minutes / 60) + (seconds / 3600)
-            return first < 0 ? -composed : composed
-        }
-        return first
     }
 
     private static func compactDecimal(_ value: Double) -> String {

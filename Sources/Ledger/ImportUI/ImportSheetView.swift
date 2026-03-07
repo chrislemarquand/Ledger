@@ -6,16 +6,39 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class ImportSession: ObservableObject {
+    struct EOSLensChoiceRequest {
+        let sourceLine: Int
+        let sourceIdentifier: String
+        let focalMillimeters: Int
+        let candidates: [String]
+    }
+
     private let coordinator = ImportCoordinator()
+    private let eosLensMappingURL: URL
+    private let lensChoiceProvider: ((EOSLensChoiceRequest) -> String?)?
+    private var eosLensMappingCache: [Int: [String]]?
     @Published var options: ImportRunOptions
     @Published var preparedRun: ImportPreparedRun?
     @Published var isBusy = false
     @Published var previewError: String?
     private var previewTask: Task<Void, Never>?
 
-    init(model: AppModel, sourceKind: ImportSourceKind) {
+    init(
+        model: AppModel,
+        sourceKind: ImportSourceKind,
+        eosLensMappingURL: URL? = nil,
+        lensChoiceProvider: ((EOSLensChoiceRequest) -> String?)? = nil
+    ) {
         var opts = coordinator.loadPersistedOptions(for: sourceKind)
+        self.eosLensMappingURL = eosLensMappingURL
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Desktop/lensfocalength.csv")
+        self.lensChoiceProvider = lensChoiceProvider
         opts.sourceKind = sourceKind
+        if sourceKind == .csv {
+            // CSV matching is now automatic (filename when uniquely safe, else row-order fallback).
+            // Preserve row-parity window controls as the fallback policy seam.
+            opts.matchStrategy = .rowParity
+        }
         let selectedCount = model.selectedFileURLs.count
         opts.scope = selectedCount >= 2 ? .selection : .folder
         opts.emptyValuePolicy = .clear
@@ -100,12 +123,27 @@ final class ImportSession: ObservableObject {
             return false
         }
 
+        let eosLensResult = applyEOSLensPolicy(assignments: resolve.assignments, run: run)
+        if eosLensResult.cancelled {
+            previewError = "⚠ Import cancelled while choosing EOS lens values."
+            return false
+        }
+
+        let policyAppliedAssignments = applyMissingFieldPolicy(
+            assignments: eosLensResult.assignments,
+            run: run,
+            model: model
+        )
         let stageSummary = model.stageImportAssignments(
-            filterAssignments(resolve.assignments, selectedTagIDs: run.options.selectedTagIDs),
+            filterAssignments(policyAppliedAssignments, selectedTagIDs: run.options.selectedTagIDs),
             sourceKind: run.options.sourceKind,
             emptyValuePolicy: run.options.emptyValuePolicy
         )
-        model.statusMessage = "Staged \(stageSummary.stagedFields) field(s) on \(stageSummary.stagedFiles) file(s)."
+        if resolve.warnings.isEmpty {
+            model.statusMessage = "Staged \(stageSummary.stagedFields) field(s) on \(stageSummary.stagedFiles) file(s)."
+        } else {
+            model.statusMessage = "Staged \(stageSummary.stagedFields) field(s) on \(stageSummary.stagedFiles) file(s) with \(resolve.warnings.count) merge warning(s)."
+        }
         return true
     }
 
@@ -128,6 +166,187 @@ final class ImportSession: ObservableObject {
         return assignments.map { ImportAssignment(targetURL: $0.targetURL, fields: $0.fields.filter { selected.contains($0.tagID) }) }
     }
 
+    private func applyEOSLensPolicy(
+        assignments: [ImportAssignment],
+        run: ImportPreparedRun
+    ) -> (assignments: [ImportAssignment], cancelled: Bool) {
+        guard run.options.sourceKind == .eos1v else {
+            return (assignments, false)
+        }
+        if !run.options.selectedTagIDs.isEmpty, !run.options.selectedTagIDs.contains("exif-lens") {
+            return (assignments, false)
+        }
+        let mapping = loadEOSLensMapping()
+        guard !mapping.isEmpty else {
+            return (assignments, false)
+        }
+
+        let rowByTargetURL = Dictionary(uniqueKeysWithValues: run.matchResult.matched.map { ($0.targetURL, $0.row) })
+        var updatedAssignments = assignments
+
+        for index in updatedAssignments.indices {
+            let assignment = updatedAssignments[index]
+            guard let row = rowByTargetURL[assignment.targetURL] else { continue }
+
+            var valueByTagID: [String: String] = [:]
+            var orderedTagIDs: [String] = []
+            for field in assignment.fields {
+                if valueByTagID[field.tagID] == nil {
+                    orderedTagIDs.append(field.tagID)
+                }
+                valueByTagID[field.tagID] = field.value
+            }
+            if let existingLens = valueByTagID["exif-lens"], !CSVSupport.trim(existingLens).isEmpty {
+                continue
+            }
+            guard let focalRaw = row.fields.first(where: { $0.tagID == "exif-focal" })?.value,
+                  let focalMM = focalLengthMillimeters(from: focalRaw),
+                  let candidates = mapping[focalMM],
+                  !candidates.isEmpty
+            else { continue }
+
+            let chosenLens: String?
+            if candidates.count == 1 {
+                chosenLens = candidates[0]
+            } else {
+                let request = EOSLensChoiceRequest(
+                    sourceLine: row.sourceLine,
+                    sourceIdentifier: row.sourceIdentifier,
+                    focalMillimeters: focalMM,
+                    candidates: candidates
+                )
+                chosenLens = chooseLens(for: request)
+            }
+
+            guard let chosenLens, !CSVSupport.trim(chosenLens).isEmpty else {
+                return (assignments, true)
+            }
+
+            if valueByTagID["exif-lens"] == nil {
+                orderedTagIDs.append("exif-lens")
+            }
+            valueByTagID["exif-lens"] = chosenLens
+            updatedAssignments[index] = ImportAssignment(
+                targetURL: assignment.targetURL,
+                fields: orderedTagIDs.map { ImportFieldValue(tagID: $0, value: valueByTagID[$0] ?? "") }
+            )
+        }
+
+        return (updatedAssignments, false)
+    }
+
+    private func loadEOSLensMapping() -> [Int: [String]] {
+        if let cached = eosLensMappingCache {
+            return cached
+        }
+        guard let data = try? Data(contentsOf: eosLensMappingURL),
+              let rows = try? CSVSupport.parseRows(from: data),
+              let header = rows.first
+        else {
+            eosLensMappingCache = [:]
+            return [:]
+        }
+
+        let normalizedHeader = header.map(CSVSupport.normalizedHeader)
+        guard let focalColumn = normalizedHeader.firstIndex(where: { $0.contains("focallength") }) else {
+            eosLensMappingCache = [:]
+            return [:]
+        }
+        let lensColumns = normalizedHeader.enumerated()
+            .filter { $0.element.hasPrefix("lens") }
+            .map(\.offset)
+        guard !lensColumns.isEmpty else {
+            eosLensMappingCache = [:]
+            return [:]
+        }
+
+        var map: [Int: [String]] = [:]
+        for row in rows.dropFirst() {
+            guard focalColumn < row.count,
+                  let focalMM = focalLengthMillimeters(from: row[focalColumn])
+            else { continue }
+            var candidates: [String] = []
+            for column in lensColumns where column < row.count {
+                let lens = CSVSupport.trim(row[column])
+                if lens.isEmpty { continue }
+                if !candidates.contains(lens) {
+                    candidates.append(lens)
+                }
+            }
+            if !candidates.isEmpty {
+                map[focalMM] = candidates
+            }
+        }
+
+        eosLensMappingCache = map
+        return map
+    }
+
+    private func focalLengthMillimeters(from raw: String) -> Int? {
+        let trimmed = CSVSupport.trim(raw)
+        guard !trimmed.isEmpty else { return nil }
+        guard let range = trimmed.range(of: #"\d+"#, options: .regularExpression) else { return nil }
+        return Int(trimmed[range])
+    }
+
+    private func chooseLens(for request: EOSLensChoiceRequest) -> String? {
+        if let provider = lensChoiceProvider {
+            return provider(request)
+        }
+
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "Choose Lens for \(request.sourceIdentifier)"
+        alert.informativeText = "Row \(request.sourceLine), focal length \(request.focalMillimeters) mm has multiple candidate lenses."
+
+        let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 420, height: 26), pullsDown: false)
+        popup.addItems(withTitles: request.candidates)
+        alert.accessoryView = popup
+        alert.addButton(withTitle: "Use Selected Lens")
+        alert.addButton(withTitle: "Cancel Import")
+
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return nil }
+        return popup.titleOfSelectedItem
+    }
+
+    private func applyMissingFieldPolicy(
+        assignments: [ImportAssignment],
+        run: ImportPreparedRun,
+        model: AppModel
+    ) -> [ImportAssignment] {
+        // CSV import supports full-field replacement semantics:
+        // when policy is .clear, missing incoming fields are cleared on matched files.
+        guard run.options.sourceKind == .csv, run.options.emptyValuePolicy == .clear else {
+            return assignments
+        }
+
+        let activeTagIDs: [String]
+        if !run.options.selectedTagIDs.isEmpty {
+            activeTagIDs = run.options.selectedTagIDs
+        } else {
+            activeTagIDs = model.importTagCatalog.map(\.id)
+        }
+        guard !activeTagIDs.isEmpty else {
+            return assignments
+        }
+        let activeTagIDSet = Set(activeTagIDs)
+
+        return assignments.map { assignment in
+            var valueByTagID: [String: String] = [:]
+            for field in assignment.fields where activeTagIDSet.contains(field.tagID) {
+                valueByTagID[field.tagID] = field.value
+            }
+            for tagID in activeTagIDs where valueByTagID[tagID] == nil {
+                valueByTagID[tagID] = ""
+            }
+            let fields = valueByTagID.keys.sorted().map { tagID in
+                ImportFieldValue(tagID: tagID, value: valueByTagID[tagID] ?? "")
+            }
+            return ImportAssignment(targetURL: assignment.targetURL, fields: fields)
+        }
+    }
+
     private func effectiveFieldCount(for fields: [ImportFieldValue]) -> Int {
         let ids = options.selectedTagIDs
         guard !ids.isEmpty else { return fields.count }
@@ -145,6 +364,17 @@ final class ImportSession: ObservableObject {
         if run.matchResult.matched.count > 200 {
             lines.append("… \(run.matchResult.matched.count - 200) more rows")
         }
+        if !run.matchResult.warnings.isEmpty {
+            lines.append("")
+            lines.append("Warnings (\(run.matchResult.warnings.count))")
+            let visibleWarnings = run.matchResult.warnings.prefix(20)
+            for warning in visibleWarnings {
+                lines.append(formatPreviewWarning(warning))
+            }
+            if run.matchResult.warnings.count > visibleWarnings.count {
+                lines.append("… \(run.matchResult.warnings.count - visibleWarnings.count) more warnings")
+            }
+        }
         if !run.matchResult.conflicts.isEmpty {
             lines.append("")
             lines.append("⚠ \(run.matchResult.conflicts.count) conflict(s) need resolution")
@@ -153,6 +383,20 @@ final class ImportSession: ObservableObject {
             lines.append("No matches found.")
         }
         return lines.joined(separator: "\n")
+    }
+
+    private func formatPreviewWarning(_ warning: ImportWarning) -> String {
+        let message: String
+        if warning.message.hasPrefix("Using row-order matching:") {
+            let reason = warning.message.replacingOccurrences(of: "Using row-order matching:", with: "").trimmingCharacters(in: .whitespaces)
+            message = "Matching mode: Row order. Reason: \(reason)"
+        } else {
+            message = warning.message
+        }
+        if let sourceLine = warning.sourceLine {
+            return "⚠ Line \(sourceLine): \(message)"
+        }
+        return "⚠ \(message)"
     }
 }
 
@@ -204,7 +448,7 @@ struct ImportSheetView: View {
                 }
             }
 
-            // Options row: Apply to | If no match | Match by (CSV only)
+            // Options row: Apply to | If no match
             HStack(alignment: .top, spacing: 28) {
                 optionGroup("Apply to:") {
                     Picker("", selection: $session.options.scope) {
@@ -222,17 +466,6 @@ struct ImportSheetView: View {
                     }
                     .pickerStyle(.radioGroup)
                     .labelsHidden()
-                }
-
-                if sourceKind == .csv {
-                    optionGroup("Match by:") {
-                        Picker("", selection: $session.options.matchStrategy) {
-                            Text("Filename").tag(ImportMatchStrategy.filename)
-                            Text("Row order").tag(ImportMatchStrategy.rowParity)
-                        }
-                        .pickerStyle(.radioGroup)
-                        .labelsHidden()
-                    }
                 }
             }
 
@@ -286,9 +519,6 @@ struct ImportSheetView: View {
         .onChange(of: session.options.scope) { _, _ in
             session.schedulePreviewRefresh(model: model)
         }
-        .onChange(of: session.options.matchStrategy) { _, _ in
-            session.schedulePreviewRefresh(model: model)
-        }
         .onChange(of: model.selectedFileURLs.count) { _, newCount in
             if newCount == 0, session.options.scope == .selection {
                 session.options.scope = .folder
@@ -299,11 +529,11 @@ struct ImportSheetView: View {
     // MARK: - Computed
 
     private var isRowParityActive: Bool {
-        sourceKind == .eos1v || session.options.matchStrategy == .rowParity
+        sourceKind == .csv || sourceKind == .eos1v || session.options.matchStrategy == .rowParity
     }
 
     private var hasAdvancedOptions: Bool {
-        sourceKind == .csv || sourceKind == .gpx
+        sourceKind == .csv || sourceKind == .gpx || sourceKind == .referenceFolder
     }
 
     private var hasPreview: Bool {
@@ -317,10 +547,10 @@ struct ImportSheetView: View {
 
     private var infoText: String {
         switch sourceKind {
-        case .csv: return "Expects an ExifTool-format CSV with a SourceFile column."
+        case .csv: return "Expects an ExifTool-format CSV. Ledger auto-matches by SourceFile when uniquely safe, otherwise falls back to row order."
         case .eos1v: return "Expects an EOS 1V CSV export file."
         case .gpx: return "One or more GPX track files. Photos are matched by timestamp."
-        case .referenceFolder: return "A folder of reference images. Metadata is read from embedded EXIF or sidecar."
+        case .referenceFolder: return "A folder of reference images. Metadata is read from embedded EXIF or sidecar. Optional fallback can apply unmatched rows by row order."
         case .referenceImage: return "A single reference image to copy metadata from."
         }
     }
@@ -418,6 +648,8 @@ struct ImportSheetView: View {
             csvAdvancedView
         case .gpx:
             gpxAdvancedView
+        case .referenceFolder:
+            referenceFolderAdvancedView
         default:
             EmptyView()
         }
@@ -491,6 +723,33 @@ struct ImportSheetView: View {
         }
         .padding()
         .frame(minWidth: 280)
+    }
+
+    @ViewBuilder
+    private var referenceFolderAdvancedView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Reference Folder Options")
+                .font(.headline)
+            Toggle(
+                "Fallback unmatched rows by row order",
+                isOn: $session.options.referenceFolderRowFallbackEnabled
+            )
+            .toggleStyle(.checkbox)
+            Text("Match by filename first. If enabled, remaining unmatched rows are applied in row order to remaining unmatched target files.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Done") {
+                    showAdvanced = false
+                    session.schedulePreviewRefresh(model: model)
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding()
+        .frame(minWidth: 340)
     }
 
     // MARK: - Actions

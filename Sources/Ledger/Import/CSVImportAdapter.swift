@@ -22,16 +22,30 @@ struct CSVImportAdapter: ImportSourceAdapter {
         guard isLikelyExifToolCSV(headerRow: headerRow, sourceFileColumnIndex: sourceFileColumnIndex) else {
             throw ImportAdapterError.invalidSchema(Self.invalidSchemaGuidance)
         }
-        if context.options.matchStrategy == .filename, sourceFileColumnIndex == nil {
-            throw ImportAdapterError.invalidSchema("Filename matching requires an ExifTool SourceFile column. \(Self.invalidSchemaGuidance)")
-        }
 
-        let mappedColumns = mappedTagColumns(headerRow: headerRow, tagCatalog: context.tagCatalog)
+        let descriptorIndex = context.tagDescriptorIndex.isEmpty
+            ? CSVSupport.buildTagDescriptorIndex(tagCatalog: context.tagCatalog)
+            : context.tagDescriptorIndex
+        let mappedColumns = mappedTagColumns(headerRow: headerRow, descriptorIndex: descriptorIndex)
         guard !mappedColumns.isEmpty else {
             throw ImportAdapterError.invalidSchema("No Ledger-supported ExifTool columns were found. \(Self.invalidSchemaGuidance)")
         }
 
         var warnings: [ImportWarning] = []
+        let matching = effectiveMatchingStrategy(
+            rows: rows,
+            sourceFileColumnIndex: sourceFileColumnIndex,
+            targetFiles: context.targetFiles
+        )
+        if let fallbackReason = matching.fallbackReason {
+            warnings.append(
+                ImportWarning(
+                    sourceLine: nil,
+                    message: fallbackReason,
+                    severity: .info
+                )
+            )
+        }
         var parsedRows: [ImportRow] = []
         var paritySourceRowNumber = 0
         var parityMappedCount = 0
@@ -65,7 +79,7 @@ struct CSVImportAdapter: ImportSourceAdapter {
             let identifier: String
             let selector: ImportTargetSelector
 
-            switch context.options.matchStrategy {
+            switch matching.strategy {
             case .filename:
                 guard !sourceFileRaw.isEmpty else {
                     warnings.append(
@@ -89,11 +103,7 @@ struct CSVImportAdapter: ImportSourceAdapter {
                     continue
                 }
                 parityMappedCount += 1
-                if !sourceIdentifierFromPath.isEmpty {
-                    identifier = sourceIdentifierFromPath
-                } else {
-                    identifier = String(format: "Row %03d", paritySourceRowNumber)
-                }
+                identifier = String(format: "Row %03d", paritySourceRowNumber)
                 selector = .rowNumber(parityMappedCount)
             }
 
@@ -137,6 +147,66 @@ struct CSVImportAdapter: ImportSourceAdapter {
         return ImportParseResult(rows: parsedRows, warnings: warnings)
     }
 
+    private func effectiveMatchingStrategy(
+        rows: [[String]],
+        sourceFileColumnIndex: Int?,
+        targetFiles: [URL]
+    ) -> (strategy: ImportMatchStrategy, fallbackReason: String?) {
+        guard let sourceFileColumnIndex else {
+            return (.rowParity, nil)
+        }
+
+        let targetCounts = Dictionary(grouping: targetFiles) { $0.lastPathComponent.lowercased() }
+            .mapValues(\.count)
+        var seenSourceIdentifiers = Set<String>()
+        var sawUsableSourceFile = false
+
+        for row in rows.dropFirst() {
+            if row.allSatisfy({ CSVSupport.trim($0).isEmpty }) {
+                continue
+            }
+
+            guard sourceFileColumnIndex < row.count else {
+                return (
+                    .rowParity,
+                    "Using row-order matching: SourceFile values are incomplete for one or more rows."
+                )
+            }
+
+            let sourceFileRaw = CSVSupport.trim(row[sourceFileColumnIndex])
+            if sourceFileRaw == "*" {
+                continue
+            }
+            let identifier = normalizedSourceIdentifier(from: sourceFileRaw).lowercased()
+            guard !identifier.isEmpty else {
+                return (
+                    .rowParity,
+                    "Using row-order matching: SourceFile values are missing for one or more rows."
+                )
+            }
+
+            sawUsableSourceFile = true
+            if !seenSourceIdentifiers.insert(identifier).inserted {
+                return (
+                    .rowParity,
+                    "Using row-order matching: duplicate SourceFile identifiers were found in the CSV."
+                )
+            }
+
+            if !targetFiles.isEmpty && targetCounts[identifier] != 1 {
+                return (
+                    .rowParity,
+                    "Using row-order matching: SourceFile values do not map uniquely to files in the current scope."
+                )
+            }
+        }
+
+        if sawUsableSourceFile {
+            return (.filename, nil)
+        }
+        return (.rowParity, nil)
+    }
+
     private func sourceFileColumn(in headerRow: [String]) -> Int? {
         headerRow.firstIndex { CSVSupport.normalizedHeader($0) == "sourcefile" }
     }
@@ -154,9 +224,8 @@ struct CSVImportAdapter: ImportSourceAdapter {
 
     private func mappedTagColumns(
         headerRow: [String],
-        tagCatalog: [ImportTagDescriptor]
+        descriptorIndex: [String: ImportTagDescriptor]
     ) -> [(Int, ImportTagDescriptor)] {
-        let descriptorIndex = buildTagDescriptorIndex(tagCatalog: tagCatalog)
         var mapped: [(Int, ImportTagDescriptor)] = []
 
         for (index, header) in headerRow.enumerated() {
@@ -184,27 +253,6 @@ struct CSVImportAdapter: ImportSourceAdapter {
         }
 
         return mapped
-    }
-
-    private func buildTagDescriptorIndex(tagCatalog: [ImportTagDescriptor]) -> [String: ImportTagDescriptor] {
-        var index: [String: ImportTagDescriptor] = [:]
-        for descriptor in tagCatalog {
-            let candidates = [
-                descriptor.id,
-                descriptor.key,
-                descriptor.label,
-                "\(descriptor.namespace.rawValue):\(descriptor.key)",
-                "\(descriptor.namespace.rawValue)-\(descriptor.key)",
-            ]
-            for candidate in candidates {
-                let normalized = CSVSupport.normalizedHeader(candidate)
-                if normalized.isEmpty { continue }
-                if index[normalized] == nil {
-                    index[normalized] = descriptor
-                }
-            }
-        }
-        return index
     }
 
     private func normalizedTagName(fromHeader header: String) -> String {
@@ -306,7 +354,7 @@ struct CSVImportAdapter: ImportSourceAdapter {
         let upper = raw.uppercased()
         let hasWestOrSouth = upper.contains("W") || upper.contains("S")
         let hasEastOrNorth = upper.contains("E") || upper.contains("N")
-        guard let parsed = parseCoordinateNumber(raw) else { return nil }
+        guard let parsed = CSVSupport.parseCoordinateNumber(raw) else { return nil }
         if hasWestOrSouth, !hasEastOrNorth {
             return -abs(parsed)
         }
@@ -314,25 +362,6 @@ struct CSVImportAdapter: ImportSourceAdapter {
             return abs(parsed)
         }
         return parsed
-    }
-
-    private func parseCoordinateNumber(_ raw: String) -> Double? {
-        if let direct = Double(raw), direct.isFinite {
-            return direct
-        }
-        let ns = raw as NSString
-        let regex = try? NSRegularExpression(pattern: "-?\\d+(?:\\.\\d+)?")
-        let matches = regex?.matches(in: raw, range: NSRange(location: 0, length: ns.length)) ?? []
-        let numbers: [Double] = matches.compactMap { Double(ns.substring(with: $0.range)) }
-        guard let first = numbers.first else { return nil }
-        if numbers.count >= 3 {
-            let degrees = abs(first)
-            let minutes = abs(numbers[1])
-            let seconds = abs(numbers[2])
-            let composed = degrees + (minutes / 60) + (seconds / 3600)
-            return first < 0 ? -composed : composed
-        }
-        return first
     }
 
     private func compactDecimal(_ value: Double) -> String {

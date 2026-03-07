@@ -24,30 +24,58 @@ struct ExifToolCSVExportService {
         }
     }
 
-    func export(fileURLs: [URL], destinationURL: URL) throws {
+    func export(fileURLs: [URL], destinationURL: URL) async throws {
         let files = Array(Set(fileURLs)).sorted(by: { $0.path < $1.path })
         guard !files.isEmpty else {
             throw ExportError.noFiles
         }
 
-        let executableURL = try resolveExifToolExecutableURL()
-        let arguments = ["-G4", "-a", "-csv"] + files.map(\.path)
-        let result = try runProcess(executableURL: executableURL, arguments: arguments)
-        guard result.terminationStatus == 0 else {
-            throw ExportError.processFailed(
-                code: result.terminationStatus,
-                message: String(decoding: result.stderr, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        try await Task.detached(priority: .userInitiated) {
+            let executableURL = try Self.resolveExifToolExecutableURL()
+            let arguments = Self.exportArguments(for: files)
+            let parent = destinationURL.deletingLastPathComponent()
+            let tempOutputURL = parent.appendingPathComponent(".ledger-export-\(UUID().uuidString).csv.tmp")
+            let tempStderrURL = parent.appendingPathComponent(".ledger-export-\(UUID().uuidString).stderr.tmp")
+            let fileManager = FileManager.default
+
+            defer {
+                try? fileManager.removeItem(at: tempOutputURL)
+                try? fileManager.removeItem(at: tempStderrURL)
+            }
+
+            let result = try Self.runProcess(
+                executableURL: executableURL,
+                arguments: arguments,
+                stdoutURL: tempOutputURL,
+                stderrURL: tempStderrURL
             )
-        }
+            guard result.terminationStatus == 0 else {
+                throw ExportError.processFailed(
+                    code: result.terminationStatus,
+                    message: String(decoding: result.stderr, as: UTF8.self)
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+            }
 
-        guard !result.stdout.isEmpty else {
-            throw ExportError.emptyOutput
-        }
+            let outputSize = ((try fileManager.attributesOfItem(atPath: tempOutputURL.path)[.size]) as? NSNumber)?.int64Value ?? 0
+            guard outputSize > 0 else {
+                throw ExportError.emptyOutput
+            }
 
-        try result.stdout.write(to: destinationURL, options: .atomic)
+            if fileManager.fileExists(atPath: destinationURL.path) {
+                _ = try fileManager.replaceItemAt(destinationURL, withItemAt: tempOutputURL)
+            } else {
+                try fileManager.moveItem(at: tempOutputURL, to: destinationURL)
+            }
+        }.value
     }
 
-    private func resolveExifToolExecutableURL() throws -> URL {
+    static func exportArguments(for files: [URL]) -> [String] {
+        // "--" terminates options so hyphen-prefixed file paths are treated as operands.
+        ["-G4", "-a", "-csv", "--"] + files.map(\.path)
+    }
+
+    private static func resolveExifToolExecutableURL() throws -> URL {
         let fileManager = FileManager.default
         let bundled = Bundle.main.resourceURL?.appendingPathComponent("exiftool/bin/exiftool")
         let candidates = [
@@ -64,7 +92,22 @@ struct ExifToolCSVExportService {
         throw ExportError.exifToolNotFound
     }
 
-    private func runProcess(executableURL: URL, arguments: [String]) throws -> (stdout: Data, stderr: Data, terminationStatus: Int32) {
+    private static func runProcess(
+        executableURL: URL,
+        arguments: [String],
+        stdoutURL: URL,
+        stderrURL: URL
+    ) throws -> (stderr: Data, terminationStatus: Int32) {
+        let fileManager = FileManager.default
+        fileManager.createFile(atPath: stdoutURL.path, contents: nil)
+        fileManager.createFile(atPath: stderrURL.path, contents: nil)
+        let stdoutHandle = try FileHandle(forWritingTo: stdoutURL)
+        let stderrHandle = try FileHandle(forWritingTo: stderrURL)
+        defer {
+            try? stdoutHandle.close()
+            try? stderrHandle.close()
+        }
+
         let process = Process()
         process.executableURL = executableURL
         process.arguments = arguments
@@ -82,17 +125,15 @@ struct ExifToolCSVExportService {
             process.environment = environment
         }
 
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.standardOutput = stdout
-        process.standardError = stderr
+        process.standardOutput = stdoutHandle
+        process.standardError = stderrHandle
 
         try process.run()
         process.waitUntilExit()
 
+        let stderrData = try Data(contentsOf: stderrURL)
         return (
-            stdout: stdout.fileHandleForReading.readDataToEndOfFile(),
-            stderr: stderr.fileHandleForReading.readDataToEndOfFile(),
+            stderr: stderrData,
             terminationStatus: process.terminationStatus
         )
     }

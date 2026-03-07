@@ -2608,6 +2608,8 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Returns files in stable browser-visible order for import matching.
+    /// Row-parity import depends on this order: row 1 -> index 0, row 2 -> index 1, etc.
     func importTargetFiles(for scope: ImportScope) -> [URL] {
         let visibleOrder = filteredBrowserItems.map(\.url)
         switch scope {
@@ -2636,9 +2638,7 @@ final class AppModel: ObservableObject {
         let fileCount = files.count
         let filesSnapshot = files
         let destinationSnapshot = destinationURL
-        try await Task.detached(priority: .userInitiated) {
-            try ExifToolCSVExportService().export(fileURLs: filesSnapshot, destinationURL: destinationSnapshot)
-        }.value
+        try await ExifToolCSVExportService().export(fileURLs: filesSnapshot, destinationURL: destinationSnapshot)
 
         setStatusMessage(
             "Exported ExifTool CSV for \(fileCount) file(s).",

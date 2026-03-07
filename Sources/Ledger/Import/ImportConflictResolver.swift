@@ -4,6 +4,7 @@ struct ImportConflictResolveResult {
     let assignments: [ImportAssignment]
     let unresolvedConflicts: [ImportConflict]
     let skippedConflicts: [ImportConflict]
+    let warnings: [String]
 }
 
 struct ImportConflictResolver {
@@ -11,8 +12,11 @@ struct ImportConflictResolver {
         matchResult: ImportMatchResult,
         resolutions: [UUID: ImportConflictResolutionChoice]
     ) -> ImportConflictResolveResult {
-        var assignments: [ImportAssignment] = matchResult.matched.map {
-            ImportAssignment(targetURL: $0.targetURL, fields: $0.row.fields)
+        var entries: [AssignmentEntry] = matchResult.matched.map {
+            AssignmentEntry(
+                assignment: ImportAssignment(targetURL: $0.targetURL, fields: $0.row.fields),
+                origin: .matched(sourceLine: $0.row.sourceLine)
+            )
         }
         var unresolved: [ImportConflict] = []
         var skipped: [ImportConflict] = []
@@ -27,32 +31,71 @@ struct ImportConflictResolver {
             case .skip:
                 skipped.append(conflict)
             case let .target(url):
-                assignments.append(ImportAssignment(targetURL: url, fields: conflict.rowFields))
+                entries.append(
+                    AssignmentEntry(
+                        assignment: ImportAssignment(targetURL: url, fields: conflict.rowFields),
+                        origin: .resolvedConflict(sourceLine: conflict.sourceLine)
+                    )
+                )
             }
         }
 
-        let merged = mergeAssignments(assignments: assignments)
+        let merged = mergeAssignments(entries: entries)
         return ImportConflictResolveResult(
-            assignments: merged,
+            assignments: merged.assignments,
             unresolvedConflicts: unresolved,
-            skippedConflicts: skipped
+            skippedConflicts: skipped,
+            warnings: merged.warnings
         )
     }
 
-    private func mergeAssignments(assignments: [ImportAssignment]) -> [ImportAssignment] {
+    private func mergeAssignments(entries: [AssignmentEntry]) -> (assignments: [ImportAssignment], warnings: [String]) {
         var byTarget: [URL: [String: String]] = [:]
-        for assignment in assignments {
-            var fieldsByTag = byTarget[assignment.targetURL] ?? [:]
-            for field in assignment.fields {
+        var originByTarget: [URL: [String: AssignmentOrigin]] = [:]
+        var warnings: [String] = []
+        for entry in entries {
+            var fieldsByTag = byTarget[entry.assignment.targetURL] ?? [:]
+            var fieldOrigins = originByTarget[entry.assignment.targetURL] ?? [:]
+            for field in entry.assignment.fields {
+                if let existingValue = fieldsByTag[field.tagID],
+                   existingValue != field.value {
+                    let previousOrigin = fieldOrigins[field.tagID]?.description ?? "previous assignment"
+                    warnings.append(
+                        "Field collision for \(entry.assignment.targetURL.lastPathComponent) tag \(field.tagID): " +
+                        "\(previousOrigin) value was overwritten by \(entry.origin.description)."
+                    )
+                }
                 fieldsByTag[field.tagID] = field.value
+                fieldOrigins[field.tagID] = entry.origin
             }
-            byTarget[assignment.targetURL] = fieldsByTag
+            byTarget[entry.assignment.targetURL] = fieldsByTag
+            originByTarget[entry.assignment.targetURL] = fieldOrigins
         }
-        return byTarget.map { targetURL, fieldsByTag in
+        let assignments = byTarget.map { targetURL, fieldsByTag in
             let fields = fieldsByTag.keys.sorted().map { key in
                 ImportFieldValue(tagID: key, value: fieldsByTag[key] ?? "")
             }
             return ImportAssignment(targetURL: targetURL, fields: fields)
         }.sorted(by: { $0.targetURL.path < $1.targetURL.path })
+        return (assignments: assignments, warnings: warnings)
+    }
+}
+
+private struct AssignmentEntry {
+    let assignment: ImportAssignment
+    let origin: AssignmentOrigin
+}
+
+private enum AssignmentOrigin {
+    case matched(sourceLine: Int)
+    case resolvedConflict(sourceLine: Int)
+
+    var description: String {
+        switch self {
+        case let .matched(sourceLine):
+            return "matched row \(sourceLine)"
+        case let .resolvedConflict(sourceLine):
+            return "resolved conflict row \(sourceLine)"
+        }
     }
 }

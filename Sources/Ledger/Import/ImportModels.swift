@@ -215,6 +215,7 @@ struct ImportRunOptions: Hashable, Codable, Sendable {
     var selectedTagIDs: [String]
     var gpxToleranceSeconds: Int
     var gpxCameraOffsetSeconds: Int
+    var referenceFolderRowFallbackEnabled: Bool = false
     /// IANA timezone identifier for the timezone the camera clock was set to.
     /// Defaults to the current system timezone. Stored as a string so the struct
     /// remains `Codable` and `Sendable`. Use the `cameraTimezone` computed
@@ -227,6 +228,36 @@ struct ImportRunOptions: Hashable, Codable, Sendable {
     var cameraTimezone: TimeZone {
         get { TimeZone(identifier: cameraTimezoneIdentifier) ?? .current }
         set { cameraTimezoneIdentifier = newValue.identifier }
+    }
+
+    init(
+        sourceKind: ImportSourceKind,
+        scope: ImportScope,
+        emptyValuePolicy: ImportEmptyValuePolicy,
+        matchStrategy: ImportMatchStrategy,
+        rowParityStartRow: Int,
+        rowParityRowCount: Int,
+        sourceURLPath: String?,
+        auxiliaryURLPaths: [String],
+        selectedTagIDs: [String],
+        gpxToleranceSeconds: Int,
+        gpxCameraOffsetSeconds: Int,
+        referenceFolderRowFallbackEnabled: Bool = false,
+        cameraTimezoneIdentifier: String
+    ) {
+        self.sourceKind = sourceKind
+        self.scope = scope
+        self.emptyValuePolicy = emptyValuePolicy
+        self.matchStrategy = matchStrategy
+        self.rowParityStartRow = rowParityStartRow
+        self.rowParityRowCount = rowParityRowCount
+        self.sourceURLPath = sourceURLPath
+        self.auxiliaryURLPaths = auxiliaryURLPaths
+        self.selectedTagIDs = selectedTagIDs
+        self.gpxToleranceSeconds = gpxToleranceSeconds
+        self.gpxCameraOffsetSeconds = gpxCameraOffsetSeconds
+        self.referenceFolderRowFallbackEnabled = referenceFolderRowFallbackEnabled
+        self.cameraTimezoneIdentifier = cameraTimezoneIdentifier
     }
 
     static func defaults(for sourceKind: ImportSourceKind) -> ImportRunOptions {
@@ -242,6 +273,7 @@ struct ImportRunOptions: Hashable, Codable, Sendable {
             selectedTagIDs: [],
             gpxToleranceSeconds: 600,
             gpxCameraOffsetSeconds: 0,
+            referenceFolderRowFallbackEnabled: false,
             cameraTimezoneIdentifier: TimeZone.current.identifier
         )
     }
@@ -253,6 +285,39 @@ struct ImportRunOptions: Hashable, Codable, Sendable {
 
     var auxiliaryURLs: [URL] {
         auxiliaryURLPaths.map { URL(fileURLWithPath: $0) }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case sourceKind
+        case scope
+        case emptyValuePolicy
+        case matchStrategy
+        case rowParityStartRow
+        case rowParityRowCount
+        case sourceURLPath
+        case auxiliaryURLPaths
+        case selectedTagIDs
+        case gpxToleranceSeconds
+        case gpxCameraOffsetSeconds
+        case referenceFolderRowFallbackEnabled
+        case cameraTimezoneIdentifier
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        sourceKind = try container.decode(ImportSourceKind.self, forKey: .sourceKind)
+        scope = try container.decode(ImportScope.self, forKey: .scope)
+        emptyValuePolicy = try container.decode(ImportEmptyValuePolicy.self, forKey: .emptyValuePolicy)
+        matchStrategy = try container.decode(ImportMatchStrategy.self, forKey: .matchStrategy)
+        rowParityStartRow = try container.decode(Int.self, forKey: .rowParityStartRow)
+        rowParityRowCount = try container.decode(Int.self, forKey: .rowParityRowCount)
+        sourceURLPath = try container.decodeIfPresent(String.self, forKey: .sourceURLPath)
+        auxiliaryURLPaths = try container.decode([String].self, forKey: .auxiliaryURLPaths)
+        selectedTagIDs = try container.decode([String].self, forKey: .selectedTagIDs)
+        gpxToleranceSeconds = try container.decode(Int.self, forKey: .gpxToleranceSeconds)
+        gpxCameraOffsetSeconds = try container.decode(Int.self, forKey: .gpxCameraOffsetSeconds)
+        referenceFolderRowFallbackEnabled = try container.decodeIfPresent(Bool.self, forKey: .referenceFolderRowFallbackEnabled) ?? false
+        cameraTimezoneIdentifier = try container.decode(String.self, forKey: .cameraTimezoneIdentifier)
     }
 }
 

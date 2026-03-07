@@ -1,14 +1,16 @@
 # Import Matrix Test Results
 
-Generated: 2026-03-06
-Test file: `Tests/LedgerTests/ImportMatrixTests.swift`
-Run: `swift test --filter ImportMatrixTests`
+Generated: 2026-03-07
+Test files: `Tests/LedgerTests/ImportMatrixTests.swift`, `Tests/LedgerTests/ImportSystemTests.swift`
+Run:
+- `swift test --filter ImportMatrixTests`
+- `swift test --filter ImportSystemTests`
 
 ---
 
 ## Summary
 
-**26 tests · 0 failures · all passing**
+**58 tests · 0 failures · all passing**
 
 ---
 
@@ -28,8 +30,8 @@ Run: `swift test --filter ImportMatrixTests`
 | C1  | `testC1_CSVBasicImportAllRowsFolderScope` | ✅ Pass | 3 rows parsed, no warnings |
 | C2  | `testC2_SingleFileSelectedDefaultsToFolderScope` | ✅ Pass | 1 file → scope = `.folder` |
 | C3  | `testC3_MultipleFilesSelectedDefaultsToSelectionScope` | ✅ Pass | 5 files → scope = `.selection`, `rowParityRowCount=5` |
-| C4  | — | ⬜ Covered in `ImportSystemTests` | `testCSVImportAdapterParsesFilenameAliasAndMappedFields` |
-| C5  | — | ⬜ Covered in `ImportSystemTests` | `testCSVImportAdapterSupportsRowParityWithoutFilenameColumn` |
+| C4  | — | ⬜ Covered in `ImportSystemTests` | `testCSVImportAdapterParsesFilenameAliasAndMappedFields` (auto-match selects filename when `SourceFile` is uniquely safe) |
+| C5  | — | ⬜ Covered in `ImportSystemTests` | `testCSVImportAdapterFallsBackToRowParityWhenSourceFileValuesAreIncomplete` |
 | C6  | `testC6_CSVFieldFilterApplied` | ✅ Pass | Filter by `selectedTagIDs` reduces field set |
 | C7  | — | ⬜ Covered in `ImportSystemTests` | `testStageImportAssignmentsRespectsEmptyPolicy` |
 | C8  | — | ⬜ Covered in `ImportSystemTests` | Same test |
