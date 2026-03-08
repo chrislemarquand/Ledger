@@ -53,7 +53,6 @@ private final class SettingsTabViewController: NSTabViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         guard let model else { return }
-        tabView.delegate = self
 
         let general = NSHostingController(rootView: GeneralSettingsView(model: model))
         let generalItem = NSTabViewItem(viewController: general)
