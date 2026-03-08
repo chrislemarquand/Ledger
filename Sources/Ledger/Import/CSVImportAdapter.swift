@@ -4,6 +4,7 @@ struct CSVImportAdapter: ImportSourceAdapter {
     let sourceKind: ImportSourceKind = .csv
 
     private static let invalidSchemaGuidance = "This CSV is not in ExifTool format. Export using ExifTool/Ledger ExifTool CSV and retry."
+    private static let firstDecimalRegex = try! NSRegularExpression(pattern: "-?\\d+(?:\\.\\d+)?")
 
     func parse(context: ImportParseContext) throws -> ImportParseResult {
         let exifDateFormatter: DateFormatter = {
@@ -107,7 +108,8 @@ struct CSVImportAdapter: ImportSourceAdapter {
                 selector = .rowNumber(parityMappedCount)
             }
 
-            var fields: [ImportFieldValue] = []
+            var fieldsByTagID: [String: String] = [:]
+            var fieldOrder: [String] = []
             for (columnIndex, descriptor) in mappedColumns {
                 guard columnIndex < row.count else { continue }
                 let rawValue = CSVSupport.trim(row[columnIndex])
@@ -121,8 +123,14 @@ struct CSVImportAdapter: ImportSourceAdapter {
                     )
                     continue
                 }
-                fields.append(ImportFieldValue(tagID: descriptor.id, value: normalized))
+                if fieldsByTagID[descriptor.id] == nil {
+                    fieldOrder.append(descriptor.id)
+                }
+                // If multiple CSV columns map to the same Ledger tag, keep the last
+                // parsed value so row preview counts and staging reflect unique tags.
+                fieldsByTagID[descriptor.id] = normalized
             }
+            let fields = fieldOrder.map { ImportFieldValue(tagID: $0, value: fieldsByTagID[$0] ?? "") }
 
             if fields.isEmpty {
                 warnings.append(
@@ -306,10 +314,13 @@ struct CSVImportAdapter: ImportSourceAdapter {
         case .text:
             return trimmed
         case .dateTime:
-            if dateFormatter.date(from: trimmed) != nil {
-                return trimmed
+            if let parsed = dateFormatter.date(from: trimmed) {
+                return dateFormatter.string(from: parsed)
             }
             if let parsed = Self.iso8601WithFraction.date(from: trimmed) ?? Self.iso8601WithoutFraction.date(from: trimmed) {
+                return dateFormatter.string(from: parsed)
+            }
+            if let parsed = Self.exifWithColonOffset.date(from: trimmed) ?? Self.exifWithBasicOffset.date(from: trimmed) {
                 return dateFormatter.string(from: parsed)
             }
             return nil
@@ -330,6 +341,9 @@ struct CSVImportAdapter: ImportSourceAdapter {
             if let match = choices.first(where: { $0.label.caseInsensitiveCompare(trimmed) == .orderedSame }) {
                 return match.value
             }
+            if let match = matchEnumChoice(trimmed, choices: choices, descriptorID: descriptor.id) {
+                return match
+            }
             return nil
         }
     }
@@ -347,21 +361,107 @@ struct CSVImportAdapter: ImportSourceAdapter {
                 return numerator / denominator
             }
         }
+        let ns = raw as NSString
+        let range = NSRange(location: 0, length: ns.length)
+        if let match = Self.firstDecimalRegex.firstMatch(in: raw, range: range) {
+            let token = ns.substring(with: match.range)
+            if let value = Double(token), value.isFinite {
+                return value
+            }
+        }
         return nil
     }
 
-    private func parseCoordinate(_ raw: String) -> Double? {
-        let upper = raw.uppercased()
-        let hasWestOrSouth = upper.contains("W") || upper.contains("S")
-        let hasEastOrNorth = upper.contains("E") || upper.contains("N")
-        guard let parsed = CSVSupport.parseCoordinateNumber(raw) else { return nil }
-        if hasWestOrSouth, !hasEastOrNorth {
-            return -abs(parsed)
+    private func matchEnumChoice(_ raw: String, choices: [ImportEnumChoice], descriptorID: String) -> String? {
+        if let numeric = Double(raw), numeric.isFinite {
+            let rounded = numeric.rounded()
+            if abs(numeric - rounded) < 0.000_001 {
+                let normalizedValue = String(Int(rounded))
+                if choices.contains(where: { $0.value == normalizedValue }) {
+                    return normalizedValue
+                }
+            }
         }
-        if hasEastOrNorth, !hasWestOrSouth {
-            return abs(parsed)
+
+        let normalizedRaw = normalizeEnumText(raw)
+        if let direct = choices.first(where: { normalizeEnumText($0.label) == normalizedRaw }) {
+            return direct.value
+        }
+
+        switch descriptorID {
+        case "exif-exposure-program":
+            if normalizedRaw.contains("shutter"), let match = choices.first(where: { $0.value == "4" }) { return match.value }
+            if normalizedRaw.contains("aperture"), let match = choices.first(where: { $0.value == "3" }) { return match.value }
+            if normalizedRaw.contains("program"), let match = choices.first(where: { $0.value == "2" }) { return match.value }
+            if normalizedRaw.contains("manual"), let match = choices.first(where: { $0.value == "1" }) { return match.value }
+            if normalizedRaw.contains("portrait"), let match = choices.first(where: { $0.value == "7" }) { return match.value }
+            if normalizedRaw.contains("landscape"), let match = choices.first(where: { $0.value == "8" }) { return match.value }
+        case "exif-flash":
+            if normalizedRaw.contains("didnotfire") && normalizedRaw.contains("off"),
+               let match = choices.first(where: { $0.value == "16" }) {
+                return match.value
+            }
+            if normalizedRaw == "noflash", let match = choices.first(where: { $0.value == "0" }) { return match.value }
+            if normalizedRaw.contains("fired"), let match = choices.first(where: { $0.value == "1" }) { return match.value }
+        default:
+            break
+        }
+        return nil
+    }
+
+    private func normalizeEnumText(_ raw: String) -> String {
+        let folded = raw.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current)
+        var result = String()
+        result.reserveCapacity(folded.count)
+        for scalar in folded.unicodeScalars {
+            if CharacterSet.alphanumerics.contains(scalar) {
+                result.unicodeScalars.append(scalar)
+            }
+        }
+        return result.lowercased()
+    }
+
+    private func parseCoordinate(_ raw: String) -> Double? {
+        guard let parsed = CSVSupport.parseCoordinateNumber(raw) else { return nil }
+
+        if let direction = coordinateDirection(in: raw) {
+            switch direction {
+            case .south, .west:
+                return -abs(parsed)
+            case .north, .east:
+                return abs(parsed)
+            }
         }
         return parsed
+    }
+
+    private enum CoordinateDirection {
+        case north
+        case south
+        case east
+        case west
+    }
+
+    private func coordinateDirection(in raw: String) -> CoordinateDirection? {
+        let tokens = raw
+            .uppercased()
+            .split(whereSeparator: { !$0.isLetter })
+            .map(String.init)
+        for token in tokens.reversed() {
+            switch token {
+            case "N", "NORTH":
+                return .north
+            case "S", "SOUTH":
+                return .south
+            case "E", "EAST":
+                return .east
+            case "W", "WEST":
+                return .west
+            default:
+                continue
+            }
+        }
+        return nil
     }
 
     private func compactDecimal(_ value: Double) -> String {
@@ -381,6 +481,20 @@ struct CSVImportAdapter: ImportSourceAdapter {
     private nonisolated(unsafe) static let iso8601WithoutFraction: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static let exifWithColonOffset: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy:MM:dd HH:mm:ssXXXXX"
+        return formatter
+    }()
+
+    private static let exifWithBasicOffset: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy:MM:dd HH:mm:ssXX"
         return formatter
     }()
 }

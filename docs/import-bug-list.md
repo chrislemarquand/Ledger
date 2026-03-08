@@ -72,5 +72,72 @@ Source: `docs/import-manual-smoke-checklist.md`
     - target order: current Ledger visible sort order (incoming target file order).
   - Fallback remains opt-in (disabled by default).
 
-## Remaining Work
-1. None from this bug list.
+## v1.1 Must-Fix (Bugs)
+1. EOS single-candidate lens auto-stage crash (`E5`)
+- Status: Monitoring (not reproducible)
+- Severity: High
+- Goal: no crash during EOS import when a focal length maps to exactly one lens candidate.
+- Plan:
+  - Reproduce using E5 fixture path and capture symbolized stack.
+  - Harden EOS lens assignment path in import commit flow.
+  - Add regression test that covers import commit (not only preview/parse path).
+- Exit criteria: E5 passes repeatedly without `EXC_BAD_ACCESS`.
+
+2. CSV `If no match: Skip` stages unchanged fields (`C10`)
+- Status: Done
+- Severity: High
+- Goal: unchanged values are retained and not shown as staged changes.
+- Plan:
+  - Enforce no-op filtering before staging when value is unchanged.
+  - Ensure inspector staged styling (grey/orange state) only appears for real deltas.
+- Exit criteria: C10 passes and visual behavior is distinct from `Clear`.
+
+3. CSV field filter not respected (`C11`)
+- Status: Done
+- Severity: High
+- Goal: only checked fields are staged/imported.
+- Plan:
+  - Enforce selected field set at final staging boundary.
+  - Add regression tests for narrow field subsets.
+- Exit criteria: C11 passes in preview + import behavior.
+
+4. ExifTool export/import round-trip mismatch (`X4`)
+- Status: Done
+- Severity: High
+- Goal: export then re-import same data yields zero net staged changes.
+- Implemented:
+  - Normalized ExifTool textual forms during import validation/staging (date with offsets, decimal-with-units, enum text variants).
+  - Collapsed duplicate mapped columns by tag (e.g. `Copy1:*` + primary column) so preview/staging reflects unique tags.
+  - Hardened coordinate parsing/sign handling for latitude and longitude, including `-0°` edge cases.
+  - Added round-trip-focused regression coverage for ExifTool location formats (lat/lon/altitude/direction).
+- Exit criteria: X4 passes; warnings reduced to true incompatibilities.
+
+5. EOS field dependency expectation mismatch (`E10`)
+- Severity: Medium
+- Goal: behavior and test expectation align for `Lens Model` vs `Focal Length` selection dependency.
+- Plan:
+  - Keep dependency if intended, but make it explicit in test wording and UI copy.
+  - Update matrix expectation to match intended behavior.
+- Exit criteria: E10 becomes pass under explicit expected behavior.
+
+## Post-Fix UX Polish
+1. Clarify unchanged vs cleared vs staged states (from `C9/C10` behavior notes)
+- Status: Done (v1.1)
+- Implemented: when a clear is staged for a selected field, inspector placeholder no longer shows baseline/on-disk value in grey.
+- Result: `Clear` and `Skip` now present as clearly different states during staging.
+
+2. EOS ambiguous-lens prompt flow polish (from `E6` note)
+- Status: Done (v1.1)
+- Implemented: ambiguous EOS lens prompt now includes an "apply to remaining rows at this focal length" option.
+- Result: repetitive prompt friction is reduced while keeping per-row flow available.
+
+3. Reset GPX Advanced options on each new import session (from `G4` note)
+- Status: Done (v1.1)
+- Implemented: GPX import session initialization resets tolerance/offset to defaults.
+- Result: prior typed GPX Advanced values no longer carry between import sessions.
+
+4. Make export scope explicit (from `X1` note)
+- Clearly state whether export target is `Folder` or `Selection (N files)` before confirmation.
+
+5. Improve CSV warning quality for ExifTool-origin files (from `X4` note)
+- Reduce noisy/repetitive warnings and prioritize actionable mismatch summaries.

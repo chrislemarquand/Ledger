@@ -6,16 +6,23 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class ImportSession: ObservableObject {
+    struct EOSLensChoiceDecision {
+        let lens: String
+        let applyToRemainingAtFocal: Bool
+    }
+
     struct EOSLensChoiceRequest {
         let sourceLine: Int
         let sourceIdentifier: String
         let focalMillimeters: Int
         let candidates: [String]
+        let remainingRowsAtFocal: Int
     }
 
     private let coordinator = ImportCoordinator()
     private let eosLensMappingURLOverride: URL?
     private let lensChoiceProvider: ((EOSLensChoiceRequest) -> String?)?
+    private let lensChoiceDecisionProvider: ((EOSLensChoiceRequest) -> EOSLensChoiceDecision?)?
     private var eosLensMappingCache: [Int: [String]]?
     @Published var options: ImportRunOptions
     @Published var preparedRun: ImportPreparedRun?
@@ -27,16 +34,25 @@ final class ImportSession: ObservableObject {
         model: AppModel,
         sourceKind: ImportSourceKind,
         eosLensMappingURL: URL? = nil,
-        lensChoiceProvider: ((EOSLensChoiceRequest) -> String?)? = nil
+        lensChoiceProvider: ((EOSLensChoiceRequest) -> String?)? = nil,
+        lensChoiceDecisionProvider: ((EOSLensChoiceRequest) -> EOSLensChoiceDecision?)? = nil
     ) {
         var opts = coordinator.loadPersistedOptions(for: sourceKind)
         self.eosLensMappingURLOverride = eosLensMappingURL
         self.lensChoiceProvider = lensChoiceProvider
+        self.lensChoiceDecisionProvider = lensChoiceDecisionProvider
         opts.sourceKind = sourceKind
         if sourceKind == .csv {
             // CSV matching is now automatic (filename when uniquely safe, else row-order fallback).
             // Preserve row-parity window controls as the fallback policy seam.
             opts.matchStrategy = .rowParity
+        }
+        if sourceKind == .gpx {
+            // GPX Advanced values should start from defaults on each new import
+            // session to avoid carrying over stale values from prior runs.
+            let defaults = ImportRunOptions.defaults(for: .gpx)
+            opts.gpxToleranceSeconds = defaults.gpxToleranceSeconds
+            opts.gpxCameraOffsetSeconds = defaults.gpxCameraOffsetSeconds
         }
         let selectedCount = model.selectedFileURLs.count
         opts.scope = selectedCount >= 2 ? .selection : .folder
@@ -131,12 +147,13 @@ final class ImportSession: ObservableObject {
         let policyAppliedAssignments = applyMissingFieldPolicy(
             assignments: eosLensResult.assignments,
             run: run,
-            model: model
+            model: model,
+            emptyValuePolicyOverride: options.emptyValuePolicy
         )
         let stageSummary = model.stageImportAssignments(
-            filterAssignments(policyAppliedAssignments, selectedTagIDs: run.options.selectedTagIDs),
+            filterAssignments(policyAppliedAssignments, selectedTagIDs: options.selectedTagIDs),
             sourceKind: run.options.sourceKind,
-            emptyValuePolicy: run.options.emptyValuePolicy
+            emptyValuePolicy: options.emptyValuePolicy
         )
         if resolve.warnings.isEmpty {
             model.statusMessage = "Staged \(stageSummary.stagedFields) field(s) on \(stageSummary.stagedFiles) file(s)."
@@ -180,8 +197,29 @@ final class ImportSession: ObservableObject {
             return (assignments, false)
         }
 
-        let rowByTargetURL = Dictionary(uniqueKeysWithValues: run.matchResult.matched.map { ($0.targetURL, $0.row) })
+        // Defensive: matching should provide unique target URLs, but avoid
+        // precondition crashes if an upstream edge case produces duplicates.
+        var rowByTargetURL: [URL: ImportRow] = [:]
+        for match in run.matchResult.matched where rowByTargetURL[match.targetURL] == nil {
+            rowByTargetURL[match.targetURL] = match.row
+        }
         var updatedAssignments = assignments
+        var applyLensChoiceToRemainingByFocal: [Int: String] = [:]
+        var remainingAmbiguousRowsByFocal: [Int: Int] = [:]
+
+        for assignment in assignments {
+            guard let row = rowByTargetURL[assignment.targetURL] else { continue }
+            let hasLens = assignment.fields.contains {
+                $0.tagID == "exif-lens" && !CSVSupport.trim($0.value).isEmpty
+            }
+            if hasLens { continue }
+            guard let focalRaw = row.fields.first(where: { $0.tagID == "exif-focal" })?.value,
+                  let focalMM = focalLengthMillimeters(from: focalRaw),
+                  let candidates = mapping[focalMM],
+                  candidates.count > 1
+            else { continue }
+            remainingAmbiguousRowsByFocal[focalMM, default: 0] += 1
+        }
 
         for index in updatedAssignments.indices {
             let assignment = updatedAssignments[index]
@@ -208,13 +246,32 @@ final class ImportSession: ObservableObject {
             if candidates.count == 1 {
                 chosenLens = candidates[0]
             } else {
-                let request = EOSLensChoiceRequest(
-                    sourceLine: row.sourceLine,
-                    sourceIdentifier: row.sourceIdentifier,
-                    focalMillimeters: focalMM,
-                    candidates: candidates
-                )
-                chosenLens = chooseLens(for: request)
+                defer {
+                    if let current = remainingAmbiguousRowsByFocal[focalMM], current > 0 {
+                        remainingAmbiguousRowsByFocal[focalMM] = current - 1
+                    }
+                }
+
+                if let remembered = applyLensChoiceToRemainingByFocal[focalMM],
+                   candidates.contains(remembered)
+                {
+                    chosenLens = remembered
+                } else {
+                    let request = EOSLensChoiceRequest(
+                        sourceLine: row.sourceLine,
+                        sourceIdentifier: row.sourceIdentifier,
+                        focalMillimeters: focalMM,
+                        candidates: candidates,
+                        remainingRowsAtFocal: max(remainingAmbiguousRowsByFocal[focalMM, default: 1] - 1, 0)
+                    )
+                    guard let decision = chooseLens(for: request) else {
+                        return (assignments, true)
+                    }
+                    chosenLens = decision.lens
+                    if decision.applyToRemainingAtFocal {
+                        applyLensChoiceToRemainingByFocal[focalMM] = decision.lens
+                    }
+                }
             }
 
             guard let chosenLens, !CSVSupport.trim(chosenLens).isEmpty else {
@@ -295,9 +352,13 @@ final class ImportSession: ObservableObject {
         return Int(trimmed[range])
     }
 
-    private func chooseLens(for request: EOSLensChoiceRequest) -> String? {
-        if let provider = lensChoiceProvider {
+    private func chooseLens(for request: EOSLensChoiceRequest) -> EOSLensChoiceDecision? {
+        if let provider = lensChoiceDecisionProvider {
             return provider(request)
+        }
+        if let provider = lensChoiceProvider {
+            guard let lens = provider(request), !CSVSupport.trim(lens).isEmpty else { return nil }
+            return EOSLensChoiceDecision(lens: lens, applyToRemainingAtFocal: false)
         }
 
         let alert = NSAlert()
@@ -307,23 +368,48 @@ final class ImportSession: ObservableObject {
 
         let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 420, height: 26), pullsDown: false)
         popup.addItems(withTitles: request.candidates)
-        alert.accessoryView = popup
+
+        let accessory = NSStackView(frame: NSRect(x: 0, y: 0, width: 420, height: 58))
+        accessory.orientation = .vertical
+        accessory.alignment = .leading
+        accessory.spacing = 8
+        accessory.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+        accessory.addArrangedSubview(popup)
+
+        let applyToRemainingCheckbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+        if request.remainingRowsAtFocal > 0 {
+            let suffix = request.remainingRowsAtFocal == 1 ? "row" : "rows"
+            applyToRemainingCheckbox.title = "Apply to remaining \(request.remainingRowsAtFocal) \(suffix) at \(request.focalMillimeters) mm"
+            accessory.addArrangedSubview(applyToRemainingCheckbox)
+        }
+        alert.accessoryView = accessory
         alert.addButton(withTitle: "Use Selected Lens")
         alert.addButton(withTitle: "Cancel Import")
 
         let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return nil }
-        return popup.titleOfSelectedItem
+        guard response == .alertFirstButtonReturn,
+              let selectedLens = popup.titleOfSelectedItem,
+              !CSVSupport.trim(selectedLens).isEmpty
+        else {
+            return nil
+        }
+
+        return EOSLensChoiceDecision(
+            lens: selectedLens,
+            applyToRemainingAtFocal: applyToRemainingCheckbox.state == .on
+        )
     }
 
     private func applyMissingFieldPolicy(
         assignments: [ImportAssignment],
         run: ImportPreparedRun,
-        model: AppModel
+        model: AppModel,
+        emptyValuePolicyOverride: ImportEmptyValuePolicy? = nil
     ) -> [ImportAssignment] {
         // CSV import supports full-field replacement semantics:
         // when policy is .clear, missing incoming fields are cleared on matched files.
-        guard run.options.sourceKind == .csv, run.options.emptyValuePolicy == .clear else {
+        let effectiveEmptyValuePolicy = emptyValuePolicyOverride ?? run.options.emptyValuePolicy
+        guard run.options.sourceKind == .csv, effectiveEmptyValuePolicy == .clear else {
             return assignments
         }
 
@@ -355,9 +441,10 @@ final class ImportSession: ObservableObject {
 
     private func effectiveFieldCount(for fields: [ImportFieldValue]) -> Int {
         let ids = options.selectedTagIDs
-        guard !ids.isEmpty else { return fields.count }
+        let uniqueFieldTagIDs = Set(fields.map(\.tagID))
+        guard !ids.isEmpty else { return uniqueFieldTagIDs.count }
         let selected = Set(ids)
-        return fields.filter { selected.contains($0.tagID) }.count
+        return uniqueFieldTagIDs.filter { selected.contains($0) }.count
     }
 
     var previewText: String {
