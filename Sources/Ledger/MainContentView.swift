@@ -589,6 +589,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         static let fileImportEOS1V = 9_115
         static let fileExportRoot = 9_116
         static let fileExportExifToolCSV = 9_117
+        static let fileExportSendToPhotos = 9_118
+        static let fileExportSendToLightroomClassic = 9_119
 
         static let editRotate = 9_201
         static let editFlip = 9_202
@@ -930,6 +932,21 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         item.tag = MenuTag.fileExportExifToolCSV
         item.isEnabled = !model.browserItems.isEmpty
         submenu.addItem(item)
+
+        let sendToPhotosItem = NSMenuItem(title: "Import in Photos…", action: #selector(sendToPhotosAction(_:)), keyEquivalent: "")
+        sendToPhotosItem.target = self
+        sendToPhotosItem.image = NSImage(systemSymbolName: "photo.on.rectangle", accessibilityDescription: nil)
+        sendToPhotosItem.tag = MenuTag.fileExportSendToPhotos
+        sendToPhotosItem.isEnabled = !model.browserItems.isEmpty
+        submenu.addItem(sendToPhotosItem)
+
+        let sendToLightroomClassicItem = NSMenuItem(title: "Send to Lightroom Classic", action: #selector(sendToLightroomClassicAction(_:)), keyEquivalent: "")
+        sendToLightroomClassicItem.target = self
+        sendToLightroomClassicItem.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
+        sendToLightroomClassicItem.tag = MenuTag.fileExportSendToLightroomClassic
+        let lightroomTargets = model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)
+        sendToLightroomClassicItem.isEnabled = model.fileActionState(for: .sendToLightroomClassic, targetURLs: lightroomTargets).isEnabled
+        submenu.addItem(sendToLightroomClassicItem)
         return submenu
     }
 
@@ -1177,6 +1194,16 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             return !model.browserItems.isEmpty
         } else if menuItem.action == #selector(exportExifToolCSVAction(_:)) {
             return !model.browserItems.isEmpty
+        } else if menuItem.action == #selector(sendToPhotosAction(_:)) {
+            let targetURLs = model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)
+            let state = model.fileActionState(for: .sendToPhotos, targetURLs: targetURLs)
+            menuItem.title = state.title
+            return state.isEnabled
+        } else if menuItem.action == #selector(sendToLightroomClassicAction(_:)) {
+            let targetURLs = model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)
+            let state = model.fileActionState(for: .sendToLightroomClassic, targetURLs: targetURLs)
+            menuItem.title = state.title
+            return state.isEnabled
         } else if menuItem.action == #selector(pinFolderToSidebarAction(_:)) {
             return model.canPinSelectedSidebarLocation
         } else if menuItem.action == #selector(unpinFolderFromSidebarAction(_:)) {
@@ -1407,6 +1434,18 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 alert.runModal()
             }
         }
+    }
+
+    @objc
+    func sendToPhotosAction(_: Any?) {
+        let targetURLs = model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)
+        model.performFileAction(.sendToPhotos, targetURLs: targetURLs)
+    }
+
+    @objc
+    func sendToLightroomClassicAction(_: Any?) {
+        let targetURLs = model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)
+        model.performFileAction(.sendToLightroomClassic, targetURLs: targetURLs)
     }
 
     @objc

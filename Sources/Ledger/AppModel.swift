@@ -275,6 +275,8 @@ final class AppModel: ObservableObject {
 
     enum FileActionID: CaseIterable {
         case openInDefaultApp
+        case sendToPhotos
+        case sendToLightroomClassic
         case refreshMetadata
         case applyMetadataChanges
         case clearMetadataChanges
@@ -578,6 +580,7 @@ final class AppModel: ObservableObject {
     private var workspaceObserverTokens: [NSObjectProtocol] = []
     private var sidebarImageCountTasks: [String: Task<Void, Never>] = [:]
     private var backgroundWarmTasksBySelectionID: [String: Task<Void, Never>] = [:]
+    private var photosImportStagingDirectory: URL?
 
     private static let browserViewModeKey = "ui.browser.view.mode"
     private static let browserSortKey = "ui.browser.sort"
@@ -808,6 +811,179 @@ final class AppModel: ObservableObject {
         openInDefaultApp(url)
     }
 
+    func sendToPhotos(_ fileURLs: [URL]) {
+        let uniqueURLs = Array(Set(fileURLs)).sorted { $0.path < $1.path }
+        guard !uniqueURLs.isEmpty else {
+            statusMessage = "Select images to send to Photos."
+            return
+        }
+        guard let photosAppURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Photos") else {
+            statusMessage = "Photos isn’t available on this Mac."
+            return
+        }
+
+        let stagingDirectory: URL
+        do {
+            stagingDirectory = try makePhotosImportStagingDirectory(for: uniqueURLs)
+        } catch {
+            statusMessage = "Couldn’t prepare files for Photos import. \(error.localizedDescription)"
+            return
+        }
+
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+        NSWorkspace.shared.open(
+            [stagingDirectory],
+            withApplicationAt: photosAppURL,
+            configuration: config
+        ) { [weak self] _, error in
+            Task { @MainActor in
+                guard let self else { return }
+                if let error {
+                    self.statusMessage = "Couldn’t open Photos import. \(error.localizedDescription)"
+                    return
+                }
+                let suffix = uniqueURLs.count == 1 ? "" : "s"
+                self.setStatusMessage("Opened Photos import review for \(uniqueURLs.count) image\(suffix).", autoClearAfterSuccess: true)
+            }
+        }
+    }
+
+    func sendToLightroomClassic(_ fileURLs: [URL]) {
+        let uniqueURLs = Array(Set(fileURLs)).sorted { $0.path < $1.path }
+        guard !uniqueURLs.isEmpty else {
+            statusMessage = "Select images to send to Lightroom Classic."
+            return
+        }
+        guard let lightroomAppURL = resolveLightroomClassicAppURL(for: uniqueURLs) else {
+            statusMessage = "Lightroom Classic isn’t available on this Mac."
+            return
+        }
+
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+        NSWorkspace.shared.open(
+            uniqueURLs,
+            withApplicationAt: lightroomAppURL,
+            configuration: config
+        ) { [weak self] _, error in
+            Task { @MainActor in
+                guard let self else { return }
+                if let error {
+                    self.statusMessage = "Couldn’t send \(uniqueURLs.count) image(s) to Lightroom Classic. \(error.localizedDescription)"
+                    return
+                }
+                let suffix = uniqueURLs.count == 1 ? "" : "s"
+                self.setStatusMessage("Sent \(uniqueURLs.count) image\(suffix) to Lightroom Classic.", autoClearAfterSuccess: true)
+            }
+        }
+    }
+
+    private func makePhotosImportStagingDirectory(for fileURLs: [URL]) throws -> URL {
+        if let existing = photosImportStagingDirectory {
+            try? FileManager.default.removeItem(at: existing)
+            photosImportStagingDirectory = nil
+        }
+
+        let stagingRootDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("Ledger-Photos-Import-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: stagingRootDirectory, withIntermediateDirectories: true)
+
+        let displayName = photosImportDisplayFolderName(for: fileURLs)
+        let stagingDirectory = stagingRootDirectory.appendingPathComponent(displayName, isDirectory: true)
+        try FileManager.default.createDirectory(at: stagingDirectory, withIntermediateDirectories: true)
+
+        var usedNames = Set<String>()
+        for (index, sourceURL) in fileURLs.enumerated() {
+            let fallback = "image-\(index + 1)\(sourceURL.pathExtension.isEmpty ? "" : ".\(sourceURL.pathExtension)")"
+            let preferred = sourceURL.lastPathComponent.isEmpty ? fallback : sourceURL.lastPathComponent
+            let uniqueName = uniqueImportFilename(preferred, usedNames: &usedNames)
+            let destinationURL = stagingDirectory.appendingPathComponent(uniqueName, isDirectory: false)
+
+            do {
+                // Prefer hard links so Photos sees real files while avoiding full data copies
+                // when source and staging paths share a filesystem.
+                try FileManager.default.linkItem(at: sourceURL, to: destinationURL)
+            } catch {
+                // Fallback for cross-volume sources or link-restricted environments.
+                try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+            }
+        }
+
+        photosImportStagingDirectory = stagingRootDirectory
+        return stagingDirectory
+    }
+
+    private func uniqueImportFilename(_ preferred: String, usedNames: inout Set<String>) -> String {
+        let base = (preferred as NSString).deletingPathExtension
+        let ext = (preferred as NSString).pathExtension
+
+        var candidate = preferred
+        var index = 2
+        while usedNames.contains(candidate) {
+            let suffix = "-\(index)"
+            candidate = ext.isEmpty ? "\(base)\(suffix)" : "\(base)\(suffix).\(ext)"
+            index += 1
+        }
+        usedNames.insert(candidate)
+        return candidate
+    }
+
+    private func photosImportDisplayFolderName(for fileURLs: [URL]) -> String {
+        let parentFolders = Set(fileURLs.map { $0.deletingLastPathComponent().standardizedFileURL.path })
+        let rawName: String
+        if parentFolders.count == 1, let path = parentFolders.first {
+            let parentName = URL(fileURLWithPath: path, isDirectory: true).lastPathComponent
+            rawName = parentName.isEmpty ? "Imported Images" : parentName
+        } else {
+            rawName = "Selected Images"
+        }
+        return sanitizedImportFolderName(rawName)
+    }
+
+    private func sanitizedImportFolderName(_ name: String) -> String {
+        let disallowed = CharacterSet(charactersIn: "/:\u{0}")
+        let cleanedScalars = name.unicodeScalars.map { disallowed.contains($0) ? "-" : Character($0) }
+        let cleaned = String(cleanedScalars).trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? "Imported Images" : cleaned
+    }
+
+    private func resolveLightroomClassicAppURL(for fileURLs: [URL]) -> URL? {
+        func isLightroomClassicApp(_ appURL: URL) -> Bool {
+            let name = FileManager.default.displayName(atPath: appURL.path).lowercased()
+            if name.contains("lightroom classic") { return true }
+            if let bundle = Bundle(url: appURL),
+               let bundleName = (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)?.lowercased(),
+               bundleName.contains("lightroom classic") {
+                return true
+            }
+            if let bundleID = Bundle(url: appURL)?.bundleIdentifier?.lowercased(),
+               bundleID.contains("lightroomclassic") {
+                return true
+            }
+            return false
+        }
+
+        if let firstURL = fileURLs.first {
+            let compatibleApps = NSWorkspace.shared.urlsForApplications(toOpen: firstURL)
+            if let matched = compatibleApps.first(where: isLightroomClassicApp) {
+                return matched
+            }
+        }
+
+        let commonInstallPaths = [
+            "/Applications/Adobe Lightroom Classic/Adobe Lightroom Classic.app",
+            "/Applications/Lightroom Classic.app",
+        ]
+        for path in commonInstallPaths {
+            let url = URL(fileURLWithPath: path)
+            if FileManager.default.fileExists(atPath: url.path), isLightroomClassicApp(url) {
+                return url
+            }
+        }
+        return nil
+    }
+
     func applyMetadataSelectionTitle(for targetURLs: [URL]) -> String {
         let count = Set(targetURLs).count
         guard count > 0 else {
@@ -823,6 +999,10 @@ final class AppModel: ObservableObject {
         let hasPending = normalized.contains { hasPendingEdits(for: $0) }
         let hasRestorable = normalized.contains { hasRestorableBackup(for: $0) }
         let openAppName = defaultAppDisplayName(for: normalized.first)
+        let hasLightroomClassic: Bool = {
+            guard hasSelection else { return false }
+            return resolveLightroomClassicAppURL(for: normalized) != nil
+        }()
 
         switch id {
         case .openInDefaultApp:
@@ -831,6 +1011,20 @@ final class AppModel: ObservableObject {
                 title: "Open in \(openAppName)",
                 symbolName: "arrow.up.forward.app",
                 isEnabled: hasSelection
+            )
+        case .sendToPhotos:
+            return FileActionState(
+                id: id,
+                title: "Import in Photos…",
+                symbolName: "photo.on.rectangle",
+                isEnabled: hasSelection
+            )
+        case .sendToLightroomClassic:
+            return FileActionState(
+                id: id,
+                title: "Send to Lightroom Classic",
+                symbolName: "square.and.arrow.up",
+                isEnabled: hasLightroomClassic
             )
         case .refreshMetadata:
             return FileActionState(
@@ -869,6 +1063,10 @@ final class AppModel: ObservableObject {
         switch id {
         case .openInDefaultApp:
             openInDefaultApp(normalized)
+        case .sendToPhotos:
+            sendToPhotos(normalized)
+        case .sendToLightroomClassic:
+            sendToLightroomClassic(normalized)
         case .refreshMetadata:
             refreshMetadata(for: normalized)
         case .applyMetadataChanges:

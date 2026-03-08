@@ -57,8 +57,8 @@ Primary objective: get import right end-to-end.
 
 ###Export
 - [x] Exiftool CSV export feature
-- [ ] Send to Photos handoff workflow.
-- [ ] Send to Lightroom Classic handoff workflow.
+- [x] Send to Photos handoff workflow.
+- [x] Send to Lightroom Classic handoff workflow.
 
 ---
 
@@ -88,6 +88,7 @@ Merges former v1.3 and v1.4 into one release.
 - [ ] List column category editing (including Exif-backed columns).
 - [ ] Gallery metadata lines/subtitle customisation.
 - [ ] Toolbar customisation/editing.
+- [ ] **Full native QuickLook rewrite**: replace current preview implementation with a fully native QuickLook integration.
 
 ---
 
