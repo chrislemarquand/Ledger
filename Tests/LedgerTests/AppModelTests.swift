@@ -308,6 +308,38 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(applyAfterClear.isEnabled)
     }
 
+    func testSendToPhotosActionStateEnabledOnlyWithSelection() {
+        let fileURL = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        let model = makeModel()
+
+        let disabled = model.fileActionState(for: .sendToPhotos, targetURLs: [])
+        XCTAssertFalse(disabled.isEnabled)
+
+        let enabled = model.fileActionState(for: .sendToPhotos, targetURLs: [fileURL])
+        XCTAssertTrue(enabled.isEnabled)
+    }
+
+    func testSendToPhotosWithoutSelectionShowsGuidanceMessage() {
+        let model = makeModel()
+        model.sendToPhotos([])
+        XCTAssertEqual(model.statusMessage, "Select images to send to Photos.")
+    }
+
+    func testSendToLightroomClassicActionStateDisabledWhenSelectionEmpty() {
+        let fileURL = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        let model = makeModel()
+
+        let disabled = model.fileActionState(for: .sendToLightroomClassic, targetURLs: [])
+        XCTAssertFalse(disabled.isEnabled)
+        _ = model.fileActionState(for: .sendToLightroomClassic, targetURLs: [fileURL])
+    }
+
+    func testSendToLightroomClassicWithoutSelectionShowsGuidanceMessage() {
+        let model = makeModel()
+        model.sendToLightroomClassic([])
+        XCTAssertEqual(model.statusMessage, "Select images to send to Lightroom Classic.")
+    }
+
     func testRotateFourTimesNormalizesToNoPendingImageEdits() throws {
         let fileURL = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
         let model = makeModel()

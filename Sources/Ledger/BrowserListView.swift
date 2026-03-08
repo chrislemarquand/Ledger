@@ -466,6 +466,8 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
         let menu = NSMenu()
         menu.autoenablesItems = false
         let openState = model.fileActionState(for: .openInDefaultApp, targetURLs: targetURLs)
+        let photosState = model.fileActionState(for: .sendToPhotos, targetURLs: targetURLs)
+        let lightroomState = model.fileActionState(for: .sendToLightroomClassic, targetURLs: targetURLs)
         let refreshState = model.fileActionState(for: .refreshMetadata, targetURLs: targetURLs)
         let applyState = model.fileActionState(for: .applyMetadataChanges, targetURLs: targetURLs)
         let clearState = model.fileActionState(for: .clearMetadataChanges, targetURLs: targetURLs)
@@ -487,6 +489,22 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
             isEnabled: openState.isEnabled
         )
         menu.addItem(openItem)
+
+        let photosItem = makeItem(
+            title: photosState.title,
+            action: #selector(sendToPhotosFromContextMenu(_:)),
+            symbolName: photosState.symbolName,
+            isEnabled: photosState.isEnabled
+        )
+        menu.addItem(photosItem)
+
+        let lightroomItem = makeItem(
+            title: lightroomState.title,
+            action: #selector(sendToLightroomClassicFromContextMenu(_:)),
+            symbolName: lightroomState.symbolName,
+            isEnabled: lightroomState.isEnabled
+        )
+        menu.addItem(lightroomItem)
 
         let revealItem = makeItem(
             title: "Reveal in Finder",
@@ -542,6 +560,18 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
     private func revealInFinderFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty else { return }
         model.revealInFinder(contextMenuTargetURLs)
+    }
+
+    @objc
+    private func sendToPhotosFromContextMenu(_: Any?) {
+        guard !contextMenuTargetURLs.isEmpty else { return }
+        model.performFileAction(.sendToPhotos, targetURLs: contextMenuTargetURLs)
+    }
+
+    @objc
+    private func sendToLightroomClassicFromContextMenu(_: Any?) {
+        guard !contextMenuTargetURLs.isEmpty else { return }
+        model.performFileAction(.sendToLightroomClassic, targetURLs: contextMenuTargetURLs)
     }
 
     @objc
