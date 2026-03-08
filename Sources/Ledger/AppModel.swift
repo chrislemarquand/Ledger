@@ -948,6 +948,10 @@ final class AppModel: ObservableObject {
         return cleaned.isEmpty ? "Imported Images" : cleaned
     }
 
+    func lightroomClassicApplicationURL(for fileURLs: [URL]) -> URL? {
+        resolveLightroomClassicAppURL(for: fileURLs)
+    }
+
     private func resolveLightroomClassicAppURL(for fileURLs: [URL]) -> URL? {
         func isLightroomClassicApp(_ appURL: URL) -> Bool {
             let name = FileManager.default.displayName(atPath: appURL.path).lowercased()

@@ -926,23 +926,35 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         let submenu = NSMenu(title: "Export")
         submenu.autoenablesItems = false
 
-        let item = NSMenuItem(title: "ExifTool CSV…", action: #selector(exportExifToolCSVAction(_:)), keyEquivalent: "")
+        let item = NSMenuItem(title: "Create CSV", action: #selector(exportExifToolCSVAction(_:)), keyEquivalent: "")
         item.target = self
         item.image = NSImage(systemSymbolName: "tablecells.badge.ellipsis", accessibilityDescription: nil)
         item.tag = MenuTag.fileExportExifToolCSV
         item.isEnabled = !model.browserItems.isEmpty
         submenu.addItem(item)
 
-        let sendToPhotosItem = NSMenuItem(title: "Import in Photos…", action: #selector(sendToPhotosAction(_:)), keyEquivalent: "")
+        let sendToPhotosItem = NSMenuItem(title: "Send to Photos", action: #selector(sendToPhotosAction(_:)), keyEquivalent: "")
         sendToPhotosItem.target = self
-        sendToPhotosItem.image = NSImage(systemSymbolName: "photo.on.rectangle", accessibilityDescription: nil)
+        if let photosAppURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Photos") {
+            let appIcon = NSWorkspace.shared.icon(forFile: photosAppURL.path)
+            appIcon.size = NSSize(width: 16, height: 16)
+            sendToPhotosItem.image = appIcon
+        } else {
+            sendToPhotosItem.image = NSImage(systemSymbolName: "photo.on.rectangle", accessibilityDescription: nil)
+        }
         sendToPhotosItem.tag = MenuTag.fileExportSendToPhotos
         sendToPhotosItem.isEnabled = !model.browserItems.isEmpty
         submenu.addItem(sendToPhotosItem)
 
         let sendToLightroomClassicItem = NSMenuItem(title: "Send to Lightroom Classic", action: #selector(sendToLightroomClassicAction(_:)), keyEquivalent: "")
         sendToLightroomClassicItem.target = self
-        sendToLightroomClassicItem.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
+        if let lightroomAppURL = model.lightroomClassicApplicationURL(for: model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)) {
+            let appIcon = NSWorkspace.shared.icon(forFile: lightroomAppURL.path)
+            appIcon.size = NSSize(width: 16, height: 16)
+            sendToLightroomClassicItem.image = appIcon
+        } else {
+            sendToLightroomClassicItem.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
+        }
         sendToLightroomClassicItem.tag = MenuTag.fileExportSendToLightroomClassic
         let lightroomTargets = model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)
         sendToLightroomClassicItem.isEnabled = model.fileActionState(for: .sendToLightroomClassic, targetURLs: lightroomTargets).isEnabled
@@ -1749,9 +1761,11 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
         private var sortItem: NSMenuToolbarItem?
         private var importItem: NSMenuToolbarItem?
+        private var exportItem: NSMenuToolbarItem?
         private var presetsItem: NSMenuToolbarItem?
         private var sortMenu: NSMenu?
         private var importMenu: NSMenu?
+        private var exportMenu: NSMenu?
         private var presetsMenu: NSMenu?
 
         init(controller: NativeThreePaneSplitViewController) {
@@ -1772,6 +1786,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 .flexibleSpace,
                 .presetTools,
                 .importTools,
+                .exportTools,
                 .applyChanges,
                 .inspectorTrackingSeparator,
                 .toggleInspector
@@ -1792,6 +1807,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 .flexibleSpace,
                 .presetTools,
                 .importTools,
+                .exportTools,
                 .applyChanges,
                 .inspectorTrackingSeparator,
                 .toggleInspector
@@ -1910,6 +1926,15 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 importItem = item
                 updateImportMenu(with: controller.model)
                 return item
+            case .exportTools:
+                let item = NSMenuToolbarItem(itemIdentifier: itemIdentifier)
+                item.label = "Export"
+                item.paletteLabel = "Export"
+                item.image = NSImage(systemSymbolName: "square.and.arrow.up.on.square", accessibilityDescription: "Export")
+                item.toolTip = "Export and handoff"
+                exportItem = item
+                updateExportMenu(with: controller.model)
+                return item
             case .presetTools:
                 let item = NSMenuToolbarItem(itemIdentifier: itemIdentifier)
                 item.label = "Presets"
@@ -1964,6 +1989,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             updateZoom(with: model)
             updateSortMenu(with: model)
             updateImportMenu(with: model)
+            updateExportMenu(with: model)
             updatePresetsMenu(with: model)
             updateApplyEnabled(with: model)
             updateInspectorToggle(with: model)
@@ -2018,6 +2044,12 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             let menu = makeImportMenu(model: model)
             importMenu = menu
             importItem?.menu = menu
+        }
+
+        private func updateExportMenu(with model: AppModel) {
+            let menu = makeExportMenu(model: model)
+            exportMenu = menu
+            exportItem?.menu = menu
         }
 
         private func updateApplyEnabled(with model: AppModel) {
@@ -2076,6 +2108,60 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             return menu
         }
 
+        private func makeExportMenu(model: AppModel) -> NSMenu {
+            guard let controller else { return NSMenu(title: "Export") }
+            let menu = NSMenu(title: "Export")
+            menu.autoenablesItems = false
+            let hasBrowserItems = !model.browserItems.isEmpty
+            let targetURLs = model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)
+
+            let createCSVItem = NSMenuItem(
+                title: "Create CSV",
+                action: #selector(NativeThreePaneSplitViewController.exportExifToolCSVAction(_:)),
+                keyEquivalent: ""
+            )
+            createCSVItem.target = controller
+            createCSVItem.isEnabled = hasBrowserItems
+            createCSVItem.image = NSImage(systemSymbolName: "tablecells.badge.ellipsis", accessibilityDescription: nil)
+            menu.addItem(createCSVItem)
+
+            let photosState = model.fileActionState(for: .sendToPhotos, targetURLs: targetURLs)
+            let sendToPhotosItem = NSMenuItem(
+                title: "Send to Photos",
+                action: #selector(NativeThreePaneSplitViewController.sendToPhotosAction(_:)),
+                keyEquivalent: ""
+            )
+            sendToPhotosItem.target = controller
+            sendToPhotosItem.isEnabled = photosState.isEnabled
+            if let photosAppURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Photos") {
+                let appIcon = NSWorkspace.shared.icon(forFile: photosAppURL.path)
+                appIcon.size = NSSize(width: 16, height: 16)
+                sendToPhotosItem.image = appIcon
+            } else {
+                sendToPhotosItem.image = NSImage(systemSymbolName: "photo.on.rectangle", accessibilityDescription: nil)
+            }
+            menu.addItem(sendToPhotosItem)
+
+            let lightroomState = model.fileActionState(for: .sendToLightroomClassic, targetURLs: targetURLs)
+            let sendToLightroomClassicItem = NSMenuItem(
+                title: "Send to Lightroom Classic",
+                action: #selector(NativeThreePaneSplitViewController.sendToLightroomClassicAction(_:)),
+                keyEquivalent: ""
+            )
+            sendToLightroomClassicItem.target = controller
+            sendToLightroomClassicItem.isEnabled = lightroomState.isEnabled
+            if let lightroomAppURL = model.lightroomClassicApplicationURL(for: targetURLs) {
+                let appIcon = NSWorkspace.shared.icon(forFile: lightroomAppURL.path)
+                appIcon.size = NSSize(width: 16, height: 16)
+                sendToLightroomClassicItem.image = appIcon
+            } else {
+                sendToLightroomClassicItem.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
+            }
+            menu.addItem(sendToLightroomClassicItem)
+
+            return menu
+        }
+
         private func makePresetsMenu(model: AppModel) -> NSMenu {
             guard let controller else { return NSMenu(title: "Presets") }
             let menu = NSMenu(title: "Presets")
@@ -2131,6 +2217,7 @@ private extension NSToolbarItem.Identifier {
     static let viewMode = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ViewMode")
     static let sort = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.Sort")
     static let importTools = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.Import")
+    static let exportTools = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.Export")
     static let presetTools = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.PresetTools")
     static let zoomOut = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ZoomOut")
     static let zoomIn = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ZoomIn")
