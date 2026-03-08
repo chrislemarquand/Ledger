@@ -605,6 +605,9 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         static let imageManagePresets = 9_310
         static let imageApplyPreset = 9_311
 
+        static let imageBatchRenameSelection = 9_312
+        static let imageBatchRenameFolder = 9_313
+
         static let helpExifToolDocs = 9_401
     }
 
@@ -1085,6 +1088,28 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
         menu.addItem(.separator())
 
+        let batchRenameSelectionItem = NSMenuItem(
+            title: "Batch Rename Selection…",
+            action: #selector(batchRenameSelectionAction(_:)),
+            keyEquivalent: ""
+        )
+        batchRenameSelectionItem.image = NSImage(systemSymbolName: "pencil.and.list.clipboard", accessibilityDescription: nil)
+        batchRenameSelectionItem.tag = MenuTag.imageBatchRenameSelection
+        batchRenameSelectionItem.target = self
+        menu.addItem(batchRenameSelectionItem)
+
+        let batchRenameFolderItem = NSMenuItem(
+            title: "Batch Rename Folder…",
+            action: #selector(batchRenameFolderAction(_:)),
+            keyEquivalent: ""
+        )
+        batchRenameFolderItem.image = NSImage(systemSymbolName: "pencil.and.list.clipboard", accessibilityDescription: nil)
+        batchRenameFolderItem.tag = MenuTag.imageBatchRenameFolder
+        batchRenameFolderItem.target = self
+        menu.addItem(batchRenameFolderItem)
+
+        menu.addItem(.separator())
+
         let presetsItem = NSMenuItem(title: "Presets", action: nil, keyEquivalent: "")
         presetsItem.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: nil)
         presetsItem.submenu = makePresetsSubmenu()
@@ -1229,6 +1254,10 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             menuItem.state = model.browserSort == .size ? .on : .off
         } else if menuItem.action == #selector(sortByKindAction(_:)) {
             menuItem.state = model.browserSort == .kind ? .on : .off
+        } else if menuItem.action == #selector(batchRenameSelectionAction(_:)) {
+            return model.fileActionState(for: .batchRenameSelection, targetURLs: Array(model.selectedFileURLs)).isEnabled
+        } else if menuItem.action == #selector(batchRenameFolderAction(_:)) {
+            return model.fileActionState(for: .batchRenameFolder, targetURLs: model.browserItems.map(\.url)).isEnabled
         }
         return true
     }
@@ -1378,8 +1407,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         if model.hasPendingEdits(inImportScope: scope) {
             let alert = NSAlert()
             alert.alertStyle = .warning
-            alert.messageText = "Staged edits are not included in ExifTool CSV export."
-            alert.informativeText = "Export reads current file metadata from disk. Apply staged edits first if you want them included."
+            alert.messageText = "Prepared metadata changes aren’t included in ExifTool CSV export."
+            alert.informativeText = "Export reads metadata currently written to disk. Apply metadata changes first to include them."
             alert.addButton(withTitle: "Cancel")
             alert.addButton(withTitle: "Export Anyway")
             let response = alert.runModal()
@@ -1401,7 +1430,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             } catch {
                 let alert = NSAlert()
                 alert.alertStyle = .warning
-                alert.messageText = "Export Failed"
+                alert.messageText = "Couldn’t export ExifTool CSV."
                 alert.informativeText = error.localizedDescription
                 alert.addButton(withTitle: "OK")
                 alert.runModal()
@@ -1526,8 +1555,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             let alert = NSAlert()
             alert.alertStyle = .warning
             let pendingCount = model.pendingEditedFileCount
-            alert.messageText = "Apply Metadata Changes?"
-            alert.informativeText = "Metadata changes for \(pendingCount) image(s) in this folder will be written to disk. This can’t be undone."
+            alert.messageText = "Apply metadata changes?"
+            alert.informativeText = "This writes metadata changes to \(pendingCount) image(s). This can’t be undone."
             alert.addButton(withTitle: "Apply")
             alert.addButton(withTitle: "Cancel")
             if let window = view.window {
@@ -1573,6 +1602,16 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     func restoreAllFromBackupAction(_: Any?) {
         let allURLs = model.browserItems.map(\.url)
         model.restoreLastOperation(for: allURLs)
+    }
+
+    @objc
+    func batchRenameSelectionAction(_: Any?) {
+        model.beginBatchRename(scope: .selection)
+    }
+
+    @objc
+    func batchRenameFolderAction(_: Any?) {
+        model.beginBatchRename(scope: .folder)
     }
 
     @objc
@@ -1642,7 +1681,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         guard let presetID = model.selectedPresetID,
               let preset = model.preset(withID: presetID)
         else {
-            model.statusMessage = "Select a preset first."
+            model.statusMessage = "Select a preset to apply."
             return
         }
         confirmAndApplyPreset(preset: preset)
@@ -1655,7 +1694,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
               let presetID = UUID(uuidString: raw),
               let preset = model.preset(withID: presetID)
         else {
-            model.statusMessage = "Preset not found."
+            model.statusMessage = "Couldn’t find that preset."
             return
         }
         model.selectedPresetID = presetID
@@ -1675,7 +1714,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     private func confirmAndApplyPreset(preset: MetadataPreset) {
         let fileCount = model.selectedFileURLs.count
         guard fileCount > 0 else {
-            model.statusMessage = "Select one or more files first."
+            model.statusMessage = "Select one or more files to apply the preset."
             return
         }
 

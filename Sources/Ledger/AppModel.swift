@@ -279,6 +279,8 @@ final class AppModel: ObservableObject {
         case applyMetadataChanges
         case clearMetadataChanges
         case restoreFromLastBackup
+        case batchRenameSelection
+        case batchRenameFolder
     }
 
     struct FileActionState: Hashable {
@@ -493,6 +495,9 @@ final class AppModel: ObservableObject {
     @Published var pendingImportSourceKind: ImportSourceKind? {
         didSet { notifyInspectorDidChange() }
     }
+    @Published var pendingBatchRenameScope: BatchRenameScope?
+    @Published var isRenaming = false
+    @Published var renameProgress: (completed: Int, total: Int) = (0, 0)
     // Search UI removed for v1.0 (name-only, aesthetically wrong). Property kept
     // so filteredBrowserItems/rebuildFilteredBrowserItems can be wired up for R14
     // (metadata-aware search) without a data-model rewrite.
@@ -685,8 +690,8 @@ final class AppModel: ObservableObject {
             statusMessage = "\(AppBrand.displayName) requires ExifTool to work. Try reinstalling the app."
             Task { @MainActor in
                 let alert = NSAlert()
-                alert.messageText = "\(AppBrand.displayName) requires exiftool"
-                alert.informativeText = "The exiftool executable could not be found. The app bundle may be corrupted. Please reinstall \(AppBrand.displayName)."
+                alert.messageText = "\(AppBrand.displayName) requires ExifTool"
+                alert.informativeText = "The ExifTool executable couldn’t be found. The app may be corrupted. Reinstall \(AppBrand.displayName)."
                 alert.alertStyle = .critical
                 alert.addButton(withTitle: "OK")
                 alert.runModal()
@@ -860,6 +865,20 @@ final class AppModel: ObservableObject {
                 symbolName: "arrow.uturn.backward.circle",
                 isEnabled: keepBackups && hasRestorable
             )
+        case .batchRenameSelection:
+            return FileActionState(
+                id: id,
+                title: "Batch Rename Selection…",
+                symbolName: "pencil.and.list.clipboard",
+                isEnabled: hasSelection
+            )
+        case .batchRenameFolder:
+            return FileActionState(
+                id: id,
+                title: "Batch Rename Folder…",
+                symbolName: "pencil.and.list.clipboard",
+                isEnabled: !browserItems.isEmpty
+            )
         }
     }
 
@@ -877,6 +896,10 @@ final class AppModel: ObservableObject {
             clearPendingEdits(for: normalized)
         case .restoreFromLastBackup:
             restoreLastOperation(for: normalized)
+        case .batchRenameSelection:
+            beginBatchRename(scope: .selection)
+        case .batchRenameFolder:
+            beginBatchRename(scope: .folder)
         }
     }
 
@@ -1140,7 +1163,7 @@ final class AppModel: ObservableObject {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "You have unsaved metadata changes."
-        alert.informativeText = "Discard unsaved edits before \(actionDescription)?"
+        alert.informativeText = "Discard prepared changes before \(actionDescription)?"
         alert.addButton(withTitle: "Discard Changes")
         alert.addButton(withTitle: "Cancel")
         return alert.runModal() == .alertFirstButtonReturn
@@ -1154,7 +1177,7 @@ final class AppModel: ObservableObject {
         invalidateAllBrowserThumbnails()
         invalidateInspectorPreviews(for: browserItems.map(\.url))
         recalculateInspectorState(forceNotify: true)
-        setStatusMessage("Discarded unsaved metadata changes.", autoClearAfterSuccess: true)
+        setStatusMessage("Discarded prepared metadata changes.", autoClearAfterSuccess: true)
     }
 
     func clearPendingEdits(for fileURLs: [URL]) {
@@ -1191,6 +1214,10 @@ final class AppModel: ObservableObject {
         let unreachableCount = files.count - reachableFiles.count
 
         guard !reachableFiles.isEmpty else {
+            presentBlockingWarning(
+                title: "Couldn’t apply metadata changes.",
+                message: "The selected source is unavailable. Reconnect the drive, then refresh and try again."
+            )
             setStatusMessage(
                 "Selected source is unavailable. Reconnect the drive, then refresh and apply again.",
                 autoClearAfterSuccess: false
@@ -1227,6 +1254,10 @@ final class AppModel: ObservableObject {
 
         guard !writableFiles.isEmpty else {
             let n = preflightFailed.count
+            presentBlockingWarning(
+                title: "Couldn’t apply metadata changes.",
+                message: "\(n == 1 ? "1 file is" : "\(n) files are") locked or not writable. Unlock files or fix permissions, then try again."
+            )
             setStatusMessage(
                 "\(n == 1 ? "1 file is" : "\(n) files are") locked or not writable — no changes applied.",
                 autoClearAfterSuccess: false
@@ -1238,7 +1269,7 @@ final class AppModel: ObservableObject {
             let alert = NSAlert()
             alert.alertStyle = .warning
             alert.messageText = "Apply metadata changes?"
-            alert.informativeText = "This will write staged changes to \(writableFiles.count) file(s)."
+            alert.informativeText = "This will write prepared metadata changes to \(writableFiles.count) file(s)."
             alert.addButton(withTitle: "Apply")
             alert.addButton(withTitle: "Cancel")
             guard alert.runModal() == .alertFirstButtonReturn else { return }
@@ -1368,18 +1399,18 @@ final class AppModel: ObservableObject {
                 )
             } else if result.succeeded.isEmpty {
                 let firstError = result.failed.first?.message ?? "Unknown write error."
-                statusMessage = "Couldn’t apply changes. \(firstError)"
+                statusMessage = "Couldn’t apply metadata changes. \(firstError)"
                 let failedNames = result.failed.prefix(5).map { $0.fileURL.lastPathComponent }.joined(separator: "\n")
                 Task { @MainActor in
                     let alert = NSAlert()
-                    alert.messageText = "Apply failed"
-                    alert.informativeText = "Could not write metadata to \(result.failed.count) file(s):\n\(failedNames)\n\n\(firstError)"
+                    alert.messageText = "Couldn’t apply metadata changes."
+                    alert.informativeText = "Couldn’t write metadata for \(result.failed.count) file(s):\n\(failedNames)\n\n\(firstError)"
                     alert.alertStyle = .warning
                     alert.addButton(withTitle: "OK")
                     alert.runModal()
                 }
             } else {
-                statusMessage = "Applied \(result.succeeded.count) of \(result.succeeded.count + result.failed.count) — \(result.failed.count) failed"
+                statusMessage = "Applied metadata changes to \(result.succeeded.count) of \(result.succeeded.count + result.failed.count) file(s). \(result.failed.count) failed."
             }
             applyMetadataCompleted = applyMetadataTotal
             clearMetadataUndoHistory()
@@ -1402,10 +1433,18 @@ final class AppModel: ObservableObject {
 
     func restoreLastOperation() {
         guard keepBackups else {
+            presentBlockingWarning(
+                title: "Couldn’t restore metadata.",
+                message: "Backups are turned off in Settings."
+            )
             statusMessage = "Backups are disabled in Settings."
             return
         }
         guard !lastOperationIDs.isEmpty else {
+            presentBlockingWarning(
+                title: "Couldn’t restore metadata.",
+                message: "No backup is available to restore."
+            )
             statusMessage = "No backup to restore."
             return
         }
@@ -1415,11 +1454,19 @@ final class AppModel: ObservableObject {
 
     func restoreLastOperation(for fileURLs: [URL]) {
         guard keepBackups else {
+            presentBlockingWarning(
+                title: "Couldn’t restore metadata.",
+                message: "Backups are turned off in Settings."
+            )
             statusMessage = "Backups are disabled in Settings."
             return
         }
         let requestedFiles = Array(Set(fileURLs))
         guard !requestedFiles.isEmpty else {
+            presentBlockingWarning(
+                title: "Couldn’t restore metadata.",
+                message: "Select one or more files to restore."
+            )
             statusMessage = "Select images to restore from backup."
             return
         }
@@ -1432,6 +1479,10 @@ final class AppModel: ObservableObject {
 
         let skippedCount = requestedFiles.count - operationIDsToRestore.count
         guard !operationIDsToRestore.isEmpty else {
+            presentBlockingWarning(
+                title: "Couldn’t restore metadata.",
+                message: "No backup is available for the selected files."
+            )
             statusMessage = "No backup available for the selected images."
             return
         }
@@ -1500,14 +1551,14 @@ final class AppModel: ObservableObject {
                 let failedNames = summary.failed.prefix(5).map { $0.fileURL.lastPathComponent }.joined(separator: "\n")
                 Task { @MainActor in
                     let alert = NSAlert()
-                    alert.messageText = "Restore failed"
-                    alert.informativeText = "Could not restore \(summary.failed.count) file(s):\n\(failedNames)\n\n\(firstError)"
+                    alert.messageText = "Couldn’t restore metadata."
+                    alert.informativeText = "Couldn’t restore metadata for \(summary.failed.count) file(s):\n\(failedNames)\n\n\(firstError)"
                     alert.alertStyle = .warning
                     alert.addButton(withTitle: "OK")
                     alert.runModal()
                 }
             } else {
-                statusMessage = "Restored \(summary.succeeded.count) of \(summary.succeeded.count + summary.failed.count) — \(summary.failed.count) failed"
+                statusMessage = "Restored metadata for \(summary.succeeded.count) of \(summary.succeeded.count + summary.failed.count) file(s). \(summary.failed.count) failed."
             }
             await loadMetadataForSelection()
         }
@@ -1674,6 +1725,10 @@ final class AppModel: ObservableObject {
 
     func requestImport(sourceKind: ImportSourceKind) {
         guard !browserItems.isEmpty else {
+            presentBlockingWarning(
+                title: "Couldn’t start import.",
+                message: "Open a folder with images before importing."
+            )
             statusMessage = "Open a folder with images before importing."
             return
         }
@@ -1684,15 +1739,88 @@ final class AppModel: ObservableObject {
         pendingImportSourceKind = nil
     }
 
+    // MARK: - Batch Rename
+
+    func beginBatchRename(scope: BatchRenameScope) {
+        let canRename: Bool
+        switch scope {
+        case .selection:
+            canRename = !selectedFileURLs.isEmpty
+        case .folder:
+            canRename = !browserItems.isEmpty
+        }
+        guard canRename else { return }
+        pendingBatchRenameScope = scope
+    }
+
+    func dismissBatchRenameSheet() {
+        pendingBatchRenameScope = nil
+    }
+
+    func previewBatchRename(pattern: RenamePattern, scope: BatchRenameScope) async -> [RenamePlanEntry] {
+        let files = renameFiles(for: scope)
+        let service = BatchRenameService()
+        return await service.buildPlan(files: files, pattern: pattern)
+    }
+
+    func applyBatchRename(operation: RenameOperation) async {
+        let total = operation.files.count
+        guard total > 0 else { return }
+
+        isRenaming = true
+        renameProgress = (0, total)
+        let suffix = total == 1 ? "" : "s"
+        statusMessage = "Renaming \(total) file\(suffix)…"
+
+        let service = BatchRenameService()
+        let backupDirectory = AppBrand.currentSupportDirectoryURL().appendingPathComponent("Backups", isDirectory: true)
+        let manager = BackupManager(baseDirectory: backupDirectory)
+
+        do {
+            let result = try await service.execute(operation: operation, backupManager: manager)
+            let succeeded = result.succeeded.count
+            let failed = result.failed.count
+            if failed == 0 {
+                statusMessage = "Renamed \(succeeded) of \(total)"
+            } else {
+                statusMessage = "Renamed \(succeeded) of \(total) — \(failed) failed"
+            }
+            renameProgress = (succeeded, total)
+            // Reload the folder so the browser reflects the new names.
+            if let item = selectedSidebarItem {
+                await loadFiles(for: item.kind)
+            }
+        } catch {
+            statusMessage = "Rename failed: \(error.localizedDescription)"
+        }
+
+        isRenaming = false
+        pendingBatchRenameScope = nil
+    }
+
+    private func renameFiles(for scope: BatchRenameScope) -> [URL] {
+        switch scope {
+        case .selection:
+            let selectionSet = selectedFileURLs
+            let visibleSelection = filteredBrowserItems.map(\.url).filter { selectionSet.contains($0) }
+            // Fall back to the raw selection set when browser items haven't loaded yet
+            // (e.g. in unit tests or before a sidebar item is fully loaded).
+            if !visibleSelection.isEmpty { return visibleSelection }
+            return selectionSet.sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+        case .folder:
+            return filteredBrowserItems.map(\.url)
+        }
+    }
+
     func applyPreset(presetID: UUID) {
         guard let preset = preset(withID: presetID) else {
-            statusMessage = "Preset not found."
+            statusMessage = "Couldn’t find that preset."
             return
         }
 
         let files = Array(selectedFileURLs)
         guard !files.isEmpty else {
-            statusMessage = "Select images to apply a preset."
+            statusMessage = "Select one or more files to apply the preset."
             return
         }
 
@@ -1725,7 +1853,7 @@ final class AppModel: ObservableObject {
         recalculateInspectorState()
         let ignoredText = unknownTagIDs.isEmpty ? "" : " Ignored \(unknownTagIDs.count) unsupported preset field(s)."
         setStatusMessage(
-            "Staged preset “\(preset.name)” for \(files.count) file(s).\(ignoredText)",
+            "Prepared metadata changes from preset “\(preset.name)” for \(files.count) file(s).\(ignoredText) Ready to apply.",
             autoClearAfterSuccess: true
         )
     }
@@ -2914,7 +3042,7 @@ final class AppModel: ObservableObject {
         registerMetadataUndoIfNeeded(previous: previousState)
         recalculateInspectorState(forceNotify: true)
         setStatusMessage(
-            "Staged import for \(stagedFiles.count) file(s).",
+            "Prepared metadata changes for \(stagedFiles.count) file(s). Ready to apply.",
             autoClearAfterSuccess: true
         )
         return ImportStageSummary(
@@ -3372,8 +3500,8 @@ final class AppModel: ObservableObject {
             if !folderName.isEmpty {
                 let alert = NSAlert()
                 alert.alertStyle = .informational
-                alert.messageText = "\u{201c}\(folderName)\u{201d} No Longer Available"
-                alert.informativeText = "This folder could not be found — it may have been deleted or moved. It has been removed from \(sectionLabel) in \(AppBrand.displayName)."
+                alert.messageText = "\u{201c}\(folderName)\u{201d} is no longer available."
+                alert.informativeText = "This folder couldn’t be found. It may have been moved or deleted. It has been removed from \(sectionLabel) in \(AppBrand.displayName)."
                 alert.addButton(withTitle: "OK")
                 alert.runModal()
             }
@@ -5125,7 +5253,7 @@ final class AppModel: ObservableObject {
             guard !Task.isCancelled, self.previewPreloadID == preloadID else { return }
             self.previewPreloadTask = nil
             self.isPreviewPreloading = false
-            self.setStatusMessage("Metadata loaded", autoClearAfterSuccess: true)
+            self.setStatusMessage("Loaded metadata.", autoClearAfterSuccess: true)
         }
     }
 
@@ -5535,6 +5663,10 @@ final class AppModel: ObservableObject {
         return metadataByFile[fileURL]
     }
 
+    /// User-facing copy contract:
+    /// - Status text is short, plain language, and action-oriented.
+    /// - Use "prepared" (not "staged") for pre-apply metadata changes.
+    /// - Status bar is for non-blocking updates; blocking surprises must use a modal.
     private func setStatusMessage(_ message: String, autoClearAfterSuccess: Bool) {
         statusResetTask?.cancel()
         statusResetTask = nil
@@ -5547,6 +5679,15 @@ final class AppModel: ObservableObject {
             self.statusMessage = "Ready"
             self.statusResetTask = nil
         }
+    }
+
+    private func presentBlockingWarning(title: String, message: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     private func persistInspectorFieldVisibility() {
@@ -5574,7 +5715,7 @@ final class AppModel: ObservableObject {
             }
         }
         if changed {
-            setStatusMessage("Removed staged values for hidden inspector fields.", autoClearAfterSuccess: true)
+            setStatusMessage("Removed prepared values for hidden inspector fields.", autoClearAfterSuccess: true)
         }
     }
 

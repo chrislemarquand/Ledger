@@ -135,6 +135,89 @@ public struct OperationResult: Codable, Hashable, Sendable {
     }
 }
 
+// MARK: - Batch Rename Domain
+
+public enum BatchRenameScope: String, Sendable, CaseIterable, Identifiable {
+    case selection
+    case folder
+
+    public var id: String { rawValue }
+}
+
+public enum RenameToken: Sendable, Equatable {
+    case text(String)
+    case originalName
+    case sequence(start: Int, step: Int, padding: Int)
+    case date(format: String)
+}
+
+public struct RenamePattern: Sendable, Equatable {
+    public var tokens: [RenameToken]
+    public var extensionOverride: String?      // stored without leading dot
+
+    public init(tokens: [RenameToken] = [], extensionOverride: String? = nil) {
+        self.tokens = tokens
+        self.extensionOverride = extensionOverride
+    }
+}
+
+public struct RenamePlanEntry: Sendable {
+    public let sourceURL: URL
+    public let proposedBasename: String        // before collision resolution
+    public let finalTargetURL: URL             // after collision resolution
+
+    public init(sourceURL: URL, proposedBasename: String, finalTargetURL: URL) {
+        self.sourceURL = sourceURL
+        self.proposedBasename = proposedBasename
+        self.finalTargetURL = finalTargetURL
+    }
+}
+
+public enum RenameConflictPolicy: Sendable { case autoDisambiguate }
+
+public struct RenameOperation: Sendable, Identifiable {
+    public let id: UUID
+    public let files: [URL]
+    public let pattern: RenamePattern
+    public let conflictPolicy: RenameConflictPolicy
+
+    public init(
+        id: UUID = UUID(),
+        files: [URL],
+        pattern: RenamePattern,
+        conflictPolicy: RenameConflictPolicy = .autoDisambiguate
+    ) {
+        self.id = id
+        self.files = files
+        self.pattern = pattern
+        self.conflictPolicy = conflictPolicy
+    }
+}
+
+public struct RenameResult: Sendable {
+    public let operationID: UUID
+    public let succeeded: [URL]
+    public let failed: [(URL, any Error & Sendable)]
+    public let backupLocation: URL?
+    public let duration: TimeInterval
+
+    public init(
+        operationID: UUID,
+        succeeded: [URL],
+        failed: [(URL, any Error & Sendable)],
+        backupLocation: URL?,
+        duration: TimeInterval
+    ) {
+        self.operationID = operationID
+        self.succeeded = succeeded
+        self.failed = failed
+        self.backupLocation = backupLocation
+        self.duration = duration
+    }
+}
+
+// MARK: - Errors
+
 public enum ExifEditError: Error, LocalizedError {
     case exifToolNotFound
     case processFailed(code: Int32, stderr: String)
