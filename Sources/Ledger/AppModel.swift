@@ -2559,6 +2559,16 @@ final class AppModel: ObservableObject {
     }
 
     func placeholderForTag(_ tag: EditableTag) -> String {
+        // If any selected file has this tag staged to empty, do not show baseline
+        // placeholder text from disk; that obscures the fact that clear is staged.
+        let hasStagedClear = selectedFileURLs.contains { url in
+            guard let stagedValue = pendingEditsByFile[url]?[tag]?.value else { return false }
+            return stagedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        if hasStagedClear {
+            return ""
+        }
+
         if let baseline = baselineValues[tag] {
             return baseline ?? "Multiple values"
         }
@@ -4379,6 +4389,9 @@ final class AppModel: ObservableObject {
         let numbers: [Double] = matches.compactMap {
             Double(ns.substring(with: $0.range))
         }
+        let hasExplicitNegative = matches.first
+            .map { ns.substring(with: $0.range).trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("-") }
+            ?? false
 
         guard let first = numbers.first else { return nil }
         if numbers.count >= 3 {
@@ -4386,7 +4399,7 @@ final class AppModel: ObservableObject {
             let minutes = abs(numbers[1])
             let seconds = abs(numbers[2])
             let composed = degrees + (minutes / 60) + (seconds / 3600)
-            return first < 0 ? -composed : composed
+            return hasExplicitNegative ? -composed : composed
         }
         return first
     }

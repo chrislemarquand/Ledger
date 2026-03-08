@@ -571,39 +571,74 @@ struct InspectorView: View {
     }
 
     private func parseCoordinate(_ raw: String) -> Double? {
-        let upper = raw.uppercased()
-        let hasWestOrSouth = upper.contains("W") || upper.contains("S")
-        let hasEastOrNorth = upper.contains("E") || upper.contains("N")
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
 
-        if let direct = Double(raw) {
-            if direct == 0, hasWestOrSouth {
-                return -0
-            }
-            return hasWestOrSouth ? -abs(direct) : direct
+        if let direct = Double(trimmed), direct.isFinite {
+            return direct
         }
 
-        let numberMatches = raw.matches(of: /-?\d+(?:\.\d+)?/).map { Double($0.0) ?? 0 }
-        guard let first = numberMatches.first else { return nil }
+        let ns = trimmed as NSString
+        let regex = try? NSRegularExpression(pattern: "-?\\d+(?:\\.\\d+)?")
+        let matches = regex?.matches(in: trimmed, range: NSRange(location: 0, length: ns.length)) ?? []
+        guard let firstMatch = matches.first else { return nil }
 
-        let absoluteValue: Double
-        if numberMatches.count >= 3 {
+        let numbers: [Double] = matches.compactMap { Double(ns.substring(with: $0.range)) }
+        guard let first = numbers.first else { return nil }
+
+        let hasExplicitNegative = ns.substring(with: firstMatch.range)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .hasPrefix("-")
+
+        let magnitude: Double
+        if numbers.count >= 3 {
             let degrees = abs(first)
-            let minutes = abs(numberMatches[1])
-            let seconds = abs(numberMatches[2])
-            absoluteValue = degrees + (minutes / 60) + (seconds / 3600)
+            let minutes = abs(numbers[1])
+            let seconds = abs(numbers[2])
+            magnitude = degrees + (minutes / 60) + (seconds / 3600)
         } else {
-            absoluteValue = abs(first)
+            magnitude = abs(first)
         }
 
-        let hasExplicitNegative = first < 0
-        let signed = hasExplicitNegative || hasWestOrSouth
-            ? -absoluteValue
-            : absoluteValue
-
-        if hasEastOrNorth, signed == -0 {
-            return 0
+        let parsed = hasExplicitNegative ? -magnitude : magnitude
+        if let direction = coordinateDirection(in: trimmed) {
+            switch direction {
+            case .south, .west:
+                return -abs(parsed)
+            case .north, .east:
+                return abs(parsed)
+            }
         }
-        return signed
+        return parsed
+    }
+
+    private enum CoordinateDirection {
+        case north
+        case south
+        case east
+        case west
+    }
+
+    private func coordinateDirection(in raw: String) -> CoordinateDirection? {
+        let tokens = raw
+            .uppercased()
+            .split(whereSeparator: { !$0.isLetter })
+            .map(String.init)
+        for token in tokens.reversed() {
+            switch token {
+            case "N", "NORTH":
+                return .north
+            case "S", "SOUTH":
+                return .south
+            case "E", "EAST":
+                return .east
+            case "W", "WEST":
+                return .west
+            default:
+                continue
+            }
+        }
+        return nil
     }
 
     private func beginEditSessionIfNeeded(for tag: AppModel.EditableTag) {

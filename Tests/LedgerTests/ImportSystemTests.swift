@@ -11,6 +11,31 @@ final class ImportSystemTests: XCTestCase {
         XCTAssertEqual(options.matchStrategy, .rowParity)
     }
 
+    func testImportSessionGPXResetsAdvancedOptionsOnOpen() {
+        let defaults = UserDefaults.standard
+        let key = "\(AppBrand.identifierPrefix).import.options.\(ImportSourceKind.gpx.rawValue)"
+        let previousData = defaults.data(forKey: key)
+        defer {
+            if let previousData {
+                defaults.set(previousData, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
+        var persisted = ImportRunOptions.defaults(for: .gpx)
+        persisted.gpxToleranceSeconds = 321
+        persisted.gpxCameraOffsetSeconds = 45
+        ImportCoordinator().persist(options: persisted)
+
+        let model = makeModel()
+        let session = ImportSession(model: model, sourceKind: .gpx)
+        let gpxDefaults = ImportRunOptions.defaults(for: .gpx)
+
+        XCTAssertEqual(session.options.gpxToleranceSeconds, gpxDefaults.gpxToleranceSeconds)
+        XCTAssertEqual(session.options.gpxCameraOffsetSeconds, gpxDefaults.gpxCameraOffsetSeconds)
+    }
+
     func testCSVImportAdapterParsesFilenameAliasAndMappedFields() throws {
         let temp = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: temp) }
@@ -200,6 +225,157 @@ final class ImportSystemTests: XCTestCase {
         XCTAssertEqual(result.rows.count, 1)
         XCTAssertTrue(result.rows[0].fields.isEmpty)
         XCTAssertTrue(result.warnings.contains(where: { $0.message.localizedCaseInsensitiveContains("invalid") }))
+    }
+
+    func testCSVImportAdapterParsesExifToolRoundTripFormats() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let csv = temp.appendingPathComponent("exiftool-roundtrip.csv")
+        try """
+        SourceFile,Copy1:CreateDate,DateTimeDigitized,ExposureProgram,FocalLength,GPSAltitude,Flash
+        a.jpg,2025:10:09 15:29:48+01:00,2025:10:09 15:29:48+01:00,Shutter speed priority AE,50.0 mm,9.1 m Above Sea Level,"Off, Did not fire"
+        """.write(to: csv, atomically: true, encoding: .utf8)
+
+        var options = ImportRunOptions.defaults(for: .csv)
+        options.cameraTimezoneIdentifier = "Europe/London"
+        let context = ImportParseContext(
+            options: options,
+            sourceURL: csv,
+            auxiliaryURLs: [],
+            targetFiles: [],
+            tagCatalog: [
+                .init(id: "datetime-digitized", key: "CreateDate", namespace: .exif, label: "Date Time Digitized", section: "Date and Time", inputKind: .dateTime),
+                .init(
+                    id: "exif-exposure-program",
+                    key: "ExposureProgram",
+                    namespace: .exif,
+                    label: "Exposure Program",
+                    section: "Capture",
+                    inputKind: .enumChoice([
+                        .init(value: "0", label: "Unknown"),
+                        .init(value: "1", label: "Manual"),
+                        .init(value: "2", label: "Program AE"),
+                        .init(value: "3", label: "Aperture Priority"),
+                        .init(value: "4", label: "Shutter Priority"),
+                    ])
+                ),
+                .init(id: "exif-focal", key: "FocalLength", namespace: .exif, label: "Focal Length", section: "Capture", inputKind: .decimal),
+                .init(id: "exif-gps-alt", key: "GPSAltitude", namespace: .exif, label: "Altitude", section: "Location", inputKind: .decimal),
+                .init(
+                    id: "exif-flash",
+                    key: "Flash",
+                    namespace: .exif,
+                    label: "Flash",
+                    section: "Capture",
+                    inputKind: .enumChoice([
+                        .init(value: "0", label: "No Flash"),
+                        .init(value: "1", label: "Fired"),
+                        .init(value: "16", label: "Off"),
+                    ])
+                ),
+            ],
+            metadataByFile: [:]
+        )
+
+        let result = try CSVImportAdapter().parse(context: context)
+        XCTAssertEqual(result.rows.count, 1)
+        XCTAssertTrue(result.warnings.isEmpty, "ExifTool CSV round-trip formats should parse without invalid-value warnings.")
+
+        let fieldsByTag = Dictionary(uniqueKeysWithValues: result.rows[0].fields.map { ($0.tagID, $0.value) })
+        XCTAssertEqual(fieldsByTag["datetime-digitized"], "2025:10:09 15:29:48")
+        XCTAssertEqual(fieldsByTag["exif-exposure-program"], "4")
+        XCTAssertEqual(fieldsByTag["exif-focal"], "50")
+        XCTAssertEqual(fieldsByTag["exif-gps-alt"], "9.1")
+        XCTAssertEqual(fieldsByTag["exif-flash"], "16")
+
+        let digitizedCount = result.rows[0].fields.filter { $0.tagID == "datetime-digitized" }.count
+        XCTAssertEqual(digitizedCount, 1, "Duplicate columns mapping to the same tag should collapse to one field.")
+    }
+
+    func testCSVImportAdapterParsesLatLonCompassDirectionsWithoutSignRegression() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let csv = temp.appendingPathComponent("gps-directions.csv")
+        let csvContent = [
+            "SourceFile,GPSLatitude,GPSLongitude",
+            #"a.jpg,"51 deg 28' 0.86"" N","0 deg 13' 45.41"" W""#,
+            #"b.jpg,"33 deg 52' 0.00"" S","151 deg 12' 0.00"" E""#,
+            "c.jpg,-33.865143,-151.209900",
+            #"d.jpg,51,"-0 deg 13' 45.41"""#,
+        ].joined(separator: "\n")
+        try csvContent.write(to: csv, atomically: true, encoding: .utf8)
+
+        let options = ImportRunOptions.defaults(for: .csv)
+        let context = ImportParseContext(
+            options: options,
+            sourceURL: csv,
+            auxiliaryURLs: [],
+            targetFiles: [],
+            tagCatalog: [
+                .init(id: "exif-gps-lat", key: "GPSLatitude", namespace: .exif, label: "Latitude", section: "Location", inputKind: .gpsCoordinate),
+                .init(id: "exif-gps-lon", key: "GPSLongitude", namespace: .exif, label: "Longitude", section: "Location", inputKind: .gpsCoordinate),
+            ],
+            metadataByFile: [:]
+        )
+
+        let result = try CSVImportAdapter().parse(context: context)
+        XCTAssertEqual(result.rows.count, 4)
+        XCTAssertTrue(result.warnings.isEmpty)
+
+        let row1 = Dictionary(uniqueKeysWithValues: result.rows[0].fields.map { ($0.tagID, $0.value) })
+        XCTAssertEqual(row1["exif-gps-lat"], "51.466905555556")
+        XCTAssertEqual(row1["exif-gps-lon"], "-0.229280555556")
+
+        let row2 = Dictionary(uniqueKeysWithValues: result.rows[1].fields.map { ($0.tagID, $0.value) })
+        XCTAssertEqual(row2["exif-gps-lat"], "-33.866666666667")
+        XCTAssertEqual(row2["exif-gps-lon"], "151.2")
+
+        let row3 = Dictionary(uniqueKeysWithValues: result.rows[2].fields.map { ($0.tagID, $0.value) })
+        XCTAssertEqual(row3["exif-gps-lat"], "-33.865143")
+        XCTAssertEqual(row3["exif-gps-lon"], "-151.2099")
+
+        let row4 = Dictionary(uniqueKeysWithValues: result.rows[3].fields.map { ($0.tagID, $0.value) })
+        XCTAssertEqual(row4["exif-gps-lat"], "51")
+        XCTAssertEqual(row4["exif-gps-lon"], "-0.229280555556")
+    }
+
+    func testCSVImportAdapterParsesExifToolLocationFieldsWithCopyVariants() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let csv = temp.appendingPathComponent("exiftool-location-roundtrip.csv")
+        let csvContent = [
+            "SourceFile,Copy1:GPSAltitude,Copy1:GPSLatitude,Copy1:GPSLongitude,GPSAltitude,GPSLatitude,GPSLongitude,GPSImgDirection",
+            #"a.jpg,9.1 m,"51 deg 28' 0.86""","0 deg 13' 45.41""",9.1 m Above Sea Level,"51 deg 28' 0.86"" N","0 deg 13' 45.41"" W",171.0121766"#,
+        ].joined(separator: "\n")
+        try csvContent.write(to: csv, atomically: true, encoding: .utf8)
+
+        let options = ImportRunOptions.defaults(for: .csv)
+        let context = ImportParseContext(
+            options: options,
+            sourceURL: csv,
+            auxiliaryURLs: [],
+            targetFiles: [],
+            tagCatalog: [
+                .init(id: "exif-gps-lat", key: "GPSLatitude", namespace: .exif, label: "Latitude", section: "Location", inputKind: .gpsCoordinate),
+                .init(id: "exif-gps-lon", key: "GPSLongitude", namespace: .exif, label: "Longitude", section: "Location", inputKind: .gpsCoordinate),
+                .init(id: "exif-gps-alt", key: "GPSAltitude", namespace: .exif, label: "Altitude", section: "Location", inputKind: .decimal),
+                .init(id: "exif-gps-direction", key: "GPSImgDirection", namespace: .exif, label: "Direction", section: "Location", inputKind: .decimal),
+            ],
+            metadataByFile: [:]
+        )
+
+        let result = try CSVImportAdapter().parse(context: context)
+        XCTAssertEqual(result.rows.count, 1)
+        XCTAssertTrue(result.warnings.isEmpty, "ExifTool location columns should parse without invalid-value warnings.")
+
+        let row = Dictionary(uniqueKeysWithValues: result.rows[0].fields.map { ($0.tagID, $0.value) })
+        XCTAssertEqual(row["exif-gps-lat"], "51.466905555556")
+        XCTAssertEqual(row["exif-gps-lon"], "-0.229280555556")
+        XCTAssertEqual(row["exif-gps-alt"], "9.1")
+        XCTAssertEqual(row["exif-gps-direction"], "171.0121766")
     }
 
     func testCSVImportAdapterRowParityRespectsStartAndCount() throws {
@@ -1146,6 +1322,7 @@ final class ImportSystemTests: XCTestCase {
 
         let session = ImportSession(model: model, sourceKind: .csv)
         session.preparedRun = preparedRun
+        session.options.emptyValuePolicy = .clear
         let success = await session.performImport(model: model)
         XCTAssertTrue(success)
 
@@ -1203,6 +1380,7 @@ final class ImportSystemTests: XCTestCase {
 
         let session = ImportSession(model: model, sourceKind: .csv)
         session.preparedRun = preparedRun
+        session.options.emptyValuePolicy = .skip
         let success = await session.performImport(model: model)
         XCTAssertTrue(success)
 
@@ -1266,6 +1444,69 @@ final class ImportSystemTests: XCTestCase {
 
         // Seed a baseline snapshot so importMetadataSnapshots can overlay staged import values.
         model.metadataByFile = [file: FileMetadataSnapshot(fileURL: file, fields: [])]
+        let snapshots = await model.importMetadataSnapshots(for: [file])
+        let lens = snapshots[file]?.fields.first(where: { $0.namespace == .exif && $0.key == "LensModel" })?.value
+        XCTAssertEqual(lens, "EF24-105mm f4L IS USM")
+    }
+
+    func testImportSessionEOSAutoStageDoesNotCrashWhenMatchedTargetsContainDuplicates() async throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let mappingCSV = temp.appendingPathComponent("lensfocalength.csv")
+        try """
+        Focal length (mm),Lens 1,Lens 2,Lens 3
+        36,EF24-105mm f4L IS USM,,
+        """.write(to: mappingCSV, atomically: true, encoding: .utf8)
+
+        let model = makeModel()
+        let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.browserItems = [
+            AppModel.BrowserItem(url: file, name: file.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+        ]
+        model.metadataByFile = [file: FileMetadataSnapshot(fileURL: file, fields: [])]
+
+        var options = ImportRunOptions.defaults(for: .eos1v)
+        options.scope = .folder
+        let row1 = ImportRow(
+            sourceLine: 2,
+            sourceIdentifier: "001.jpg",
+            targetSelector: .rowNumber(1),
+            fields: [.init(tagID: "exif-focal", value: "36 mm")]
+        )
+        let row2 = ImportRow(
+            sourceLine: 3,
+            sourceIdentifier: "002.jpg",
+            targetSelector: .rowNumber(2),
+            fields: [.init(tagID: "exif-focal", value: "36 mm")]
+        )
+        let preparedRun = ImportPreparedRun(
+            options: options,
+            parsedAsSourceKind: .eos1v,
+            parseResult: ImportParseResult(rows: [row1, row2], warnings: []),
+            matchResult: ImportMatchResult(
+                matched: [
+                    ImportRowMatch(row: row1, targetURL: file),
+                    ImportRowMatch(row: row2, targetURL: file),
+                ],
+                conflicts: [],
+                warnings: []
+            ),
+            previewSummary: ImportPreviewSummary(
+                sourceKind: .eos1v,
+                parsedRows: 2,
+                matchedRows: 2,
+                conflictedRows: 0,
+                warnings: 0,
+                fieldWrites: 2
+            )
+        )
+
+        let session = ImportSession(model: model, sourceKind: .eos1v, eosLensMappingURL: mappingCSV)
+        session.preparedRun = preparedRun
+        let success = await session.performImport(model: model)
+        XCTAssertTrue(success)
+
         let snapshots = await model.importMetadataSnapshots(for: [file])
         let lens = snapshots[file]?.fields.first(where: { $0.namespace == .exif && $0.key == "LensModel" })?.value
         XCTAssertEqual(lens, "EF24-105mm f4L IS USM")
@@ -1360,6 +1601,100 @@ final class ImportSystemTests: XCTestCase {
         XCTAssertEqual(lensB, "EF40mm f2.8 STM")
     }
 
+    func testImportSessionEOSApplyToRemainingAtFocalPromptsOnce() async throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let mappingCSV = temp.appendingPathComponent("lensfocalength.csv")
+        try """
+        Focal length (mm),Lens 1,Lens 2,Lens 3
+        40,EF24-105mm f4L IS USM,EF40mm f2.8 STM,
+        """.write(to: mappingCSV, atomically: true, encoding: .utf8)
+
+        let model = makeModel()
+        let fileA = URL(fileURLWithPath: "/tmp/\(UUID().uuidString)-a.jpg")
+        let fileB = URL(fileURLWithPath: "/tmp/\(UUID().uuidString)-b.jpg")
+        let fileC = URL(fileURLWithPath: "/tmp/\(UUID().uuidString)-c.jpg")
+        model.browserItems = [
+            AppModel.BrowserItem(url: fileA, name: fileA.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+            AppModel.BrowserItem(url: fileB, name: fileB.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+            AppModel.BrowserItem(url: fileC, name: fileC.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+        ]
+        model.metadataByFile = [
+            fileA: FileMetadataSnapshot(fileURL: fileA, fields: []),
+            fileB: FileMetadataSnapshot(fileURL: fileB, fields: []),
+            fileC: FileMetadataSnapshot(fileURL: fileC, fields: []),
+        ]
+
+        var options = ImportRunOptions.defaults(for: .eos1v)
+        options.scope = .folder
+        let rowA = ImportRow(
+            sourceLine: 2,
+            sourceIdentifier: "001.jpg",
+            targetSelector: .rowNumber(1),
+            fields: [.init(tagID: "exif-focal", value: "40 mm")]
+        )
+        let rowB = ImportRow(
+            sourceLine: 3,
+            sourceIdentifier: "002.jpg",
+            targetSelector: .rowNumber(2),
+            fields: [.init(tagID: "exif-focal", value: "40 mm")]
+        )
+        let rowC = ImportRow(
+            sourceLine: 4,
+            sourceIdentifier: "003.jpg",
+            targetSelector: .rowNumber(3),
+            fields: [.init(tagID: "exif-focal", value: "40 mm")]
+        )
+        let preparedRun = ImportPreparedRun(
+            options: options,
+            parsedAsSourceKind: .eos1v,
+            parseResult: ImportParseResult(rows: [rowA, rowB, rowC], warnings: []),
+            matchResult: ImportMatchResult(
+                matched: [
+                    ImportRowMatch(row: rowA, targetURL: fileA),
+                    ImportRowMatch(row: rowB, targetURL: fileB),
+                    ImportRowMatch(row: rowC, targetURL: fileC),
+                ],
+                conflicts: [],
+                warnings: []
+            ),
+            previewSummary: ImportPreviewSummary(
+                sourceKind: .eos1v,
+                parsedRows: 3,
+                matchedRows: 3,
+                conflictedRows: 0,
+                warnings: 0,
+                fieldWrites: 3
+            )
+        )
+
+        var prompts: [ImportSession.EOSLensChoiceRequest] = []
+        let session = ImportSession(
+            model: model,
+            sourceKind: .eos1v,
+            eosLensMappingURL: mappingCSV,
+            lensChoiceDecisionProvider: { request in
+                prompts.append(request)
+                return ImportSession.EOSLensChoiceDecision(
+                    lens: "EF24-105mm f4L IS USM",
+                    applyToRemainingAtFocal: true
+                )
+            }
+        )
+        session.preparedRun = preparedRun
+        let success = await session.performImport(model: model)
+        XCTAssertTrue(success)
+        XCTAssertEqual(prompts.count, 1)
+        XCTAssertEqual(prompts.first?.remainingRowsAtFocal, 2)
+
+        let snapshots = await model.importMetadataSnapshots(for: [fileA, fileB, fileC])
+        let lenses = [fileA, fileB, fileC].map { file in
+            snapshots[file]?.fields.first(where: { $0.namespace == .exif && $0.key == "LensModel" })?.value
+        }
+        XCTAssertEqual(lenses, ["EF24-105mm f4L IS USM", "EF24-105mm f4L IS USM", "EF24-105mm f4L IS USM"])
+    }
+
     func testImportSessionEOSAmbiguousLensChoiceCancelAbortsImport() async throws {
         let temp = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: temp) }
@@ -1428,6 +1763,125 @@ final class ImportSystemTests: XCTestCase {
         let title = snapshots[file]?.fields.first(where: { $0.namespace == .xmp && $0.key == "Title" })?.value
         XCTAssertNil(lens)
         XCTAssertNil(title)
+    }
+
+    func testImportSessionUsesCurrentEmptyPolicyWhenPreparedRunExists() async throws {
+        let model = makeModel()
+        let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.browserItems = [
+            AppModel.BrowserItem(url: file, name: file.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+        ]
+        model.metadataByFile = [
+            file: FileMetadataSnapshot(
+                fileURL: file,
+                fields: [
+                    MetadataField(key: "Title", namespace: .xmp, value: "Old Title"),
+                    MetadataField(key: "Make", namespace: .exif, value: "Canon"),
+                ]
+            ),
+        ]
+
+        var staleOptions = ImportRunOptions.defaults(for: .csv)
+        staleOptions.scope = .folder
+        staleOptions.emptyValuePolicy = .clear
+
+        let row = ImportRow(
+            sourceLine: 2,
+            sourceIdentifier: file.lastPathComponent,
+            targetSelector: .filename(file.lastPathComponent),
+            fields: [.init(tagID: "xmp-title", value: "New Title")]
+        )
+        let stalePreparedRun = ImportPreparedRun(
+            options: staleOptions,
+            parsedAsSourceKind: .csv,
+            parseResult: ImportParseResult(rows: [row], warnings: []),
+            matchResult: ImportMatchResult(
+                matched: [ImportRowMatch(row: row, targetURL: file)],
+                conflicts: [],
+                warnings: []
+            ),
+            previewSummary: ImportPreviewSummary(
+                sourceKind: .csv,
+                parsedRows: 1,
+                matchedRows: 1,
+                conflictedRows: 0,
+                warnings: 0,
+                fieldWrites: 1
+            )
+        )
+
+        let session = ImportSession(model: model, sourceKind: .csv)
+        session.preparedRun = stalePreparedRun
+        session.options.emptyValuePolicy = .skip // changed after preview
+        let success = await session.performImport(model: model)
+        XCTAssertTrue(success)
+
+        let snapshots = await model.importMetadataSnapshots(for: [file])
+        let title = snapshots[file]?.fields.first(where: { $0.namespace == .xmp && $0.key == "Title" })?.value
+        let make = snapshots[file]?.fields.first(where: { $0.namespace == .exif && $0.key == "Make" })?.value
+        XCTAssertEqual(title, "New Title")
+        XCTAssertEqual(make, "Canon", "Skip policy should retain missing fields when current options changed after preview.")
+    }
+
+    func testImportSessionUsesCurrentSelectedTagsWhenPreparedRunExists() async throws {
+        let model = makeModel()
+        let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.browserItems = [
+            AppModel.BrowserItem(url: file, name: file.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+        ]
+        model.metadataByFile = [
+            file: FileMetadataSnapshot(
+                fileURL: file,
+                fields: [
+                    MetadataField(key: "Title", namespace: .xmp, value: "Old Title"),
+                    MetadataField(key: "Make", namespace: .exif, value: "Canon"),
+                ]
+            ),
+        ]
+
+        var options = ImportRunOptions.defaults(for: .csv)
+        options.scope = .folder
+        options.selectedTagIDs = [] // stale preview options = all fields
+
+        let row = ImportRow(
+            sourceLine: 2,
+            sourceIdentifier: file.lastPathComponent,
+            targetSelector: .filename(file.lastPathComponent),
+            fields: [
+                .init(tagID: "xmp-title", value: "New Title"),
+                .init(tagID: "exif-make", value: "Nikon"),
+            ]
+        )
+        let preparedRun = ImportPreparedRun(
+            options: options,
+            parsedAsSourceKind: .csv,
+            parseResult: ImportParseResult(rows: [row], warnings: []),
+            matchResult: ImportMatchResult(
+                matched: [ImportRowMatch(row: row, targetURL: file)],
+                conflicts: [],
+                warnings: []
+            ),
+            previewSummary: ImportPreviewSummary(
+                sourceKind: .csv,
+                parsedRows: 1,
+                matchedRows: 1,
+                conflictedRows: 0,
+                warnings: 0,
+                fieldWrites: 2
+            )
+        )
+
+        let session = ImportSession(model: model, sourceKind: .csv)
+        session.preparedRun = preparedRun
+        session.options.selectedTagIDs = ["xmp-title"] // changed after preview
+        let success = await session.performImport(model: model)
+        XCTAssertTrue(success)
+
+        let snapshots = await model.importMetadataSnapshots(for: [file])
+        let title = snapshots[file]?.fields.first(where: { $0.namespace == .xmp && $0.key == "Title" })?.value
+        let make = snapshots[file]?.fields.first(where: { $0.namespace == .exif && $0.key == "Make" })?.value
+        XCTAssertEqual(title, "New Title")
+        XCTAssertEqual(make, "Canon", "Only currently selected fields should stage when import is committed.")
     }
 
     func testImportMetadataSnapshotsOverlaysStagedDateValues() async throws {
