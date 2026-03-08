@@ -422,6 +422,13 @@ final class AppModel: ObservableObject {
         let stagedValuesByFile: [URL: StagedEditRecord]
     }
 
+    struct EditableTagSectionGroup: Identifiable {
+        let section: String
+        let tags: [EditableTag]
+
+        var id: String { section }
+    }
+
     private struct PendingEditState: Equatable {
         let pendingEditsByFile: [URL: [EditableTag: StagedEditRecord]]
         let pendingImageOpsByFile: [URL: [StagedImageOperation]]
@@ -529,6 +536,7 @@ final class AppModel: ObservableObject {
     @Published private var inspectorPreviewImages: [URL: NSImage] = [:]
     @Published private var inspectorPreviewRenderedSide: [URL: CGFloat] = [:]
     private var mixedTags: Set<EditableTag> = []
+    private var editSessionSnapshotsByTagID: [String: EditSessionSnapshot] = [:]
     /// Set to true the first time selectSidebar(id:) is called, meaning the user
     /// has explicitly chosen a sidebar item (vs. SwiftUI auto-selecting at startup).
     private var hasHadExplicitSidebarSelection = false
@@ -1815,6 +1823,23 @@ final class AppModel: ObservableObject {
         recalculateInspectorState()
     }
 
+    func beginEditSessionSnapshotIfNeeded(for tag: EditableTag) {
+        guard editSessionSnapshotsByTagID[tag.id] == nil else { return }
+        editSessionSnapshotsByTagID[tag.id] = makeEditSessionSnapshot(for: tag)
+    }
+
+    func editSessionSnapshot(forTagID tagID: String) -> EditSessionSnapshot? {
+        editSessionSnapshotsByTagID[tagID]
+    }
+
+    func removeEditSessionSnapshot(forTagID tagID: String) {
+        editSessionSnapshotsByTagID[tagID] = nil
+    }
+
+    func clearEditSessionSnapshots() {
+        editSessionSnapshotsByTagID.removeAll()
+    }
+
     func editableTag(forID id: String) -> EditableTag? {
         activeEditableTagsByID[id]
     }
@@ -2680,16 +2705,23 @@ final class AppModel: ObservableObject {
         selectedFileURLs.compactMap { metadataByFile[$0] }
     }
 
-    var groupedEditableTags: [(section: String, tags: [EditableTag])] {
-        var result: [(section: String, tags: [EditableTag])] = []
-        for tag in activeEditableTags {
-            if let index = result.firstIndex(where: { $0.section == tag.section }) {
-                result[index].tags.append(tag)
-            } else {
-                result.append((section: tag.section, tags: [tag]))
+    var groupedEditableTags: [String: [EditableTag]] {
+        Dictionary(grouping: activeEditableTags, by: \.section)
+    }
+
+    var orderedEditableTagSections: [EditableTagSectionGroup] {
+        let grouped = groupedEditableTags
+        var orderedSections: [String] = []
+        for entry in activeInspectorFieldCatalog {
+            if !orderedSections.contains(entry.section) {
+                orderedSections.append(entry.section)
             }
         }
-        return result
+
+        return orderedSections.compactMap { section in
+            guard let tags = grouped[section], !tags.isEmpty else { return nil }
+            return EditableTagSectionGroup(section: section, tags: tags)
+        }
     }
 
     var inspectorFieldSections: [(section: String, fields: [FieldCatalogEntry])] {

@@ -34,7 +34,7 @@ struct PresetEditorSheet: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    ForEach(model.groupedEditableTags, id: \.section) { grouped in
+                    ForEach(model.orderedEditableTagSections) { grouped in
                         VStack(alignment: .leading, spacing: 8) {
                             Text(grouped.section.uppercased())
                                 .font(.caption.weight(.semibold))
