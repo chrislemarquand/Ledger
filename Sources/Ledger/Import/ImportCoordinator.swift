@@ -59,13 +59,23 @@ final class ImportCoordinator {
         parsedAsSourceKind = options.sourceKind
 
         let matchResult = matcher.match(parseResult: parseResult, targetFiles: targetFiles, options: options)
+        let catalogTagIDs = Set(tagCatalog.map(\.id))
+        let activeTagIDs: Set<String>
+        if options.selectedTagIDs.isEmpty {
+            activeTagIDs = catalogTagIDs
+        } else {
+            activeTagIDs = Set(options.selectedTagIDs).intersection(catalogTagIDs)
+        }
         let summary = ImportPreviewSummary(
             sourceKind: options.sourceKind,
             parsedRows: parseResult.rows.count,
             matchedRows: matchResult.matched.count,
             conflictedRows: matchResult.conflicts.count,
             warnings: matchResult.warnings.count,
-            fieldWrites: matchResult.matched.reduce(0) { $0 + $1.row.fields.count }
+            fieldWrites: matchResult.matched.reduce(0) { partial, match in
+                let matchedFieldIDs = Set(match.row.fields.map(\.tagID))
+                return partial + matchedFieldIDs.intersection(activeTagIDs).count
+            }
         )
         persist(options: options)
 

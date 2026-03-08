@@ -29,6 +29,7 @@ final class ImportSession: ObservableObject {
     @Published var isBusy = false
     @Published var previewError: String?
     private var previewTask: Task<Void, Never>?
+    private unowned let model: AppModel
 
     init(
         model: AppModel,
@@ -37,6 +38,7 @@ final class ImportSession: ObservableObject {
         lensChoiceProvider: ((EOSLensChoiceRequest) -> String?)? = nil,
         lensChoiceDecisionProvider: ((EOSLensChoiceRequest) -> EOSLensChoiceDecision?)? = nil
     ) {
+        self.model = model
         var opts = coordinator.loadPersistedOptions(for: sourceKind)
         self.eosLensMappingURLOverride = eosLensMappingURL
         self.lensChoiceProvider = lensChoiceProvider
@@ -138,7 +140,8 @@ final class ImportSession: ObservableObject {
             return false
         }
 
-        let eosLensResult = applyEOSLensPolicy(assignments: resolve.assignments, run: run)
+        let activeTagIDs = effectiveActiveTagIDSet(model: model)
+        let eosLensResult = applyEOSLensPolicy(assignments: resolve.assignments, run: run, activeTagIDs: activeTagIDs)
         if eosLensResult.cancelled {
             previewError = "⚠ Import cancelled while choosing EOS lens values."
             return false
@@ -151,7 +154,7 @@ final class ImportSession: ObservableObject {
             emptyValuePolicyOverride: options.emptyValuePolicy
         )
         let stageSummary = model.stageImportAssignments(
-            filterAssignments(policyAppliedAssignments, selectedTagIDs: options.selectedTagIDs),
+            filterAssignments(policyAppliedAssignments, selectedTagIDs: options.selectedTagIDs, activeTagIDs: activeTagIDs),
             sourceKind: run.options.sourceKind,
             emptyValuePolicy: options.emptyValuePolicy
         )
@@ -176,20 +179,26 @@ final class ImportSession: ObservableObject {
         return ids
     }
 
-    private func filterAssignments(_ assignments: [ImportAssignment], selectedTagIDs: [String]) -> [ImportAssignment] {
-        guard !selectedTagIDs.isEmpty else { return assignments }
-        let selected = Set(selectedTagIDs)
-        return assignments.map { ImportAssignment(targetURL: $0.targetURL, fields: $0.fields.filter { selected.contains($0.tagID) }) }
+    private func filterAssignments(
+        _ assignments: [ImportAssignment],
+        selectedTagIDs: [String],
+        activeTagIDs: Set<String>
+    ) -> [ImportAssignment] {
+        let selected = selectedTagIDs.isEmpty ? activeTagIDs : Set(selectedTagIDs).intersection(activeTagIDs)
+        return assignments.map {
+            ImportAssignment(targetURL: $0.targetURL, fields: $0.fields.filter { selected.contains($0.tagID) })
+        }
     }
 
     private func applyEOSLensPolicy(
         assignments: [ImportAssignment],
-        run: ImportPreparedRun
+        run: ImportPreparedRun,
+        activeTagIDs: Set<String>
     ) -> (assignments: [ImportAssignment], cancelled: Bool) {
         guard run.options.sourceKind == .eos1v else {
             return (assignments, false)
         }
-        if !run.options.selectedTagIDs.isEmpty, !run.options.selectedTagIDs.contains("exif-lens") {
+        guard activeTagIDs.contains("exif-lens") else {
             return (assignments, false)
         }
         let mapping = loadEOSLensMapping()
@@ -413,16 +422,11 @@ final class ImportSession: ObservableObject {
             return assignments
         }
 
-        let activeTagIDs: [String]
-        if !run.options.selectedTagIDs.isEmpty {
-            activeTagIDs = run.options.selectedTagIDs
-        } else {
-            activeTagIDs = model.importTagCatalog.map(\.id)
-        }
-        guard !activeTagIDs.isEmpty else {
+        let activeTagIDSet = effectiveActiveTagIDSet(model: model)
+        guard !activeTagIDSet.isEmpty else {
             return assignments
         }
-        let activeTagIDSet = Set(activeTagIDs)
+        let activeTagIDs = model.importTagCatalog.map(\.id).filter { activeTagIDSet.contains($0) }
 
         return assignments.map { assignment in
             var valueByTagID: [String: String] = [:]
@@ -440,11 +444,19 @@ final class ImportSession: ObservableObject {
     }
 
     private func effectiveFieldCount(for fields: [ImportFieldValue]) -> Int {
-        let ids = options.selectedTagIDs
+        let ids = Array(effectiveActiveTagIDSet(model: model))
         let uniqueFieldTagIDs = Set(fields.map(\.tagID))
         guard !ids.isEmpty else { return uniqueFieldTagIDs.count }
         let selected = Set(ids)
         return uniqueFieldTagIDs.filter { selected.contains($0) }.count
+    }
+
+    private func effectiveActiveTagIDSet(model: AppModel) -> Set<String> {
+        let catalogIDs = Set(model.importTagCatalog.map(\.id))
+        if options.selectedTagIDs.isEmpty {
+            return catalogIDs
+        }
+        return Set(options.selectedTagIDs).intersection(catalogIDs)
     }
 
     var previewText: String {
