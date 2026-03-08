@@ -78,16 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc
     func showSettingsWindowAction(_: Any?) {
-        guard let appModel else { return }
-        if settingsWindowController == nil {
-            settingsWindowController = SettingsWindowController(model: appModel)
-        }
         settingsWindowController?.showWindowAndActivate()
-    }
-
-    @objc(showSettingsWindow:)
-    func showSettingsWindow(_ sender: Any?) {
-        showSettingsWindowAction(sender)
     }
 
     private func configureApplicationMenu() {
@@ -126,7 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: ","
         )
         settingsItem.keyEquivalentModifierMask = .command
-        settingsItem.target = self
+        settingsItem.target = nil
         settingsItem.image = NSImage(systemSymbolName: "gear", accessibilityDescription: nil)
         appMenu.addItem(settingsItem)
         appMenu.addItem(.separator())
@@ -211,6 +202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // behavior for this app so stale restoration metadata is ignored.
         UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")
         let model = AppModel()
+        settingsWindowController = SettingsWindowController(model: model)
         let windowController = MainWindowController(model: model)
         mainWindowController = windowController
         windowController.showWindow(nil)
