@@ -99,7 +99,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
     private var didConfigureWindow = false
     private var nativeToolbarDelegate: NativeToolbarDelegate?
-    private weak var appMenuForInjection: NSMenu?
     private weak var fileMenuForInjection: NSMenu?
     private weak var editMenuForInjection: NSMenu?
     private weak var viewMenuForSortInjection: NSMenu?
@@ -332,7 +331,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         installBrowserFocusRequestObserverIfNeeded()
         DispatchQueue.main.async { [weak self] in
             self?.focusBrowserPane()
-            self?.injectAppMenuIfNeeded()
             self?.injectFileMenuIfNeeded()
             self?.injectEditMenuIfNeeded()
             self?.injectSortMenuIfNeeded()
@@ -349,7 +347,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.injectAppMenuIfNeeded()
                 self?.injectSortMenuIfNeeded()
                 self?.injectFileMenuIfNeeded()
                 self?.injectEditMenuIfNeeded()
@@ -656,16 +653,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         rebuildFileMenu(submenu)
     }
 
-    private func injectAppMenuIfNeeded() {
-        guard let mainMenu = NSApp.mainMenu,
-              let appItem = mainMenu.items.first,
-              let submenu = appItem.submenu
-        else { return }
-        appMenuForInjection = submenu
-        submenu.delegate = self
-        rebuildAppMenu(submenu)
-    }
-
     private func injectEditMenuIfNeeded() {
         guard let submenu = ensureTopLevelMenu(title: "Edit", insertAfterTitle: "File") else { return }
         editMenuForInjection = submenu
@@ -871,91 +858,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             menu.addItem(.separator())
             systemItems.forEach { menu.addItem($0) }
         }
-    }
-
-    private func rebuildAppMenu(_ menu: NSMenu) {
-        ensureAppMenuBaseline(in: menu)
-
-        let removePrefixes = ["Settings", "Preferences"]
-        for item in menu.items.reversed() {
-            if removePrefixes.contains(where: { item.title.hasPrefix($0) }) {
-                menu.removeItem(item)
-            }
-        }
-
-        if let aboutItem = menu.items.first(where: { $0.title.hasPrefix("About") }) {
-            aboutItem.target = NSApp.delegate
-            aboutItem.action = #selector(AppDelegate.showAboutPanelMenuAction(_:))
-        }
-
-        // Clean separator runs that can happen after removing settings/preferences.
-        var index = menu.items.count - 1
-        while index > 0 {
-            if menu.items[index].isSeparatorItem && menu.items[index - 1].isSeparatorItem {
-                menu.removeItem(at: index)
-            }
-            index -= 1
-        }
-        if let first = menu.items.first, first.isSeparatorItem { menu.removeItem(at: 0) }
-        if let last = menu.items.last, last.isSeparatorItem { menu.removeItem(at: menu.items.count - 1) }
-    }
-
-    private func ensureAppMenuBaseline(in menu: NSMenu) {
-        let hasAbout = menu.items.contains { $0.title.hasPrefix("About") }
-        let hasQuit = menu.items.contains { $0.action == #selector(NSApplication.terminate(_:)) }
-        guard !hasAbout || !hasQuit else { return }
-
-        menu.removeAllItems()
-
-        let appName = AppBrand.displayName
-
-        let aboutItem = NSMenuItem(
-            title: "About \(appName)",
-            action: #selector(AppDelegate.showAboutPanelMenuAction(_:)),
-            keyEquivalent: ""
-        )
-        aboutItem.target = NSApp.delegate
-        menu.addItem(aboutItem)
-        menu.addItem(.separator())
-
-        let servicesRoot = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
-        let servicesMenu = NSMenu(title: "Services")
-        servicesRoot.submenu = servicesMenu
-        NSApp.servicesMenu = servicesMenu
-        menu.addItem(servicesRoot)
-        menu.addItem(.separator())
-
-        let hideItem = NSMenuItem(
-            title: "Hide \(appName)",
-            action: #selector(NSApplication.hide(_:)),
-            keyEquivalent: "h"
-        )
-        hideItem.keyEquivalentModifierMask = .command
-        menu.addItem(hideItem)
-
-        let hideOthersItem = NSMenuItem(
-            title: "Hide Others",
-            action: #selector(NSApplication.hideOtherApplications(_:)),
-            keyEquivalent: "h"
-        )
-        hideOthersItem.keyEquivalentModifierMask = [.command, .option]
-        menu.addItem(hideOthersItem)
-
-        let showAllItem = NSMenuItem(
-            title: "Show All",
-            action: #selector(NSApplication.unhideAllApplications(_:)),
-            keyEquivalent: ""
-        )
-        menu.addItem(showAllItem)
-        menu.addItem(.separator())
-
-        let quitItem = NSMenuItem(
-            title: "Quit \(appName)",
-            action: #selector(NSApplication.terminate(_:)),
-            keyEquivalent: "q"
-        )
-        quitItem.keyEquivalentModifierMask = .command
-        menu.addItem(quitItem)
     }
 
     private func makeOpenWithSubmenu() -> NSMenu {
@@ -1238,9 +1140,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     // MARK: NSMenuDelegate
 
     func menuWillOpen(_ menu: NSMenu) {
-        if menu === appMenuForInjection {
-            rebuildAppMenu(menu)
-        } else if menu === fileMenuForInjection {
+        if menu === fileMenuForInjection {
             rebuildFileMenu(menu)
         } else if menu === editMenuForInjection {
             rebuildEditMenu(menu)
