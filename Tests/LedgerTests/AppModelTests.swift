@@ -8,7 +8,7 @@ import XCTest
 final class AppModelTests: XCTestCase {
     func testImportTagCatalogMirrorsGroupedEditableTags() {
         let model = makeModel()
-        let groupedIDs = model.groupedEditableTags.flatMap(\.tags).map(\.id)
+        let groupedIDs = model.orderedEditableTagSections.flatMap(\.tags).map(\.id)
         let catalogIDs = model.importTagCatalog.map(\.id)
         XCTAssertEqual(groupedIDs, catalogIDs)
     }

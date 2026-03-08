@@ -61,7 +61,7 @@ private struct InspectorPreviewActionLabel: View {
 }
 
 struct InspectorView: View {
-    let model: AppModel
+    @ObservedObject var model: AppModel
     private let topScrollStartInset: CGFloat = 56
     private let contentHorizontalInset: CGFloat = 16
     private let sectionInnerInset: CGFloat = 12
@@ -72,13 +72,10 @@ struct InspectorView: View {
         return formatter
     }()
     @FocusState private var focusedTagID: String?
-    @State private var editSessionSnapshots: [String: AppModel.EditSessionSnapshot] = [:]
     @State private var activeEditTagID: String?
     @State private var suppressNextFocusScrollAnimation = false
-    @State private var inspectorRefreshRevision: UInt64 = 0
 
     var body: some View {
-        let _ = inspectorRefreshRevision
         ScrollViewReader { proxy in
             ScrollView {
                 if model.selectedFileURLs.isEmpty {
@@ -190,7 +187,7 @@ struct InspectorView: View {
                         .padding(.horizontal, contentHorizontalInset)
                     }
 
-                    ForEach(model.groupedEditableTags, id: \.section) { grouped in
+                    ForEach(model.orderedEditableTagSections) { grouped in
                         DisclosureGroup(
                             isExpanded: Binding(
                                 get: { !model.isInspectorSectionCollapsed(grouped.section) },
@@ -403,7 +400,7 @@ struct InspectorView: View {
         }
         .onChange(of: model.selectedFileURLs) { _, _ in
             model.endUndoCoalescing()
-            editSessionSnapshots.removeAll()
+            model.clearEditSessionSnapshots()
             activeEditTagID = nil
             suppressNextFocusScrollAnimation = true
             // Defer @FocusState clear: setting it synchronously during the SwiftUI
@@ -414,16 +411,10 @@ struct InspectorView: View {
                 focusedTagID = nil
             }
         }
-        .onAppear {
-            inspectorRefreshRevision = model.inspectorRefreshRevision
-        }
-        .onReceive(model.$inspectorRefreshRevision.removeDuplicates()) { revision in
-            inspectorRefreshRevision = revision
-        }
         .onExitCommand {
             let targetTagID = focusedTagID ?? activeEditTagID
             guard let targetTagID,
-                  let snapshot = editSessionSnapshots[targetTagID]
+                  let snapshot = model.editSessionSnapshot(forTagID: targetTagID)
             else {
                 self.focusedTagID = nil
                 NotificationCenter.default.post(name: .inspectorDidRequestBrowserFocus, object: nil)
@@ -436,7 +427,7 @@ struct InspectorView: View {
             DispatchQueue.main.async {
                 model.restoreEditSession(snapshot)
             }
-            editSessionSnapshots.removeValue(forKey: targetTagID)
+            model.removeEditSessionSnapshot(forTagID: targetTagID)
             activeEditTagID = nil
             self.focusedTagID = nil
             NotificationCenter.default.post(name: .inspectorDidRequestBrowserFocus, object: nil)
@@ -642,9 +633,7 @@ struct InspectorView: View {
     }
 
     private func beginEditSessionIfNeeded(for tag: AppModel.EditableTag) {
-        if editSessionSnapshots[tag.id] == nil {
-            editSessionSnapshots[tag.id] = model.makeEditSessionSnapshot(for: tag)
-        }
+        model.beginEditSessionSnapshotIfNeeded(for: tag)
         activeEditTagID = tag.id
     }
 
@@ -670,7 +659,7 @@ struct InspectorView: View {
     }
 
     private func focusableInspectorTagIDs() -> [String] {
-        model.groupedEditableTags
+        model.orderedEditableTagSections
             .filter { !model.isInspectorSectionCollapsed($0.section) }
             .flatMap(\.tags)
             .filter { tag in
