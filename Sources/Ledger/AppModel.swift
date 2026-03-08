@@ -358,6 +358,18 @@ final class AppModel: ObservableObject {
         let section: String
         let inputKind: ImportFieldInputKind
         let isEnabled: Bool
+
+        func withEnabled(_ isEnabled: Bool) -> FieldCatalogEntry {
+            FieldCatalogEntry(
+                id: id,
+                namespace: namespace,
+                key: key,
+                label: label,
+                section: section,
+                inputKind: inputKind,
+                isEnabled: isEnabled
+            )
+        }
     }
 
     struct PickerOption: Identifiable, Hashable {
@@ -444,6 +456,15 @@ final class AppModel: ObservableObject {
     }
     @Published var metadataByFile: [URL: FileMetadataSnapshot] = [:]
     @Published private(set) var activeInspectorFieldCatalog: [FieldCatalogEntry] = AppModel.defaultFieldCatalogEntries()
+    @Published var confirmBeforeApply = true {
+        didSet { UserDefaults.standard.set(confirmBeforeApply, forKey: Self.confirmBeforeApplyKey) }
+    }
+    @Published var autoRefreshMetadataAfterApply = true {
+        didSet { UserDefaults.standard.set(autoRefreshMetadataAfterApply, forKey: Self.autoRefreshAfterApplyKey) }
+    }
+    @Published var keepBackups = true {
+        didSet { UserDefaults.standard.set(keepBackups, forKey: Self.keepBackupsKey) }
+    }
     @Published var draftValues: [EditableTag: String] = [:]
     @Published var baselineValues: [EditableTag: String?] = [:]
     @Published var presets: [MetadataPreset] = []
@@ -557,6 +578,10 @@ final class AppModel: ObservableObject {
     private static let galleryZoomKey = "ui.gallery.zoom"
     private static let collapsedInspectorSectionsKey = "ui.inspector.collapsed.sections"
     private static let selectedPresetIDKey = "ui.presets.selected.id"
+    private static let confirmBeforeApplyKey = "ui.settings.confirm.before.apply"
+    private static let autoRefreshAfterApplyKey = "ui.settings.auto.refresh.after.apply"
+    private static let keepBackupsKey = "ui.settings.keep.backups"
+    private static let inspectorFieldVisibilityKey = "ui.settings.inspector.field.visibility"
     private static let legacyUserDefaultsPrefixes = ["Logbook"]
     private static let selectionMetadataBatchSize = 120
     private static let selectionMetadataDebounceNanoseconds: UInt64 = 90_000_000
@@ -672,6 +697,31 @@ final class AppModel: ObservableObject {
             as: [String].self
         ) ?? []
         collapsedInspectorSections = Set(storedCollapsed)
+        confirmBeforeApply = Self.firstUserDefaultsValue(
+            for: Self.confirmBeforeApplyKey,
+            defaults: defaults,
+            as: Bool.self
+        ) ?? true
+        autoRefreshMetadataAfterApply = Self.firstUserDefaultsValue(
+            for: Self.autoRefreshAfterApplyKey,
+            defaults: defaults,
+            as: Bool.self
+        ) ?? true
+        keepBackups = Self.firstUserDefaultsValue(
+            for: Self.keepBackupsKey,
+            defaults: defaults,
+            as: Bool.self
+        ) ?? true
+        let visibility = Self.firstUserDefaultsValue(
+            for: Self.inspectorFieldVisibilityKey,
+            defaults: defaults,
+            as: [String: Bool].self
+        ) ?? [:]
+        activeInspectorFieldCatalog = activeInspectorFieldCatalog.map { entry in
+            guard let enabled = visibility[entry.id] else { return entry }
+            return entry.withEnabled(enabled)
+        }
+        persistInspectorFieldVisibility()
         reconcileAndLoadFavorites()
         reconcileAndLoadRecentLocations()
         sidebarItems = composedSidebarItems()
@@ -800,7 +850,7 @@ final class AppModel: ObservableObject {
                 id: id,
                 title: "Restore from Backup",
                 symbolName: "arrow.uturn.backward.circle",
-                isEnabled: hasRestorable
+                isEnabled: keepBackups && hasRestorable
             )
         }
     }
@@ -1176,9 +1226,20 @@ final class AppModel: ObservableObject {
             return
         }
 
+        if confirmBeforeApply {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Apply metadata changes?"
+            alert.informativeText = "This will write staged changes to \(writableFiles.count) file(s)."
+            alert.addButton(withTitle: "Apply")
+            alert.addButton(withTitle: "Cancel")
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+        }
+
         isApplyingMetadata = true
         applyMetadataCompleted = 0
         applyMetadataTotal = writableFiles.count
+        let shouldKeepBackups = keepBackups
 
         Task {
             let startedAt = Date()
@@ -1196,15 +1257,20 @@ final class AppModel: ObservableObject {
                     continue
                 }
                 let operationID = UUID()
-                operationFilesByID[operationID] = fileURL
 
                 do {
                     if imageOps.isEmpty {
                         let operation = EditOperation(id: operationID, targetFiles: [fileURL], changes: patches)
-                        let result = try await engine.apply(operation: operation)
-                        operationIDs.append(result.operationID)
-                        if firstBackupLocation == nil {
-                            firstBackupLocation = result.backupLocation
+                        let result: OperationResult
+                        if shouldKeepBackups {
+                            result = try await engine.apply(operation: operation)
+                            operationIDs.append(result.operationID)
+                            operationFilesByID[result.operationID] = fileURL
+                            if firstBackupLocation == nil {
+                                firstBackupLocation = result.backupLocation
+                            }
+                        } else {
+                            result = try await engine.writeMetadataWithoutBackup(operation: operation)
                         }
                         if result.failed.isEmpty {
                             succeeded.append(fileURL)
@@ -1216,16 +1282,21 @@ final class AppModel: ObservableObject {
                         }
                     } else {
                         var didApplyImageOps = false
-                        let backupLocation = try await engine.createBackup(operationID: operationID, files: [fileURL])
-                        if firstBackupLocation == nil {
-                            firstBackupLocation = backupLocation
+                        if shouldKeepBackups {
+                            let backupLocation = try await engine.createBackup(operationID: operationID, files: [fileURL])
+                            operationFilesByID[operationID] = fileURL
+                            if firstBackupLocation == nil {
+                                firstBackupLocation = backupLocation
+                            }
                         }
 
                         try await Self.applyStagedImageOperations(imageOps, to: fileURL)
                         didApplyImageOps = true
 
                         if patches.isEmpty {
-                            operationIDs.append(operationID)
+                            if shouldKeepBackups {
+                                operationIDs.append(operationID)
+                            }
                             succeeded.append(fileURL)
                             pendingImageOpsByFile[fileURL] = nil
                             staleMetadataFiles.insert(fileURL)
@@ -1233,14 +1304,17 @@ final class AppModel: ObservableObject {
                             let metadataOperation = EditOperation(id: operationID, targetFiles: [fileURL], changes: patches)
                             let metadataResult = try await engine.writeMetadataWithoutBackup(operation: metadataOperation)
                             if metadataResult.failed.isEmpty {
-                                operationIDs.append(metadataResult.operationID)
+                                if shouldKeepBackups {
+                                    operationIDs.append(metadataResult.operationID)
+                                    operationFilesByID[metadataResult.operationID] = fileURL
+                                }
                                 succeeded.append(fileURL)
                                 pendingCommitsByFile[fileURL] = pendingEditsByFile[fileURL]?.mapValues(\.value)
                                 pendingEditsByFile[fileURL] = nil
                                 pendingImageOpsByFile[fileURL] = nil
                                 staleMetadataFiles.insert(fileURL)
                             } else {
-                                if didApplyImageOps {
+                                if shouldKeepBackups, didApplyImageOps {
                                     do { _ = try await engine.restore(operationID: operationID) }
                                     catch { logger.error("Fallback restore after metadata write failed: \(error)") }
                                 }
@@ -1250,7 +1324,7 @@ final class AppModel: ObservableObject {
                     }
                     removeStagedQuickLookPreviewFile(for: fileURL)
                 } catch {
-                    if !imageOps.isEmpty {
+                    if shouldKeepBackups, !imageOps.isEmpty {
                         do { _ = try await engine.restore(operationID: operationID) }
                         catch { logger.error("Fallback restore after apply error: \(error)") }
                     }
@@ -1303,8 +1377,13 @@ final class AppModel: ObservableObject {
             clearMetadataUndoHistory()
 
             Task { @MainActor [weak self] in
-                await self?.loadMetadataForSelection()
-                self?.isApplyingMetadata = false
+                guard let self else { return }
+                if self.autoRefreshMetadataAfterApply {
+                    await self.loadMetadataForSelection()
+                } else {
+                    self.recalculateInspectorState(forceNotify: true)
+                }
+                self.isApplyingMetadata = false
             }
         }
     }
@@ -1314,6 +1393,10 @@ final class AppModel: ObservableObject {
     }
 
     func restoreLastOperation() {
+        guard keepBackups else {
+            statusMessage = "Backups are disabled in Settings."
+            return
+        }
         guard !lastOperationIDs.isEmpty else {
             statusMessage = "No backup to restore."
             return
@@ -1323,6 +1406,10 @@ final class AppModel: ObservableObject {
     }
 
     func restoreLastOperation(for fileURLs: [URL]) {
+        guard keepBackups else {
+            statusMessage = "Backups are disabled in Settings."
+            return
+        }
         let requestedFiles = Array(Set(fileURLs))
         guard !requestedFiles.isEmpty else {
             statusMessage = "Select images to restore from backup."
@@ -2605,6 +2692,44 @@ final class AppModel: ObservableObject {
         return result
     }
 
+    var inspectorFieldSections: [(section: String, fields: [FieldCatalogEntry])] {
+        var result: [(section: String, fields: [FieldCatalogEntry])] = []
+        for entry in activeInspectorFieldCatalog {
+            if let index = result.firstIndex(where: { $0.section == entry.section }) {
+                result[index].fields.append(entry)
+            } else {
+                result.append((section: entry.section, fields: [entry]))
+            }
+        }
+        return result
+    }
+
+    func isInspectorFieldEnabled(_ fieldID: String) -> Bool {
+        activeInspectorFieldCatalog.first(where: { $0.id == fieldID })?.isEnabled ?? false
+    }
+
+    func isInspectorSectionEnabled(_ section: String) -> Bool {
+        let fields = activeInspectorFieldCatalog.filter { $0.section == section }
+        guard !fields.isEmpty else { return false }
+        return fields.allSatisfy(\.isEnabled)
+    }
+
+    func setInspectorFieldEnabled(fieldID: String, isEnabled: Bool) {
+        let updated = activeInspectorFieldCatalog.map { entry in
+            guard entry.id == fieldID else { return entry }
+            return entry.withEnabled(isEnabled)
+        }
+        applyInspectorFieldCatalogUpdate(updated)
+    }
+
+    func setInspectorSectionEnabled(section: String, isEnabled: Bool) {
+        let updated = activeInspectorFieldCatalog.map { entry in
+            guard entry.section == section else { return entry }
+            return entry.withEnabled(isEnabled)
+        }
+        applyInspectorFieldCatalogUpdate(updated)
+    }
+
     var importTagCatalog: [ImportTagDescriptor] {
         activeInspectorFieldCatalog.filter(\.isEnabled).map {
             ImportTagDescriptor(
@@ -3010,6 +3135,14 @@ final class AppModel: ObservableObject {
             return
         }
         refreshSidebarItems(selectFirstWhenMissing: false)
+    }
+
+    func clearRecentFolders() {
+        locationItems.removeAll()
+        recentLocationLastOpenedAtByID.removeAll()
+        persistRecentLocations()
+        refreshSidebarItems(selectFirstWhenMissing: false)
+        setStatusMessage("Cleared recent folders.", autoClearAfterSuccess: true)
     }
 
     func canMoveFavoriteUp(_ item: SidebarItem) -> Bool {
@@ -4041,8 +4174,10 @@ final class AppModel: ObservableObject {
             return []
         }
 
+        let enabledIDs = Set(activeInspectorFieldCatalog.filter(\.isEnabled).map(\.id))
         var allPatches: [MetadataPatch] = []
         for (tag, record) in staged {
+            guard enabledIDs.contains(tag.id) else { continue }
             allPatches.append(contentsOf: patchesForTag(tag, rawValue: record.value))
         }
         return allPatches
@@ -5379,6 +5514,35 @@ final class AppModel: ObservableObject {
             guard let self, self.statusMessage == message else { return }
             self.statusMessage = "Ready"
             self.statusResetTask = nil
+        }
+    }
+
+    private func persistInspectorFieldVisibility() {
+        let visibility = Dictionary(uniqueKeysWithValues: activeInspectorFieldCatalog.map { ($0.id, $0.isEnabled) })
+        UserDefaults.standard.set(visibility, forKey: Self.inspectorFieldVisibilityKey)
+    }
+
+    private func applyInspectorFieldCatalogUpdate(_ updated: [FieldCatalogEntry]) {
+        guard updated != activeInspectorFieldCatalog else { return }
+        activeInspectorFieldCatalog = updated
+        persistInspectorFieldVisibility()
+        dropPendingEditsForDisabledFields()
+        recalculateInspectorState(forceNotify: true)
+    }
+
+    private func dropPendingEditsForDisabledFields() {
+        let enabledIDs = Set(activeInspectorFieldCatalog.filter(\.isEnabled).map(\.id))
+        var changed = false
+        for fileURL in pendingEditsByFile.keys {
+            guard let staged = pendingEditsByFile[fileURL] else { continue }
+            let filtered = staged.filter { enabledIDs.contains($0.key.id) }
+            if filtered.count != staged.count {
+                pendingEditsByFile[fileURL] = filtered.isEmpty ? nil : filtered
+                changed = true
+            }
+        }
+        if changed {
+            setStatusMessage("Removed staged values for hidden inspector fields.", autoClearAfterSuccess: true)
         }
     }
 

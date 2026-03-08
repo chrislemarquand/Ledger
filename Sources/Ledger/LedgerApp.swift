@@ -18,6 +18,7 @@ enum LedgerMain {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindowController: MainWindowController?
+    private var settingsWindowController: SettingsWindowController?
     private var isShowingTerminateConfirmation = false
     private var allowImmediateTermination = false
     var appModel: AppModel? { mainWindowController?.appModel }
@@ -75,6 +76,101 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showAboutPanel()
     }
 
+    @objc
+    func showSettingsWindowAction(_: Any?) {
+        guard let appModel else { return }
+        if settingsWindowController == nil {
+            settingsWindowController = SettingsWindowController(model: appModel)
+        }
+        settingsWindowController?.showWindowAndActivate()
+    }
+
+    @objc(showSettingsWindow:)
+    func showSettingsWindow(_ sender: Any?) {
+        showSettingsWindowAction(sender)
+    }
+
+    private func configureApplicationMenu() {
+        let appName = AppBrand.displayName
+        let mainMenu = NSApp.mainMenu ?? NSMenu(title: "MainMenu")
+        if NSApp.mainMenu == nil {
+            NSApp.mainMenu = mainMenu
+        }
+
+        let appMenuItem: NSMenuItem
+        if let first = mainMenu.items.first {
+            appMenuItem = first
+        } else {
+            appMenuItem = NSMenuItem(title: appName, action: nil, keyEquivalent: "")
+            mainMenu.insertItem(appMenuItem, at: 0)
+        }
+        appMenuItem.title = appName
+
+        let appMenu = appMenuItem.submenu ?? NSMenu(title: appName)
+        appMenuItem.submenu = appMenu
+        appMenu.removeAllItems()
+
+        let aboutItem = NSMenuItem(
+            title: "About \(appName)",
+            action: #selector(showAboutPanelMenuAction(_:)),
+            keyEquivalent: ""
+        )
+        aboutItem.target = self
+        aboutItem.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: nil)
+        appMenu.addItem(aboutItem)
+        appMenu.addItem(.separator())
+
+        let settingsItem = NSMenuItem(
+            title: "Settings…",
+            action: #selector(showSettingsWindowAction(_:)),
+            keyEquivalent: ","
+        )
+        settingsItem.keyEquivalentModifierMask = .command
+        settingsItem.target = self
+        settingsItem.image = NSImage(systemSymbolName: "gear", accessibilityDescription: nil)
+        appMenu.addItem(settingsItem)
+        appMenu.addItem(.separator())
+
+        let servicesRoot = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
+        let servicesMenu = NSMenu(title: "Services")
+        servicesRoot.submenu = servicesMenu
+        NSApp.servicesMenu = servicesMenu
+        appMenu.addItem(servicesRoot)
+        appMenu.addItem(.separator())
+
+        let hideItem = NSMenuItem(
+            title: "Hide \(appName)",
+            action: #selector(NSApplication.hide(_:)),
+            keyEquivalent: "h"
+        )
+        hideItem.keyEquivalentModifierMask = .command
+        appMenu.addItem(hideItem)
+
+        let hideOthersItem = NSMenuItem(
+            title: "Hide Others",
+            action: #selector(NSApplication.hideOtherApplications(_:)),
+            keyEquivalent: "h"
+        )
+        hideOthersItem.keyEquivalentModifierMask = [.command, .option]
+        appMenu.addItem(hideOthersItem)
+
+        let showAllItem = NSMenuItem(
+            title: "Show All",
+            action: #selector(NSApplication.unhideAllApplications(_:)),
+            keyEquivalent: ""
+        )
+        appMenu.addItem(showAllItem)
+        appMenu.addItem(.separator())
+
+        let quitItem = NSMenuItem(
+            title: "Quit \(appName)",
+            action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q"
+        )
+        quitItem.keyEquivalentModifierMask = .command
+        appMenu.addItem(quitItem)
+    }
+
     private func bundledExifToolVersion() -> String? {
         guard let executablePath = Bundle.main.path(forResource: "exiftool/bin/exiftool", ofType: nil) else {
             return nil
@@ -110,6 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSWindow.allowsAutomaticWindowTabbing = false
+        configureApplicationMenu()
         // Belt-and-braces: disable system "Reopen windows when logging back in"
         // behavior for this app so stale restoration metadata is ignored.
         UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")
