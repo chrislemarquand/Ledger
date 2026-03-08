@@ -13,6 +13,9 @@
 		A100001D0000000000000001 /* Sources/Ledger/MainContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000D0000000000000001 /* Sources/Ledger/MainContentView.swift */; };
 		A100001E0000000000000001 /* Sources/ExifEditCore/BackupManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000110000000000000001 /* Sources/ExifEditCore/BackupManager.swift */; };
 		A100001F0000000000000001 /* Sources/ExifEditCore/Domain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000120000000000000001 /* Sources/ExifEditCore/Domain.swift */; };
+		D100000100000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000200000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift */; };
+		D100000300000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */; };
+		D100000500000000000000001 /* Tests/ExifEditCoreTests/BatchRenameServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000600000000000000001 /* Tests/ExifEditCoreTests/BatchRenameServiceTests.swift */; };
 		A10000200000000000000001 /* Sources/ExifEditCore/ExifEditEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000130000000000000001 /* Sources/ExifEditCore/ExifEditEngine.swift */; };
 		A10000210000000000000001 /* Sources/ExifEditCore/ExifToolCommandBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000140000000000000001 /* Sources/ExifEditCore/ExifToolCommandBuilder.swift */; };
 		A10000220000000000000001 /* Sources/ExifEditCore/ExifToolService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000150000000000000001 /* Sources/ExifEditCore/ExifToolService.swift */; };
@@ -83,6 +86,9 @@
 		A100000D0000000000000001 /* Sources/Ledger/MainContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/MainContentView.swift; sourceTree = SOURCE_ROOT; };
 		A10000110000000000000001 /* Sources/ExifEditCore/BackupManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/BackupManager.swift; sourceTree = SOURCE_ROOT; };
 		A10000120000000000000001 /* Sources/ExifEditCore/Domain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/Domain.swift; sourceTree = SOURCE_ROOT; };
+		D100000200000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/BatchRenameService.swift; sourceTree = SOURCE_ROOT; };
+		D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/BatchRenameSheetView.swift; sourceTree = SOURCE_ROOT; };
+		D100000600000000000000001 /* Tests/ExifEditCoreTests/BatchRenameServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/BatchRenameServiceTests.swift; sourceTree = SOURCE_ROOT; };
 		A10000130000000000000001 /* Sources/ExifEditCore/ExifEditEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/ExifEditEngine.swift; sourceTree = SOURCE_ROOT; };
 		A10000140000000000000001 /* Sources/ExifEditCore/ExifToolCommandBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/ExifToolCommandBuilder.swift; sourceTree = SOURCE_ROOT; };
 		A10000150000000000000001 /* Sources/ExifEditCore/ExifToolService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/ExifToolService.swift; sourceTree = SOURCE_ROOT; };
@@ -181,6 +187,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000180000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift */,
+				D100000600000000000000001 /* Tests/ExifEditCoreTests/BatchRenameServiceTests.swift */,
 				A10000190000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift */,
 				A100001A0000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift */,
 			);
@@ -224,6 +231,7 @@
 				C20000F00000000000000001 /* Sources/Ledger/Import */,
 				C20000F10000000000000001 /* Sources/Ledger/ImportUI */,
 				A100000B0000000000000001 /* Sources/Ledger/AppModel.swift */,
+				D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */,
 				A100000C0000000000000001 /* Sources/Ledger/LedgerApp.swift */,
 				A100000D0000000000000001 /* Sources/Ledger/MainContentView.swift */,
 				A10001410000000000000001 /* Sources/Ledger/Presets.swift */,
@@ -242,6 +250,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000110000000000000001 /* Sources/ExifEditCore/BackupManager.swift */,
+				D100000200000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift */,
 				A10000120000000000000001 /* Sources/ExifEditCore/Domain.swift */,
 				A10000130000000000000001 /* Sources/ExifEditCore/ExifEditEngine.swift */,
 				A10000140000000000000001 /* Sources/ExifEditCore/ExifToolCommandBuilder.swift */,
@@ -417,6 +426,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A100001B0000000000000001 /* Sources/Ledger/AppModel.swift in Sources */,
+				D100000300000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift in Sources */,
 				A100001C0000000000000001 /* Sources/Ledger/LedgerApp.swift in Sources */,
 				A100001D0000000000000001 /* Sources/Ledger/MainContentView.swift in Sources */,
 				A10001420000000000000001 /* Sources/Ledger/Presets.swift in Sources */,
@@ -450,6 +460,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A100001E0000000000000001 /* Sources/ExifEditCore/BackupManager.swift in Sources */,
+				D100000100000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift in Sources */,
 				A100001F0000000000000001 /* Sources/ExifEditCore/Domain.swift in Sources */,
 				A10000200000000000000001 /* Sources/ExifEditCore/ExifEditEngine.swift in Sources */,
 				A10000210000000000000001 /* Sources/ExifEditCore/ExifToolCommandBuilder.swift in Sources */,
@@ -463,6 +474,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000240000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift in Sources */,
+				D100000500000000000000001 /* Tests/ExifEditCoreTests/BatchRenameServiceTests.swift in Sources */,
 				A10000250000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift in Sources */,
 				A10000260000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift in Sources */,
 			);

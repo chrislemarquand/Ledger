@@ -600,6 +600,85 @@ final class AppModelTests: XCTestCase {
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }
+
+    // MARK: - Batch Rename action-state tests
+
+    func testBatchRenameSelectionDisabledWhenSelectionEmpty() {
+        let model = makeModel()
+        // No browser items or selection
+        let state = model.fileActionState(for: .batchRenameSelection, targetURLs: [])
+        XCTAssertFalse(state.isEnabled)
+    }
+
+    func testBatchRenameSelectionEnabledWhenSelectionNonEmpty() {
+        let fileURL = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        let model = makeModel()
+        let state = model.fileActionState(for: .batchRenameSelection, targetURLs: [fileURL])
+        XCTAssertTrue(state.isEnabled)
+    }
+
+    func testBatchRenameFolderDisabledWhenBrowserEmpty() {
+        let model = makeModel()
+        XCTAssertTrue(model.browserItems.isEmpty)
+        let state = model.fileActionState(for: .batchRenameFolder, targetURLs: [])
+        XCTAssertFalse(state.isEnabled)
+    }
+
+    func testBatchRenameFolderEnabledWhenBrowserNonEmpty() {
+        let model = makeModel()
+        model.browserItems = [makeBrowserItem(name: "photo.jpg")]
+        let state = model.fileActionState(for: .batchRenameFolder, targetURLs: [])
+        XCTAssertTrue(state.isEnabled)
+    }
+
+    func testBeginBatchRenameSelectionSetsPendingScope() {
+        let fileURL = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        let model = makeModel()
+        model.selectedFileURLs = [fileURL]
+        model.beginBatchRename(scope: .selection)
+        XCTAssertEqual(model.pendingBatchRenameScope, .selection)
+    }
+
+    func testBeginBatchRenameSelectionNoopWhenSelectionEmpty() {
+        let model = makeModel()
+        model.beginBatchRename(scope: .selection)
+        XCTAssertNil(model.pendingBatchRenameScope)
+    }
+
+    func testBeginBatchRenameFolderSetsPendingScope() {
+        let model = makeModel()
+        model.browserItems = [makeBrowserItem(name: "photo.jpg")]
+        model.beginBatchRename(scope: .folder)
+        XCTAssertEqual(model.pendingBatchRenameScope, .folder)
+    }
+
+    func testDismissBatchRenameSheetClearsPendingScope() {
+        let fileURL = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        let model = makeModel()
+        model.selectedFileURLs = [fileURL]
+        model.beginBatchRename(scope: .selection)
+        model.dismissBatchRenameSheet()
+        XCTAssertNil(model.pendingBatchRenameScope)
+    }
+
+    func testPreviewBatchRenameReturnsDeterministicPlan() async {
+        let model = makeModel()
+        let files = [
+            URL(fileURLWithPath: "/tmp/b.jpg"),
+            URL(fileURLWithPath: "/tmp/a.jpg"),
+        ]
+        model.selectedFileURLs = Set(files)
+        let plan = await model.previewBatchRename(
+            pattern: RenamePattern(tokens: [.sequence(start: 1, step: 1, padding: 2)]),
+            scope: .selection
+        )
+        // Plan should be sorted by name: a.jpg first, b.jpg second
+        XCTAssertEqual(plan.count, 2)
+        XCTAssertEqual(plan[0].sourceURL.lastPathComponent, "a.jpg")
+        XCTAssertEqual(plan[0].finalTargetURL.lastPathComponent, "01.jpg")
+        XCTAssertEqual(plan[1].sourceURL.lastPathComponent, "b.jpg")
+        XCTAssertEqual(plan[1].finalTargetURL.lastPathComponent, "02.jpg")
+    }
 }
 
 private func make1x1PNG() throws -> Data {

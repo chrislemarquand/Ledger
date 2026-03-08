@@ -470,6 +470,7 @@ struct InspectorView: View {
         )) { sourceKind in
             ImportSheetView(model: model, sourceKind: sourceKind)
         }
+        .batchRenameSheet(model: model)
     }
 
     private var photoCoordinate: CLLocationCoordinate2D? {
