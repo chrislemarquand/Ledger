@@ -27,33 +27,33 @@ Primary objective: get import right end-to-end.
 
 ### General UX
 - [ ] Status bar message audit: review all status messages for necessity; promote any that warrant it to modal dialogs.
+- [ ] UI/UX polish: settings pane layout and sizes.
 
 ### Inspector Groundwork (prerequisite for Settings)
-- [ ] `inspectorRefreshRevision`: eliminate the duplicate `@State` copy in `InspectorView`; model's `@Published` value should be the single source of truth.
-- [ ] Edit-session snapshots: move `editSessionSnapshots` out of `InspectorView` `@State` and into `AppModel` so edit-in-progress state is model-owned.
-- [ ] `groupedEditableTags`: migrate from tuple-array to dictionary-based grouping.
+- [x] `inspectorRefreshRevision`: eliminate the duplicate `@State` copy in `InspectorView`; model's `@Published` value is now the single source of truth.
+- [x] Edit-session snapshots: moved `editSessionSnapshots` out of `InspectorView` `@State` and into `AppModel` so edit-in-progress state is model-owned.
+- [x] `groupedEditableTags`: migrated from tuple-array to dictionary-based grouping (with stable ordered section projection for UI consumers).
 
 ### Import
-- [ ] Unified import framework and shared UI flow for:
-  - [ ] CSV
-  - [ ] GPX
-  - [ ] Reference Folder
-  - [ ] EOS 1V CSV
-- [ ] Single import flow: load source -> match/preview/conflicts -> target scope (selection/folder) -> apply.
-- [ ] EOS 1V ingest parity in Swift (mapping/normalization/matching semantics from existing EOS 1V tool).
-- [ ] EOS 1V lens-tag resolver architecture: remove hardcoded lens inference and route through a policy layer that can read future Settings defaults plus per-import overrides.
-- [ ] Import conflict-resolution UX (unmatched/conflict buckets, explicit user resolution).
-- [ ] Deterministic import reporting and dry-run parity.
-- [ ] **Reference-based metadata apply**: select one image as reference, apply chosen metadata fields to a selection. Uses ExifTool `-tagsFromFile`. Sheet UI: select reference file → choose field groups → preview diff → confirm.
+- [x] Unified import framework and shared UI flow for:
+  - [x] CSV
+  - [x] GPX
+  - [x] Reference Folder
+  - [x] EOS 1V CSV
+- [x] Single import flow: load source -> match/preview/conflicts -> target scope (selection/folder) -> apply.
+- [x] EOS 1V ingest parity in Swift (mapping/normalization/matching semantics from existing EOS 1V tool).
+- [x] EOS 1V lens-tag resolver architecture: remove hardcoded lens inference and route through a policy layer that can read future Settings defaults plus per-import overrides.
+- [ ] Import sheet preview/stage parity hardening + structured import report output.
+- [x] **Reference-based metadata apply**: select one image as reference, apply chosen metadata fields to a selection. Uses ExifTool `-tagsFromFile`. Sheet UI: select reference file → choose field groups → preview diff → confirm.
 
 ### Browser
 - [ ] Click-to-drag rubber-band selection in list and gallery views.
 
 ### Settings
-- [ ] Inspector field visibility controls.
-- [ ] Backup enable/disable controls with menu/context behavior alignment.
+- [x] Inspector field visibility controls.
+- [x] Backup enable/disable controls with menu/context behavior alignment.
 - [ ] Backup retention policy.
-- [ ] Clear recent folders action.
+- [x] Clear recent folders action (handled via existing context-menu remove flow).
 - [ ] EOS 1V import lens-tag policy controls:
   - [ ] Policy mode: `Do not write lens`, `Single lens for import`, `Focal-length mapping table`.
   - [ ] Unknown focal length behavior: `Leave empty`, `Use fallback`, or `Warn/skip`.
@@ -121,6 +121,7 @@ Moves before performance: search will expose large-folder performance gaps, maki
 - [ ] **Finder-style gallery view**: filmstrip along bottom, large preview at top — third browser mode alongside list and grid.
 - [ ] **Metadata export CSV/JSON**: select fields, export to CSV or JSON for spreadsheet editing or audit reporting.
 - [ ] **Import conflict-resolution UI (power-user)**: dedicated conflict workspace for unresolved/ambiguous import rows with per-row target choice, side-by-side field diff, and bulk resolve actions.
+- [ ] **EOS lens-tag resolver enhancements**: advanced policy presets and richer per-import/per-project lens mapping controls.
 - [ ] Inspector clear-field control (candidate): evaluate optional trailing `x.circle.fill` action per field for staged-clear UX, balancing discoverability vs native macOS conventions.
 - [ ] **Sidecar management**: XMP sidecar create/rebuild/apply; browser badges for sidecar-exists and sidecar-differs-from-embedded states.
 - [ ] ExifTool console: live readout of ExifTool commands and output as operations run, mirroring what would appear if running ExifTool directly in the terminal.

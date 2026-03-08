@@ -1,5 +1,4 @@
 import AppKit
-import SwiftUI
 
 @MainActor
 final class SettingsWindowController: NSWindowController {
@@ -35,12 +34,15 @@ final class SettingsWindowController: NSWindowController {
 
 @MainActor
 private final class SettingsTabViewController: NSTabViewController {
-    private weak var model: AppModel?
+    private let generalController: GeneralSettingsViewController
+    private let inspectorController: InspectorSettingsViewController
+
     private let generalHeight: CGFloat = 320
     private let inspectorHeight: CGFloat = 620
 
     init(model: AppModel) {
-        self.model = model
+        generalController = GeneralSettingsViewController(model: model)
+        inspectorController = InspectorSettingsViewController(model: model)
         super.init(nibName: nil, bundle: nil)
         tabStyle = .toolbar
     }
@@ -52,21 +54,21 @@ private final class SettingsTabViewController: NSTabViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        guard let model else { return }
 
-        let general = NSHostingController(rootView: GeneralSettingsView(model: model))
-        let generalItem = NSTabViewItem(viewController: general)
+        generalController.title = "General"
+        let generalItem = NSTabViewItem(viewController: generalController)
         generalItem.label = "General"
         generalItem.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "General")
 
-        let inspector = NSHostingController(rootView: InspectorSettingsView(model: model))
-        let inspectorItem = NSTabViewItem(viewController: inspector)
+        inspectorController.title = "Inspector"
+        let inspectorItem = NSTabViewItem(viewController: inspectorController)
         inspectorItem.label = "Inspector"
         inspectorItem.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: "Inspector")
 
         addTabViewItem(generalItem)
         addTabViewItem(inspectorItem)
         selectedTabViewItemIndex = 0
+        title = "General"
     }
 
     override func viewDidAppear() {
@@ -81,7 +83,10 @@ private final class SettingsTabViewController: NSTabViewController {
     func refreshWindowForSelectedTab(animated: Bool) {
         guard let window = view.window else { return }
         let selected = tabViewItems.indices.contains(selectedTabViewItemIndex) ? tabViewItems[selectedTabViewItemIndex] : nil
-        window.title = selected?.label ?? "Settings"
+        let selectedTitle = selected?.label ?? "Settings"
+        selected?.viewController?.title = selectedTitle
+        title = selectedTitle
+        window.title = selectedTitle
 
         let targetContentHeight: CGFloat
         switch selected?.label {
@@ -103,81 +108,242 @@ private final class SettingsTabViewController: NSTabViewController {
     }
 }
 
-private struct GeneralSettingsView: View {
-    @ObservedObject var model: AppModel
+@MainActor
+private final class GeneralSettingsViewController: NSViewController {
+    private unowned let model: AppModel
 
-    var body: some View {
-        Form {
-            Toggle("Confirm before Apply", isOn: Binding(
-                get: { model.confirmBeforeApply },
-                set: { value in
-                    DispatchQueue.main.async {
-                        model.confirmBeforeApply = value
-                    }
-                }
-            ))
+    private lazy var confirmBeforeApplyButton = makeCheckbox(
+        title: "Confirm before Apply",
+        action: #selector(confirmBeforeApplyToggled(_:))
+    )
 
-            Toggle("Auto-refresh metadata after Apply", isOn: Binding(
-                get: { model.autoRefreshMetadataAfterApply },
-                set: { value in
-                    DispatchQueue.main.async {
-                        model.autoRefreshMetadataAfterApply = value
-                    }
-                }
-            ))
+    private lazy var autoRefreshAfterApplyButton = makeCheckbox(
+        title: "Auto-refresh metadata after Apply",
+        action: #selector(autoRefreshAfterApplyToggled(_:))
+    )
 
-            Toggle("Keep backups", isOn: Binding(
-                get: { model.keepBackups },
-                set: { value in
-                    DispatchQueue.main.async {
-                        model.keepBackups = value
-                    }
-                }
-            ))
-        }
-        .formStyle(.grouped)
-        .padding(20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    private lazy var keepBackupsButton = makeCheckbox(
+        title: "Keep backups",
+        action: #selector(keepBackupsToggled(_:))
+    )
+
+    init(model: AppModel) {
+        self.model = model
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func loadView() {
+        let root = NSView()
+        root.translatesAutoresizingMaskIntoConstraints = false
+        view = root
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        buildUI()
+        refreshFromModel()
+    }
+
+    private func buildUI() {
+        let applyLabel = makeCategoryLabel(title: "Apply:")
+        let backupsLabel = makeCategoryLabel(title: "Backups:")
+        let blankLabel = makeCategoryLabel(title: "")
+
+        let grid = NSGridView(views: [
+            [applyLabel, confirmBeforeApplyButton],
+            [blankLabel, autoRefreshAfterApplyButton],
+            [backupsLabel, keepBackupsButton],
+        ])
+        grid.translatesAutoresizingMaskIntoConstraints = false
+        grid.rowSpacing = 12
+        grid.columnSpacing = 14
+        grid.yPlacement = .center
+        grid.column(at: 0).xPlacement = .trailing
+        grid.column(at: 1).xPlacement = .leading
+
+        view.addSubview(grid)
+
+        NSLayoutConstraint.activate([
+            grid.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
+            grid.topAnchor.constraint(equalTo: view.topAnchor, constant: 24),
+            grid.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24),
+        ])
+    }
+
+    private func makeCheckbox(title: String, action: Selector) -> NSButton {
+        let button = NSButton(checkboxWithTitle: title, target: self, action: action)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.setContentCompressionResistancePriority(.required, for: .vertical)
+        return button
+    }
+
+    private func makeCategoryLabel(title: String) -> NSTextField {
+        let label = NSTextField(labelWithString: title)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.alignment = .right
+        label.textColor = .labelColor
+        return label
+    }
+
+    private func refreshFromModel() {
+        confirmBeforeApplyButton.state = model.confirmBeforeApply ? .on : .off
+        autoRefreshAfterApplyButton.state = model.autoRefreshMetadataAfterApply ? .on : .off
+        keepBackupsButton.state = model.keepBackups ? .on : .off
+    }
+
+    @objc
+    private func confirmBeforeApplyToggled(_ sender: NSButton) {
+        model.confirmBeforeApply = (sender.state == .on)
+    }
+
+    @objc
+    private func autoRefreshAfterApplyToggled(_ sender: NSButton) {
+        model.autoRefreshMetadataAfterApply = (sender.state == .on)
+    }
+
+    @objc
+    private func keepBackupsToggled(_ sender: NSButton) {
+        model.keepBackups = (sender.state == .on)
     }
 }
 
-private struct InspectorSettingsView: View {
-    @ObservedObject var model: AppModel
+@MainActor
+private final class InspectorSettingsViewController: NSViewController {
+    private unowned let model: AppModel
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                ForEach(model.inspectorFieldSections, id: \.section) { grouped in
-                    VStack(alignment: .leading, spacing: 10) {
-                        Toggle(grouped.section, isOn: Binding(
-                            get: { model.isInspectorSectionEnabled(grouped.section) },
-                            set: { value in
-                                DispatchQueue.main.async {
-                                    model.setInspectorSectionEnabled(section: grouped.section, isEnabled: value)
-                                }
-                            }
-                        ))
-                        .font(.headline)
+    private let scrollView = NSScrollView()
+    private let contentView = NSView()
+    private let contentStack = NSStackView()
 
-                        VStack(alignment: .leading, spacing: 8) {
-                            ForEach(grouped.fields, id: \.id) { field in
-                                Toggle(field.label, isOn: Binding(
-                                    get: { model.isInspectorFieldEnabled(field.id) },
-                                    set: { value in
-                                        DispatchQueue.main.async {
-                                            model.setInspectorFieldEnabled(fieldID: field.id, isEnabled: value)
-                                        }
-                                    }
-                                ))
-                            }
-                        }
-                        .padding(.leading, 18)
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(20)
+    private var fieldByButtonID: [ObjectIdentifier: String] = [:]
+    private var sectionByButtonID: [ObjectIdentifier: String] = [:]
+
+    init(model: AppModel) {
+        self.model = model
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func loadView() {
+        let root = NSView()
+        root.translatesAutoresizingMaskIntoConstraints = false
+        view = root
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        buildUI()
+        rebuildContent()
+    }
+
+    private func buildUI() {
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.borderType = .noBorder
+
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        contentStack.translatesAutoresizingMaskIntoConstraints = false
+        contentStack.orientation = .vertical
+        contentStack.alignment = .leading
+        contentStack.spacing = 16
+
+        contentView.addSubview(contentStack)
+        NSLayoutConstraint.activate([
+            contentStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
+            contentStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 20),
+            contentStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
+            contentStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -20),
+            contentStack.widthAnchor.constraint(equalTo: contentView.widthAnchor, constant: -48),
+        ])
+
+        scrollView.documentView = contentView
+        view.addSubview(scrollView)
+
+        NSLayoutConstraint.activate([
+            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: view.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+    }
+
+    private func rebuildContent() {
+        fieldByButtonID.removeAll()
+        sectionByButtonID.removeAll()
+
+        for arranged in contentStack.arrangedSubviews {
+            contentStack.removeArrangedSubview(arranged)
+            arranged.removeFromSuperview()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+        for grouped in model.inspectorFieldSections {
+            let sectionToggle = NSButton(checkboxWithTitle: grouped.section, target: self, action: #selector(sectionToggled(_:)))
+            sectionToggle.font = NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+            sectionToggle.translatesAutoresizingMaskIntoConstraints = false
+
+            let enabledCount = grouped.fields.reduce(into: 0) { partial, field in
+                if model.isInspectorFieldEnabled(field.id) { partial += 1 }
+            }
+            sectionToggle.allowsMixedState = true
+            if enabledCount == 0 {
+                sectionToggle.state = .off
+            } else if enabledCount == grouped.fields.count {
+                sectionToggle.state = .on
+            } else {
+                sectionToggle.state = .mixed
+            }
+
+            sectionByButtonID[ObjectIdentifier(sectionToggle)] = grouped.section
+
+            let fieldStack = NSStackView()
+            fieldStack.orientation = .vertical
+            fieldStack.alignment = .leading
+            fieldStack.spacing = 8
+            fieldStack.translatesAutoresizingMaskIntoConstraints = false
+
+            for field in grouped.fields {
+                let fieldToggle = NSButton(checkboxWithTitle: field.label, target: self, action: #selector(fieldToggled(_:)))
+                fieldToggle.state = model.isInspectorFieldEnabled(field.id) ? .on : .off
+                fieldToggle.translatesAutoresizingMaskIntoConstraints = false
+                fieldByButtonID[ObjectIdentifier(fieldToggle)] = field.id
+                fieldStack.addArrangedSubview(fieldToggle)
+            }
+
+            let sectionGroup = NSStackView(views: [sectionToggle, fieldStack])
+            sectionGroup.orientation = .vertical
+            sectionGroup.alignment = .leading
+            sectionGroup.spacing = 8
+            sectionGroup.translatesAutoresizingMaskIntoConstraints = false
+            sectionGroup.setCustomSpacing(6, after: sectionToggle)
+
+            fieldStack.leadingAnchor.constraint(equalTo: sectionGroup.leadingAnchor, constant: 20).isActive = true
+
+            contentStack.addArrangedSubview(sectionGroup)
+        }
+    }
+
+    @objc
+    private func sectionToggled(_ sender: NSButton) {
+        guard let section = sectionByButtonID[ObjectIdentifier(sender)] else { return }
+        model.setInspectorSectionEnabled(section: section, isEnabled: sender.state != .off)
+        rebuildContent()
+    }
+
+    @objc
+    private func fieldToggled(_ sender: NSButton) {
+        guard let fieldID = fieldByButtonID[ObjectIdentifier(sender)] else { return }
+        model.setInspectorFieldEnabled(fieldID: fieldID, isEnabled: sender.state == .on)
+        rebuildContent()
     }
 }
