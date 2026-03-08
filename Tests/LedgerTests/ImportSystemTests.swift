@@ -1756,7 +1756,7 @@ final class ImportSystemTests: XCTestCase {
         session.preparedRun = preparedRun
         let success = await session.performImport(model: model)
         XCTAssertFalse(success)
-        XCTAssertEqual(session.previewError, "⚠ Import cancelled while choosing EOS lens values.")
+        XCTAssertEqual(session.previewError, "Import was cancelled while choosing EOS lens values.")
 
         let snapshots = await model.importMetadataSnapshots(for: [file])
         let lens = snapshots[file]?.fields.first(where: { $0.namespace == .exif && $0.key == "LensModel" })?.value

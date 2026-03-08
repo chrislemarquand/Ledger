@@ -101,7 +101,7 @@ final class ImportSession: ObservableObject {
             } catch {
                 guard !Task.isCancelled else { return }
                 preparedRun = nil
-                previewError = "⚠ \(error.localizedDescription)"
+                previewError = error.localizedDescription
             }
             isBusy = false
         }
@@ -129,21 +129,31 @@ final class ImportSession: ObservableObject {
                 isBusy = false
             } catch {
                 isBusy = false
-                previewError = "⚠ \(error.localizedDescription)"
+                let message = error.localizedDescription
+                previewError = message
+                presentBlockingImportAlert(
+                    title: "Couldn’t prepare import.",
+                    message: error.localizedDescription
+                )
                 return false
             }
         }
 
         let resolve = coordinator.resolveAssignments(preparedRun: run, resolutions: [:])
         if !resolve.unresolvedConflicts.isEmpty {
-            previewError = "⚠ \(resolve.unresolvedConflicts.count) conflict(s) need resolution. Conflict resolution will be available in a future update."
+            let message = "\(resolve.unresolvedConflicts.count) conflict(s) need resolution. Conflict resolution will be available in a future update."
+            previewError = message
+            presentBlockingImportAlert(
+                title: "Import needs conflict resolution.",
+                message: message
+            )
             return false
         }
 
         let activeTagIDs = effectiveActiveTagIDSet(model: model)
         let eosLensResult = applyEOSLensPolicy(assignments: resolve.assignments, run: run, activeTagIDs: activeTagIDs)
         if eosLensResult.cancelled {
-            previewError = "⚠ Import cancelled while choosing EOS lens values."
+            previewError = "Import was cancelled while choosing EOS lens values."
             return false
         }
 
@@ -159,11 +169,20 @@ final class ImportSession: ObservableObject {
             emptyValuePolicy: options.emptyValuePolicy
         )
         if resolve.warnings.isEmpty {
-            model.statusMessage = "Staged \(stageSummary.stagedFields) field(s) on \(stageSummary.stagedFiles) file(s)."
+            model.statusMessage = "Prepared \(stageSummary.stagedFields) metadata field(s) for \(stageSummary.stagedFiles) file(s). Ready to apply."
         } else {
-            model.statusMessage = "Staged \(stageSummary.stagedFields) field(s) on \(stageSummary.stagedFiles) file(s) with \(resolve.warnings.count) merge warning(s)."
+            model.statusMessage = "Prepared \(stageSummary.stagedFields) metadata field(s) for \(stageSummary.stagedFiles) file(s) with \(resolve.warnings.count) warning(s). Ready to apply."
         }
         return true
+    }
+
+    private func presentBlockingImportAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     /// Tag IDs that actually appear in the parsed data. Nil until a run is prepared.
@@ -482,7 +501,7 @@ final class ImportSession: ObservableObject {
         }
         if !run.matchResult.conflicts.isEmpty {
             lines.append("")
-            lines.append("⚠ \(run.matchResult.conflicts.count) conflict(s) need resolution")
+            lines.append("\(run.matchResult.conflicts.count) conflict(s) need resolution")
         }
         if lines.isEmpty {
             lines.append("No matches found.")
@@ -499,9 +518,9 @@ final class ImportSession: ObservableObject {
             message = warning.message
         }
         if let sourceLine = warning.sourceLine {
-            return "⚠ Line \(sourceLine): \(message)"
+            return "Line \(sourceLine): \(message)"
         }
-        return "⚠ \(message)"
+        return message
     }
 }
 
