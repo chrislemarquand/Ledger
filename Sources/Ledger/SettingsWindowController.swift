@@ -10,8 +10,8 @@ final class SettingsWindowController: NSWindowController {
         let window = NSWindow(contentViewController: tabsController)
         window.title = "General"
         window.styleMask = [.titled, .closable, .miniaturizable]
-        window.setContentSize(NSSize(width: contentWidth, height: 320))
-        window.minSize = NSSize(width: contentWidth, height: 280)
+        window.setContentSize(NSSize(width: contentWidth, height: 100))
+        window.minSize = NSSize(width: contentWidth, height: 100)
         window.maxSize = NSSize(width: contentWidth, height: 1200)
         window.toolbarStyle = .preference
         window.isReleasedWhenClosed = false
@@ -37,7 +37,6 @@ private final class SettingsTabViewController: NSTabViewController {
     private let generalController: GeneralSettingsViewController
     private let inspectorController: InspectorSettingsViewController
 
-    private let generalHeight: CGFloat = 320
     private let inspectorHeight: CGFloat = 620
 
     init(model: AppModel) {
@@ -93,18 +92,27 @@ private final class SettingsTabViewController: NSTabViewController {
         case "Inspector":
             targetContentHeight = inspectorHeight
         default:
-            targetContentHeight = generalHeight
+            if let vc = selected?.viewController {
+                vc.view.layoutSubtreeIfNeeded()
+                targetContentHeight = vc.view.fittingSize.height
+            } else {
+                return
+            }
         }
 
         let frame = window.frame
         let currentContentRect = window.contentRect(forFrameRect: frame)
-        let delta = targetContentHeight - currentContentRect.height
+        let chromeHeight = frame.height - currentContentRect.height
+        let maxContentHeight = (window.screen?.visibleFrame.height ?? 800) - chromeHeight
+        let clampedContentHeight = min(targetContentHeight, maxContentHeight)
+        let delta = clampedContentHeight - currentContentRect.height
         guard abs(delta) > 0.5 else { return }
 
         var targetFrame = frame
         targetFrame.size.height += delta
         targetFrame.origin.y -= delta
-        window.setFrame(targetFrame, display: true, animate: animated)
+        let constrainedFrame = window.constrainFrameRect(targetFrame, to: window.screen)
+        window.setFrame(constrainedFrame, display: true, animate: animated)
     }
 }
 
@@ -176,9 +184,11 @@ private final class GeneralSettingsViewController: NSViewController {
         view.addSubview(grid)
 
         NSLayoutConstraint.activate([
-            grid.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
+            grid.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            grid.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 24),
             grid.topAnchor.constraint(equalTo: view.topAnchor, constant: 24),
             grid.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24),
+            grid.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -24),
         ])
     }
 
@@ -254,12 +264,16 @@ private final class GeneralSettingsViewController: NSViewController {
     }
 }
 
+private final class FlippedView: NSView {
+    override var isFlipped: Bool { true }
+}
+
 @MainActor
 private final class InspectorSettingsViewController: NSViewController {
     private unowned let model: AppModel
 
     private let scrollView = NSScrollView()
-    private let contentView = NSView()
+    private let contentView = FlippedView()
     private let contentStack = NSStackView()
 
     private var fieldByButtonID: [ObjectIdentifier: String] = [:]
