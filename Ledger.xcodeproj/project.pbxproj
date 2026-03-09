@@ -31,6 +31,8 @@
 		A100014C0000000000000001 /* Sources/Ledger/PresetSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014B0000000000000001 /* Sources/Ledger/PresetSheets.swift */; };
 		A100014E0000000000000001 /* Sources/Ledger/ThumbnailService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014D0000000000000001 /* Sources/Ledger/ThumbnailService.swift */; };
 		A10001500000000000000001 /* Sources/Ledger/SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014F0000000000000001 /* Sources/Ledger/SettingsWindowController.swift */; };
+		A10001510000000000000001 /* Sources/Ledger/AppModel+Sidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001530000000000000001 /* Sources/Ledger/AppModel+Sidebar.swift */; };
+		A10001520000000000000001 /* Sources/Ledger/AppModel+Preview.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001540000000000000001 /* Sources/Ledger/AppModel+Preview.swift */; };
 		B100001D0000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000D0000000000000001 /* Assets.xcassets */; };
 		C20002010000000000000001 /* Sources/Ledger/Import/CSVImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001010000000000000001 /* Sources/Ledger/Import/CSVImportAdapter.swift */; };
 		C20002020000000000000001 /* Sources/Ledger/Import/CSVSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001020000000000000001 /* Sources/Ledger/Import/CSVSupport.swift */; };
@@ -100,6 +102,8 @@
 		A100014B0000000000000001 /* Sources/Ledger/PresetSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/PresetSheets.swift; sourceTree = SOURCE_ROOT; };
 		A100014D0000000000000001 /* Sources/Ledger/ThumbnailService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/ThumbnailService.swift; sourceTree = SOURCE_ROOT; };
 		A100014F0000000000000001 /* Sources/Ledger/SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/SettingsWindowController.swift; sourceTree = SOURCE_ROOT; };
+		A10001530000000000000001 /* Sources/Ledger/AppModel+Sidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+Sidebar.swift"; sourceTree = SOURCE_ROOT; };
+		A10001540000000000000001 /* Sources/Ledger/AppModel+Preview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+Preview.swift"; sourceTree = SOURCE_ROOT; };
 		B100000D0000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = SOURCE_ROOT; };
 		C20001010000000000000001 /* Sources/Ledger/Import/CSVImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/CSVImportAdapter.swift; sourceTree = SOURCE_ROOT; };
 		C20001020000000000000001 /* Sources/Ledger/Import/CSVSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/CSVSupport.swift; sourceTree = SOURCE_ROOT; };
@@ -219,13 +223,15 @@
 		};
 		A10000560000000000000001 /* Sources/Ledger */ = {
 			isa = PBXGroup;
-			children = (
-				B100000D0000000000000001 /* Assets.xcassets */,
-				C20000F00000000000000001 /* Sources/Ledger/Import */,
-				C20000F10000000000000001 /* Sources/Ledger/ImportUI */,
-				A100000B0000000000000001 /* Sources/Ledger/AppModel.swift */,
-				A100000C0000000000000001 /* Sources/Ledger/LedgerApp.swift */,
-				A100000D0000000000000001 /* Sources/Ledger/MainContentView.swift */,
+				children = (
+					B100000D0000000000000001 /* Assets.xcassets */,
+					C20000F00000000000000001 /* Sources/Ledger/Import */,
+					C20000F10000000000000001 /* Sources/Ledger/ImportUI */,
+					A100000B0000000000000001 /* Sources/Ledger/AppModel.swift */,
+					A10001530000000000000001 /* Sources/Ledger/AppModel+Sidebar.swift */,
+					A10001540000000000000001 /* Sources/Ledger/AppModel+Preview.swift */,
+					A100000C0000000000000001 /* Sources/Ledger/LedgerApp.swift */,
+					A100000D0000000000000001 /* Sources/Ledger/MainContentView.swift */,
 				A10001410000000000000001 /* Sources/Ledger/Presets.swift */,
 				A10001430000000000000001 /* Sources/Ledger/BrowserGalleryView.swift */,
 				A10001450000000000000001 /* Sources/Ledger/BrowserListView.swift */,
@@ -415,10 +421,12 @@
 		A10000800000000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (
-				A100001B0000000000000001 /* Sources/Ledger/AppModel.swift in Sources */,
-				A100001C0000000000000001 /* Sources/Ledger/LedgerApp.swift in Sources */,
-				A100001D0000000000000001 /* Sources/Ledger/MainContentView.swift in Sources */,
+				files = (
+					A100001B0000000000000001 /* Sources/Ledger/AppModel.swift in Sources */,
+					A10001510000000000000001 /* Sources/Ledger/AppModel+Sidebar.swift in Sources */,
+					A10001520000000000000001 /* Sources/Ledger/AppModel+Preview.swift in Sources */,
+					A100001C0000000000000001 /* Sources/Ledger/LedgerApp.swift in Sources */,
+					A100001D0000000000000001 /* Sources/Ledger/MainContentView.swift in Sources */,
 				A10001420000000000000001 /* Sources/Ledger/Presets.swift in Sources */,
 				A10001440000000000000001 /* Sources/Ledger/BrowserGalleryView.swift in Sources */,
 				A10001460000000000000001 /* Sources/Ledger/BrowserListView.swift in Sources */,
