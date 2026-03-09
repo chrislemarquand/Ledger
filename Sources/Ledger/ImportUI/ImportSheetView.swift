@@ -95,11 +95,17 @@ final class ImportSession: ObservableObject {
                         await model.importMetadataSnapshots(for: files)
                     }
                 )
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else {
+                    isBusy = false
+                    return
+                }
                 preparedRun = prepared
                 previewError = nil
             } catch {
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else {
+                    isBusy = false
+                    return
+                }
                 preparedRun = nil
                 previewError = error.localizedDescription
             }
@@ -129,6 +135,7 @@ final class ImportSession: ObservableObject {
                 isBusy = false
             } catch {
                 isBusy = false
+                preparedRun = nil
                 let message = error.localizedDescription
                 previewError = message
                 presentBlockingImportAlert(
@@ -141,7 +148,9 @@ final class ImportSession: ObservableObject {
 
         let resolve = coordinator.resolveAssignments(preparedRun: run, resolutions: [:])
         if !resolve.unresolvedConflicts.isEmpty {
-            let message = "\(resolve.unresolvedConflicts.count) conflict(s) need resolution. Conflict resolution will be available in a future update."
+            let conflictCount = resolve.unresolvedConflicts.count
+            let conflicts = conflictCount == 1 ? "1 conflict needs" : "\(conflictCount) conflicts need"
+            let message = "\(conflicts) resolution. Conflict resolution will be available in a future update."
             previewError = message
             presentBlockingImportAlert(
                 title: "Import needs conflict resolution.",
@@ -168,10 +177,17 @@ final class ImportSession: ObservableObject {
             sourceKind: run.options.sourceKind,
             emptyValuePolicy: options.emptyValuePolicy
         )
+        guard stageSummary.stagedFiles > 0 else {
+            previewError = "No metadata changes to import. Check that source rows match the target files."
+            return false
+        }
+        let fields = stageSummary.stagedFields == 1 ? "1 field" : "\(stageSummary.stagedFields) fields"
+        let files = stageSummary.stagedFiles == 1 ? "1 file" : "\(stageSummary.stagedFiles) files"
         if resolve.warnings.isEmpty {
-            model.statusMessage = "Prepared \(stageSummary.stagedFields) metadata field(s) for \(stageSummary.stagedFiles) file(s). Ready to apply."
+            model.statusMessage = "Prepared \(fields) for \(files). Ready to apply."
         } else {
-            model.statusMessage = "Prepared \(stageSummary.stagedFields) metadata field(s) for \(stageSummary.stagedFiles) file(s) with \(resolve.warnings.count) warning(s). Ready to apply."
+            let warnings = resolve.warnings.count == 1 ? "1 warning" : "\(resolve.warnings.count) warnings"
+            model.statusMessage = "Prepared \(fields) for \(files) with \(warnings). Ready to apply."
         }
         return true
     }
@@ -290,7 +306,7 @@ final class ImportSession: ObservableObject {
                         sourceIdentifier: row.sourceIdentifier,
                         focalMillimeters: focalMM,
                         candidates: candidates,
-                        remainingRowsAtFocal: max(remainingAmbiguousRowsByFocal[focalMM, default: 1] - 1, 0)
+                        remainingRowsAtFocal: max(remainingAmbiguousRowsByFocal[focalMM, default: 0] - 1, 0)
                     )
                     guard let decision = chooseLens(for: request) else {
                         return (assignments, true)
@@ -501,7 +517,8 @@ final class ImportSession: ObservableObject {
         }
         if !run.matchResult.conflicts.isEmpty {
             lines.append("")
-            lines.append("\(run.matchResult.conflicts.count) conflict(s) need resolution")
+            let cc = run.matchResult.conflicts.count
+            lines.append("\(cc) \(cc == 1 ? "conflict needs" : "conflicts need") resolution")
         }
         if lines.isEmpty {
             lines.append("No matches found.")

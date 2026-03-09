@@ -278,6 +278,9 @@ private final class InspectorSettingsViewController: NSViewController {
 
     private var fieldByButtonID: [ObjectIdentifier: String] = [:]
     private var sectionByButtonID: [ObjectIdentifier: String] = [:]
+    private var sectionToggleBySection: [String: NSButton] = [:]
+    private var fieldTogglesBySection: [String: [NSButton]] = [:]
+    private var sectionForFieldID: [String: String] = [:]
 
     init(model: AppModel) {
         self.model = model
@@ -337,6 +340,9 @@ private final class InspectorSettingsViewController: NSViewController {
     private func rebuildContent() {
         fieldByButtonID.removeAll()
         sectionByButtonID.removeAll()
+        sectionToggleBySection.removeAll()
+        fieldTogglesBySection.removeAll()
+        sectionForFieldID.removeAll()
 
         for arranged in contentStack.arrangedSubviews {
             contentStack.removeArrangedSubview(arranged)
@@ -361,6 +367,7 @@ private final class InspectorSettingsViewController: NSViewController {
             }
 
             sectionByButtonID[ObjectIdentifier(sectionToggle)] = grouped.section
+            sectionToggleBySection[grouped.section] = sectionToggle
 
             let fieldStack = NSStackView()
             fieldStack.orientation = .vertical
@@ -368,13 +375,17 @@ private final class InspectorSettingsViewController: NSViewController {
             fieldStack.spacing = 8
             fieldStack.translatesAutoresizingMaskIntoConstraints = false
 
+            var togglesForSection: [NSButton] = []
             for field in grouped.fields {
                 let fieldToggle = NSButton(checkboxWithTitle: field.label, target: self, action: #selector(fieldToggled(_:)))
                 fieldToggle.state = model.isInspectorFieldEnabled(field.id) ? .on : .off
                 fieldToggle.translatesAutoresizingMaskIntoConstraints = false
                 fieldByButtonID[ObjectIdentifier(fieldToggle)] = field.id
+                sectionForFieldID[field.id] = grouped.section
+                togglesForSection.append(fieldToggle)
                 fieldStack.addArrangedSubview(fieldToggle)
             }
+            fieldTogglesBySection[grouped.section] = togglesForSection
 
             let sectionGroup = NSStackView(views: [sectionToggle, fieldStack])
             sectionGroup.orientation = .vertical
@@ -389,17 +400,40 @@ private final class InspectorSettingsViewController: NSViewController {
         }
     }
 
+    private func recalculateSectionToggleState(for section: String) {
+        guard let sectionToggle = sectionToggleBySection[section],
+              let toggles = fieldTogglesBySection[section] else { return }
+        let enabledCount = toggles.reduce(into: 0) { count, toggle in
+            if toggle.state == .on { count += 1 }
+        }
+        if enabledCount == 0 {
+            sectionToggle.state = .off
+        } else if enabledCount == toggles.count {
+            sectionToggle.state = .on
+        } else {
+            sectionToggle.state = .mixed
+        }
+    }
+
     @objc
     private func sectionToggled(_ sender: NSButton) {
         guard let section = sectionByButtonID[ObjectIdentifier(sender)] else { return }
-        model.setInspectorSectionEnabled(section: section, isEnabled: sender.state != .off)
-        rebuildContent()
+        let enable = sender.state != .off
+        model.setInspectorSectionEnabled(section: section, isEnabled: enable)
+        if let toggles = fieldTogglesBySection[section] {
+            for toggle in toggles {
+                toggle.state = enable ? .on : .off
+            }
+        }
+        recalculateSectionToggleState(for: section)
     }
 
     @objc
     private func fieldToggled(_ sender: NSButton) {
         guard let fieldID = fieldByButtonID[ObjectIdentifier(sender)] else { return }
         model.setInspectorFieldEnabled(fieldID: fieldID, isEnabled: sender.state == .on)
-        rebuildContent()
+        if let section = sectionForFieldID[fieldID] {
+            recalculateSectionToggleState(for: section)
+        }
     }
 }

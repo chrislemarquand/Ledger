@@ -98,6 +98,10 @@ struct PresetEditorSheet: View {
         }
         .padding(16)
         .frame(width: 760, height: 520)
+        .onAppear {
+            validationMessage = nil
+            duplicateConflict = nil
+        }
         .alert("A preset with this name already exists.", isPresented: duplicateAlertBinding) {
             Button("Replace") {
                 replaceExistingPreset()
@@ -387,6 +391,7 @@ struct PresetManagerSheet: View {
         .padding(16)
         .frame(minWidth: 480, minHeight: 420)
         .onAppear {
+            pendingDeletePresetID = nil
             if selectedPresetID == nil {
                 selectedPresetID = model.selectedPresetID ?? model.presets.first?.id
             }
