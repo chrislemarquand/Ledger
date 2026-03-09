@@ -308,7 +308,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         didConfigureWindow = true
 
         window.styleMask.insert(.fullSizeContentView)
-        window.toolbarStyle = .unified
+        window.toolbarStyle = .automatic
         window.titleVisibility = .visible
         window.titlebarAppearsTransparent = false
 
