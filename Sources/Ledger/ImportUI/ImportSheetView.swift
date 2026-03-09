@@ -72,6 +72,10 @@ final class ImportSession: ObservableObject {
         options = opts
     }
 
+    deinit {
+        previewTask?.cancel()
+    }
+
     func schedulePreviewRefresh(model: AppModel) {
         previewTask?.cancel()
         guard options.sourceURL != nil else {
