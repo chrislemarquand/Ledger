@@ -1962,6 +1962,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 item.target = controller
                 item.action = #selector(NativeThreePaneSplitViewController.applyChangesAction(_:))
                 item.toolTip = "Apply metadata changes"
+                item.style = controller.model.canApplyMetadataChanges ? .prominent : .plain
                 applyChangesItem = item
                 return item
             case .toggleInspector:
@@ -2053,7 +2054,9 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         }
 
         private func updateApplyEnabled(with model: AppModel) {
-            applyChangesItem?.isEnabled = model.canApplyMetadataChanges
+            let canApply = model.canApplyMetadataChanges
+            applyChangesItem?.isEnabled = canApply
+            applyChangesItem?.style = canApply ? .prominent : .plain
         }
 
         private func updateInspectorToggle(with model: AppModel) {

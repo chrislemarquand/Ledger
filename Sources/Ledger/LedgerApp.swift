@@ -198,9 +198,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSWindow.allowsAutomaticWindowTabbing = false
         configureApplicationMenu()
-        // Belt-and-braces: disable system "Reopen windows when logging back in"
-        // behavior for this app so stale restoration metadata is ignored.
-        UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")
         let model = AppModel()
         settingsWindowController = SettingsWindowController(model: model)
         let windowController = MainWindowController(model: model)
@@ -214,11 +211,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldSaveApplicationState(_ sender: NSApplication) -> Bool {
-        false
+        true
     }
 
     func applicationShouldRestoreApplicationState(_ sender: NSApplication) -> Bool {
-        false
+        true
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -280,12 +277,12 @@ final class MainWindowController: NSWindowController {
         appModel = model
         let contentController = NativeThreePaneSplitViewController(model: model)
         let window = NSWindow(contentViewController: contentController)
-        window.setContentSize(NSSize(width: 1320, height: 860))
+        window.setContentSize(NSSize(width: 1300, height: 800))
         window.minSize = NSSize(width: 1200, height: 720)
         window.title = AppBrand.displayName
         window.isReleasedWhenClosed = false
-        window.isRestorable = false
-        window.restorationClass = nil
+        window.isRestorable = true
+        window.setFrameAutosaveName("\(AppBrand.identifierPrefix).MainWindow")
         super.init(window: window)
         shouldCascadeWindows = true
     }
