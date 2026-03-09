@@ -109,6 +109,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     private var spacebarMonitor: Any?
     private var browserFocusRequestObserver: NSObjectProtocol?
     private var splitResizeObserver: NSObjectProtocol?
+    private var appearanceObservation: NSKeyValueObservation?
     private var didApplyInitialContentSplit = false
     private var didApplyInitialInspectorVisibility = false
     private var lastWindowTitleText = ""
@@ -259,6 +260,14 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     override func viewDidAppear() {
         super.viewDidAppear()
         ensureInitialInspectorVisibilityIfNeeded()
+        // NSHostingView can disrupt AppKit's appearance-change propagation to views
+        // outside the SwiftUI hierarchy (toolbar items). Force a full window redisplay
+        // after SwiftUI has completed its own update pass.
+        appearanceObservation = view.observe(\.effectiveAppearance) { [weak self] _, _ in
+            DispatchQueue.main.async {
+                self?.view.window?.display()
+            }
+        }
     }
 
     override func viewDidLayout() {
@@ -1573,25 +1582,26 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
     @objc
     func applyChangesAction(_: Any?) {
-        if model.requiresBatchApplyConfirmation {
-            let alert = NSAlert()
-            alert.alertStyle = .warning
-            let pendingCount = model.pendingEditedFileCount
-            alert.messageText = "Apply Metadata Changes?"
-            alert.informativeText = "Metadata changes for \(pendingCount) image(s) in this folder will be written to disk. This can’t be undone."
-            alert.addButton(withTitle: "Apply")
-            alert.addButton(withTitle: "Cancel")
-            if let window = view.window {
-                alert.beginSheetModal(for: window) { [weak self] response in
-                    guard response == .alertFirstButtonReturn else { return }
-                    self?.model.applyChanges()
-                }
-            } else if alert.runModal() == .alertFirstButtonReturn {
-                model.applyChanges()
-            }
+        let count = model.pendingEditedFileCount
+        guard model.confirmBeforeApply || count > 1 else {
+            model.applyChanges()
             return
         }
-        model.applyChanges()
+        let images = count == 1 ? "1 image" : "\(count) images"
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Apply changes to \(images)?"
+        alert.informativeText = "Metadata changes will be written to disk. This can’t be undone."
+        alert.addButton(withTitle: "Apply")
+        alert.addButton(withTitle: "Cancel")
+        if let window = view.window {
+            alert.beginSheetModal(for: window) { [weak self] response in
+                guard response == .alertFirstButtonReturn else { return }
+                self?.model.applyChanges()
+            }
+        } else if alert.runModal() == .alertFirstButtonReturn {
+            model.applyChanges()
+        }
     }
 
     @objc
@@ -1848,7 +1858,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 )
                 control.setImage(NSImage(systemSymbolName: "square.grid.3x2", accessibilityDescription: "Gallery"), forSegment: 0)
                 control.setImage(NSImage(systemSymbolName: "list.bullet", accessibilityDescription: "List"), forSegment: 1)
-                control.segmentStyle = .texturedRounded
                 control.setWidth(44, forSegment: 0)
                 control.setWidth(44, forSegment: 1)
 

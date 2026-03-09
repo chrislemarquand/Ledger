@@ -1450,16 +1450,6 @@ final class AppModel: ObservableObject {
             return
         }
 
-        if confirmBeforeApply {
-            let alert = NSAlert()
-            alert.alertStyle = .warning
-            alert.messageText = "Apply metadata changes?"
-            alert.informativeText = "This will write staged changes to \(writableFiles.count) file(s)."
-            alert.addButton(withTitle: "Apply")
-            alert.addButton(withTitle: "Cancel")
-            guard alert.runModal() == .alertFirstButtonReturn else { return }
-        }
-
         isApplyingMetadata = true
         applyMetadataCompleted = 0
         applyMetadataTotal = writableFiles.count
@@ -1587,9 +1577,11 @@ final class AppModel: ObservableObject {
                 statusMessage = "Couldn’t apply changes. \(firstError)"
                 let failedNames = result.failed.prefix(5).map { $0.fileURL.lastPathComponent }.joined(separator: "\n")
                 Task { @MainActor in
+                    let n = result.failed.count
+                    let images = n == 1 ? "1 image" : "\(n) images"
                     let alert = NSAlert()
-                    alert.messageText = "Apply failed"
-                    alert.informativeText = "Could not write metadata to \(result.failed.count) file(s):\n\(failedNames)\n\n\(firstError)"
+                    alert.messageText = "Couldn't Apply Changes"
+                    alert.informativeText = "Metadata couldn't be written to \(images):\n\(failedNames)\n\n\(firstError)"
                     alert.alertStyle = .warning
                     alert.addButton(withTitle: "OK")
                     alert.runModal()
@@ -2129,10 +2121,6 @@ final class AppModel: ObservableObject {
 
     var needsMixedValueConfirmation: Bool {
         selectedFileURLs.count > 1 && mixedOverrideCount > 0
-    }
-
-    var requiresBatchApplyConfirmation: Bool {
-        pendingEditedFileCount > 1
     }
 
     func isDateTimeTag(_ tag: EditableTag) -> Bool {
