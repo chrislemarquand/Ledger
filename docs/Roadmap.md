@@ -46,9 +46,6 @@ Primary objective: get import right end-to-end.
 - [ ] Import sheet preview/stage parity hardening + structured import report output.
 - [x] **Reference-based metadata apply**: select one image as reference, apply chosen metadata fields to a selection. Uses ExifTool `-tagsFromFile`. Sheet UI: select reference file → choose field groups → preview diff → confirm.
 
-### Browser
-- [ ] Click-to-drag rubber-band selection in list and gallery views.
-
 ### Settings
 - [x] Inspector field visibility controls.
 - [x] Backup enable/disable controls with menu/context behavior alignment.
@@ -117,6 +114,7 @@ Moves before performance: search will expose large-folder performance gaps, maki
 ## v2.0 (Major) — Gallery + Power User Features
 
 - [ ] Major gallery/browser architecture rewrite (AppKit-shell-first, Mondrian-inspired — see `photos-reverse-engineering.md`).
+- [ ] Click-to-drag rubber-band selection in list and gallery views (after gallery rewrite).
 - [ ] Sidebar rewritten in AppKit.
 - [ ] **Finder-style gallery view**: filmstrip along bottom, large preview at top — third browser mode alongside list and grid.
 - [ ] **Metadata export CSV/JSON**: select fields, export to CSV or JSON for spreadsheet editing or audit reporting.

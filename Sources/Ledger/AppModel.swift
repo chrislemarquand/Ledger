@@ -81,6 +81,20 @@ enum AppBrand {
         let root = applicationSupportRootURL(fileManager: fileManager)
         return legacyDisplayNames.map { root.appendingPathComponent($0, isDirectory: true) }
     }
+
+    static var localizedTrashDisplayName: String {
+        let trashPath = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+            .appendingPathComponent(".Trash", isDirectory: true).path
+        let displayName = FileManager.default.displayName(atPath: trashPath).trimmingCharacters(in: .whitespacesAndNewlines)
+        if displayName.isEmpty {
+            return "Trash"
+        }
+        if displayName.caseInsensitiveCompare("Trash") == .orderedSame,
+           Locale.current.region?.identifier == "GB" {
+            return "Bin"
+        }
+        return displayName
+    }
 }
 
 enum AppTheme {
@@ -1600,6 +1614,57 @@ final class AppModel: ObservableObject {
 
     func hasRestorableBackup(for fileURL: URL) -> Bool {
         lastOperationFilesByID.values.contains(fileURL)
+    }
+
+    func clearAllBackups() throws -> Int {
+        let backupDirectory = AppBrand.currentSupportDirectoryURL().appendingPathComponent("Backups", isDirectory: true)
+        let trashName = AppBrand.localizedTrashDisplayName
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: backupDirectory.path) else {
+            lastOperationIDs.removeAll()
+            lastOperationFilesByID.removeAll()
+            setStatusMessage("No backups to clear.", autoClearAfterSuccess: true)
+            return 0
+        }
+
+        let operationFolders = try fileManager.contentsOfDirectory(
+            at: backupDirectory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ).filter { UUID(uuidString: $0.lastPathComponent) != nil }
+
+        guard !operationFolders.isEmpty else {
+            setStatusMessage("No backups to clear.", autoClearAfterSuccess: true)
+            return 0
+        }
+
+        var trashedOperationIDs: Set<UUID> = []
+        var failedTrashCount = 0
+
+        for folder in operationFolders {
+            guard let operationID = UUID(uuidString: folder.lastPathComponent) else { continue }
+            do {
+                _ = try fileManager.trashItem(at: folder, resultingItemURL: nil)
+                trashedOperationIDs.insert(operationID)
+            } catch {
+                failedTrashCount += 1
+            }
+        }
+
+        if !trashedOperationIDs.isEmpty {
+            lastOperationIDs.removeAll { trashedOperationIDs.contains($0) }
+            for operationID in trashedOperationIDs {
+                lastOperationFilesByID.removeValue(forKey: operationID)
+            }
+        }
+
+        let clearedCount = trashedOperationIDs.count
+        if failedTrashCount > 0 {
+            statusMessage = "Moved \(clearedCount) backup(s) to \(trashName). \(failedTrashCount) couldn’t be moved."
+        } else {
+            setStatusMessage("Moved \(clearedCount) backup(s) to \(trashName).", autoClearAfterSuccess: true)
+        }
+        return clearedCount
     }
 
     func restoreLastOperation() {

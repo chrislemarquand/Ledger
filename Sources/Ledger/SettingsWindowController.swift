@@ -127,6 +127,11 @@ private final class GeneralSettingsViewController: NSViewController {
         action: #selector(keepBackupsToggled(_:))
     )
 
+    private lazy var clearBackupsButton = makeActionButton(
+        title: "Clear backups...",
+        action: #selector(clearBackupsAction(_:))
+    )
+
     init(model: AppModel) {
         self.model = model
         super.init(nibName: nil, bundle: nil)
@@ -153,11 +158,13 @@ private final class GeneralSettingsViewController: NSViewController {
         let applyLabel = makeCategoryLabel(title: "Apply:")
         let backupsLabel = makeCategoryLabel(title: "Backups:")
         let blankLabel = makeCategoryLabel(title: "")
+        let blankLabel2 = makeCategoryLabel(title: "")
 
         let grid = NSGridView(views: [
             [applyLabel, confirmBeforeApplyButton],
             [blankLabel, autoRefreshAfterApplyButton],
             [backupsLabel, keepBackupsButton],
+            [blankLabel2, clearBackupsButton],
         ])
         grid.translatesAutoresizingMaskIntoConstraints = false
         grid.rowSpacing = 12
@@ -178,6 +185,14 @@ private final class GeneralSettingsViewController: NSViewController {
     private func makeCheckbox(title: String, action: Selector) -> NSButton {
         let button = NSButton(checkboxWithTitle: title, target: self, action: action)
         button.translatesAutoresizingMaskIntoConstraints = false
+        button.setContentCompressionResistancePriority(.required, for: .vertical)
+        return button
+    }
+
+    private func makeActionButton(title: String, action: Selector) -> NSButton {
+        let button = NSButton(title: title, target: self, action: action)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.bezelStyle = .rounded
         button.setContentCompressionResistancePriority(.required, for: .vertical)
         return button
     }
@@ -209,6 +224,33 @@ private final class GeneralSettingsViewController: NSViewController {
     @objc
     private func keepBackupsToggled(_ sender: NSButton) {
         model.keepBackups = (sender.state == .on)
+    }
+
+    @objc
+    private func clearBackupsAction(_: Any?) {
+        let trashName = AppBrand.localizedTrashDisplayName
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Move all backups to \(trashName)?"
+        alert.informativeText = "This moves all saved backups to \(trashName)."
+        let deleteButton = alert.addButton(withTitle: "Move to \(trashName)")
+        deleteButton.hasDestructiveAction = true
+        alert.addButton(withTitle: "Cancel")
+
+        let handleResponse: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            do {
+                _ = try self.model.clearAllBackups()
+            } catch {
+                self.model.statusMessage = "Couldn’t clear backups. \(error.localizedDescription)"
+            }
+        }
+
+        if let window = view.window {
+            alert.beginSheetModal(for: window, completionHandler: handleResponse)
+        } else {
+            handleResponse(alert.runModal())
+        }
     }
 }
 
