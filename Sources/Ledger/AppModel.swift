@@ -5671,7 +5671,7 @@ final class AppModel: ObservableObject {
         let uniqueFiles = Array(Set(files))
         guard !uniqueFiles.isEmpty else { return }
 
-        backgroundWarmTasksBySelectionID[id] = Task { @MainActor [weak self] in
+        backgroundWarmTasksBySelectionID[id] = Task(priority: .utility) { @MainActor [weak self] in
             guard let self else { return }
             defer { self.backgroundWarmTasksBySelectionID[id] = nil }
             await self.warmCachesInBackground(files: uniqueFiles)
@@ -5679,11 +5679,10 @@ final class AppModel: ObservableObject {
     }
 
     private func warmCachesInBackground(files: [URL]) async {
-        // Never contend with the active foreground load. Warm only when the UI is idle.
-        while isFolderMetadataLoading || isPreviewPreloading {
-            do { try await Task.sleep(nanoseconds: 300_000_000) } catch { return }
-        }
+        // Never contend with active foreground work.
+        guard !isFolderMetadataLoading, !isPreviewPreloading else { return }
         do { try await Task.sleep(nanoseconds: Self.previewBulkStartDelayNanoseconds) } catch { return }
+        guard !isFolderMetadataLoading, !isPreviewPreloading else { return }
 
         let filesNeedingMetadata = files.filter { fileURL in
             staleMetadataFiles.contains(fileURL) || metadataByFile[fileURL] == nil

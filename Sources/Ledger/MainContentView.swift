@@ -84,6 +84,19 @@ actor SharedThumbnailRequestBroker {
     }
 }
 
+private func observeEquatable<P: Publisher>(
+    _ publisher: P,
+    storeIn cancellables: inout [AnyCancellable],
+    onChange: @escaping () -> Void
+) where P.Output: Equatable, P.Failure == Never {
+    publisher
+        .removeDuplicates()
+        .sink { _ in
+            onChange()
+        }
+        .store(in: &cancellables)
+}
+
 final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuItemValidation, NSMenuDelegate {
     private var model: AppModel
 
@@ -115,6 +128,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     private var lastWindowTitleText = ""
     private var lastWindowSubtitleText = ""
     private var isPaneStateSyncScheduled = false
+    private var isModelUIRefreshScheduled = false
     init(model: AppModel) {
         self.model = model
 
@@ -205,16 +219,9 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
     private func installUIRefreshObservers() {
         func observe<Value: Equatable>(_ publisher: Published<Value>.Publisher) {
-            publisher
-                .removeDuplicates()
-                .receive(on: DispatchQueue.main)
-                .sink { [weak self] _ in
-                    DispatchQueue.main.async { [weak self] in
-                        self?.nativeToolbarDelegate?.refreshFromModel()
-                        self?.refreshWindowTitleSubtitleIfNeeded()
-                    }
-                }
-                .store(in: &uiRefreshObservers)
+            observeEquatable(publisher, storeIn: &uiRefreshObservers) { [weak self] in
+                self?.scheduleModelDrivenUIRefresh()
+            }
         }
 
         observe(model.$selectedSidebarID)
@@ -235,6 +242,17 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         observe(model.$isInspectorCollapsed)
         observe(model.$inspectorRefreshRevision)
         observe(model.$stagedOpsDisplayToken)
+    }
+
+    private func scheduleModelDrivenUIRefresh() {
+        guard !isModelUIRefreshScheduled else { return }
+        isModelUIRefreshScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isModelUIRefreshScheduled = false
+            self.nativeToolbarDelegate?.refreshFromModel()
+            self.refreshWindowTitleSubtitleIfNeeded()
+        }
     }
 
     override func viewDidLoad() {
@@ -2037,19 +2055,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             let menu = makeSortMenu(model: model)
             sortMenu = menu
             sortItem?.menu = menu
-            for item in menu.items {
-                item.state = .off
-            }
-            switch model.browserSort {
-            case .name:
-                menu.item(withTitle: "Name")?.state = .on
-            case .created:
-                menu.item(withTitle: "Date Created")?.state = .on
-            case .size:
-                menu.item(withTitle: "Size")?.state = .on
-            case .kind:
-                menu.item(withTitle: "Kind")?.state = .on
-            }
+            applySortState(model.browserSort, to: menu)
         }
 
         private func updatePresetsMenu(with model: AppModel) {
@@ -2095,7 +2101,15 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             for item in menu.items {
                 item.target = controller
             }
-            switch model.browserSort {
+            applySortState(model.browserSort, to: menu)
+            return menu
+        }
+
+        private func applySortState(_ sort: AppModel.BrowserSort, to menu: NSMenu) {
+            for item in menu.items {
+                item.state = .off
+            }
+            switch sort {
             case .name:
                 menu.item(withTitle: "Name")?.state = .on
             case .created:
@@ -2105,7 +2119,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             case .kind:
                 menu.item(withTitle: "Kind")?.state = .on
             }
-            return menu
         }
 
         private func makeImportMenu(model: AppModel) -> NSMenu {
@@ -2268,6 +2281,7 @@ final class BrowserContainerViewController: NSViewController {
     private var renderObservers: [AnyCancellable] = []
     private var lastOverlayState: OverlayState = .none
     private var lastRenderedMode: AppModel.BrowserViewMode?
+    private var isRenderScheduled = false
 
     init(model: AppModel) {
         self.model = model
@@ -2296,15 +2310,9 @@ final class BrowserContainerViewController: NSViewController {
 
     private func installRenderObservers() {
         func observe<P: Publisher>(_ publisher: P) where P.Output: Equatable, P.Failure == Never {
-            publisher
-                .removeDuplicates()
-                .receive(on: DispatchQueue.main)
-                .sink { [weak self] _ in
-                    DispatchQueue.main.async { [weak self] in
-                        self?.render()
-                    }
-                }
-                .store(in: &renderObservers)
+            observeEquatable(publisher, storeIn: &renderObservers) { [weak self] in
+                self?.scheduleRender()
+            }
         }
 
         observe(model.$browserViewMode)
@@ -2321,6 +2329,16 @@ final class BrowserContainerViewController: NSViewController {
         observe(model.$browserSortAscending)
         observe(model.$galleryGridLevel)
         observe(model.$inspectorRefreshRevision)
+    }
+
+    private func scheduleRender() {
+        guard !isRenderScheduled else { return }
+        isRenderScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isRenderScheduled = false
+            self.render()
+        }
     }
 
     override func viewWillDisappear() {
