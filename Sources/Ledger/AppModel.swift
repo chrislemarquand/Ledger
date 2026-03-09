@@ -854,6 +854,10 @@ final class AppModel: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 if let error {
+                    if let staging = self.photosImportStagingDirectory {
+                        try? FileManager.default.removeItem(at: staging)
+                        self.photosImportStagingDirectory = nil
+                    }
                     self.statusMessage = "Couldn’t open Photos import. \(error.localizedDescription)"
                     return
                 }
@@ -884,7 +888,9 @@ final class AppModel: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 if let error {
-                    self.statusMessage = "Couldn’t send \(uniqueURLs.count) image(s) to Lightroom Classic. \(error.localizedDescription)"
+                    let n = uniqueURLs.count
+                    let images = n == 1 ? "1 image" : "\(n) images"
+                    self.statusMessage = "Couldn’t send \(images) to Lightroom Classic. \(error.localizedDescription)"
                     return
                 }
                 let suffix = uniqueURLs.count == 1 ? "" : "s"
@@ -902,6 +908,9 @@ final class AppModel: ObservableObject {
         let stagingRootDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent("Ledger-Photos-Import-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: stagingRootDirectory, withIntermediateDirectories: true)
+
+        // Track immediately so cleanup works even if the copy loop throws.
+        photosImportStagingDirectory = stagingRootDirectory
 
         let displayName = photosImportDisplayFolderName(for: fileURLs)
         let stagingDirectory = stagingRootDirectory.appendingPathComponent(displayName, isDirectory: true)
@@ -924,7 +933,6 @@ final class AppModel: ObservableObject {
             }
         }
 
-        photosImportStagingDirectory = stagingRootDirectory
         return stagingDirectory
     }
 
@@ -1300,7 +1308,8 @@ final class AppModel: ObservableObject {
                 if let selectedURL = primarySelectionURL, files.contains(selectedURL) {
                     ensureInspectorPreviewLoaded(for: selectedURL)
                 }
-                setStatusMessage("Refreshed metadata for \(files.count) file(s).", autoClearAfterSuccess: true)
+                let refreshed = files.count == 1 ? "1 file" : "\(files.count) files"
+                setStatusMessage("Refreshed metadata for \(refreshed).", autoClearAfterSuccess: true)
             } catch {
                 statusMessage = error.localizedDescription
             }
@@ -1385,7 +1394,8 @@ final class AppModel: ObservableObject {
         invalidateBrowserThumbnails(for: uniqueURLs)
         invalidateInspectorPreviews(for: uniqueURLs)
         recalculateInspectorState(forceNotify: true)
-        setStatusMessage("Cleared metadata changes for \(uniqueURLs.count) file(s).", autoClearAfterSuccess: true)
+        let cleared = uniqueURLs.count == 1 ? "1 file" : "\(uniqueURLs.count) files"
+        setStatusMessage("Cleared metadata changes for \(cleared).", autoClearAfterSuccess: true)
     }
 
     func applyChanges() {
@@ -1416,7 +1426,7 @@ final class AppModel: ObservableObject {
 
         if unreachableCount > 0 {
             setStatusMessage(
-                "Skipping \(unreachableCount) unavailable file(s); applying remaining changes.",
+                "Skipping \(unreachableCount) unavailable \(unreachableCount == 1 ? "file" : "files"); applying remaining changes.",
                 autoClearAfterSuccess: true
             )
         }
@@ -1651,10 +1661,11 @@ final class AppModel: ObservableObject {
         }
 
         let clearedCount = trashedOperationIDs.count
+        let backups = clearedCount == 1 ? "1 backup" : "\(clearedCount) backups"
         if failedTrashCount > 0 {
-            statusMessage = "Moved \(clearedCount) backup(s) to \(trashName). \(failedTrashCount) couldn’t be moved."
+            statusMessage = "Moved \(backups) to \(trashName). \(failedTrashCount) couldn’t be moved."
         } else {
-            setStatusMessage("Moved \(clearedCount) backup(s) to \(trashName).", autoClearAfterSuccess: true)
+            setStatusMessage("Moved \(backups) to \(trashName).", autoClearAfterSuccess: true)
         }
         return clearedCount
     }
@@ -1748,7 +1759,8 @@ final class AppModel: ObservableObject {
                 invalidateInspectorPreviews(for: summary.succeeded)
             }
             if summary.failed.isEmpty {
-                var message = "Restored \(summary.succeeded.count) file(s)."
+                let restoredFiles = summary.succeeded.count == 1 ? "1 file" : "\(summary.succeeded.count) files"
+                var message = "Restored \(restoredFiles)."
                 if skippedCount > 0 {
                     message += " \(skippedCount) had no backup."
                 }
@@ -1760,7 +1772,8 @@ final class AppModel: ObservableObject {
                 Task { @MainActor in
                     let alert = NSAlert()
                     alert.messageText = "Restore failed"
-                    alert.informativeText = "Could not restore \(summary.failed.count) file(s):\n\(failedNames)\n\n\(firstError)"
+                    let failedFiles = summary.failed.count == 1 ? "1 file" : "\(summary.failed.count) files"
+                    alert.informativeText = "Could not restore \(failedFiles):\n\(failedNames)\n\n\(firstError)"
                     alert.alertStyle = .warning
                     alert.addButton(withTitle: "OK")
                     alert.runModal()
@@ -1982,9 +1995,11 @@ final class AppModel: ObservableObject {
         }
         registerMetadataUndoIfNeeded(previous: previousState)
         recalculateInspectorState()
-        let ignoredText = unknownTagIDs.isEmpty ? "" : " Ignored \(unknownTagIDs.count) unsupported preset field(s)."
+        let ignoredCount = unknownTagIDs.count
+        let ignoredText = unknownTagIDs.isEmpty ? "" : " Ignored \(ignoredCount) unsupported preset \(ignoredCount == 1 ? "field" : "fields")."
+        let presetFiles = files.count == 1 ? "1 file" : "\(files.count) files"
         setStatusMessage(
-            "Staged preset “\(preset.name)” for \(files.count) file(s).\(ignoredText)",
+            "Staged preset \u{201C}\(preset.name)\u{201D} for \(presetFiles).\(ignoredText)",
             autoClearAfterSuccess: true
         )
     }
@@ -3063,7 +3078,7 @@ final class AppModel: ObservableObject {
         try await ExifToolCSVExportService().export(fileURLs: filesSnapshot, destinationURL: destinationSnapshot)
 
         setStatusMessage(
-            "Exported ExifTool CSV for \(fileCount) file(s).",
+            "Exported ExifTool CSV for \(fileCount == 1 ? "1 file" : "\(fileCount) files").",
             autoClearAfterSuccess: true
         )
         return fileCount
@@ -3169,7 +3184,7 @@ final class AppModel: ObservableObject {
         registerMetadataUndoIfNeeded(previous: previousState)
         recalculateInspectorState(forceNotify: true)
         setStatusMessage(
-            "Staged import for \(stagedFiles.count) file(s).",
+            "Staged import for \(stagedFiles.count == 1 ? "1 file" : "\(stagedFiles.count) files").",
             autoClearAfterSuccess: true
         )
         return ImportStageSummary(
@@ -5402,7 +5417,7 @@ final class AppModel: ObservableObject {
         let fileCount: Int
 
         var errorDescription: String? {
-            "Timed out reading metadata for \(fileCount) file(s)."
+            "Timed out reading metadata for \(fileCount == 1 ? "1 file" : "\(fileCount) files")."
         }
     }
 

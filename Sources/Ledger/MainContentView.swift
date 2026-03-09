@@ -196,6 +196,11 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             NotificationCenter.default.removeObserver(splitResizeObserver)
             self.splitResizeObserver = nil
         }
+        if let menuTrackingObserver {
+            NotificationCenter.default.removeObserver(menuTrackingObserver)
+            self.menuTrackingObserver = nil
+        }
+        appearanceObservation = nil
     }
 
     private func installUIRefreshObservers() {
@@ -1743,7 +1748,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Apply “\(preset.name)”?"
-        alert.informativeText = "This will update metadata for \(fileCount) image(s). Preset fields will overwrite existing values."
+        let images = fileCount == 1 ? "1 image" : "\(fileCount) images"
+        alert.informativeText = "This will update metadata for \(images). Preset fields will overwrite existing values."
         alert.addButton(withTitle: "Apply")
         alert.addButton(withTitle: "Cancel")
 
