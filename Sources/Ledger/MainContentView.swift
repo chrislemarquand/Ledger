@@ -861,13 +861,13 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         menu.addItem(openFolderItem)
 
         let importItem = NSMenuItem(title: "Import", action: nil, keyEquivalent: "")
-        importItem.image = NSImage(systemSymbolName: "square.and.arrow.down.on.square", accessibilityDescription: nil)
+        importItem.image = NSImage(systemSymbolName: "checklist.checked", accessibilityDescription: nil)
         importItem.tag = MenuTag.fileImportRoot
         importItem.submenu = makeImportSubmenu()
         menu.addItem(importItem)
 
         let exportItem = NSMenuItem(title: "Export", action: nil, keyEquivalent: "")
-        exportItem.image = NSImage(systemSymbolName: "square.and.arrow.up.on.square", accessibilityDescription: nil)
+        exportItem.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
         exportItem.tag = MenuTag.fileExportRoot
         exportItem.submenu = makeExportSubmenu()
         menu.addItem(exportItem)
@@ -1120,7 +1120,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
         let applySelectionItem = NSMenuItem(title: "Apply Metadata Changes to Selection", action: #selector(applySelectionAction(_:)), keyEquivalent: "s")
         applySelectionItem.keyEquivalentModifierMask = .command
-        applySelectionItem.image = NSImage(systemSymbolName: "square.and.arrow.down", accessibilityDescription: nil)
+        applySelectionItem.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
         applySelectionItem.tag = MenuTag.imageApplySelection
         applySelectionItem.target = self
         menu.addItem(applySelectionItem)
@@ -1150,7 +1150,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
         let applyAllItem = NSMenuItem(title: "Apply Metadata Changes to All Images", action: #selector(applyFolderAction(_:)), keyEquivalent: "S")
         applyAllItem.keyEquivalentModifierMask = [.command, .option, .shift]
-        applyAllItem.image = NSImage(systemSymbolName: "square.and.arrow.down.on.square", accessibilityDescription: nil)
+        applyAllItem.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
         applyAllItem.tag = MenuTag.imageApplyAll
         applyAllItem.target = self
         menu.addItem(applyAllItem)
@@ -2013,7 +2013,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 let item = NSMenuToolbarItem(itemIdentifier: itemIdentifier)
                 item.label = "Export"
                 item.paletteLabel = "Export"
-                item.image = NSImage(systemSymbolName: "square.and.arrow.up.on.square", accessibilityDescription: "Export")
+                item.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: "Export")
                 item.toolTip = "Export and handoff"
                 exportItem = item
                 updateExportMenu(with: controller.model)
@@ -2040,7 +2040,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 let item = NSToolbarItem(itemIdentifier: itemIdentifier)
                 item.label = "Apply Changes"
                 item.paletteLabel = "Apply Changes"
-                item.image = NSImage(systemSymbolName: "square.and.arrow.down.on.square", accessibilityDescription: "Save and apply")
+                item.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "Save and apply")
                 item.autovalidates = false
                 item.target = controller
                 item.action = #selector(NativeThreePaneSplitViewController.applyChangesAction(_:))
