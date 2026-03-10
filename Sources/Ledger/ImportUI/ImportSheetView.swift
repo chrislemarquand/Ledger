@@ -852,8 +852,10 @@ struct ImportSheetView: View {
                 .buttonStyle(.plain)
                 .popover(isPresented: $showInfo) {
                     Text(infoText)
+                        .font(.callout)
                         .padding()
-                        .frame(maxWidth: 280)
+                        .frame(minWidth: 260, maxWidth: 340)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
@@ -988,25 +990,25 @@ struct ImportSheetView: View {
         if isPostImportReviewMode, session.requiresPostImportReview, let report = session.importReport {
             return (
                 .warning,
-                "Import review: warnings/conflicts/partial outcomes detected.",
+                "Import completed with issues",
                 [
-                    "Warnings: \(report.summary.warningCount) • Conflicts: \(report.summary.conflictCount)",
-                    "Open Details… for detailed row outcomes before closing.",
+                    "\(report.summary.warningCount) warnings · \(report.summary.conflictCount) conflicts",
+                    "Review Details… before closing.",
                 ]
             )
         }
         if !session.rowOrderFallbackWarnings.isEmpty {
             return (
                 .warning,
-                "Row-order fallback is active for this import.",
-                Array(session.rowOrderFallbackWarnings.prefix(2))
+                "Matching images by position",
+                ["Images will be matched to CSV rows in order rather than by filename. Check the preview carefully."]
             )
         }
         if session.shouldShowEOSLensDependencyBanner {
             return (
                 .info,
-                "Lens Model depends on Focal Length in EOS imports.",
-                ["Enable Focal Length in Fields to include Lens Model values and lens-resolution prompts."]
+                "Lens Model requires Focal Length",
+                ["Enable Focal Length in Fields to include lens tags."]
             )
         }
         return nil
@@ -1014,11 +1016,11 @@ struct ImportSheetView: View {
 
     private var infoText: String {
         switch sourceKind {
-        case .csv: return "Expects an ExifTool-format CSV. Ledger auto-matches by SourceFile when uniquely safe, otherwise falls back to row order."
-        case .eos1v: return "Expects an EOS 1V CSV export file."
-        case .gpx: return "One or more GPX track files. Photos are matched by timestamp."
-        case .referenceFolder: return "A folder of reference images. Metadata is read from embedded EXIF or sidecar. Optional fallback can apply unmatched rows by row order."
-        case .referenceImage: return "A single reference image to copy metadata from."
+        case .csv: return "Import metadata from an ExifTool CSV file. Each row is matched to an image by filename. If filenames aren't available, rows are matched in the order images appear in the current view."
+        case .eos1v: return "Import shooting data from a Canon EOS 1V CSV export. Rows are matched to images in the order they appear in the current view."
+        case .gpx: return "Add GPS coordinates from a GPX track file. Each image is matched to a location by its capture time."
+        case .referenceFolder: return "Copy metadata from a folder of reference images. Images are matched by filename. If no match is found, an optional fallback matches rows in the order images appear in the current view."
+        case .referenceImage: return "Copy metadata fields from a single reference image to your selection."
         }
     }
 
@@ -1309,37 +1311,18 @@ struct InlineSheetMessageBanner: View {
         }
     }
 
-    private var accentColor: Color {
-        switch tone {
-        case .info:
-            return .blue
-        case .warning:
-            return .orange
-        case .error:
-            return .red
-        }
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 3) {
             Label(title, systemImage: iconName)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(accentColor)
+                .foregroundStyle(.secondary)
             ForEach(messages, id: \.self) { message in
                 Text(message)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, 20)
             }
         }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(accentColor.opacity(0.08))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(accentColor.opacity(0.25), lineWidth: 1)
-        )
     }
 }
