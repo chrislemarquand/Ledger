@@ -2052,6 +2052,7 @@ final class ImportSystemTests: XCTestCase {
         XCTAssertEqual(report?.rows.first?.status, .staged)
         XCTAssertEqual(report?.rows.first?.sourceLine, 2)
         XCTAssertEqual(report?.rows.first?.targetURL, file)
+        XCTAssertFalse(session.shouldEnterPostImportReview)
     }
 
     func testImportSessionGeneratesStructuredReportForUnresolvedConflicts() async throws {
@@ -2098,6 +2099,100 @@ final class ImportSystemTests: XCTestCase {
         XCTAssertEqual(session.importReport?.summary.conflictCount, 1)
         XCTAssertEqual(session.importReport?.conflicts.first?.sourceLine, 12)
         XCTAssertEqual(session.importReport?.conflicts.first?.sourceIdentifier, "row-12")
+        XCTAssertTrue(session.shouldEnterPostImportReview)
+    }
+
+    func testImportSessionEntersPostImportReviewWhenWarningsExist() async throws {
+        let model = makeModel()
+        let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.browserItems = [
+            AppModel.BrowserItem(url: file, name: file.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+        ]
+        model.metadataByFile = [file: FileMetadataSnapshot(fileURL: file, fields: [])]
+
+        var options = ImportRunOptions.defaults(for: .csv)
+        options.scope = .folder
+        let row = ImportRow(
+            sourceLine: 2,
+            sourceIdentifier: file.lastPathComponent,
+            targetSelector: .filename(file.lastPathComponent),
+            fields: [.init(tagID: "xmp-title", value: "Warn Path")]
+        )
+        let preparedRun = ImportPreparedRun(
+            options: options,
+            parsedAsSourceKind: .csv,
+            parseResult: ImportParseResult(rows: [row], warnings: []),
+            matchResult: ImportMatchResult(
+                matched: [ImportRowMatch(row: row, targetURL: file)],
+                conflicts: [],
+                warnings: [
+                    ImportWarning(
+                        sourceLine: nil,
+                        message: "Using row-order matching: SourceFile values are incomplete for one or more rows.",
+                        severity: .warning
+                    ),
+                ]
+            ),
+            previewSummary: ImportPreviewSummary(
+                sourceKind: .csv,
+                parsedRows: 1,
+                matchedRows: 1,
+                conflictedRows: 0,
+                warnings: 1,
+                fieldWrites: 1
+            )
+        )
+
+        let session = ImportSession(model: model, sourceKind: .csv)
+        session.preparedRun = preparedRun
+        let success = await session.performImport(model: model)
+        XCTAssertTrue(success)
+        XCTAssertTrue(session.shouldEnterPostImportReview)
+    }
+
+    func testImportSessionEntersPostImportReviewWhenOnlyPartialOutcomesOccur() async throws {
+        let model = makeModel()
+        let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.browserItems = [
+            AppModel.BrowserItem(url: file, name: file.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+        ]
+        model.metadataByFile = [file: FileMetadataSnapshot(fileURL: file, fields: [])]
+
+        var options = ImportRunOptions.defaults(for: .csv)
+        options.scope = .folder
+        options.emptyValuePolicy = .skip
+        let row = ImportRow(
+            sourceLine: 2,
+            sourceIdentifier: file.lastPathComponent,
+            targetSelector: .filename(file.lastPathComponent),
+            fields: [.init(tagID: "xmp-title", value: "")]
+        )
+        let preparedRun = ImportPreparedRun(
+            options: options,
+            parsedAsSourceKind: .csv,
+            parseResult: ImportParseResult(rows: [row], warnings: []),
+            matchResult: ImportMatchResult(
+                matched: [ImportRowMatch(row: row, targetURL: file)],
+                conflicts: [],
+                warnings: []
+            ),
+            previewSummary: ImportPreviewSummary(
+                sourceKind: .csv,
+                parsedRows: 1,
+                matchedRows: 1,
+                conflictedRows: 0,
+                warnings: 0,
+                fieldWrites: 1
+            )
+        )
+
+        let session = ImportSession(model: model, sourceKind: .csv)
+        session.preparedRun = preparedRun
+        session.options.emptyValuePolicy = .skip
+        let success = await session.performImport(model: model)
+        XCTAssertFalse(success)
+        XCTAssertTrue(session.shouldEnterPostImportReview)
+        XCTAssertEqual(session.importReport?.rows.first?.status, .skippedByPolicy)
     }
 
     func testImportSessionUsesCurrentEmptyPolicyWhenPreparedRunExists() async throws {

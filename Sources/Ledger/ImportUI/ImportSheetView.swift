@@ -175,7 +175,6 @@ final class ImportSession: ObservableObject {
                 stageSummary: nil
             )
             shouldEnterPostImportReview = shouldReview(report: importReport)
-            debugLogImportReport(importReport)
             presentBlockingImportAlert(
                 title: "Import needs conflict resolution.",
                 message: message
@@ -207,7 +206,6 @@ final class ImportSession: ObservableObject {
             stageSummary: stageSummary
         )
         shouldEnterPostImportReview = shouldReview(report: importReport)
-        debugLogImportReport(importReport)
         guard stageSummary.stagedFiles > 0 else {
             previewError = "No metadata changes to import. Check that source rows match the target files."
             return false
@@ -302,19 +300,6 @@ final class ImportSession: ObservableObject {
         return report.rows.contains { row in
             row.attemptedFields > 0 && row.status != .staged
         }
-    }
-
-    private func debugLogImportReport(_ report: ImportRunReport?) {
-#if DEBUG
-        guard let report else { return }
-        print("[ImportReport] kind=\(report.sourceKind.rawValue) scope=\(report.scope.rawValue) rows=\(report.summary.parsedRows) matched=\(report.summary.matchedRows) conflicts=\(report.summary.conflictCount) stagedFiles=\(report.summary.stagedFiles) stagedFields=\(report.summary.stagedFields) warnings=\(report.summary.warningCount)")
-        for row in report.rows.prefix(12) {
-            print("[ImportReportRow] source=\(row.sourceIdentifier) target=\(row.targetDisplayName) status=\(row.status.rawValue) attempted=\(row.attemptedFields) staged=\(row.stagedFields) skipped=\(row.skippedByPolicy) unchanged=\(row.unchangedFields) unsupported=\(row.unsupportedFields)")
-        }
-        if report.rows.count > 12 {
-            print("[ImportReportRow] ... \(report.rows.count - 12) more rows")
-        }
-#endif
     }
 
     private func presentBlockingImportAlert(title: String, message: String) {
@@ -909,7 +894,7 @@ struct ImportSheetView: View {
             ProgressView(value: importProgress ?? 0)
                 .opacity(importProgress == nil ? 0 : 1)
 
-            // Footer: Fields… | [Advanced…] | [Preview…]   Cancel  Import
+            // Footer: Fields… | [Advanced…] | [Details…]   Cancel  Import
             HStack {
                 Button("Fields…") {
                     showFields = true
@@ -928,7 +913,7 @@ struct ImportSheetView: View {
                     }
                 }
                 if hasPreview {
-                    Button("Preview…") {
+                    Button("Details…") {
                         showPreview = true
                     }
                     .disabled(session.options.sourceURL == nil)
@@ -998,7 +983,7 @@ struct ImportSheetView: View {
                 "Import review: warnings/conflicts/partial outcomes detected.",
                 [
                     "Warnings: \(report.summary.warningCount) • Conflicts: \(report.summary.conflictCount)",
-                    "Open Preview… for detailed row outcomes before closing.",
+                    "Open Details… for detailed row outcomes before closing.",
                 ]
             )
         }
