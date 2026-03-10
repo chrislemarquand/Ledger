@@ -521,11 +521,6 @@ final class AppModel: ObservableObject {
     /// Bumped on every staged image operation so the gallery can refresh display transforms
     /// without clearing the thumbnail pipeline cache (no async re-fetch needed).
     @Published var stagedOpsDisplayToken: UInt64 = 0
-    @Published var lastResult: OperationResult? {
-        didSet {
-            notifyInspectorDidChange()
-        }
-    }
     @Published var isFolderContentLoading = false
     @Published var isFolderMetadataLoading = false
     @Published var folderMetadataLoadCompleted = 0

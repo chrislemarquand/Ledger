@@ -17,6 +17,7 @@ final class ImportSession: ObservableObject {
     struct EOSLensChoiceRequest {
         let sourceLine: Int
         let sourceIdentifier: String
+        let targetFileName: String
         let focalMillimeters: Int
         let candidates: [String]
         let remainingRowsAtFocal: Int
@@ -455,6 +456,7 @@ final class ImportSession: ObservableObject {
                     let request = EOSLensChoiceRequest(
                         sourceLine: row.sourceLine,
                         sourceIdentifier: row.sourceIdentifier,
+                        targetFileName: assignment.targetURL.lastPathComponent,
                         focalMillimeters: focalMM,
                         candidates: candidates,
                         remainingRowsAtFocal: max(remainingAmbiguousRowsByFocal[focalMM, default: 0] - 1, 0)
@@ -558,28 +560,34 @@ final class ImportSession: ObservableObject {
 
         let alert = NSAlert()
         alert.alertStyle = .informational
-        alert.messageText = "Choose Lens for \(request.sourceIdentifier)"
-        alert.informativeText = "Row \(request.sourceLine), focal length \(request.focalMillimeters) mm has multiple candidate lenses."
+        alert.messageText = "Multiple Lenses Matched"
+        alert.informativeText = "\(request.targetFileName) matched more than one lens at \(request.focalMillimeters) mm. Choose which lens to assign."
 
-        let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 420, height: 26), pullsDown: false)
+        let popup = NSPopUpButton(frame: .zero, pullsDown: false)
         popup.addItems(withTitles: request.candidates)
+        popup.sizeToFit()
 
-        let accessory = NSStackView(frame: NSRect(x: 0, y: 0, width: 420, height: 58))
+        let accessory = NSStackView()
         accessory.orientation = .vertical
         accessory.alignment = .leading
-        accessory.spacing = 8
-        accessory.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+        accessory.spacing = 12
+        accessory.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 4, right: 0)
         accessory.addArrangedSubview(popup)
 
         let applyToRemainingCheckbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
         if request.remainingRowsAtFocal > 0 {
-            let suffix = request.remainingRowsAtFocal == 1 ? "row" : "rows"
-            applyToRemainingCheckbox.title = "Apply to remaining \(request.remainingRowsAtFocal) \(suffix) at \(request.focalMillimeters) mm"
+            let suffix = request.remainingRowsAtFocal == 1 ? "image" : "images"
+            applyToRemainingCheckbox.title = "Apply to \(request.remainingRowsAtFocal) more \(suffix)"
             accessory.addArrangedSubview(applyToRemainingCheckbox)
         }
+
+        // Let the accessory size to its content — NSAlert will widen itself if needed.
+        accessory.layoutSubtreeIfNeeded()
+        accessory.frame = NSRect(origin: .zero, size: accessory.fittingSize)
+
         alert.accessoryView = accessory
-        alert.addButton(withTitle: "Use Selected Lens")
-        alert.addButton(withTitle: "Cancel Import")
+        alert.addButton(withTitle: "Use Lens")
+        alert.addButton(withTitle: "Cancel")
 
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn,

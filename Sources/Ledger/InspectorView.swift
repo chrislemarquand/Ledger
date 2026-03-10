@@ -348,25 +348,7 @@ struct InspectorView: View {
                         .padding(.horizontal, contentHorizontalInset)
                     }
 
-                    if let lastResult = model.lastResult {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Last Operation")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .tracking(0.4)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Succeeded: \(lastResult.succeeded.count)")
-                                Text("Failed: \(lastResult.failed.count)")
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(sectionInnerInset)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(.quaternary.opacity(0.35))
-                            )
-                        }
-                        .padding(.horizontal, contentHorizontalInset)
-                    }
+
                 }
                     .padding(.vertical, 12)
                 }

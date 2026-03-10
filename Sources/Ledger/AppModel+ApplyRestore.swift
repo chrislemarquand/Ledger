@@ -210,7 +210,6 @@ extension AppModel {
             )
             lastOperationIDs = operationIDs
             lastOperationFilesByID = operationFilesByID
-            lastResult = result
 
             if !result.succeeded.isEmpty {
                 // Applied image operations mutate file pixels on disk, so any pre-apply
@@ -383,7 +382,6 @@ extension AppModel {
                 backupLocation: backupLocation,
                 duration: Date().timeIntervalSince(startedAt)
             )
-            lastResult = summary
             if !summary.succeeded.isEmpty {
                 for fileURL in summary.succeeded {
                     pendingEditsByFile[fileURL] = nil
