@@ -27,7 +27,7 @@ Primary objective: get import right end-to-end.
 
 ### General UX
 - [x] Status bar message audit: review all status messages for necessity; promote any that warrant it to modal dialogs.
-- [ ] UI/UX polish: settings pane layout and sizes.
+- [x] UI/UX polish: settings pane layout and sizes.
 
 ### Inspector Groundwork (prerequisite for Settings)
 - [x] `inspectorRefreshRevision`: eliminate the duplicate `@State` copy in `InspectorView`; model's `@Published` value is now the single source of truth.
@@ -43,7 +43,7 @@ Primary objective: get import right end-to-end.
 - [x] Single import flow: load source -> match/preview/conflicts -> target scope (selection/folder) -> apply.
 - [x] EOS 1V ingest parity in Swift (mapping/normalization/matching semantics from existing EOS 1V tool).
 - [x] EOS 1V lens-tag resolver architecture: remove hardcoded lens inference and route through a policy layer that can read future Settings defaults plus per-import overrides.
-- [ ] Import sheet preview/stage parity hardening + structured import report output.
+- [x] Import sheet preview/stage parity hardening + structured import report output.
 - [x] **Reference-based metadata apply**: select one image as reference, apply chosen metadata fields to a selection. Uses ExifTool `-tagsFromFile`. Sheet UI: select reference file → choose field groups → preview diff → confirm.
 
 ### Settings
@@ -61,10 +61,8 @@ Primary objective: get import right end-to-end.
 
 ## v1.2 (Minor) — Editing Productivity
 
-- [ ] Batch Rename (first release).
-- [ ] Metadata copy/paste:
-  - [ ] Field-level copy/paste.
-  - [ ] Metadata-set copy/paste.
+- [ ] Batch Rename (first release)
+- [ ] Add more Exif fields to Inspector view (including rating)
 - [ ] Rename hardening:
   - [ ] Collision handling.
   - [ ] Preview determinism.
@@ -86,6 +84,9 @@ Merges former v1.3 and v1.4 into one release.
 - [ ] Gallery metadata lines/subtitle customisation.
 - [ ] Toolbar customisation/editing.
 - [ ] **Full native QuickLook rewrite**: replace current preview implementation with a fully native QuickLook integration.
+- [ ] Metadata copy/paste:
+  - [ ] Field-level copy/paste.
+  - [ ] Metadata-set copy/paste.
 
 ---
 
