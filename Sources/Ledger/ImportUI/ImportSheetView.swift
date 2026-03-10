@@ -1017,7 +1017,7 @@ struct ImportSheetView: View {
     private var infoText: String {
         switch sourceKind {
         case .csv: return "Import metadata from an ExifTool CSV file. Each row is matched to an image by filename. If filenames aren't available, rows are matched in the order images appear in the current view."
-        case .eos1v: return "Import shooting data from a Canon EOS 1V CSV export. Rows are matched to images in the order they appear in the current view."
+        case .eos1v: return "Import shooting data from a Canon EOS-1V CSV export. Rows are matched to images in the order they appear in the current view."
         case .gpx: return "Add GPS coordinates from a GPX track file. Each image is matched to a location by its capture time."
         case .referenceFolder: return "Copy metadata from a folder of reference images. Images are matched by filename. If no match is found, an optional fallback matches rows in the order images appear in the current view."
         case .referenceImage: return "Copy metadata fields from a single reference image to your selection."
