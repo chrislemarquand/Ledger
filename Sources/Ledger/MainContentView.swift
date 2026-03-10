@@ -122,7 +122,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     private var spacebarMonitor: Any?
     private var browserFocusRequestObserver: NSObjectProtocol?
     private var splitResizeObserver: NSObjectProtocol?
-    private var appearanceObservation: NSKeyValueObservation?
+    private var windowAppearanceObservation: NSKeyValueObservation?
+    private var lastWindowAppearanceName: NSAppearance.Name?
     private var didApplyInitialContentSplit = false
     private var didApplyInitialInspectorVisibility = false
     private var lastWindowTitleText = ""
@@ -214,7 +215,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             NotificationCenter.default.removeObserver(menuTrackingObserver)
             self.menuTrackingObserver = nil
         }
-        appearanceObservation = nil
+        windowAppearanceObservation = nil
+        lastWindowAppearanceName = nil
     }
 
     private func installUIRefreshObservers() {
@@ -283,14 +285,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     override func viewDidAppear() {
         super.viewDidAppear()
         ensureInitialInspectorVisibilityIfNeeded()
-        // NSHostingView can disrupt AppKit's appearance-change propagation to views
-        // outside the SwiftUI hierarchy (toolbar items). Force a full window redisplay
-        // after SwiftUI has completed its own update pass.
-        appearanceObservation = view.observe(\.effectiveAppearance) { [weak self] _, _ in
-            DispatchQueue.main.async {
-                self?.view.window?.display()
-            }
-        }
+        installWindowAppearanceObservationIfNeeded()
     }
 
     override func viewDidLayout() {
@@ -335,25 +330,62 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             || defaults.object(forKey: "NSSplitView Divider Positions \(Self.contentSplitAutosaveName)") != nil
     }
 
+    private func installWindowAppearanceObservationIfNeeded() {
+        guard windowAppearanceObservation == nil, let window = view.window else { return }
+        lastWindowAppearanceName = window.effectiveAppearance.name
+        windowAppearanceObservation = window.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, change in
+            let newName = change.newValue?.name
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard let newName else { return }
+                guard self.lastWindowAppearanceName != newName else { return }
+                self.lastWindowAppearanceName = newName
+                self.rebuildToolbarForCurrentAppearance()
+            }
+        }
+    }
+
+    private func installMainToolbar(on window: NSWindow, resetDelegateState: Bool) {
+        let delegate: NativeToolbarDelegate
+        if let existingDelegate = nativeToolbarDelegate {
+            delegate = existingDelegate
+            if resetDelegateState {
+                delegate.resetCachedToolbarReferences()
+            }
+        } else {
+            delegate = NativeToolbarDelegate(controller: self)
+        }
+        nativeToolbarDelegate = delegate
+
+        // Recreate the toolbar through AppKit so item views are rebuilt for the
+        // current titlebar appearance (light/dark/high-contrast).
+        let toolbar = NSToolbar(identifier: "\(AppBrand.identifierPrefix).MainToolbar.v5")
+        toolbar.delegate = delegate
+        toolbar.displayMode = .iconOnly
+        toolbar.allowsUserCustomization = false
+        toolbar.autosavesConfiguration = false
+        window.toolbar = toolbar
+    }
+
+    private func rebuildToolbarForCurrentAppearance() {
+        guard let window = view.window else { return }
+        installMainToolbar(on: window, resetDelegateState: true)
+        nativeToolbarDelegate?.refreshFromModel()
+        window.toolbar?.validateVisibleItems()
+    }
+
     private func configureWindowIfNeeded() {
         guard !didConfigureWindow, let window = view.window else { return }
         didConfigureWindow = true
 
         window.styleMask.insert(.fullSizeContentView)
         window.toolbarStyle = .automatic
+        window.titlebarSeparatorStyle = .automatic
         window.titleVisibility = .visible
         window.titlebarAppearsTransparent = false
 
-        let delegate = NativeToolbarDelegate(controller: self)
-        // Bump toolbar identifier so AppKit rebuilds default item layout.
-        let toolbar = NSToolbar(identifier: "\(AppBrand.identifierPrefix).MainToolbar.v4")
-        toolbar.delegate = delegate
-        toolbar.displayMode = .iconOnly
-        toolbar.allowsUserCustomization = false
-        toolbar.autosavesConfiguration = false
-        window.toolbar = toolbar
-
-        nativeToolbarDelegate = delegate
+        installMainToolbar(on: window, resetDelegateState: true)
+        nativeToolbarDelegate?.refreshFromModel()
         if sidebarItem.isCollapsed {
             sidebarItem.isCollapsed = false
         }
@@ -1804,6 +1836,24 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
         init(controller: NativeThreePaneSplitViewController) {
             self.controller = controller
+        }
+
+        func resetCachedToolbarReferences() {
+            viewModeControl = nil
+            loadingItem = nil
+            loadingSpinner = nil
+            zoomOutItem = nil
+            zoomInItem = nil
+            applyChangesItem = nil
+            inspectorToggleItem = nil
+            sortItem = nil
+            importItem = nil
+            exportItem = nil
+            presetsItem = nil
+            sortMenu = nil
+            importMenu = nil
+            exportMenu = nil
+            presetsMenu = nil
         }
 
         func toolbarDefaultItemIdentifiers(_: NSToolbar) -> [NSToolbarItem.Identifier] {
