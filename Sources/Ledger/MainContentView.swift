@@ -1495,20 +1495,31 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             }
             panel.canCreateDirectories = true
             panel.nameFieldStringValue = "exiftool-export.csv"
-            guard panel.runModal() == .OK, let destinationURL = panel.url else { return }
 
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                do {
-                    _ = try await self.model.exportExifToolCSV(scope: scope, destinationURL: destinationURL)
-                } catch {
-                    let alert = NSAlert()
-                    alert.alertStyle = .warning
-                    alert.messageText = "Export Failed"
-                    alert.informativeText = error.localizedDescription
-                    alert.addButton(withTitle: "OK")
-                    alert.runModal()
+            let export: (URL) -> Void = { [weak self] destinationURL in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    do {
+                        _ = try await self.model.exportExifToolCSV(scope: scope, destinationURL: destinationURL)
+                    } catch {
+                        let alert = NSAlert()
+                        alert.alertStyle = .warning
+                        alert.messageText = "Export Failed"
+                        alert.informativeText = error.localizedDescription
+                        alert.addButton(withTitle: "OK")
+                        alert.runModal()
+                    }
                 }
+            }
+
+            if let window = self.view.window {
+                panel.beginSheetModal(for: window) { response in
+                    guard response == .OK, let destinationURL = panel.url else { return }
+                    export(destinationURL)
+                }
+            } else {
+                guard panel.runModal() == .OK, let destinationURL = panel.url else { return }
+                export(destinationURL)
             }
         }
     }
@@ -1533,16 +1544,39 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     private func pickExportScope(actionTitle: String, completion: @escaping (ImportScope, [URL]) -> Void) {
         let selectionURLs = Array(model.selectedFileURLs)
         let folderURLs = model.browserItems.map(\.url)
+        let hasPendingEdits = model.hasPendingEdits(inImportScope: .folder)
+        let pendingEditsNote = hasPendingEdits
+            ? "\n\nYou have unapplied changes that won't be included. Apply them first if you want them exported."
+            : ""
 
         guard !selectionURLs.isEmpty else {
-            completion(.folder, folderURLs)
+            // No selection — fall straight through, but warn about pending edits if needed.
+            if hasPendingEdits {
+                let alert = NSAlert()
+                alert.alertStyle = .warning
+                alert.messageText = actionTitle
+                alert.informativeText = "You have unapplied changes that won't be included. Apply them first if you want them exported."
+                alert.addButton(withTitle: "Export Anyway")
+                alert.addButton(withTitle: "Cancel")
+                if let window = view.window {
+                    alert.beginSheetModal(for: window) { response in
+                        guard response == .alertFirstButtonReturn else { return }
+                        completion(.folder, folderURLs)
+                    }
+                } else {
+                    guard alert.runModal() == .alertFirstButtonReturn else { return }
+                    completion(.folder, folderURLs)
+                }
+            } else {
+                completion(.folder, folderURLs)
+            }
             return
         }
 
         let n = selectionURLs.count
         let alert = NSAlert()
         alert.messageText = actionTitle
-        alert.informativeText = "Export the current selection or all images in the folder?"
+        alert.informativeText = "Export the current selection or all images in the folder?\(pendingEditsNote)"
         alert.addButton(withTitle: "Selection (\(n) \(n == 1 ? "file" : "files"))")
         alert.addButton(withTitle: "Folder")
         alert.addButton(withTitle: "Cancel")
