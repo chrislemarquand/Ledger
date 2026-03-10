@@ -215,8 +215,13 @@ extension AppModel {
             if !result.succeeded.isEmpty {
                 // Applied image operations mutate file pixels on disk, so any pre-apply
                 // cached thumbnails become stale immediately once staged ops are cleared.
+                ThumbnailPipeline.invalidateCachedImages(for: Set(result.succeeded))
                 invalidateBrowserThumbnails(for: result.succeeded)
                 invalidateInspectorPreviews(for: result.succeeded)
+                let selectedSucceeded = result.succeeded.filter { selectedFileURLs.contains($0) }
+                for fileURL in selectedSucceeded {
+                    loadInspectorPreview(for: fileURL, force: true, priority: .userInitiated)
+                }
             }
 
             if result.failed.isEmpty {
@@ -398,8 +403,13 @@ extension AppModel {
                     lastOperationIDs.removeAll { $0 == opID }
                     lastOperationFilesByID.removeValue(forKey: opID)
                 }
+                ThumbnailPipeline.invalidateCachedImages(for: succeededSet)
                 invalidateBrowserThumbnails(for: summary.succeeded)
                 invalidateInspectorPreviews(for: summary.succeeded)
+                let selectedSucceeded = summary.succeeded.filter { selectedFileURLs.contains($0) }
+                for fileURL in selectedSucceeded {
+                    loadInspectorPreview(for: fileURL, force: true, priority: .userInitiated)
+                }
             }
             if summary.failed.isEmpty {
                 let restoredFiles = summary.succeeded.count == 1 ? "1 file" : "\(summary.succeeded.count) files"
