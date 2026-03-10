@@ -30,7 +30,38 @@
 		A100014A0000000000000001 /* Sources/Ledger/NavigationSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001490000000000000001 /* Sources/Ledger/NavigationSidebarView.swift */; };
 		A100014C0000000000000001 /* Sources/Ledger/PresetSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014B0000000000000001 /* Sources/Ledger/PresetSheets.swift */; };
 		A100014E0000000000000001 /* Sources/Ledger/ThumbnailService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014D0000000000000001 /* Sources/Ledger/ThumbnailService.swift */; };
+		A10001500000000000000001 /* Sources/Ledger/SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014F0000000000000001 /* Sources/Ledger/SettingsWindowController.swift */; };
+		A10001510000000000000001 /* Sources/Ledger/AppModel+Sidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001530000000000000001 /* Sources/Ledger/AppModel+Sidebar.swift */; };
+		A10001520000000000000001 /* Sources/Ledger/AppModel+Preview.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001540000000000000001 /* Sources/Ledger/AppModel+Preview.swift */; };
+		A10001620000000000000001 /* Sources/Ledger/AppModel+Actions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001550000000000000001 /* Sources/Ledger/AppModel+Actions.swift */; };
+		A10001630000000000000001 /* Sources/Ledger/AppModel+Navigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001560000000000000001 /* Sources/Ledger/AppModel+Navigation.swift */; };
+		A10001640000000000000001 /* Sources/Ledger/AppModel+ApplyRestore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001570000000000000001 /* Sources/Ledger/AppModel+ApplyRestore.swift */; };
+		A10001650000000000000001 /* Sources/Ledger/AppModel+Presets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001580000000000000001 /* Sources/Ledger/AppModel+Presets.swift */; };
+		A10001660000000000000001 /* Sources/Ledger/AppModel+Editing.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001590000000000000001 /* Sources/Ledger/AppModel+Editing.swift */; };
+		A10001670000000000000001 /* Sources/Ledger/AppModel+InspectorFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100015A0000000000000001 /* Sources/Ledger/AppModel+InspectorFields.swift */; };
+		A10001680000000000000001 /* Sources/Ledger/AppModel+Import.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100015B0000000000000001 /* Sources/Ledger/AppModel+Import.swift */; };
+		A10001690000000000000001 /* Sources/Ledger/AppModel+FileLoading.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100015C0000000000000001 /* Sources/Ledger/AppModel+FileLoading.swift */; };
+		A100016A0000000000000001 /* Sources/Ledger/AppModel+MetadataValues.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100015D0000000000000001 /* Sources/Ledger/AppModel+MetadataValues.swift */; };
+		A100016B0000000000000001 /* Sources/Ledger/AppModel+Formatters.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100015E0000000000000001 /* Sources/Ledger/AppModel+Formatters.swift */; };
+		A100016C0000000000000001 /* Sources/Ledger/AppModel+MetadataPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100015F0000000000000001 /* Sources/Ledger/AppModel+MetadataPipeline.swift */; };
+		A100016D0000000000000001 /* Sources/Ledger/AppModel+UndoStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001600000000000000001 /* Sources/Ledger/AppModel+UndoStatus.swift */; };
+		A100016E0000000000000001 /* Sources/Ledger/AppModel+FieldCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001610000000000000001 /* Sources/Ledger/AppModel+FieldCatalog.swift */; };
 		B100001D0000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000D0000000000000001 /* Assets.xcassets */; };
+		C20002010000000000000001 /* Sources/Ledger/Import/CSVImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001010000000000000001 /* Sources/Ledger/Import/CSVImportAdapter.swift */; };
+		C20002020000000000000001 /* Sources/Ledger/Import/CSVSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001020000000000000001 /* Sources/Ledger/Import/CSVSupport.swift */; };
+		C20002030000000000000001 /* Sources/Ledger/Import/EOS1VImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001030000000000000001 /* Sources/Ledger/Import/EOS1VImportAdapter.swift */; };
+		C20002040000000000000001 /* Sources/Ledger/Import/GPXImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001040000000000000001 /* Sources/Ledger/Import/GPXImportAdapter.swift */; };
+		C20002050000000000000001 /* Sources/Ledger/Import/ImportConflictResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001050000000000000001 /* Sources/Ledger/Import/ImportConflictResolver.swift */; };
+		C20002060000000000000001 /* Sources/Ledger/Import/ImportCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001060000000000000001 /* Sources/Ledger/Import/ImportCoordinator.swift */; };
+		C20002070000000000000001 /* Sources/Ledger/Import/ImportMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001070000000000000001 /* Sources/Ledger/Import/ImportMatcher.swift */; };
+		C20002080000000000000001 /* Sources/Ledger/Import/ImportModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001080000000000000001 /* Sources/Ledger/Import/ImportModels.swift */; };
+		C20002090000000000000001 /* Sources/Ledger/Import/EOSLensMappingEmbedded.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001090000000000000001 /* Sources/Ledger/Import/EOSLensMappingEmbedded.swift */; };
+		C200020A0000000000000001 /* Sources/Ledger/Import/ImportSourceAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010A0000000000000001 /* Sources/Ledger/Import/ImportSourceAdapter.swift */; };
+		C200020B0000000000000001 /* Sources/Ledger/Import/ReferenceFolderImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010B0000000000000001 /* Sources/Ledger/Import/ReferenceFolderImportAdapter.swift */; };
+		C200020C0000000000000001 /* Sources/Ledger/Import/ReferenceImageImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010C0000000000000001 /* Sources/Ledger/Import/ReferenceImageImportAdapter.swift */; };
+		C200020D0000000000000001 /* Sources/Ledger/Import/ReferenceImportSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010D0000000000000001 /* Sources/Ledger/Import/ReferenceImportSupport.swift */; };
+		C200020E0000000000000001 /* Sources/Ledger/ImportUI/ImportSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010E0000000000000001 /* Sources/Ledger/ImportUI/ImportSheetView.swift */; };
+		C200020F0000000000000001 /* Sources/Ledger/Import/ExifToolCSVExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010F0000000000000001 /* Sources/Ledger/Import/ExifToolCSVExportService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -83,7 +114,38 @@
 		A10001490000000000000001 /* Sources/Ledger/NavigationSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/NavigationSidebarView.swift; sourceTree = SOURCE_ROOT; };
 		A100014B0000000000000001 /* Sources/Ledger/PresetSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/PresetSheets.swift; sourceTree = SOURCE_ROOT; };
 		A100014D0000000000000001 /* Sources/Ledger/ThumbnailService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/ThumbnailService.swift; sourceTree = SOURCE_ROOT; };
+		A100014F0000000000000001 /* Sources/Ledger/SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/SettingsWindowController.swift; sourceTree = SOURCE_ROOT; };
+		A10001530000000000000001 /* Sources/Ledger/AppModel+Sidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+Sidebar.swift"; sourceTree = SOURCE_ROOT; };
+		A10001540000000000000001 /* Sources/Ledger/AppModel+Preview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+Preview.swift"; sourceTree = SOURCE_ROOT; };
+		A10001550000000000000001 /* Sources/Ledger/AppModel+Actions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+Actions.swift"; sourceTree = SOURCE_ROOT; };
+		A10001560000000000000001 /* Sources/Ledger/AppModel+Navigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+Navigation.swift"; sourceTree = SOURCE_ROOT; };
+		A10001570000000000000001 /* Sources/Ledger/AppModel+ApplyRestore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+ApplyRestore.swift"; sourceTree = SOURCE_ROOT; };
+		A10001580000000000000001 /* Sources/Ledger/AppModel+Presets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+Presets.swift"; sourceTree = SOURCE_ROOT; };
+		A10001590000000000000001 /* Sources/Ledger/AppModel+Editing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+Editing.swift"; sourceTree = SOURCE_ROOT; };
+		A100015A0000000000000001 /* Sources/Ledger/AppModel+InspectorFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+InspectorFields.swift"; sourceTree = SOURCE_ROOT; };
+		A100015B0000000000000001 /* Sources/Ledger/AppModel+Import.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+Import.swift"; sourceTree = SOURCE_ROOT; };
+		A100015C0000000000000001 /* Sources/Ledger/AppModel+FileLoading.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+FileLoading.swift"; sourceTree = SOURCE_ROOT; };
+		A100015D0000000000000001 /* Sources/Ledger/AppModel+MetadataValues.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+MetadataValues.swift"; sourceTree = SOURCE_ROOT; };
+		A100015E0000000000000001 /* Sources/Ledger/AppModel+Formatters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+Formatters.swift"; sourceTree = SOURCE_ROOT; };
+		A100015F0000000000000001 /* Sources/Ledger/AppModel+MetadataPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+MetadataPipeline.swift"; sourceTree = SOURCE_ROOT; };
+		A10001600000000000000001 /* Sources/Ledger/AppModel+UndoStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+UndoStatus.swift"; sourceTree = SOURCE_ROOT; };
+		A10001610000000000000001 /* Sources/Ledger/AppModel+FieldCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+FieldCatalog.swift"; sourceTree = SOURCE_ROOT; };
 		B100000D0000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = SOURCE_ROOT; };
+		C20001010000000000000001 /* Sources/Ledger/Import/CSVImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/CSVImportAdapter.swift; sourceTree = SOURCE_ROOT; };
+		C20001020000000000000001 /* Sources/Ledger/Import/CSVSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/CSVSupport.swift; sourceTree = SOURCE_ROOT; };
+		C20001030000000000000001 /* Sources/Ledger/Import/EOS1VImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/EOS1VImportAdapter.swift; sourceTree = SOURCE_ROOT; };
+		C20001040000000000000001 /* Sources/Ledger/Import/GPXImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/GPXImportAdapter.swift; sourceTree = SOURCE_ROOT; };
+		C20001050000000000000001 /* Sources/Ledger/Import/ImportConflictResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/ImportConflictResolver.swift; sourceTree = SOURCE_ROOT; };
+		C20001060000000000000001 /* Sources/Ledger/Import/ImportCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/ImportCoordinator.swift; sourceTree = SOURCE_ROOT; };
+		C20001070000000000000001 /* Sources/Ledger/Import/ImportMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/ImportMatcher.swift; sourceTree = SOURCE_ROOT; };
+		C20001080000000000000001 /* Sources/Ledger/Import/ImportModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/ImportModels.swift; sourceTree = SOURCE_ROOT; };
+		C20001090000000000000001 /* Sources/Ledger/Import/EOSLensMappingEmbedded.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/EOSLensMappingEmbedded.swift; sourceTree = SOURCE_ROOT; };
+		C200010A0000000000000001 /* Sources/Ledger/Import/ImportSourceAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/ImportSourceAdapter.swift; sourceTree = SOURCE_ROOT; };
+		C200010B0000000000000001 /* Sources/Ledger/Import/ReferenceFolderImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/ReferenceFolderImportAdapter.swift; sourceTree = SOURCE_ROOT; };
+		C200010C0000000000000001 /* Sources/Ledger/Import/ReferenceImageImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/ReferenceImageImportAdapter.swift; sourceTree = SOURCE_ROOT; };
+		C200010D0000000000000001 /* Sources/Ledger/Import/ReferenceImportSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/ReferenceImportSupport.swift; sourceTree = SOURCE_ROOT; };
+		C200010E0000000000000001 /* Sources/Ledger/ImportUI/ImportSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/ImportUI/ImportSheetView.swift; sourceTree = SOURCE_ROOT; };
+		C200010F0000000000000001 /* Sources/Ledger/Import/ExifToolCSVExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/ExifToolCSVExportService.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -187,11 +249,28 @@
 		};
 		A10000560000000000000001 /* Sources/Ledger */ = {
 			isa = PBXGroup;
-			children = (
-				B100000D0000000000000001 /* Assets.xcassets */,
-				A100000B0000000000000001 /* Sources/Ledger/AppModel.swift */,
-				A100000C0000000000000001 /* Sources/Ledger/LedgerApp.swift */,
-				A100000D0000000000000001 /* Sources/Ledger/MainContentView.swift */,
+				children = (
+					B100000D0000000000000001 /* Assets.xcassets */,
+					C20000F00000000000000001 /* Sources/Ledger/Import */,
+					C20000F10000000000000001 /* Sources/Ledger/ImportUI */,
+					A100000B0000000000000001 /* Sources/Ledger/AppModel.swift */,
+					A10001530000000000000001 /* Sources/Ledger/AppModel+Sidebar.swift */,
+					A10001540000000000000001 /* Sources/Ledger/AppModel+Preview.swift */,
+					A10001550000000000000001 /* Sources/Ledger/AppModel+Actions.swift */,
+					A10001560000000000000001 /* Sources/Ledger/AppModel+Navigation.swift */,
+					A10001570000000000000001 /* Sources/Ledger/AppModel+ApplyRestore.swift */,
+					A10001580000000000000001 /* Sources/Ledger/AppModel+Presets.swift */,
+					A10001590000000000000001 /* Sources/Ledger/AppModel+Editing.swift */,
+					A100015A0000000000000001 /* Sources/Ledger/AppModel+InspectorFields.swift */,
+					A100015B0000000000000001 /* Sources/Ledger/AppModel+Import.swift */,
+					A100015C0000000000000001 /* Sources/Ledger/AppModel+FileLoading.swift */,
+					A100015D0000000000000001 /* Sources/Ledger/AppModel+MetadataValues.swift */,
+					A100015E0000000000000001 /* Sources/Ledger/AppModel+Formatters.swift */,
+					A100015F0000000000000001 /* Sources/Ledger/AppModel+MetadataPipeline.swift */,
+					A10001600000000000000001 /* Sources/Ledger/AppModel+UndoStatus.swift */,
+					A10001610000000000000001 /* Sources/Ledger/AppModel+FieldCatalog.swift */,
+					A100000C0000000000000001 /* Sources/Ledger/LedgerApp.swift */,
+					A100000D0000000000000001 /* Sources/Ledger/MainContentView.swift */,
 				A10001410000000000000001 /* Sources/Ledger/Presets.swift */,
 				A10001430000000000000001 /* Sources/Ledger/BrowserGalleryView.swift */,
 				A10001450000000000000001 /* Sources/Ledger/BrowserListView.swift */,
@@ -199,6 +278,7 @@
 				A10001490000000000000001 /* Sources/Ledger/NavigationSidebarView.swift */,
 				A100014B0000000000000001 /* Sources/Ledger/PresetSheets.swift */,
 				A100014D0000000000000001 /* Sources/Ledger/ThumbnailService.swift */,
+				A100014F0000000000000001 /* Sources/Ledger/SettingsWindowController.swift */,
 			);
 			path = Sources/Ledger;
 			sourceTree = SOURCE_ROOT;
@@ -214,6 +294,35 @@
 				A10000160000000000000001 /* Sources/ExifEditCore/MetadataValidator.swift */,
 			);
 			path = Sources/ExifEditCore;
+			sourceTree = SOURCE_ROOT;
+		};
+		C20000F00000000000000001 /* Sources/Ledger/Import */ = {
+			isa = PBXGroup;
+			children = (
+				C20001010000000000000001 /* Sources/Ledger/Import/CSVImportAdapter.swift */,
+				C20001020000000000000001 /* Sources/Ledger/Import/CSVSupport.swift */,
+				C20001030000000000000001 /* Sources/Ledger/Import/EOS1VImportAdapter.swift */,
+				C20001040000000000000001 /* Sources/Ledger/Import/GPXImportAdapter.swift */,
+				C20001050000000000000001 /* Sources/Ledger/Import/ImportConflictResolver.swift */,
+				C20001060000000000000001 /* Sources/Ledger/Import/ImportCoordinator.swift */,
+				C20001070000000000000001 /* Sources/Ledger/Import/ImportMatcher.swift */,
+				C20001080000000000000001 /* Sources/Ledger/Import/ImportModels.swift */,
+				C20001090000000000000001 /* Sources/Ledger/Import/EOSLensMappingEmbedded.swift */,
+				C200010A0000000000000001 /* Sources/Ledger/Import/ImportSourceAdapter.swift */,
+				C200010B0000000000000001 /* Sources/Ledger/Import/ReferenceFolderImportAdapter.swift */,
+				C200010C0000000000000001 /* Sources/Ledger/Import/ReferenceImageImportAdapter.swift */,
+				C200010D0000000000000001 /* Sources/Ledger/Import/ReferenceImportSupport.swift */,
+				C200010F0000000000000001 /* Sources/Ledger/Import/ExifToolCSVExportService.swift */,
+			);
+			path = Sources/Ledger/Import;
+			sourceTree = SOURCE_ROOT;
+		};
+		C20000F10000000000000001 /* Sources/Ledger/ImportUI */ = {
+			isa = PBXGroup;
+			children = (
+				C200010E0000000000000001 /* Sources/Ledger/ImportUI/ImportSheetView.swift */,
+			);
+			path = Sources/Ledger/ImportUI;
 			sourceTree = SOURCE_ROOT;
 		};
 /* End PBXGroup section */
@@ -279,7 +388,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1620;
-				LastUpgradeCheck = 1620;
+				LastUpgradeCheck = 2630;
 				TargetAttributes = {
 					A10000600000000000000001 = {
 						CreatedOnToolsVersion = 16.2;
@@ -351,10 +460,25 @@
 		A10000800000000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (
-				A100001B0000000000000001 /* Sources/Ledger/AppModel.swift in Sources */,
-				A100001C0000000000000001 /* Sources/Ledger/LedgerApp.swift in Sources */,
-				A100001D0000000000000001 /* Sources/Ledger/MainContentView.swift in Sources */,
+				files = (
+					A100001B0000000000000001 /* Sources/Ledger/AppModel.swift in Sources */,
+					A10001510000000000000001 /* Sources/Ledger/AppModel+Sidebar.swift in Sources */,
+					A10001520000000000000001 /* Sources/Ledger/AppModel+Preview.swift in Sources */,
+					A10001620000000000000001 /* Sources/Ledger/AppModel+Actions.swift in Sources */,
+					A10001630000000000000001 /* Sources/Ledger/AppModel+Navigation.swift in Sources */,
+					A10001640000000000000001 /* Sources/Ledger/AppModel+ApplyRestore.swift in Sources */,
+					A10001650000000000000001 /* Sources/Ledger/AppModel+Presets.swift in Sources */,
+					A10001660000000000000001 /* Sources/Ledger/AppModel+Editing.swift in Sources */,
+					A10001670000000000000001 /* Sources/Ledger/AppModel+InspectorFields.swift in Sources */,
+					A10001680000000000000001 /* Sources/Ledger/AppModel+Import.swift in Sources */,
+					A10001690000000000000001 /* Sources/Ledger/AppModel+FileLoading.swift in Sources */,
+					A100016A0000000000000001 /* Sources/Ledger/AppModel+MetadataValues.swift in Sources */,
+					A100016B0000000000000001 /* Sources/Ledger/AppModel+Formatters.swift in Sources */,
+					A100016C0000000000000001 /* Sources/Ledger/AppModel+MetadataPipeline.swift in Sources */,
+					A100016D0000000000000001 /* Sources/Ledger/AppModel+UndoStatus.swift in Sources */,
+					A100016E0000000000000001 /* Sources/Ledger/AppModel+FieldCatalog.swift in Sources */,
+					A100001C0000000000000001 /* Sources/Ledger/LedgerApp.swift in Sources */,
+					A100001D0000000000000001 /* Sources/Ledger/MainContentView.swift in Sources */,
 				A10001420000000000000001 /* Sources/Ledger/Presets.swift in Sources */,
 				A10001440000000000000001 /* Sources/Ledger/BrowserGalleryView.swift in Sources */,
 				A10001460000000000000001 /* Sources/Ledger/BrowserListView.swift in Sources */,
@@ -362,6 +486,22 @@
 				A100014A0000000000000001 /* Sources/Ledger/NavigationSidebarView.swift in Sources */,
 				A100014C0000000000000001 /* Sources/Ledger/PresetSheets.swift in Sources */,
 				A100014E0000000000000001 /* Sources/Ledger/ThumbnailService.swift in Sources */,
+				A10001500000000000000001 /* Sources/Ledger/SettingsWindowController.swift in Sources */,
+				C20002010000000000000001 /* Sources/Ledger/Import/CSVImportAdapter.swift in Sources */,
+				C20002020000000000000001 /* Sources/Ledger/Import/CSVSupport.swift in Sources */,
+				C20002030000000000000001 /* Sources/Ledger/Import/EOS1VImportAdapter.swift in Sources */,
+				C20002040000000000000001 /* Sources/Ledger/Import/GPXImportAdapter.swift in Sources */,
+				C20002050000000000000001 /* Sources/Ledger/Import/ImportConflictResolver.swift in Sources */,
+				C20002060000000000000001 /* Sources/Ledger/Import/ImportCoordinator.swift in Sources */,
+				C20002070000000000000001 /* Sources/Ledger/Import/ImportMatcher.swift in Sources */,
+				C20002080000000000000001 /* Sources/Ledger/Import/ImportModels.swift in Sources */,
+				C20002090000000000000001 /* Sources/Ledger/Import/EOSLensMappingEmbedded.swift in Sources */,
+				C200020A0000000000000001 /* Sources/Ledger/Import/ImportSourceAdapter.swift in Sources */,
+				C200020B0000000000000001 /* Sources/Ledger/Import/ReferenceFolderImportAdapter.swift in Sources */,
+				C200020C0000000000000001 /* Sources/Ledger/Import/ReferenceImageImportAdapter.swift in Sources */,
+				C200020D0000000000000001 /* Sources/Ledger/Import/ReferenceImportSupport.swift in Sources */,
+				C200020F0000000000000001 /* Sources/Ledger/Import/ExifToolCSVExportService.swift in Sources */,
+				C200020E0000000000000001 /* Sources/Ledger/ImportUI/ImportSheetView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -409,11 +549,41 @@
 			baseConfigurationReference = A10000050000000000000001 /* Config/Debug.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
 				ONLY_ACTIVE_ARCH = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
@@ -423,10 +593,39 @@
 			baseConfigurationReference = A10000060000000000000001 /* Config/Release.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
@@ -439,6 +638,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = BrandAccent;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Config/Ledger.entitlements;
+				DEAD_CODE_STRIPPING = YES;
 				INFOPLIST_FILE = "Config/Ledger-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -461,6 +661,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = BrandAccent;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Config/Ledger.entitlements;
+				DEAD_CODE_STRIPPING = YES;
 				INFOPLIST_FILE = "Config/Ledger-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -479,6 +680,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A10000050000000000000001 /* Config/Debug.xcconfig */;
 			buildSettings = {
+				DEAD_CODE_STRIPPING = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -490,6 +692,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A10000060000000000000001 /* Config/Release.xcconfig */;
 			buildSettings = {
+				DEAD_CODE_STRIPPING = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -502,6 +705,7 @@
 			baseConfigurationReference = A10000050000000000000001 /* Config/Debug.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "";
+				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_TEST_BUNDLE_IDENTIFIER)";
@@ -516,6 +720,7 @@
 			baseConfigurationReference = A10000060000000000000001 /* Config/Release.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "";
+				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_TEST_BUNDLE_IDENTIFIER)";

@@ -23,8 +23,17 @@ A native macOS photo metadata editor. Browse folders of images, edit EXIF, IPTC,
 - Automatic backup before every write; restore from backup at any time
 - Clear pending edits without writing
 
+**Import**
+- Import metadata from CSV, GPX track logs, reference folders, reference images, and Canon EOS-1V CSV exports
+- Preview every import before writing; structured report on completion
+- Export an ExifTool CSV for external editing and re-import
+
 **Presets**
 - Save, edit, and apply named metadata presets to any selection
+
+**Settings**
+- Control which metadata fields appear in the inspector
+- Enable or disable automatic backups
 
 ---
 
@@ -46,6 +55,18 @@ ExifTool is bundled — no separate installation required.
 ## Installation
 
 Download the latest release from the [Releases](../../releases) page, unzip, and drag **Ledger.app** to your Applications folder.
+
+---
+
+## Development tests
+
+Run the full suite with:
+
+```bash
+./scripts/test/run_all.sh
+```
+
+This uses `swift test --parallel`, which is the stable mode for this project environment.
 
 ---
 
