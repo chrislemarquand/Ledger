@@ -6,6 +6,9 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class ImportSession: ObservableObject {
+    static let eosFocalTagID = "exif-focal"
+    static let eosLensTagID = "exif-lens"
+
     struct EOSLensChoiceDecision {
         let lens: String
         let applyToRemainingAtFocal: Bool
@@ -216,6 +219,47 @@ final class ImportSession: ObservableObject {
             for field in conflict.rowFields { ids.insert(field.tagID) }
         }
         return ids
+    }
+
+    var shouldShowEOSLensDependencyBanner: Bool {
+        guard options.sourceKind == .eos1v else { return false }
+        guard hasPreparedEOSFocalData else { return false }
+        let found = foundTagIDs ?? []
+        return !resolvedSelectedTagIDs(foundTagIDs: found).contains(Self.eosFocalTagID)
+    }
+
+    func isTagSelectableInFields(_ tagID: String, foundTagIDs: Set<String>) -> Bool {
+        defaultSelectableTagIDs(foundTagIDs: foundTagIDs).contains(tagID)
+    }
+
+    func isTagDependencyBlockedInFields(_ tagID: String, foundTagIDs: Set<String>) -> Bool {
+        guard options.sourceKind == .eos1v, tagID == Self.eosLensTagID else { return false }
+        let selected = resolvedSelectedTagIDs(foundTagIDs: foundTagIDs)
+        return !selected.contains(Self.eosFocalTagID)
+    }
+
+    func isTagSelectedInFields(_ tagID: String, foundTagIDs: Set<String>) -> Bool {
+        resolvedSelectedTagIDs(foundTagIDs: foundTagIDs).contains(tagID)
+    }
+
+    func setTagSelectedInFields(_ tagID: String, isOn: Bool, foundTagIDs: Set<String>) {
+        let selectable = defaultSelectableTagIDs(foundTagIDs: foundTagIDs)
+        guard selectable.contains(tagID) else { return }
+
+        var selected = resolvedSelectedTagIDs(foundTagIDs: foundTagIDs)
+        if isOn {
+            selected.insert(tagID)
+        } else {
+            selected.remove(tagID)
+        }
+        enforceEOSLensDependency(on: &selected)
+
+        let defaultSelected = defaultSelectableTagIDs(foundTagIDs: foundTagIDs)
+        if selected == defaultSelected {
+            options.selectedTagIDs = []
+        } else {
+            options.selectedTagIDs = Array(selected).sorted()
+        }
     }
 
     private func filterAssignments(
@@ -487,15 +531,67 @@ final class ImportSession: ObservableObject {
         let uniqueFieldTagIDs = Set(fields.map(\.tagID))
         guard !ids.isEmpty else { return uniqueFieldTagIDs.count }
         let selected = Set(ids)
-        return uniqueFieldTagIDs.filter { selected.contains($0) }.count
+        var count = uniqueFieldTagIDs.filter { selected.contains($0) }.count
+        if options.sourceKind == .eos1v,
+           selected.contains(Self.eosFocalTagID),
+           selected.contains(Self.eosLensTagID),
+           uniqueFieldTagIDs.contains(Self.eosFocalTagID),
+           !uniqueFieldTagIDs.contains(Self.eosLensTagID)
+        {
+            // EOS lens assignment is derived from focal length during import.
+            // Reflect that in preview field counts so focal toggles are +/-2.
+            count += 1
+        }
+        return count
     }
 
     private func effectiveActiveTagIDSet(model: AppModel) -> Set<String> {
         let catalogIDs = Set(model.importTagCatalog.map(\.id))
+        var active: Set<String>
         if options.selectedTagIDs.isEmpty {
-            return catalogIDs
+            active = catalogIDs
+        } else {
+            active = Set(options.selectedTagIDs).intersection(catalogIDs)
         }
-        return Set(options.selectedTagIDs).intersection(catalogIDs)
+        enforceEOSLensDependency(on: &active)
+        return active
+    }
+
+    private func defaultSelectableTagIDs(foundTagIDs: Set<String>) -> Set<String> {
+        var ids = foundTagIDs
+        if options.sourceKind == .eos1v,
+           hasPreparedEOSFocalData,
+           Set(model.importTagCatalog.map(\.id)).contains(Self.eosLensTagID)
+        {
+            ids.insert(Self.eosLensTagID)
+        }
+        return ids
+    }
+
+    private func resolvedSelectedTagIDs(foundTagIDs: Set<String>) -> Set<String> {
+        let defaultSelected = defaultSelectableTagIDs(foundTagIDs: foundTagIDs)
+        var selected: Set<String>
+        if options.selectedTagIDs.isEmpty {
+            selected = defaultSelected
+        } else {
+            selected = Set(options.selectedTagIDs).intersection(defaultSelected)
+        }
+        enforceEOSLensDependency(on: &selected)
+        return selected
+    }
+
+    private func enforceEOSLensDependency(on selected: inout Set<String>) {
+        guard options.sourceKind == .eos1v else { return }
+        if !selected.contains(Self.eosFocalTagID) {
+            selected.remove(Self.eosLensTagID)
+        }
+    }
+
+    private var hasPreparedEOSFocalData: Bool {
+        guard options.sourceKind == .eos1v, let run = preparedRun else { return false }
+        return run.parseResult.rows.contains { row in
+            row.fields.contains(where: { $0.tagID == Self.eosFocalTagID && !CSVSupport.trim($0.value).isEmpty })
+        }
     }
 
     var previewText: String {
@@ -542,6 +638,18 @@ final class ImportSession: ObservableObject {
             return "Line \(sourceLine): \(message)"
         }
         return message
+    }
+
+    var rowOrderFallbackWarnings: [String] {
+        guard let run = preparedRun else { return [] }
+        return run.matchResult.warnings
+            .filter(Self.isRowOrderFallbackWarning)
+            .map(formatPreviewWarning)
+    }
+
+    private static func isRowOrderFallbackWarning(_ warning: ImportWarning) -> Bool {
+        warning.message.hasPrefix("Using row-order matching:")
+            || warning.message.hasPrefix("Using row-order fallback for ")
     }
 }
 
@@ -612,6 +720,22 @@ struct ImportSheetView: View {
                     .pickerStyle(.radioGroup)
                     .labelsHidden()
                 }
+            }
+
+            if !session.rowOrderFallbackWarnings.isEmpty {
+                InlineSheetMessageBanner(
+                    tone: .warning,
+                    title: "Row-order fallback is active for this import.",
+                    messages: Array(session.rowOrderFallbackWarnings.prefix(2))
+                )
+            }
+
+            if session.shouldShowEOSLensDependencyBanner {
+                InlineSheetMessageBanner(
+                    tone: .info,
+                    title: "Lens Model depends on Focal Length in EOS imports.",
+                    messages: ["Enable Focal Length in Fields to include Lens Model values and lens-resolution prompts."]
+                )
             }
 
             ProgressView(value: importProgress ?? 0)
@@ -722,25 +846,18 @@ struct ImportSheetView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(tags, id: \.id) { tag in
-                        let isFound = foundIDs.contains(tag.id)
+                        let isSelectable = session.isTagSelectableInFields(tag.id, foundTagIDs: foundIDs)
+                        let isDependencyBlocked = session.isTagDependencyBlockedInFields(tag.id, foundTagIDs: foundIDs)
                         Toggle(tag.label, isOn: Binding(
                             get: {
-                                guard isFound else { return false }
-                                let ids = session.options.selectedTagIDs
-                                // Empty = all found fields selected
-                                return ids.isEmpty ? true : ids.contains(tag.id)
+                                session.isTagSelectedInFields(tag.id, foundTagIDs: foundIDs)
                             },
                             set: { isOn in
-                                // Initialise from found IDs if nothing explicitly chosen yet
-                                var ids = Set(session.options.selectedTagIDs.isEmpty
-                                    ? foundIDs
-                                    : Set(session.options.selectedTagIDs))
-                                if isOn { ids.insert(tag.id) } else { ids.remove(tag.id) }
-                                session.options.selectedTagIDs = Array(ids)
+                                session.setTagSelectedInFields(tag.id, isOn: isOn, foundTagIDs: foundIDs)
                             }
                         ))
                         .toggleStyle(.checkbox)
-                        .disabled(!isFound)
+                        .disabled(!isSelectable || isDependencyBlocked)
                     }
                 }
                 .padding(.vertical, 2)
@@ -959,5 +1076,62 @@ struct ImportSheetView: View {
                 importProgress = nil
             }
         }
+    }
+}
+
+enum InlineSheetMessageTone {
+    case info
+    case warning
+    case error
+}
+
+struct InlineSheetMessageBanner: View {
+    let tone: InlineSheetMessageTone
+    let title: String
+    let messages: [String]
+
+    private var iconName: String {
+        switch tone {
+        case .info:
+            return "info.circle.fill"
+        case .warning:
+            return "exclamationmark.triangle.fill"
+        case .error:
+            return "xmark.octagon.fill"
+        }
+    }
+
+    private var accentColor: Color {
+        switch tone {
+        case .info:
+            return .blue
+        case .warning:
+            return .orange
+        case .error:
+            return .red
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(title, systemImage: iconName)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(accentColor)
+            ForEach(messages, id: \.self) { message in
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(accentColor.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(accentColor.opacity(0.25), lineWidth: 1)
+        )
     }
 }

@@ -139,6 +139,12 @@ struct ImportRow: Hashable, Sendable {
     let fields: [ImportFieldValue]
 }
 
+enum ImportRowLabelFormatter {
+    static func fallbackRowLabel(_ rowNumber: Int) -> String {
+        String(format: "Row %03d", max(1, rowNumber))
+    }
+}
+
 enum ImportWarningSeverity: String, Codable, Sendable {
     case info
     case warning
