@@ -4,9 +4,30 @@ All notable changes to Ledger are documented here.
 
 ---
 
-## [Unreleased]
+## [1.1] — 2026-03-10
 
-- Marketing version bumped from `1.0.1` to `1.0.2`.
+### Added
+
+- **Unified import system**: single import flow covering CSV, GPX, Reference Folder, Reference Image, and EOS-1V — load source → match/preview → resolve conflicts → apply.
+- **Structured import report**: post-import summary view showing matched rows, warnings, conflicts, and per-field outcomes. Stays open in review mode when warnings or conflicts are present; auto-closes on a clean run.
+- **Reference-based metadata apply**: select one image as a reference, choose fields, preview the diff, and apply to a selection or folder. Uses ExifTool `-tagsFromFile`.
+- **Export scope picker**: all three export actions (ExifTool CSV, Send to Photos, Send to Lightroom Classic) now present a sheet to confirm scope (Selection / Folder) before proceeding.
+- **Settings window**: Inspector field visibility controls; backup enable/disable; accessible via Cmd+, and the app menu.
+- **EOS-1V lens resolver**: routes lens inference through a policy layer; multi-candidate focal lengths prompt per-import resolution with an "Apply to N more images" option.
+- **Multiple GPX file selection**: source picker accepts more than one GPX file per import session.
+
+### Fixed
+
+- Apply confirmation sheet now attaches to the window (no `runModal` blocking).
+- Inspector preview no longer shows a stale pre-apply image while the thumbnail already reflects the new state.
+- Toolbar buttons now update immediately on macOS light/dark mode switch.
+- Settings General pane auto-sizes via `fittingSize` (no hardcoded height).
+- Settings Inspector pane scroll view starts at the top on open.
+- Preset editor: validation message and duplicate-conflict state no longer carry over on reopen.
+- Preset manager: pending-delete state no longer carries over on reopen.
+- Photos staging directory cleaned up correctly on copy failure and on `NSWorkspace.open` error.
+- EOS-1V lens `remainingAmbiguousRowsByFocal` default value mismatch corrected.
+- All "file(s)" / "image(s)" / "backup(s)" pluralisation fixed across 16 instances.
 
 ---
 
@@ -14,9 +35,6 @@ All notable changes to Ledger are documented here.
 
 ### Fixed
 - **List metadata columns/inspector subtitle missing values**: in the folder-load pipeline, `browserItemHydrationID` was assigned before `clearLoadedContentState()`, which immediately reset it. That caused async browser-item hydration to be dropped, leaving `Date Created`, `Size`, and `Kind` as `—` in list view and size/type missing in inspector subtitle. Fix: assign `browserItemHydrationID` after clearing state and keep the prehydrate guard tied to the active folder load lifecycle.
-
-### Changed
-- Marketing version bumped from `1.0.1` to `1.0.2`.
 
 ---
 
@@ -33,7 +51,6 @@ All notable changes to Ledger are documented here.
 ### Changed
 - Sidebar context menu polish: simplified labels (`Unpin`, `Move Up`, `Move Down`) and added `Remove` for recent and pinned folders.
 - Browser loading overlay condition now only shows loading when there are no browser items available to render.
-- Marketing version bumped from `1.0.0` to `1.0.1`.
 
 ---
 
@@ -47,7 +64,6 @@ All notable changes to Ledger are documented here.
 ### Changed
 - About panel credits text is now centre-aligned.
 - New app icon.
-- Marketing version bumped to `1.0.0`.
 
 ---
 
@@ -84,7 +100,6 @@ All notable changes to Ledger are documented here.
 ### Changed
 - Apply/save SF Symbol convention formalised: `square.and.arrow.down` for selection-scoped apply (toolbar Apply Changes button, Image menu "Apply to Selection", context menus); `square.and.arrow.down.on.square` for folder-wide apply (Image menu "Apply to Folder"); `square.and.arrow.down.badge.checkmark` for Save as Preset (Image menu and presets toolbar dropdown, where it was previously unsymboled).
 - Roadmap/backlog triage updated with two new tracked items from Xcode debug logs: **B22** (intermittent SwiftUI publish-during-view-update warning, actionable) and **B23** (CMPhoto/IOSurface log spam, non-blocking monitoring item).
-- Marketing version bumped from `0.8` to `0.8.1`.
 
 ---
 
@@ -95,7 +110,6 @@ All notable changes to Ledger are documented here.
 - Thumbnail request dedupe now separates foreground and background request lanes and applies explicit task priorities, reducing Thread Performance Checker priority-inversion warnings caused by user-initiated thumbnail requests awaiting lower-QoS inflight tasks.
 
 ### Changed
-- Marketing version bumped from `0.7.3` to `0.8`.
 - Declared this build as the first release candidate for the `0.8` line.
 
 ---
@@ -110,7 +124,6 @@ All notable changes to Ledger are documented here.
 ### Changed
 - Image menu **Presets** item now uses the same symbol as the presets toolbar control (`slider.horizontal.3`) for consistent command identity across surfaces.
 - File > Open With submenu now shows each app's native icon next to its menu item.
-- Marketing version bumped from `0.7.2` to `0.7.3`.
 
 ---
 
@@ -125,7 +138,6 @@ All notable changes to Ledger are documented here.
 - Gallery/list mode-switch crash fixed by guarding gallery layout item size to a minimum positive value before assignment (`itemSize.width/height > 0`).
 
 ### Changed
-- Marketing version bumped from `0.7.1` to `0.7.2`.
 - Custom menu-bar command ownership consolidated under AppKit (`NSMenu`/`NSMenuItem`) for native validation and dynamic submenu behavior.
 - Browser center pane now uses an AppKit container controller that owns list/gallery hosts and overlays directly.
 - Reverted two folder-switch empty-state flicker attempts (`1094a1f`, `1b77bfd`) after no user-visible improvement; root cause of those failures now understood and addressed above.

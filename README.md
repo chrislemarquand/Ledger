@@ -23,8 +23,17 @@ A native macOS photo metadata editor. Browse folders of images, edit EXIF, IPTC,
 - Automatic backup before every write; restore from backup at any time
 - Clear pending edits without writing
 
+**Import**
+- Import metadata from CSV, GPX track logs, reference folders, reference images, and Canon EOS-1V CSV exports
+- Preview every import before writing; structured report on completion
+- Export an ExifTool CSV for external editing and re-import
+
 **Presets**
 - Save, edit, and apply named metadata presets to any selection
+
+**Settings**
+- Control which metadata fields appear in the inspector
+- Enable or disable automatic backups
 
 ---
 
