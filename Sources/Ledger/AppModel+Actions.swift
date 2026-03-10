@@ -290,7 +290,7 @@ extension AppModel {
         case .sendToLightroomClassic:
             return FileActionState(
                 id: id,
-                title: "Send to Lightroom Classic",
+                title: "Send to Lightroom Classic…",
                 symbolName: "square.and.arrow.up",
                 isEnabled: hasLightroomClassic
             )
