@@ -28,9 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appName = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
             ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
             ?? AppBrand.displayName
-        let shortVersion = (bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.0.0"
-        let buildVersion = (bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? "1"
-        let combinedVersion = "\(shortVersion) (\(buildVersion))"
+        let shortVersion = (bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.0"
         let exifToolVersion = bundledExifToolVersion() ?? "Unknown"
 
         let purpose = "Edit photo metadata — EXIF, IPTC, and XMP — powered by ExifTool."
@@ -63,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let options: [NSApplication.AboutPanelOptionKey: Any] = [
             .applicationName: appName,
-            .applicationVersion: combinedVersion,
+            .applicationVersion: shortVersion,
             .credits: credits,
             NSApplication.AboutPanelOptionKey(rawValue: "Copyright"): "© 2026 Chris Le Marquand",
         ]
