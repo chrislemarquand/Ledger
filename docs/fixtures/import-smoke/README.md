@@ -1,6 +1,6 @@
 # Import Smoke Fixtures
 
-These fixtures support the manual check-off sheet at `docs/import-manual-smoke-checklist.md`.
+These fixtures support the manual smoke checklist at `docs/v1.1-smoke-checklist.md`.
 
 ## Files
 
