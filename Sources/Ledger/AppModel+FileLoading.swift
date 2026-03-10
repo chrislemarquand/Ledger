@@ -9,7 +9,7 @@ extension AppModel {
         return sidebarItems.first { $0.id == selectedSidebarID }
     }
 
-    func sidebarImageCount(for item: SidebarItem) -> Int {
+    private func sidebarImageCount(for item: SidebarItem) -> Int {
         sidebarImageCounts[item.id] ?? 0
     }
 
@@ -270,7 +270,7 @@ extension AppModel {
         recalculateInspectorState(forceNotify: true)
     }
 
-    func startInitialThumbnailWarmup(for files: [URL], loadID: UUID) {
+    private func startInitialThumbnailWarmup(for files: [URL], loadID: UUID) {
         let warmupTargets = Array(files.prefix(Self.initialThumbnailWarmupCount))
         guard !warmupTargets.isEmpty else { return }
 
@@ -290,7 +290,7 @@ extension AppModel {
         }
     }
 
-    func scheduleDeferredFolderMetadataPrefetch(for files: [URL], batchSize: Int, loadID: UUID) {
+    private func scheduleDeferredFolderMetadataPrefetch(for files: [URL], batchSize: Int, loadID: UUID) {
         deferredFolderMetadataPrefetchTask?.cancel()
         deferredFolderMetadataPrefetchTask = nil
         deferredFolderMetadataPrefetchTask = Task { @MainActor [weak self] in
@@ -301,7 +301,7 @@ extension AppModel {
         }
     }
 
-    func startBrowserItemHydration(for files: [URL], hydrationID: UUID) {
+    private func startBrowserItemHydration(for files: [URL], hydrationID: UUID) {
         browserItemHydrationTask?.cancel()
         browserItemHydrationTask = nil
         guard !files.isEmpty else { return }
@@ -332,7 +332,7 @@ extension AppModel {
 
     typealias BrowserFileAttributes = (modifiedAt: Date?, createdAt: Date?, sizeBytes: Int?, kind: String?)
 
-    func readBrowserFileAttributes(for files: [URL]) async -> [URL: BrowserFileAttributes] {
+    private func readBrowserFileAttributes(for files: [URL]) async -> [URL: BrowserFileAttributes] {
         await Task.detached(priority: .utility) { () -> [URL: BrowserFileAttributes] in
             var result: [URL: BrowserFileAttributes] = [:]
             result.reserveCapacity(files.count)
@@ -403,7 +403,7 @@ extension AppModel {
 
 
 
-    func metadataBatchSize(for kind: SidebarKind) -> Int {
+    private func metadataBatchSize(for kind: SidebarKind) -> Int {
         switch kind {
         case .mountedVolume:
             return 1
@@ -414,12 +414,12 @@ extension AppModel {
         }
     }
 
-    func isLikelyExternalLocation(_ url: URL) -> Bool {
+    private func isLikelyExternalLocation(_ url: URL) -> Bool {
         let path = url.standardizedFileURL.path
         return path.hasPrefix("/Volumes/")
     }
 
-    func isReachableDirectory(_ url: URL) -> Bool {
+    private func isReachableDirectory(_ url: URL) -> Bool {
         var isDirectory: ObjCBool = false
         return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
             && isDirectory.boolValue
@@ -445,7 +445,7 @@ extension AppModel {
         }
     }
 
-    func handleWorkspaceVolumeChange() {
+    private func handleWorkspaceVolumeChange() {
         let previousSelectionID = selectedSidebarID
         let previousSelection = selectedSidebarItem
         refreshSidebarItems(selectFirstWhenMissing: false)
@@ -464,7 +464,7 @@ extension AppModel {
         }
     }
 
-    func clearToEmptyStateAfterSourceLoss() {
+    private func clearToEmptyStateAfterSourceLoss() {
         selectedSidebarID = nil
         clearLoadedContentState(preserveSessionCaches: true)
         setStatusMessage(
@@ -473,7 +473,7 @@ extension AppModel {
         )
     }
 
-    func sidebarSourceURL(for kind: SidebarKind) -> URL? {
+    private func sidebarSourceURL(for kind: SidebarKind) -> URL? {
         switch kind {
         case let .mountedVolume(url):
             return url
@@ -514,7 +514,7 @@ extension AppModel {
             ?? URL(fileURLWithPath: NSHomeDirectory())
     }
 
-    func enumerateImages(in folder: URL) throws -> [URL] {
+    private func enumerateImages(in folder: URL) throws -> [URL] {
         let urls = try FileManager.default.contentsOfDirectory(
             at: folder,
             includingPropertiesForKeys: [.isRegularFileKey],
@@ -528,7 +528,7 @@ extension AppModel {
         }
     }
 
-    func enumerateImagesRecursively(in folder: URL) -> [URL] {
+    private func enumerateImagesRecursively(in folder: URL) -> [URL] {
         guard let enumerator = FileManager.default.enumerator(
             at: folder,
             includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey],
@@ -553,7 +553,7 @@ extension AppModel {
         return files
     }
 
-    nonisolated static func countSupportedImages(in folder: URL) -> Int {
+    private nonisolated static func countSupportedImages(in folder: URL) -> Int {
         let urls: [URL]
         do {
             urls = try FileManager.default.contentsOfDirectory(
@@ -575,7 +575,7 @@ extension AppModel {
         }
     }
 
-    func sidebarCountURL(for kind: SidebarKind) -> URL? {
+    private func sidebarCountURL(for kind: SidebarKind) -> URL? {
         switch kind {
         case .pictures:
             return picturesDirectoryURL()

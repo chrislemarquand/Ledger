@@ -38,7 +38,7 @@ enum ThumbnailPipeline {
 }
 
 enum AppBrand {
-    static let fallbackDisplayName = "Ledger"
+    private static let fallbackDisplayName = "Ledger"
     static let legacyDisplayNames = ["Logbook", "ExifEditMac"]
     static let migrationSentinelKey = "Ledger.Migration.v1Completed"
 
@@ -67,7 +67,7 @@ enum AppBrand {
         displayName
     }
 
-    static func applicationSupportRootURL(fileManager: FileManager = .default) -> URL {
+    private static func applicationSupportRootURL(fileManager: FileManager = .default) -> URL {
         fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
     }
@@ -596,16 +596,16 @@ final class AppModel: ObservableObject {
     var backgroundWarmTasksBySelectionID: [String: Task<Void, Never>] = [:]
     var photosImportStagingDirectory: URL?
 
-    static let browserViewModeKey = "ui.browser.view.mode"
-    static let browserSortKey = "ui.browser.sort"
-    static let browserSortAscendingKey = "ui.browser.sort.ascending"
-    static let galleryGridLevelKey = "ui.gallery.grid.level"
-    static let galleryZoomKey = "ui.gallery.zoom"
-    static let collapsedInspectorSectionsKey = "ui.inspector.collapsed.sections"
-    static let selectedPresetIDKey = "ui.presets.selected.id"
-    static let confirmBeforeApplyKey = "ui.settings.confirm.before.apply"
-    static let autoRefreshAfterApplyKey = "ui.settings.auto.refresh.after.apply"
-    static let keepBackupsKey = "ui.settings.keep.backups"
+    private static let browserViewModeKey = "ui.browser.view.mode"
+    private static let browserSortKey = "ui.browser.sort"
+    private static let browserSortAscendingKey = "ui.browser.sort.ascending"
+    private static let galleryGridLevelKey = "ui.gallery.grid.level"
+    private static let galleryZoomKey = "ui.gallery.zoom"
+    private static let collapsedInspectorSectionsKey = "ui.inspector.collapsed.sections"
+    private static let selectedPresetIDKey = "ui.presets.selected.id"
+    private static let confirmBeforeApplyKey = "ui.settings.confirm.before.apply"
+    private static let autoRefreshAfterApplyKey = "ui.settings.auto.refresh.after.apply"
+    private static let keepBackupsKey = "ui.settings.keep.backups"
     static let inspectorFieldVisibilityKey = "ui.settings.inspector.field.visibility"
     static let legacyUserDefaultsPrefixes = ["Logbook"]
     static let selectionMetadataBatchSize = 120

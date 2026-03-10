@@ -104,7 +104,7 @@ extension AppModel {
         }
     }
 
-    func scheduleDeferredPreviewPreload(for files: [URL]) {
+    private func scheduleDeferredPreviewPreload(for files: [URL]) {
         deferredPreviewPreloadTask?.cancel()
         deferredPreviewPreloadTask = nil
         let filesSnapshot = files
@@ -115,7 +115,7 @@ extension AppModel {
         }
     }
 
-    func startPreviewPreload(for files: [URL]) {
+    private func startPreviewPreload(for files: [URL]) {
         previewPreloadTask?.cancel()
         previewPreloadTask = nil
         deferredPreviewPreloadTask?.cancel()
@@ -181,7 +181,7 @@ extension AppModel {
         }
     }
 
-    static func requestInspectorPreviewFromThumbnailService(
+    private static func requestInspectorPreviewFromThumbnailService(
         for fileURL: URL,
         priority: TaskPriority,
         forceRefresh: Bool
@@ -203,7 +203,7 @@ extension AppModel {
         }
     }
 
-    func readMetadataWithTimeout(_ files: [URL], timeoutNanoseconds: UInt64) async throws -> [FileMetadataSnapshot] {
+    private func readMetadataWithTimeout(_ files: [URL], timeoutNanoseconds: UInt64) async throws -> [FileMetadataSnapshot] {
         try await withThrowingTaskGroup(of: [FileMetadataSnapshot].self) { group in
             group.addTask {
                 try await self.engine.readMetadata(files: files)
@@ -352,7 +352,7 @@ extension AppModel {
         inspectorPreviewRecency.removeAll(where: { targets.contains($0) })
     }
 
-    func makeStagedQuickLookPreviewFile(for sourceURL: URL) throws -> URL {
+    private func makeStagedQuickLookPreviewFile(for sourceURL: URL) throws -> URL {
         let previewsDirectory = AppBrand.currentSupportDirectoryURL()
             .appendingPathComponent("QuickLookPreviews", isDirectory: true)
         try FileManager.default.createDirectory(at: previewsDirectory, withIntermediateDirectories: true)
@@ -374,7 +374,7 @@ extension AppModel {
         }
     }
 
-    func storeInspectorPreview(_ image: NSImage, for fileURL: URL, renderedSide: CGFloat) {
+    private func storeInspectorPreview(_ image: NSImage, for fileURL: URL, renderedSide: CGFloat) {
         inspectorPreviewImages[fileURL] = image
         let side = max(1, renderedSide)
         inspectorPreviewRenderedSide[fileURL] = max(side, inspectorPreviewRenderedSide[fileURL] ?? 0)
@@ -394,7 +394,7 @@ extension AppModel {
         defaults.set(true, forKey: AppBrand.migrationSentinelKey)
     }
 
-    static func userDefaultsKeyCandidates(for key: String) -> [String] {
+    private static func userDefaultsKeyCandidates(for key: String) -> [String] {
         [key] + legacyUserDefaultsPrefixes.map { "\($0).\(key)" }
     }
 
@@ -407,7 +407,7 @@ extension AppModel {
         return nil
     }
 
-    static func migrateLegacySupportDirectoryIfNeeded() {
+    private static func migrateLegacySupportDirectoryIfNeeded() {
         let fileManager = FileManager.default
         let current = AppBrand.currentSupportDirectoryURL(fileManager: fileManager)
 
@@ -436,7 +436,7 @@ extension AppModel {
         inspectorPreviewRecency.append(fileURL)
     }
 
-    func trimInspectorPreviewCacheIfNeeded() {
+    private func trimInspectorPreviewCacheIfNeeded() {
         let excessCount = inspectorPreviewRecency.count - Self.maxInspectorPreviewCacheEntries
         guard excessCount > 0 else { return }
         let evicted = inspectorPreviewRecency.prefix(excessCount)
@@ -460,7 +460,7 @@ extension AppModel {
         }
     }
 
-    func warmCachesInBackground(files: [URL]) async {
+    private func warmCachesInBackground(files: [URL]) async {
         // Never contend with active foreground work.
         guard !isFolderMetadataLoading, !isPreviewPreloading else { return }
         do { try await Task.sleep(nanoseconds: Self.previewBulkStartDelayNanoseconds) } catch { return }
@@ -517,7 +517,7 @@ extension AppModel {
         }
     }
 
-    func cancelStaleInspectorPreviewTasks(keeping keepURLs: Set<URL>) {
+    private func cancelStaleInspectorPreviewTasks(keeping keepURLs: Set<URL>) {
         let staleURLs = inspectorPreviewTasksByURL.keys.filter { !keepURLs.contains($0) }
         guard !staleURLs.isEmpty else { return }
         for fileURL in staleURLs {

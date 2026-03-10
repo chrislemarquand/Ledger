@@ -62,7 +62,7 @@ extension AppModel {
         return true
     }
 
-    func makeEditSessionSnapshot(for tag: EditableTag) -> EditSessionSnapshot {
+    private func makeEditSessionSnapshot(for tag: EditableTag) -> EditSessionSnapshot {
         let selected = Array(selectedFileURLs)
         var stagedValues: [URL: StagedEditRecord] = [:]
         for fileURL in selected {
@@ -250,7 +250,7 @@ extension AppModel {
         return (width, height)
     }
 
-    func parseDimensionValue(_ raw: String) -> Int? {
+    private func parseDimensionValue(_ raw: String) -> Int? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         if let direct = Int(trimmed), direct > 0 {
@@ -361,7 +361,7 @@ extension AppModel {
         registerMetadataUndoIfNeeded(previous: previousState)
     }
 
-    func startStagedQuickLookPreviewGeneration(for sourceURL: URL, operations: [StagedImageOperation]) {
+    private func startStagedQuickLookPreviewGeneration(for sourceURL: URL, operations: [StagedImageOperation]) {
         guard !operations.isEmpty else { return }
         guard !stagedQuickLookPreviewGenerationInFlight.contains(sourceURL) else { return }
         stagedQuickLookPreviewGenerationInFlight.insert(sourceURL)
@@ -386,7 +386,7 @@ extension AppModel {
         }
     }
 
-    nonisolated static func generateStagedQuickLookPreviewFile(sourceURL: URL, operations: [StagedImageOperation]) -> URL? {
+    private nonisolated static func generateStagedQuickLookPreviewFile(sourceURL: URL, operations: [StagedImageOperation]) -> URL? {
         let previewsDirectory = AppBrand.currentSupportDirectoryURL()
             .appendingPathComponent("QuickLookPreviews", isDirectory: true)
         do {
@@ -412,7 +412,7 @@ extension AppModel {
         }
     }
 
-    nonisolated static func runSipsSync(arguments: [String]) throws {
+    private nonisolated static func runSipsSync(arguments: [String]) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/sips")
         process.arguments = arguments
@@ -493,7 +493,7 @@ extension AppModel {
         }
     }
 
-    nonisolated static func applyImageOperations(_ operations: [StagedImageOperation], to image: NSImage) -> NSImage? {
+    private nonisolated static func applyImageOperations(_ operations: [StagedImageOperation], to image: NSImage) -> NSImage? {
         var current = image
         for operation in operations {
             guard let next = transformedImage(current, operation: operation) else { return nil }
@@ -502,7 +502,7 @@ extension AppModel {
         return current
     }
 
-    nonisolated static func transformedImage(_ image: NSImage, operation: StagedImageOperation) -> NSImage? {
+    private nonisolated static func transformedImage(_ image: NSImage, operation: StagedImageOperation) -> NSImage? {
         let size = image.size
         guard size.width > 0, size.height > 0 else { return nil }
         let outputSize: NSSize
@@ -535,7 +535,7 @@ extension AppModel {
         return output
     }
 
-    nonisolated static func writeImage(_ image: NSImage, to fileURL: URL) throws {
+    private nonisolated static func writeImage(_ image: NSImage, to fileURL: URL) throws {
         guard let rep = NSBitmapImageRep(data: image.tiffRepresentation ?? Data()) else {
             throw NSError(
                 domain: "\(AppBrand.identifierPrefix).ImageOps",
@@ -576,7 +576,7 @@ extension AppModel {
         try data.write(to: fileURL, options: .atomic)
     }
 
-    static func runSips(arguments: [String], errorDomain: String) async throws {
+    private static func runSips(arguments: [String], errorDomain: String) async throws {
         try await withCheckedThrowingContinuation { continuation in
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/sips")
@@ -614,7 +614,7 @@ extension AppModel {
         }
     }
 
-    func trackPendingEdit(_ value: String, for tag: EditableTag, source: StagedEditSource) {
+    private func trackPendingEdit(_ value: String, for tag: EditableTag, source: StagedEditSource) {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         let selectedURLs = selectedFileURLs
         guard !selectedURLs.isEmpty else { return }
@@ -692,7 +692,7 @@ extension AppModel {
         selectionChanged()
     }
 
-    func toggleSelection(for fileURL: URL, additive: Bool) {
+    private func toggleSelection(for fileURL: URL, additive: Bool) {
         var modifiers = NSEvent.ModifierFlags()
         if additive {
             modifiers.insert(.command)
@@ -840,7 +840,7 @@ extension AppModel {
         selectionChanged()
     }
 
-    func moveSingleSelection(in items: [BrowserItem], delta: Int) {
+    private func moveSingleSelection(in items: [BrowserItem], delta: Int) {
         let currentIndex = currentSelectionIndex(in: items)
         let targetIndex: Int
 
@@ -871,7 +871,7 @@ extension AppModel {
         return nil
     }
 
-    func applyRangeSelection(to fileURL: URL, additive: Bool, in items: [BrowserItem]) {
+    private func applyRangeSelection(to fileURL: URL, additive: Bool, in items: [BrowserItem]) {
         guard let targetIndex = items.firstIndex(where: { $0.url == fileURL }) else {
             selectedFileURLs = [fileURL]
             selectionAnchorURL = fileURL
@@ -904,7 +904,7 @@ extension AppModel {
         selectionFocusURL = fileURL
     }
 
-    func moveRangeSelection(in items: [BrowserItem], delta: Int) {
+    private func moveRangeSelection(in items: [BrowserItem], delta: Int) {
         guard delta != 0 else { return }
 
         let anchorURL = selectionAnchorURL
