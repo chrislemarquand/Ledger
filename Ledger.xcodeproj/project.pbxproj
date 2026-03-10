@@ -9,13 +9,11 @@
 /* Begin PBXBuildFile section */
 		469CE1912F4B7DE400D51BC9 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 469CE1902F4B7DE400D51BC9 /* AppIcon.icon */; };
 		A100001B0000000000000001 /* Sources/Ledger/AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000B0000000000000001 /* Sources/Ledger/AppModel.swift */; };
+		D100000300000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */; };
 		A100001C0000000000000001 /* Sources/Ledger/LedgerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000C0000000000000001 /* Sources/Ledger/LedgerApp.swift */; };
 		A100001D0000000000000001 /* Sources/Ledger/MainContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000D0000000000000001 /* Sources/Ledger/MainContentView.swift */; };
 		A100001E0000000000000001 /* Sources/ExifEditCore/BackupManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000110000000000000001 /* Sources/ExifEditCore/BackupManager.swift */; };
 		A100001F0000000000000001 /* Sources/ExifEditCore/Domain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000120000000000000001 /* Sources/ExifEditCore/Domain.swift */; };
-		D100000100000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000200000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift */; };
-		D100000300000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */; };
-		D100000500000000000000001 /* Tests/ExifEditCoreTests/BatchRenameServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000600000000000000001 /* Tests/ExifEditCoreTests/BatchRenameServiceTests.swift */; };
 		A10000200000000000000001 /* Sources/ExifEditCore/ExifEditEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000130000000000000001 /* Sources/ExifEditCore/ExifEditEngine.swift */; };
 		A10000210000000000000001 /* Sources/ExifEditCore/ExifToolCommandBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000140000000000000001 /* Sources/ExifEditCore/ExifToolCommandBuilder.swift */; };
 		A10000220000000000000001 /* Sources/ExifEditCore/ExifToolService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000150000000000000001 /* Sources/ExifEditCore/ExifToolService.swift */; };
@@ -34,6 +32,21 @@
 		A100014C0000000000000001 /* Sources/Ledger/PresetSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014B0000000000000001 /* Sources/Ledger/PresetSheets.swift */; };
 		A100014E0000000000000001 /* Sources/Ledger/ThumbnailService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014D0000000000000001 /* Sources/Ledger/ThumbnailService.swift */; };
 		A10001500000000000000001 /* Sources/Ledger/SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014F0000000000000001 /* Sources/Ledger/SettingsWindowController.swift */; };
+		A10001510000000000000001 /* Sources/Ledger/AppModel+Sidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001530000000000000001 /* Sources/Ledger/AppModel+Sidebar.swift */; };
+		A10001520000000000000001 /* Sources/Ledger/AppModel+Preview.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001540000000000000001 /* Sources/Ledger/AppModel+Preview.swift */; };
+		A10001620000000000000001 /* Sources/Ledger/AppModel+Actions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001550000000000000001 /* Sources/Ledger/AppModel+Actions.swift */; };
+		A10001630000000000000001 /* Sources/Ledger/AppModel+Navigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001560000000000000001 /* Sources/Ledger/AppModel+Navigation.swift */; };
+		A10001640000000000000001 /* Sources/Ledger/AppModel+ApplyRestore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001570000000000000001 /* Sources/Ledger/AppModel+ApplyRestore.swift */; };
+		A10001650000000000000001 /* Sources/Ledger/AppModel+Presets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001580000000000000001 /* Sources/Ledger/AppModel+Presets.swift */; };
+		A10001660000000000000001 /* Sources/Ledger/AppModel+Editing.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001590000000000000001 /* Sources/Ledger/AppModel+Editing.swift */; };
+		A10001670000000000000001 /* Sources/Ledger/AppModel+InspectorFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100015A0000000000000001 /* Sources/Ledger/AppModel+InspectorFields.swift */; };
+		A10001680000000000000001 /* Sources/Ledger/AppModel+Import.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100015B0000000000000001 /* Sources/Ledger/AppModel+Import.swift */; };
+		A10001690000000000000001 /* Sources/Ledger/AppModel+FileLoading.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100015C0000000000000001 /* Sources/Ledger/AppModel+FileLoading.swift */; };
+		A100016A0000000000000001 /* Sources/Ledger/AppModel+MetadataValues.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100015D0000000000000001 /* Sources/Ledger/AppModel+MetadataValues.swift */; };
+		A100016B0000000000000001 /* Sources/Ledger/AppModel+Formatters.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100015E0000000000000001 /* Sources/Ledger/AppModel+Formatters.swift */; };
+		A100016C0000000000000001 /* Sources/Ledger/AppModel+MetadataPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100015F0000000000000001 /* Sources/Ledger/AppModel+MetadataPipeline.swift */; };
+		A100016D0000000000000001 /* Sources/Ledger/AppModel+UndoStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001600000000000000001 /* Sources/Ledger/AppModel+UndoStatus.swift */; };
+		A100016E0000000000000001 /* Sources/Ledger/AppModel+FieldCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001610000000000000001 /* Sources/Ledger/AppModel+FieldCatalog.swift */; };
 		B100001D0000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000D0000000000000001 /* Assets.xcassets */; };
 		C20002010000000000000001 /* Sources/Ledger/Import/CSVImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001010000000000000001 /* Sources/Ledger/Import/CSVImportAdapter.swift */; };
 		C20002020000000000000001 /* Sources/Ledger/Import/CSVSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001020000000000000001 /* Sources/Ledger/Import/CSVSupport.swift */; };
@@ -82,13 +95,11 @@
 		A10000090000000000000001 /* scripts/release/notarize.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = scripts/release/notarize.sh; sourceTree = SOURCE_ROOT; };
 		A100000A0000000000000001 /* scripts/release/release.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = scripts/release/release.sh; sourceTree = SOURCE_ROOT; };
 		A100000B0000000000000001 /* Sources/Ledger/AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/AppModel.swift; sourceTree = SOURCE_ROOT; };
+		D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/BatchRenameSheetView.swift; sourceTree = SOURCE_ROOT; };
 		A100000C0000000000000001 /* Sources/Ledger/LedgerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/LedgerApp.swift; sourceTree = SOURCE_ROOT; };
 		A100000D0000000000000001 /* Sources/Ledger/MainContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/MainContentView.swift; sourceTree = SOURCE_ROOT; };
 		A10000110000000000000001 /* Sources/ExifEditCore/BackupManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/BackupManager.swift; sourceTree = SOURCE_ROOT; };
 		A10000120000000000000001 /* Sources/ExifEditCore/Domain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/Domain.swift; sourceTree = SOURCE_ROOT; };
-		D100000200000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/BatchRenameService.swift; sourceTree = SOURCE_ROOT; };
-		D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/BatchRenameSheetView.swift; sourceTree = SOURCE_ROOT; };
-		D100000600000000000000001 /* Tests/ExifEditCoreTests/BatchRenameServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/BatchRenameServiceTests.swift; sourceTree = SOURCE_ROOT; };
 		A10000130000000000000001 /* Sources/ExifEditCore/ExifEditEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/ExifEditEngine.swift; sourceTree = SOURCE_ROOT; };
 		A10000140000000000000001 /* Sources/ExifEditCore/ExifToolCommandBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/ExifToolCommandBuilder.swift; sourceTree = SOURCE_ROOT; };
 		A10000150000000000000001 /* Sources/ExifEditCore/ExifToolService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/ExifToolService.swift; sourceTree = SOURCE_ROOT; };
@@ -106,6 +117,21 @@
 		A100014B0000000000000001 /* Sources/Ledger/PresetSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/PresetSheets.swift; sourceTree = SOURCE_ROOT; };
 		A100014D0000000000000001 /* Sources/Ledger/ThumbnailService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/ThumbnailService.swift; sourceTree = SOURCE_ROOT; };
 		A100014F0000000000000001 /* Sources/Ledger/SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/SettingsWindowController.swift; sourceTree = SOURCE_ROOT; };
+		A10001530000000000000001 /* Sources/Ledger/AppModel+Sidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+Sidebar.swift"; sourceTree = SOURCE_ROOT; };
+		A10001540000000000000001 /* Sources/Ledger/AppModel+Preview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+Preview.swift"; sourceTree = SOURCE_ROOT; };
+		A10001550000000000000001 /* Sources/Ledger/AppModel+Actions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+Actions.swift"; sourceTree = SOURCE_ROOT; };
+		A10001560000000000000001 /* Sources/Ledger/AppModel+Navigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+Navigation.swift"; sourceTree = SOURCE_ROOT; };
+		A10001570000000000000001 /* Sources/Ledger/AppModel+ApplyRestore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+ApplyRestore.swift"; sourceTree = SOURCE_ROOT; };
+		A10001580000000000000001 /* Sources/Ledger/AppModel+Presets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+Presets.swift"; sourceTree = SOURCE_ROOT; };
+		A10001590000000000000001 /* Sources/Ledger/AppModel+Editing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+Editing.swift"; sourceTree = SOURCE_ROOT; };
+		A100015A0000000000000001 /* Sources/Ledger/AppModel+InspectorFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+InspectorFields.swift"; sourceTree = SOURCE_ROOT; };
+		A100015B0000000000000001 /* Sources/Ledger/AppModel+Import.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+Import.swift"; sourceTree = SOURCE_ROOT; };
+		A100015C0000000000000001 /* Sources/Ledger/AppModel+FileLoading.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+FileLoading.swift"; sourceTree = SOURCE_ROOT; };
+		A100015D0000000000000001 /* Sources/Ledger/AppModel+MetadataValues.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+MetadataValues.swift"; sourceTree = SOURCE_ROOT; };
+		A100015E0000000000000001 /* Sources/Ledger/AppModel+Formatters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+Formatters.swift"; sourceTree = SOURCE_ROOT; };
+		A100015F0000000000000001 /* Sources/Ledger/AppModel+MetadataPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+MetadataPipeline.swift"; sourceTree = SOURCE_ROOT; };
+		A10001600000000000000001 /* Sources/Ledger/AppModel+UndoStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+UndoStatus.swift"; sourceTree = SOURCE_ROOT; };
+		A10001610000000000000001 /* Sources/Ledger/AppModel+FieldCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/Ledger/AppModel+FieldCatalog.swift"; sourceTree = SOURCE_ROOT; };
 		B100000D0000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = SOURCE_ROOT; };
 		C20001010000000000000001 /* Sources/Ledger/Import/CSVImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/CSVImportAdapter.swift; sourceTree = SOURCE_ROOT; };
 		C20001020000000000000001 /* Sources/Ledger/Import/CSVSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/Import/CSVSupport.swift; sourceTree = SOURCE_ROOT; };
@@ -187,7 +213,6 @@
 			isa = PBXGroup;
 			children = (
 				A10000180000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift */,
-				D100000600000000000000001 /* Tests/ExifEditCoreTests/BatchRenameServiceTests.swift */,
 				A10000190000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift */,
 				A100001A0000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift */,
 			);
@@ -226,14 +251,29 @@
 		};
 		A10000560000000000000001 /* Sources/Ledger */ = {
 			isa = PBXGroup;
-			children = (
-				B100000D0000000000000001 /* Assets.xcassets */,
-				C20000F00000000000000001 /* Sources/Ledger/Import */,
-				C20000F10000000000000001 /* Sources/Ledger/ImportUI */,
-				A100000B0000000000000001 /* Sources/Ledger/AppModel.swift */,
-				D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */,
-				A100000C0000000000000001 /* Sources/Ledger/LedgerApp.swift */,
-				A100000D0000000000000001 /* Sources/Ledger/MainContentView.swift */,
+				children = (
+					B100000D0000000000000001 /* Assets.xcassets */,
+					C20000F00000000000000001 /* Sources/Ledger/Import */,
+					C20000F10000000000000001 /* Sources/Ledger/ImportUI */,
+					A100000B0000000000000001 /* Sources/Ledger/AppModel.swift */,
+					D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */,
+					A10001530000000000000001 /* Sources/Ledger/AppModel+Sidebar.swift */,
+					A10001540000000000000001 /* Sources/Ledger/AppModel+Preview.swift */,
+					A10001550000000000000001 /* Sources/Ledger/AppModel+Actions.swift */,
+					A10001560000000000000001 /* Sources/Ledger/AppModel+Navigation.swift */,
+					A10001570000000000000001 /* Sources/Ledger/AppModel+ApplyRestore.swift */,
+					A10001580000000000000001 /* Sources/Ledger/AppModel+Presets.swift */,
+					A10001590000000000000001 /* Sources/Ledger/AppModel+Editing.swift */,
+					A100015A0000000000000001 /* Sources/Ledger/AppModel+InspectorFields.swift */,
+					A100015B0000000000000001 /* Sources/Ledger/AppModel+Import.swift */,
+					A100015C0000000000000001 /* Sources/Ledger/AppModel+FileLoading.swift */,
+					A100015D0000000000000001 /* Sources/Ledger/AppModel+MetadataValues.swift */,
+					A100015E0000000000000001 /* Sources/Ledger/AppModel+Formatters.swift */,
+					A100015F0000000000000001 /* Sources/Ledger/AppModel+MetadataPipeline.swift */,
+					A10001600000000000000001 /* Sources/Ledger/AppModel+UndoStatus.swift */,
+					A10001610000000000000001 /* Sources/Ledger/AppModel+FieldCatalog.swift */,
+					A100000C0000000000000001 /* Sources/Ledger/LedgerApp.swift */,
+					A100000D0000000000000001 /* Sources/Ledger/MainContentView.swift */,
 				A10001410000000000000001 /* Sources/Ledger/Presets.swift */,
 				A10001430000000000000001 /* Sources/Ledger/BrowserGalleryView.swift */,
 				A10001450000000000000001 /* Sources/Ledger/BrowserListView.swift */,
@@ -250,7 +290,6 @@
 			isa = PBXGroup;
 			children = (
 				A10000110000000000000001 /* Sources/ExifEditCore/BackupManager.swift */,
-				D100000200000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift */,
 				A10000120000000000000001 /* Sources/ExifEditCore/Domain.swift */,
 				A10000130000000000000001 /* Sources/ExifEditCore/ExifEditEngine.swift */,
 				A10000140000000000000001 /* Sources/ExifEditCore/ExifToolCommandBuilder.swift */,
@@ -352,7 +391,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1620;
-				LastUpgradeCheck = 1620;
+				LastUpgradeCheck = 2630;
 				TargetAttributes = {
 					A10000600000000000000001 = {
 						CreatedOnToolsVersion = 16.2;
@@ -424,11 +463,26 @@
 		A10000800000000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (
-				A100001B0000000000000001 /* Sources/Ledger/AppModel.swift in Sources */,
-				D100000300000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift in Sources */,
-				A100001C0000000000000001 /* Sources/Ledger/LedgerApp.swift in Sources */,
-				A100001D0000000000000001 /* Sources/Ledger/MainContentView.swift in Sources */,
+				files = (
+					A100001B0000000000000001 /* Sources/Ledger/AppModel.swift in Sources */,
+					D100000300000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift in Sources */,
+					A10001510000000000000001 /* Sources/Ledger/AppModel+Sidebar.swift in Sources */,
+					A10001520000000000000001 /* Sources/Ledger/AppModel+Preview.swift in Sources */,
+					A10001620000000000000001 /* Sources/Ledger/AppModel+Actions.swift in Sources */,
+					A10001630000000000000001 /* Sources/Ledger/AppModel+Navigation.swift in Sources */,
+					A10001640000000000000001 /* Sources/Ledger/AppModel+ApplyRestore.swift in Sources */,
+					A10001650000000000000001 /* Sources/Ledger/AppModel+Presets.swift in Sources */,
+					A10001660000000000000001 /* Sources/Ledger/AppModel+Editing.swift in Sources */,
+					A10001670000000000000001 /* Sources/Ledger/AppModel+InspectorFields.swift in Sources */,
+					A10001680000000000000001 /* Sources/Ledger/AppModel+Import.swift in Sources */,
+					A10001690000000000000001 /* Sources/Ledger/AppModel+FileLoading.swift in Sources */,
+					A100016A0000000000000001 /* Sources/Ledger/AppModel+MetadataValues.swift in Sources */,
+					A100016B0000000000000001 /* Sources/Ledger/AppModel+Formatters.swift in Sources */,
+					A100016C0000000000000001 /* Sources/Ledger/AppModel+MetadataPipeline.swift in Sources */,
+					A100016D0000000000000001 /* Sources/Ledger/AppModel+UndoStatus.swift in Sources */,
+					A100016E0000000000000001 /* Sources/Ledger/AppModel+FieldCatalog.swift in Sources */,
+					A100001C0000000000000001 /* Sources/Ledger/LedgerApp.swift in Sources */,
+					A100001D0000000000000001 /* Sources/Ledger/MainContentView.swift in Sources */,
 				A10001420000000000000001 /* Sources/Ledger/Presets.swift in Sources */,
 				A10001440000000000000001 /* Sources/Ledger/BrowserGalleryView.swift in Sources */,
 				A10001460000000000000001 /* Sources/Ledger/BrowserListView.swift in Sources */,
@@ -460,7 +514,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				A100001E0000000000000001 /* Sources/ExifEditCore/BackupManager.swift in Sources */,
-				D100000100000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift in Sources */,
 				A100001F0000000000000001 /* Sources/ExifEditCore/Domain.swift in Sources */,
 				A10000200000000000000001 /* Sources/ExifEditCore/ExifEditEngine.swift in Sources */,
 				A10000210000000000000001 /* Sources/ExifEditCore/ExifToolCommandBuilder.swift in Sources */,
@@ -474,7 +527,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000240000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift in Sources */,
-				D100000500000000000000001 /* Tests/ExifEditCoreTests/BatchRenameServiceTests.swift in Sources */,
 				A10000250000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift in Sources */,
 				A10000260000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift in Sources */,
 			);
@@ -501,11 +553,41 @@
 			baseConfigurationReference = A10000050000000000000001 /* Config/Debug.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
 				ONLY_ACTIVE_ARCH = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
@@ -515,10 +597,39 @@
 			baseConfigurationReference = A10000060000000000000001 /* Config/Release.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
@@ -531,6 +642,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = BrandAccent;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Config/Ledger.entitlements;
+				DEAD_CODE_STRIPPING = YES;
 				INFOPLIST_FILE = "Config/Ledger-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -553,6 +665,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = BrandAccent;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Config/Ledger.entitlements;
+				DEAD_CODE_STRIPPING = YES;
 				INFOPLIST_FILE = "Config/Ledger-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -571,6 +684,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A10000050000000000000001 /* Config/Debug.xcconfig */;
 			buildSettings = {
+				DEAD_CODE_STRIPPING = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -582,6 +696,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A10000060000000000000001 /* Config/Release.xcconfig */;
 			buildSettings = {
+				DEAD_CODE_STRIPPING = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -594,6 +709,7 @@
 			baseConfigurationReference = A10000050000000000000001 /* Config/Debug.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "";
+				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_TEST_BUNDLE_IDENTIFIER)";
@@ -608,6 +724,7 @@
 			baseConfigurationReference = A10000060000000000000001 /* Config/Release.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "";
+				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_TEST_BUNDLE_IDENTIFIER)";

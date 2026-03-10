@@ -10,8 +10,8 @@ final class SettingsWindowController: NSWindowController {
         let window = NSWindow(contentViewController: tabsController)
         window.title = "General"
         window.styleMask = [.titled, .closable, .miniaturizable]
-        window.setContentSize(NSSize(width: contentWidth, height: 320))
-        window.minSize = NSSize(width: contentWidth, height: 280)
+        window.setContentSize(NSSize(width: contentWidth, height: 100))
+        window.minSize = NSSize(width: contentWidth, height: 100)
         window.maxSize = NSSize(width: contentWidth, height: 1200)
         window.toolbarStyle = .preference
         window.isReleasedWhenClosed = false
@@ -37,7 +37,6 @@ private final class SettingsTabViewController: NSTabViewController {
     private let generalController: GeneralSettingsViewController
     private let inspectorController: InspectorSettingsViewController
 
-    private let generalHeight: CGFloat = 320
     private let inspectorHeight: CGFloat = 620
 
     init(model: AppModel) {
@@ -93,18 +92,27 @@ private final class SettingsTabViewController: NSTabViewController {
         case "Inspector":
             targetContentHeight = inspectorHeight
         default:
-            targetContentHeight = generalHeight
+            if let vc = selected?.viewController {
+                vc.view.layoutSubtreeIfNeeded()
+                targetContentHeight = vc.view.fittingSize.height
+            } else {
+                return
+            }
         }
 
         let frame = window.frame
         let currentContentRect = window.contentRect(forFrameRect: frame)
-        let delta = targetContentHeight - currentContentRect.height
+        let chromeHeight = frame.height - currentContentRect.height
+        let maxContentHeight = (window.screen?.visibleFrame.height ?? 800) - chromeHeight
+        let clampedContentHeight = min(targetContentHeight, maxContentHeight)
+        let delta = clampedContentHeight - currentContentRect.height
         guard abs(delta) > 0.5 else { return }
 
         var targetFrame = frame
         targetFrame.size.height += delta
         targetFrame.origin.y -= delta
-        window.setFrame(targetFrame, display: true, animate: animated)
+        let constrainedFrame = window.constrainFrameRect(targetFrame, to: window.screen)
+        window.setFrame(constrainedFrame, display: true, animate: animated)
     }
 }
 
@@ -125,6 +133,11 @@ private final class GeneralSettingsViewController: NSViewController {
     private lazy var keepBackupsButton = makeCheckbox(
         title: "Keep backups",
         action: #selector(keepBackupsToggled(_:))
+    )
+
+    private lazy var clearBackupsButton = makeActionButton(
+        title: "Clear backups...",
+        action: #selector(clearBackupsAction(_:))
     )
 
     init(model: AppModel) {
@@ -153,11 +166,13 @@ private final class GeneralSettingsViewController: NSViewController {
         let applyLabel = makeCategoryLabel(title: "Apply:")
         let backupsLabel = makeCategoryLabel(title: "Backups:")
         let blankLabel = makeCategoryLabel(title: "")
+        let blankLabel2 = makeCategoryLabel(title: "")
 
         let grid = NSGridView(views: [
             [applyLabel, confirmBeforeApplyButton],
             [blankLabel, autoRefreshAfterApplyButton],
             [backupsLabel, keepBackupsButton],
+            [blankLabel2, clearBackupsButton],
         ])
         grid.translatesAutoresizingMaskIntoConstraints = false
         grid.rowSpacing = 12
@@ -169,15 +184,25 @@ private final class GeneralSettingsViewController: NSViewController {
         view.addSubview(grid)
 
         NSLayoutConstraint.activate([
-            grid.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
+            grid.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            grid.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 24),
             grid.topAnchor.constraint(equalTo: view.topAnchor, constant: 24),
             grid.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24),
+            grid.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -24),
         ])
     }
 
     private func makeCheckbox(title: String, action: Selector) -> NSButton {
         let button = NSButton(checkboxWithTitle: title, target: self, action: action)
         button.translatesAutoresizingMaskIntoConstraints = false
+        button.setContentCompressionResistancePriority(.required, for: .vertical)
+        return button
+    }
+
+    private func makeActionButton(title: String, action: Selector) -> NSButton {
+        let button = NSButton(title: title, target: self, action: action)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.bezelStyle = .rounded
         button.setContentCompressionResistancePriority(.required, for: .vertical)
         return button
     }
@@ -210,6 +235,37 @@ private final class GeneralSettingsViewController: NSViewController {
     private func keepBackupsToggled(_ sender: NSButton) {
         model.keepBackups = (sender.state == .on)
     }
+
+    @objc
+    private func clearBackupsAction(_: Any?) {
+        let trashName = AppBrand.localizedTrashDisplayName
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Move all backups to \(trashName)?"
+        alert.informativeText = "This moves all saved backups to \(trashName)."
+        let deleteButton = alert.addButton(withTitle: "Move to \(trashName)")
+        deleteButton.hasDestructiveAction = true
+        alert.addButton(withTitle: "Cancel")
+
+        let handleResponse: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            do {
+                _ = try self.model.clearAllBackups()
+            } catch {
+                self.model.statusMessage = "Couldn’t clear backups. \(error.localizedDescription)"
+            }
+        }
+
+        if let window = view.window {
+            alert.beginSheetModal(for: window, completionHandler: handleResponse)
+        } else {
+            handleResponse(alert.runModal())
+        }
+    }
+}
+
+private final class FlippedView: NSView {
+    override var isFlipped: Bool { true }
 }
 
 @MainActor
@@ -217,11 +273,14 @@ private final class InspectorSettingsViewController: NSViewController {
     private unowned let model: AppModel
 
     private let scrollView = NSScrollView()
-    private let contentView = NSView()
+    private let contentView = FlippedView()
     private let contentStack = NSStackView()
 
     private var fieldByButtonID: [ObjectIdentifier: String] = [:]
     private var sectionByButtonID: [ObjectIdentifier: String] = [:]
+    private var sectionToggleBySection: [String: NSButton] = [:]
+    private var fieldTogglesBySection: [String: [NSButton]] = [:]
+    private var sectionForFieldID: [String: String] = [:]
 
     init(model: AppModel) {
         self.model = model
@@ -281,6 +340,9 @@ private final class InspectorSettingsViewController: NSViewController {
     private func rebuildContent() {
         fieldByButtonID.removeAll()
         sectionByButtonID.removeAll()
+        sectionToggleBySection.removeAll()
+        fieldTogglesBySection.removeAll()
+        sectionForFieldID.removeAll()
 
         for arranged in contentStack.arrangedSubviews {
             contentStack.removeArrangedSubview(arranged)
@@ -305,6 +367,7 @@ private final class InspectorSettingsViewController: NSViewController {
             }
 
             sectionByButtonID[ObjectIdentifier(sectionToggle)] = grouped.section
+            sectionToggleBySection[grouped.section] = sectionToggle
 
             let fieldStack = NSStackView()
             fieldStack.orientation = .vertical
@@ -312,13 +375,17 @@ private final class InspectorSettingsViewController: NSViewController {
             fieldStack.spacing = 8
             fieldStack.translatesAutoresizingMaskIntoConstraints = false
 
+            var togglesForSection: [NSButton] = []
             for field in grouped.fields {
                 let fieldToggle = NSButton(checkboxWithTitle: field.label, target: self, action: #selector(fieldToggled(_:)))
                 fieldToggle.state = model.isInspectorFieldEnabled(field.id) ? .on : .off
                 fieldToggle.translatesAutoresizingMaskIntoConstraints = false
                 fieldByButtonID[ObjectIdentifier(fieldToggle)] = field.id
+                sectionForFieldID[field.id] = grouped.section
+                togglesForSection.append(fieldToggle)
                 fieldStack.addArrangedSubview(fieldToggle)
             }
+            fieldTogglesBySection[grouped.section] = togglesForSection
 
             let sectionGroup = NSStackView(views: [sectionToggle, fieldStack])
             sectionGroup.orientation = .vertical
@@ -333,17 +400,40 @@ private final class InspectorSettingsViewController: NSViewController {
         }
     }
 
+    private func recalculateSectionToggleState(for section: String) {
+        guard let sectionToggle = sectionToggleBySection[section],
+              let toggles = fieldTogglesBySection[section] else { return }
+        let enabledCount = toggles.reduce(into: 0) { count, toggle in
+            if toggle.state == .on { count += 1 }
+        }
+        if enabledCount == 0 {
+            sectionToggle.state = .off
+        } else if enabledCount == toggles.count {
+            sectionToggle.state = .on
+        } else {
+            sectionToggle.state = .mixed
+        }
+    }
+
     @objc
     private func sectionToggled(_ sender: NSButton) {
         guard let section = sectionByButtonID[ObjectIdentifier(sender)] else { return }
-        model.setInspectorSectionEnabled(section: section, isEnabled: sender.state != .off)
-        rebuildContent()
+        let enable = sender.state != .off
+        model.setInspectorSectionEnabled(section: section, isEnabled: enable)
+        if let toggles = fieldTogglesBySection[section] {
+            for toggle in toggles {
+                toggle.state = enable ? .on : .off
+            }
+        }
+        recalculateSectionToggleState(for: section)
     }
 
     @objc
     private func fieldToggled(_ sender: NSButton) {
         guard let fieldID = fieldByButtonID[ObjectIdentifier(sender)] else { return }
         model.setInspectorFieldEnabled(fieldID: fieldID, isEnabled: sender.state == .on)
-        rebuildContent()
+        if let section = sectionForFieldID[fieldID] {
+            recalculateSectionToggleState(for: section)
+        }
     }
 }

@@ -17,41 +17,80 @@ enum ThumbnailService {
 
     private final class ThumbnailCache: @unchecked Sendable {
         private let maxEntries: Int
+        private let maxTotalCostBytes: Int
         private let lock = NSLock()
-        private var images: [URL: NSImage] = [:]
-        private var renderedSideByURL: [URL: CGFloat] = [:]
-        private var recency: [URL] = []
+        private var entries: [URL: CacheEntry] = [:]
+        private var totalCostBytes = 0
+        private var lruHead: CacheNode?
+        private var lruTail: CacheNode?
 
-        init(maxEntries: Int) {
+        private final class CacheNode {
+            let url: URL
+            var previous: CacheNode?
+            var next: CacheNode?
+
+            init(url: URL) {
+                self.url = url
+            }
+        }
+
+        private struct CacheEntry {
+            var image: NSImage
+            var renderedSide: CGFloat
+            var costBytes: Int
+            let node: CacheNode
+        }
+
+        init(maxEntries: Int, maxTotalCostBytes: Int) {
             self.maxEntries = max(100, maxEntries)
+            self.maxTotalCostBytes = max(64 * 1024 * 1024, maxTotalCostBytes)
         }
 
         func image(for url: URL, minRenderedSide: CGFloat) -> NSImage? {
             lock.lock()
             defer { lock.unlock() }
-            guard let image = images[url] else { return nil }
-            if let rendered = renderedSideByURL[url], rendered + 0.5 < minRenderedSide {
+            guard let entry = entries[url] else { return nil }
+            if entry.renderedSide + 0.5 < minRenderedSide {
                 return nil
             }
-            touch(url)
-            return image
+            touch(entry.node)
+            return entry.image
         }
 
         func store(_ image: NSImage, for url: URL, renderedSide: CGFloat) {
             lock.lock()
             defer { lock.unlock() }
-            images[url] = image
-            renderedSideByURL[url] = max(renderedSide, renderedSideByURL[url] ?? 0)
-            touch(url)
+            let newCostBytes = estimateCostBytes(for: image)
+            if var existing = entries[url] {
+                totalCostBytes -= existing.costBytes
+                existing.image = image
+                existing.renderedSide = max(renderedSide, existing.renderedSide)
+                existing.costBytes = newCostBytes
+                entries[url] = existing
+                totalCostBytes += newCostBytes
+                touch(existing.node)
+            } else {
+                let node = CacheNode(url: url)
+                let entry = CacheEntry(
+                    image: image,
+                    renderedSide: renderedSide,
+                    costBytes: newCostBytes,
+                    node: node
+                )
+                entries[url] = entry
+                totalCostBytes += newCostBytes
+                appendToTail(node)
+            }
             trimIfNeeded()
         }
 
         func invalidateAll() {
             lock.lock()
             defer { lock.unlock() }
-            images.removeAll()
-            renderedSideByURL.removeAll()
-            recency.removeAll()
+            entries.removeAll()
+            totalCostBytes = 0
+            lruHead = nil
+            lruTail = nil
         }
 
         func invalidate(urls: Set<URL>) {
@@ -59,26 +98,71 @@ enum ThumbnailService {
             lock.lock()
             defer { lock.unlock() }
             for url in urls {
-                images.removeValue(forKey: url)
-                renderedSideByURL.removeValue(forKey: url)
+                removeEntry(for: url)
             }
-            recency.removeAll(where: { urls.contains($0) })
         }
 
-        private func touch(_ url: URL) {
-            recency.removeAll(where: { $0 == url })
-            recency.append(url)
+        private func touch(_ node: CacheNode) {
+            guard lruTail !== node else { return }
+            detach(node)
+            appendToTail(node)
         }
 
         private func trimIfNeeded() {
-            let overflow = images.count - maxEntries
-            guard overflow > 0 else { return }
-            let toRemove = recency.prefix(overflow)
-            for url in toRemove {
-                images.removeValue(forKey: url)
-                renderedSideByURL.removeValue(forKey: url)
+            while entries.count > maxEntries || totalCostBytes > maxTotalCostBytes {
+                guard let oldest = lruHead else { break }
+                removeEntry(for: oldest.url)
             }
-            recency.removeFirst(min(overflow, recency.count))
+        }
+
+        private func removeEntry(for url: URL) {
+            guard let existing = entries.removeValue(forKey: url) else { return }
+            totalCostBytes = max(0, totalCostBytes - existing.costBytes)
+            detach(existing.node)
+        }
+
+        private func appendToTail(_ node: CacheNode) {
+            node.previous = lruTail
+            node.next = nil
+            lruTail?.next = node
+            lruTail = node
+            if lruHead == nil {
+                lruHead = node
+            }
+        }
+
+        private func detach(_ node: CacheNode) {
+            let previous = node.previous
+            let next = node.next
+            if let previous {
+                previous.next = next
+            } else {
+                lruHead = next
+            }
+            if let next {
+                next.previous = previous
+            } else {
+                lruTail = previous
+            }
+            node.previous = nil
+            node.next = nil
+        }
+
+        private func estimateCostBytes(for image: NSImage) -> Int {
+            var bestCost = 0
+            for representation in image.representations {
+                if let bitmap = representation as? NSBitmapImageRep {
+                    let width = max(1, bitmap.pixelsWide)
+                    let height = max(1, bitmap.pixelsHigh)
+                    bestCost = max(bestCost, width * height * 4)
+                }
+            }
+            if bestCost > 0 {
+                return bestCost
+            }
+            let fallbackWidth = max(1, Int(image.size.width.rounded(.up)))
+            let fallbackHeight = max(1, Int(image.size.height.rounded(.up)))
+            return max(1, fallbackWidth * fallbackHeight * 4)
         }
     }
 
@@ -152,7 +236,10 @@ enum ThumbnailService {
         }
     }
 
-    private static let cache = ThumbnailCache(maxEntries: 3_000)
+    private static let cache = ThumbnailCache(
+        maxEntries: 3_000,
+        maxTotalCostBytes: 256 * 1024 * 1024
+    )
     private static let broker = RequestBroker(maxConcurrentRequests: 4)
 
     static func cachedImage(for fileURL: URL, minRenderedSide: CGFloat) -> NSImage? {

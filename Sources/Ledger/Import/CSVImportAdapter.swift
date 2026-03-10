@@ -104,7 +104,7 @@ struct CSVImportAdapter: ImportSourceAdapter {
                     continue
                 }
                 parityMappedCount += 1
-                identifier = String(format: "Row %03d", paritySourceRowNumber)
+                identifier = ImportRowLabelFormatter.fallbackRowLabel(paritySourceRowNumber)
                 selector = .rowNumber(parityMappedCount)
             }
 
