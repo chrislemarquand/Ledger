@@ -29,6 +29,8 @@ final class ImportSession: ObservableObject {
     private var eosLensMappingCache: [Int: [String]]?
     @Published var options: ImportRunOptions
     @Published var preparedRun: ImportPreparedRun?
+    @Published var importReport: ImportRunReport?
+    @Published var shouldEnterPostImportReview = false
     @Published var isBusy = false
     @Published var previewError: String?
     private var previewTask: Task<Void, Never>?
@@ -83,11 +85,15 @@ final class ImportSession: ObservableObject {
         previewTask?.cancel()
         guard options.sourceURL != nil else {
             preparedRun = nil
+            importReport = nil
+            shouldEnterPostImportReview = false
             previewError = nil
             return
         }
         isBusy = true
         preparedRun = nil
+        importReport = nil
+        shouldEnterPostImportReview = false
         previewError = nil
         let opts = options
         let targetFiles = model.importTargetFiles(for: opts.scope)
@@ -114,6 +120,8 @@ final class ImportSession: ObservableObject {
                     return
                 }
                 preparedRun = nil
+                importReport = nil
+                shouldEnterPostImportReview = false
                 previewError = error.localizedDescription
             }
             isBusy = false
@@ -143,6 +151,8 @@ final class ImportSession: ObservableObject {
             } catch {
                 isBusy = false
                 preparedRun = nil
+                importReport = nil
+                shouldEnterPostImportReview = false
                 let message = error.localizedDescription
                 previewError = message
                 presentBlockingImportAlert(
@@ -159,6 +169,13 @@ final class ImportSession: ObservableObject {
             let conflicts = conflictCount == 1 ? "1 conflict needs" : "\(conflictCount) conflicts need"
             let message = "\(conflicts) resolution. Conflict resolution will be available in a future update."
             previewError = message
+            importReport = makeImportReport(
+                run: run,
+                resolve: resolve,
+                stageSummary: nil
+            )
+            shouldEnterPostImportReview = shouldReview(report: importReport)
+            debugLogImportReport(importReport)
             presentBlockingImportAlert(
                 title: "Import needs conflict resolution.",
                 message: message
@@ -184,6 +201,13 @@ final class ImportSession: ObservableObject {
             sourceKind: run.options.sourceKind,
             emptyValuePolicy: options.emptyValuePolicy
         )
+        importReport = makeImportReport(
+            run: run,
+            resolve: resolve,
+            stageSummary: stageSummary
+        )
+        shouldEnterPostImportReview = shouldReview(report: importReport)
+        debugLogImportReport(importReport)
         guard stageSummary.stagedFiles > 0 else {
             previewError = "No metadata changes to import. Check that source rows match the target files."
             return false
@@ -197,6 +221,100 @@ final class ImportSession: ObservableObject {
             model.statusMessage = "Prepared \(fields) for \(files) with \(warnings). Ready to apply."
         }
         return true
+    }
+
+    private func makeImportReport(
+        run: ImportPreparedRun,
+        resolve: ImportConflictResolveResult,
+        stageSummary: ImportStageSummary?
+    ) -> ImportRunReport {
+        var sourceRowByTarget: [URL: ImportRow] = [:]
+        for match in run.matchResult.matched where sourceRowByTarget[match.targetURL] == nil {
+            sourceRowByTarget[match.targetURL] = match.row
+        }
+
+        let rowItems: [ImportRowReportItem] = (stageSummary?.assignmentOutcomes ?? []).map { outcome in
+            let source = sourceRowByTarget[outcome.targetURL]
+            let status: ImportRowOutcomeStatus
+            if outcome.stagedFields > 0 {
+                status = .staged
+            } else if outcome.skippedByPolicy == outcome.attemptedFields, outcome.attemptedFields > 0 {
+                status = .skippedByPolicy
+            } else if outcome.unsupportedFields == outcome.attemptedFields, outcome.attemptedFields > 0 {
+                status = .unsupported
+            } else {
+                status = .unchanged
+            }
+            return ImportRowReportItem(
+                sourceLine: source?.sourceLine,
+                sourceIdentifier: source?.sourceIdentifier ?? outcome.targetURL.lastPathComponent,
+                targetURL: outcome.targetURL,
+                targetDisplayName: outcome.targetURL.lastPathComponent,
+                status: status,
+                attemptedFields: outcome.attemptedFields,
+                stagedFields: outcome.stagedFields,
+                skippedByPolicy: outcome.skippedByPolicy,
+                unchangedFields: outcome.unchangedFields,
+                unsupportedFields: outcome.unsupportedFields,
+                warnings: outcome.warnings
+            )
+        }
+
+        let warningStrings = (
+            run.matchResult.warnings.map(formatPreviewWarning)
+                + resolve.warnings
+                + (stageSummary?.warnings ?? [])
+        )
+
+        let conflictItems = run.matchResult.conflicts.map {
+            ImportConflictReportItem(
+                sourceLine: $0.sourceLine,
+                sourceIdentifier: $0.sourceIdentifier,
+                message: $0.message
+            )
+        }
+
+        return ImportRunReport(
+            sourceKind: run.options.sourceKind,
+            scope: run.options.scope,
+            createdAt: Date(),
+            summary: ImportRunReportSummary(
+                parsedRows: run.parseResult.rows.count,
+                matchedRows: run.matchResult.matched.count,
+                conflictedRows: run.matchResult.conflicts.count,
+                stagedFiles: stageSummary?.stagedFiles ?? 0,
+                stagedFields: stageSummary?.stagedFields ?? 0,
+                skippedFields: stageSummary?.skippedFields ?? 0,
+                warningCount: warningStrings.count,
+                conflictCount: conflictItems.count
+            ),
+            warnings: warningStrings,
+            conflicts: conflictItems,
+            rows: rowItems
+        )
+    }
+
+    private func shouldReview(report: ImportRunReport?) -> Bool {
+        guard let report else { return false }
+        if report.summary.warningCount > 0 || report.summary.conflictCount > 0 {
+            return true
+        }
+        return report.rows.contains { row in
+            row.attemptedFields > 0 && row.status != .staged
+        }
+    }
+
+    private func debugLogImportReport(_ report: ImportRunReport?) {
+#if DEBUG
+        guard let report else { return }
+        print("[ImportReport] kind=\(report.sourceKind.rawValue) scope=\(report.scope.rawValue) rows=\(report.summary.parsedRows) matched=\(report.summary.matchedRows) conflicts=\(report.summary.conflictCount) stagedFiles=\(report.summary.stagedFiles) stagedFields=\(report.summary.stagedFields) warnings=\(report.summary.warningCount)")
+        for row in report.rows.prefix(12) {
+            print("[ImportReportRow] source=\(row.sourceIdentifier) target=\(row.targetDisplayName) status=\(row.status.rawValue) attempted=\(row.attemptedFields) staged=\(row.stagedFields) skipped=\(row.skippedByPolicy) unchanged=\(row.unchangedFields) unsupported=\(row.unsupportedFields)")
+        }
+        if report.rows.count > 12 {
+            print("[ImportReportRow] ... \(report.rows.count - 12) more rows")
+        }
+#endif
     }
 
     private func presentBlockingImportAlert(title: String, message: String) {
@@ -647,6 +765,60 @@ final class ImportSession: ObservableObject {
             .map(formatPreviewWarning)
     }
 
+    var requiresPostImportReview: Bool {
+        guard let report = importReport else { return false }
+        if report.summary.warningCount > 0 || report.summary.conflictCount > 0 {
+            return true
+        }
+        return report.rows.contains { row in
+            row.attemptedFields > 0 && row.status != .staged
+        }
+    }
+
+    var reportPreviewText: String {
+        guard let report = importReport else { return "No import report available." }
+        var lines: [String] = []
+        lines.append("Import Summary")
+        lines.append("Kind: \(report.sourceKind.title)")
+        lines.append("Scope: \(report.scope.title)")
+        lines.append("Rows: \(report.summary.parsedRows), Matched: \(report.summary.matchedRows), Conflicts: \(report.summary.conflictCount)")
+        lines.append("Staged: \(report.summary.stagedFiles) files, \(report.summary.stagedFields) fields")
+        if report.summary.warningCount > 0 {
+            lines.append("Warnings: \(report.summary.warningCount)")
+        }
+        if !report.warnings.isEmpty {
+            lines.append("")
+            lines.append("Warnings")
+            for warning in report.warnings.prefix(20) {
+                lines.append("- \(warning)")
+            }
+            if report.warnings.count > 20 {
+                lines.append("… \(report.warnings.count - 20) more warnings")
+            }
+        }
+        if !report.conflicts.isEmpty {
+            lines.append("")
+            lines.append("Conflicts")
+            for conflict in report.conflicts.prefix(20) {
+                lines.append("Line \(conflict.sourceLine): \(conflict.sourceIdentifier) — \(conflict.message)")
+            }
+            if report.conflicts.count > 20 {
+                lines.append("… \(report.conflicts.count - 20) more conflicts")
+            }
+        }
+        if !report.rows.isEmpty {
+            lines.append("")
+            lines.append("Row Outcomes")
+            for row in report.rows.prefix(120) {
+                lines.append("\(row.sourceIdentifier) → \(row.targetDisplayName) [\(row.status.rawValue)] attempted \(row.attemptedFields), staged \(row.stagedFields), skipped \(row.skippedByPolicy), unchanged \(row.unchangedFields), unsupported \(row.unsupportedFields)")
+            }
+            if report.rows.count > 120 {
+                lines.append("… \(report.rows.count - 120) more rows")
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+
     private static func isRowOrderFallbackWarning(_ warning: ImportWarning) -> Bool {
         warning.message.hasPrefix("Using row-order matching:")
             || warning.message.hasPrefix("Using row-order fallback for ")
@@ -664,6 +836,7 @@ struct ImportSheetView: View {
     @State private var showPreview = false
     @State private var showInfo = false
     @State private var importProgress: Double?
+    @State private var isPostImportReviewMode = false
 
     init(model: AppModel, sourceKind: ImportSourceKind) {
         self.model = model
@@ -699,6 +872,7 @@ struct ImportSheetView: View {
                 Button("Choose…") {
                     chooseSource()
                 }
+                .disabled(isPostImportReviewMode || session.isBusy || importProgress != nil)
             }
 
             // Options row: Apply to | If no match
@@ -710,6 +884,7 @@ struct ImportSheetView: View {
                     }
                     .pickerStyle(.radioGroup)
                     .labelsHidden()
+                    .disabled(isPostImportReviewMode)
                 }
 
                 optionGroup("If no match:") {
@@ -719,22 +894,15 @@ struct ImportSheetView: View {
                     }
                     .pickerStyle(.radioGroup)
                     .labelsHidden()
+                    .disabled(isPostImportReviewMode)
                 }
             }
 
-            if !session.rowOrderFallbackWarnings.isEmpty {
+            if let banner = activeBanner {
                 InlineSheetMessageBanner(
-                    tone: .warning,
-                    title: "Row-order fallback is active for this import.",
-                    messages: Array(session.rowOrderFallbackWarnings.prefix(2))
-                )
-            }
-
-            if session.shouldShowEOSLensDependencyBanner {
-                InlineSheetMessageBanner(
-                    tone: .info,
-                    title: "Lens Model depends on Focal Length in EOS imports.",
-                    messages: ["Enable Focal Length in Fields to include Lens Model values and lens-resolution prompts."]
+                    tone: banner.tone,
+                    title: banner.title,
+                    messages: banner.messages
                 )
             }
 
@@ -746,7 +914,7 @@ struct ImportSheetView: View {
                 Button("Fields…") {
                     showFields = true
                 }
-                .disabled(session.foundTagIDs == nil)
+                .disabled(session.foundTagIDs == nil || isPostImportReviewMode)
                 .popover(isPresented: $showFields) {
                     fieldsPopover
                 }
@@ -754,6 +922,7 @@ struct ImportSheetView: View {
                     Button("Advanced…") {
                         showAdvanced = true
                     }
+                    .disabled(isPostImportReviewMode)
                     .popover(isPresented: $showAdvanced) {
                         advancedPopover
                     }
@@ -768,24 +937,32 @@ struct ImportSheetView: View {
                     }
                 }
                 Spacer()
-                Button("Cancel") {
-                    model.dismissImportSheet()
+                if !isPostImportReviewMode {
+                    Button("Cancel") {
+                        model.dismissImportSheet()
+                    }
+                    .keyboardShortcut(.cancelAction)
                 }
-                .keyboardShortcut(.cancelAction)
-                Button("Import") {
-                    performImport()
+                Button(isPostImportReviewMode ? "Close" : "Import") {
+                    if isPostImportReviewMode {
+                        model.dismissImportSheet()
+                    } else {
+                        performImport()
+                    }
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(session.options.sourceURL == nil || session.isBusy || importProgress != nil)
+                .disabled(isPostImportReviewMode ? false : (session.options.sourceURL == nil || session.isBusy || importProgress != nil))
             }
         }
         .fixedSize(horizontal: false, vertical: true)
         .padding(20)
         .frame(width: 560)
         .onChange(of: session.options.sourceURLPath) { _, _ in
+            isPostImportReviewMode = false
             session.schedulePreviewRefresh(model: model)
         }
         .onChange(of: session.options.scope) { _, _ in
+            isPostImportReviewMode = false
             session.schedulePreviewRefresh(model: model)
         }
         .onChange(of: model.selectedFileURLs.count) { _, newCount in
@@ -812,6 +989,34 @@ struct ImportSheetView: View {
     private var selectionLabel: String {
         let count = model.selectedFileURLs.count
         return count > 0 ? "Selection (\(count))" : "Selection"
+    }
+
+    private var activeBanner: (tone: InlineSheetMessageTone, title: String, messages: [String])? {
+        if isPostImportReviewMode, session.requiresPostImportReview, let report = session.importReport {
+            return (
+                .warning,
+                "Import review: warnings/conflicts/partial outcomes detected.",
+                [
+                    "Warnings: \(report.summary.warningCount) • Conflicts: \(report.summary.conflictCount)",
+                    "Open Preview… for detailed row outcomes before closing.",
+                ]
+            )
+        }
+        if !session.rowOrderFallbackWarnings.isEmpty {
+            return (
+                .warning,
+                "Row-order fallback is active for this import.",
+                Array(session.rowOrderFallbackWarnings.prefix(2))
+            )
+        }
+        if session.shouldShowEOSLensDependencyBanner {
+            return (
+                .info,
+                "Lens Model depends on Focal Length in EOS imports.",
+                ["Enable Focal Length in Fields to include Lens Model values and lens-resolution prompts."]
+            )
+        }
+        return nil
     }
 
     private var infoText: String {
@@ -890,7 +1095,8 @@ struct ImportSheetView: View {
                     }
                     .padding(8)
                 } else {
-                    Text(session.previewText.isEmpty ? "No matches found." : session.previewText)
+                    let text = isPostImportReviewMode ? session.reportPreviewText : session.previewText
+                    Text(text.isEmpty ? "No matches found." : text)
                         .font(.system(.caption, design: .monospaced))
                         .padding(8)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1063,6 +1269,7 @@ struct ImportSheetView: View {
     }
 
     private func performImport() {
+        isPostImportReviewMode = false
         importProgress = 0.0
         Task {
             let success = await session.performImport(model: model)
@@ -1071,9 +1278,17 @@ struct ImportSheetView: View {
                     importProgress = 1.0
                 }
                 try? await Task.sleep(for: .milliseconds(500))
-                model.dismissImportSheet()
+                if session.shouldEnterPostImportReview {
+                    importProgress = nil
+                    isPostImportReviewMode = true
+                } else {
+                    model.dismissImportSheet()
+                }
             } else {
                 importProgress = nil
+                if session.shouldEnterPostImportReview {
+                    isPostImportReviewMode = true
+                }
             }
         }
     }

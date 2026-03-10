@@ -2002,6 +2002,104 @@ final class ImportSystemTests: XCTestCase {
         XCTAssertNil(lens)
     }
 
+    func testImportSessionGeneratesStructuredReportOnSuccessfulImport() async throws {
+        let model = makeModel()
+        let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.browserItems = [
+            AppModel.BrowserItem(url: file, name: file.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+        ]
+        model.metadataByFile = [file: FileMetadataSnapshot(fileURL: file, fields: [])]
+
+        var options = ImportRunOptions.defaults(for: .csv)
+        options.scope = .folder
+        let row = ImportRow(
+            sourceLine: 2,
+            sourceIdentifier: "row-1",
+            targetSelector: .filename(file.lastPathComponent),
+            fields: [.init(tagID: "xmp-title", value: "New Title")]
+        )
+        let preparedRun = ImportPreparedRun(
+            options: options,
+            parsedAsSourceKind: .csv,
+            parseResult: ImportParseResult(rows: [row], warnings: []),
+            matchResult: ImportMatchResult(
+                matched: [ImportRowMatch(row: row, targetURL: file)],
+                conflicts: [],
+                warnings: []
+            ),
+            previewSummary: ImportPreviewSummary(
+                sourceKind: .csv,
+                parsedRows: 1,
+                matchedRows: 1,
+                conflictedRows: 0,
+                warnings: 0,
+                fieldWrites: 1
+            )
+        )
+
+        let session = ImportSession(model: model, sourceKind: .csv)
+        session.preparedRun = preparedRun
+        let success = await session.performImport(model: model)
+        XCTAssertTrue(success)
+
+        let report = session.importReport
+        XCTAssertNotNil(report)
+        XCTAssertEqual(report?.summary.parsedRows, 1)
+        XCTAssertEqual(report?.summary.matchedRows, 1)
+        XCTAssertEqual(report?.summary.stagedFiles, 1)
+        XCTAssertEqual(report?.summary.stagedFields, 1)
+        XCTAssertEqual(report?.rows.count, 1)
+        XCTAssertEqual(report?.rows.first?.status, .staged)
+        XCTAssertEqual(report?.rows.first?.sourceLine, 2)
+        XCTAssertEqual(report?.rows.first?.targetURL, file)
+    }
+
+    func testImportSessionGeneratesStructuredReportForUnresolvedConflicts() async throws {
+        let model = makeModel()
+        let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.browserItems = [
+            AppModel.BrowserItem(url: file, name: file.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+        ]
+
+        var options = ImportRunOptions.defaults(for: .csv)
+        options.scope = .folder
+        let conflict = ImportConflict(
+            id: UUID(),
+            kind: .missingTarget,
+            sourceLine: 12,
+            sourceIdentifier: "row-12",
+            rowFields: [.init(tagID: "xmp-title", value: "Value")],
+            candidateTargets: [],
+            message: "No target file named row-12 in scope."
+        )
+        let preparedRun = ImportPreparedRun(
+            options: options,
+            parsedAsSourceKind: .csv,
+            parseResult: ImportParseResult(rows: [], warnings: []),
+            matchResult: ImportMatchResult(
+                matched: [],
+                conflicts: [conflict],
+                warnings: []
+            ),
+            previewSummary: ImportPreviewSummary(
+                sourceKind: .csv,
+                parsedRows: 0,
+                matchedRows: 0,
+                conflictedRows: 1,
+                warnings: 0,
+                fieldWrites: 0
+            )
+        )
+
+        let session = ImportSession(model: model, sourceKind: .csv)
+        session.preparedRun = preparedRun
+        let success = await session.performImport(model: model)
+        XCTAssertFalse(success)
+        XCTAssertEqual(session.importReport?.summary.conflictCount, 1)
+        XCTAssertEqual(session.importReport?.conflicts.first?.sourceLine, 12)
+        XCTAssertEqual(session.importReport?.conflicts.first?.sourceIdentifier, "row-12")
+    }
+
     func testImportSessionUsesCurrentEmptyPolicyWhenPreparedRunExists() async throws {
         let model = makeModel()
         let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
