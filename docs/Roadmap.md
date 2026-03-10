@@ -124,6 +124,7 @@ Moves before performance: search will expose large-folder performance gaps, maki
   - [ ] Policy mode: `Do not write lens`, `Single lens for import`, `Focal-length mapping table`.
   - [ ] Unknown focal length behavior: `Leave empty`, `Use fallback`, or `Warn/skip`.
   - [ ] Named lens profiles + import-sheet override selector.
+- [ ] **ExifTool-native Date Time Digitized backfill**: optional post-import/apply pass that fills missing `EXIF:CreateDate` from `FileCreateDate` only (no app-side date parsing, no overwrite of existing values).
 - [ ] Inspector clear-field control (candidate): evaluate optional trailing `x.circle.fill` action per field for staged-clear UX, balancing discoverability vs native macOS conventions.
 - [ ] **Sidecar management**: XMP sidecar create/rebuild/apply; browser badges for sidecar-exists and sidecar-differs-from-embedded states.
 - [ ] ExifTool console: live readout of ExifTool commands and output as operations run, mirroring what would appear if running ExifTool directly in the terminal.
