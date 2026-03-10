@@ -19,7 +19,7 @@ enum ImportSourceKind: String, CaseIterable, Codable, Sendable {
         case .referenceImage:
             return "Reference Image…"
         case .eos1v:
-            return "EOS 1V CSV…"
+            return "EOS-1V…"
         }
     }
 
@@ -34,7 +34,7 @@ enum ImportSourceKind: String, CaseIterable, Codable, Sendable {
         case .referenceImage:
             return "Reference Image"
         case .eos1v:
-            return "EOS 1V CSV"
+            return "EOS-1V"
         }
     }
 }
