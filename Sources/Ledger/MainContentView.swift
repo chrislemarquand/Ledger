@@ -990,14 +990,14 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         let submenu = NSMenu(title: "Export")
         submenu.autoenablesItems = false
 
-        let item = NSMenuItem(title: "Create CSV", action: #selector(exportExifToolCSVAction(_:)), keyEquivalent: "")
+        let item = NSMenuItem(title: "Create CSV…", action: #selector(exportExifToolCSVAction(_:)), keyEquivalent: "")
         item.target = self
         item.image = NSImage(systemSymbolName: "tablecells.badge.ellipsis", accessibilityDescription: nil)
         item.tag = MenuTag.fileExportExifToolCSV
         item.isEnabled = !model.browserItems.isEmpty
         submenu.addItem(item)
 
-        let sendToPhotosItem = NSMenuItem(title: "Send to Photos", action: #selector(sendToPhotosAction(_:)), keyEquivalent: "")
+        let sendToPhotosItem = NSMenuItem(title: "Send to Photos…", action: #selector(sendToPhotosAction(_:)), keyEquivalent: "")
         sendToPhotosItem.target = self
         if let photosAppURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Photos") {
             let appIcon = NSWorkspace.shared.icon(forFile: photosAppURL.path)
@@ -1010,7 +1010,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         sendToPhotosItem.isEnabled = !model.browserItems.isEmpty
         submenu.addItem(sendToPhotosItem)
 
-        let sendToLightroomClassicItem = NSMenuItem(title: "Send to Lightroom Classic", action: #selector(sendToLightroomClassicAction(_:)), keyEquivalent: "")
+        let sendToLightroomClassicItem = NSMenuItem(title: "Send to Lightroom Classic…", action: #selector(sendToLightroomClassicAction(_:)), keyEquivalent: "")
         sendToLightroomClassicItem.target = self
         if let lightroomAppURL = model.lightroomClassicApplicationURL(for: model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)) {
             let appIcon = NSWorkspace.shared.icon(forFile: lightroomAppURL.path)
@@ -1477,51 +1477,91 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
     @objc
     func exportExifToolCSVAction(_: Any?) {
-        let scope: ImportScope = model.selectedFileURLs.isEmpty ? .folder : .selection
-        if model.hasPendingEdits(inImportScope: scope) {
-            let alert = NSAlert()
-            alert.alertStyle = .warning
-            alert.messageText = "Staged edits are not included in ExifTool CSV export."
-            alert.informativeText = "Export reads current file metadata from disk. Apply staged edits first if you want them included."
-            alert.addButton(withTitle: "Cancel")
-            alert.addButton(withTitle: "Export Anyway")
-            let response = alert.runModal()
-            guard response == .alertSecondButtonReturn else { return }
-        }
-
-        let panel = NSSavePanel()
-        if let csvType = UTType(filenameExtension: "csv") {
-            panel.allowedContentTypes = [csvType]
-        }
-        panel.canCreateDirectories = true
-        panel.nameFieldStringValue = "exiftool-export.csv"
-        guard panel.runModal() == .OK, let destinationURL = panel.url else { return }
-
-        Task { @MainActor [weak self] in
+        pickExportScope(actionTitle: "Export ExifTool CSV") { [weak self] scope, _ in
             guard let self else { return }
-            do {
-                _ = try await self.model.exportExifToolCSV(scope: scope, destinationURL: destinationURL)
-            } catch {
+            if self.model.hasPendingEdits(inImportScope: scope) {
                 let alert = NSAlert()
                 alert.alertStyle = .warning
-                alert.messageText = "Export Failed"
-                alert.informativeText = error.localizedDescription
-                alert.addButton(withTitle: "OK")
-                alert.runModal()
+                alert.messageText = "Staged edits are not included in ExifTool CSV export."
+                alert.informativeText = "Export reads current file metadata from disk. Apply staged edits first if you want them included."
+                alert.addButton(withTitle: "Cancel")
+                alert.addButton(withTitle: "Export Anyway")
+                guard alert.runModal() == .alertSecondButtonReturn else { return }
+            }
+
+            let panel = NSSavePanel()
+            if let csvType = UTType(filenameExtension: "csv") {
+                panel.allowedContentTypes = [csvType]
+            }
+            panel.canCreateDirectories = true
+            panel.nameFieldStringValue = "exiftool-export.csv"
+            guard panel.runModal() == .OK, let destinationURL = panel.url else { return }
+
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    _ = try await self.model.exportExifToolCSV(scope: scope, destinationURL: destinationURL)
+                } catch {
+                    let alert = NSAlert()
+                    alert.alertStyle = .warning
+                    alert.messageText = "Export Failed"
+                    alert.informativeText = error.localizedDescription
+                    alert.addButton(withTitle: "OK")
+                    alert.runModal()
+                }
             }
         }
     }
 
     @objc
     func sendToPhotosAction(_: Any?) {
-        let targetURLs = model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)
-        model.performFileAction(.sendToPhotos, targetURLs: targetURLs)
+        pickExportScope(actionTitle: "Send to Photos") { [weak self] _, targetURLs in
+            self?.model.performFileAction(.sendToPhotos, targetURLs: targetURLs)
+        }
     }
 
     @objc
     func sendToLightroomClassicAction(_: Any?) {
-        let targetURLs = model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)
-        model.performFileAction(.sendToLightroomClassic, targetURLs: targetURLs)
+        pickExportScope(actionTitle: "Send to Lightroom Classic") { [weak self] _, targetURLs in
+            self?.model.performFileAction(.sendToLightroomClassic, targetURLs: targetURLs)
+        }
+    }
+
+    /// Shows a scope-picker sheet when there is a selection, then calls `completion` with the
+    /// resolved scope and target URLs. Falls straight through with folder scope when there is no
+    /// selection. `completion` is not called if the user cancels.
+    private func pickExportScope(actionTitle: String, completion: @escaping (ImportScope, [URL]) -> Void) {
+        let selectionURLs = Array(model.selectedFileURLs)
+        let folderURLs = model.browserItems.map(\.url)
+
+        guard !selectionURLs.isEmpty else {
+            completion(.folder, folderURLs)
+            return
+        }
+
+        let n = selectionURLs.count
+        let alert = NSAlert()
+        alert.messageText = actionTitle
+        alert.informativeText = "Export the current selection or all images in the folder?"
+        alert.addButton(withTitle: "Selection (\(n) \(n == 1 ? "file" : "files"))")
+        alert.addButton(withTitle: "Folder")
+        alert.addButton(withTitle: "Cancel")
+
+        if let window = view.window {
+            alert.beginSheetModal(for: window) { response in
+                switch response {
+                case .alertFirstButtonReturn: completion(.selection, selectionURLs)
+                case .alertSecondButtonReturn: completion(.folder, folderURLs)
+                default: break
+                }
+            }
+        } else {
+            switch alert.runModal() {
+            case .alertFirstButtonReturn: completion(.selection, selectionURLs)
+            case .alertSecondButtonReturn: completion(.folder, folderURLs)
+            default: break
+            }
+        }
     }
 
     @objc
@@ -2201,7 +2241,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             let targetURLs = model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)
 
             let createCSVItem = NSMenuItem(
-                title: "Create CSV",
+                title: "Create CSV…",
                 action: #selector(NativeThreePaneSplitViewController.exportExifToolCSVAction(_:)),
                 keyEquivalent: ""
             )
@@ -2212,7 +2252,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
             let photosState = model.fileActionState(for: .sendToPhotos, targetURLs: targetURLs)
             let sendToPhotosItem = NSMenuItem(
-                title: "Send to Photos",
+                title: "Send to Photos…",
                 action: #selector(NativeThreePaneSplitViewController.sendToPhotosAction(_:)),
                 keyEquivalent: ""
             )
@@ -2229,7 +2269,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
             let lightroomState = model.fileActionState(for: .sendToLightroomClassic, targetURLs: targetURLs)
             let sendToLightroomClassicItem = NSMenuItem(
-                title: "Send to Lightroom Classic",
+                title: "Send to Lightroom Classic…",
                 action: #selector(NativeThreePaneSplitViewController.sendToLightroomClassicAction(_:)),
                 keyEquivalent: ""
             )

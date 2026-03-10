@@ -49,7 +49,7 @@ Primary objective: get import right end-to-end.
 ### Settings
 - [x] Inspector field visibility controls.
 - [x] Backup enable/disable controls with menu/context behavior alignment.
-- [ ] Backup retention policy.
+- [x] Backup retention policy — deferred to v2.0.
 - [x] Clear recent folders action (handled via existing context-menu remove flow).
 
 ###Export
@@ -126,6 +126,7 @@ Moves before performance: search will expose large-folder performance gaps, maki
   - [ ] Named lens profiles + import-sheet override selector.
 - [ ] **ExifTool-native Date Time Digitized backfill**: optional post-import/apply pass that fills missing `EXIF:CreateDate` from `FileCreateDate` only (no app-side date parsing, no overwrite of existing values).
 - [ ] Inspector clear-field control (candidate): evaluate optional trailing `x.circle.fill` action per field for staged-clear UX, balancing discoverability vs native macOS conventions.
+- [ ] **Backup retention policy**: keep-last-N model, persistence, prune path wiring, and Settings UI controls.
 - [ ] **Sidecar management**: XMP sidecar create/rebuild/apply; browser badges for sidecar-exists and sidecar-differs-from-embedded states.
 - [ ] ExifTool console: live readout of ExifTool commands and output as operations run, mirroring what would appear if running ExifTool directly in the terminal.
 - [ ] Architecture reference docs:
