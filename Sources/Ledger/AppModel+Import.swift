@@ -117,7 +117,13 @@ extension AppModel {
         emptyValuePolicy: ImportEmptyValuePolicy
     ) -> ImportStageSummary {
         guard !assignments.isEmpty else {
-            return ImportStageSummary(stagedFiles: 0, stagedFields: 0, skippedFields: 0, warnings: [])
+            return ImportStageSummary(
+                stagedFiles: 0,
+                stagedFields: 0,
+                skippedFields: 0,
+                warnings: [],
+                assignmentOutcomes: []
+            )
         }
 
         let previousState = currentPendingEditState()
@@ -126,17 +132,29 @@ extension AppModel {
         var stagedFields = 0
         var skippedFields = 0
         var warnings: [String] = []
+        var assignmentOutcomes: [ImportAssignmentOutcome] = []
 
         for assignment in assignments {
+            var attemptedFields = 0
+            var rowStagedFields = 0
+            var rowSkippedByPolicy = 0
+            var rowUnchangedFields = 0
+            var rowUnsupportedFields = 0
+            var rowWarnings: [String] = []
             for field in assignment.fields {
+                attemptedFields += 1
                 guard let tag = editableTag(forID: field.tagID) else {
                     skippedFields += 1
-                    warnings.append("Unsupported tag \(field.tagID) skipped.")
+                    rowUnsupportedFields += 1
+                    let warning = "Unsupported tag \(field.tagID) skipped."
+                    warnings.append(warning)
+                    rowWarnings.append(warning)
                     continue
                 }
                 let trimmed = field.value.trimmingCharacters(in: .whitespacesAndNewlines)
                 if trimmed.isEmpty, emptyValuePolicy == .skip {
                     skippedFields += 1
+                    rowSkippedByPolicy += 1
                     continue
                 }
                 stageEdit(
@@ -147,9 +165,23 @@ extension AppModel {
                 )
                 if pendingEditsByFile[assignment.targetURL]?[tag] != nil {
                     stagedFields += 1
+                    rowStagedFields += 1
                     stagedFiles.insert(assignment.targetURL)
+                } else {
+                    rowUnchangedFields += 1
                 }
             }
+            assignmentOutcomes.append(
+                ImportAssignmentOutcome(
+                    targetURL: assignment.targetURL,
+                    attemptedFields: attemptedFields,
+                    stagedFields: rowStagedFields,
+                    skippedByPolicy: rowSkippedByPolicy,
+                    unchangedFields: rowUnchangedFields,
+                    unsupportedFields: rowUnsupportedFields,
+                    warnings: rowWarnings
+                )
+            )
         }
 
         registerMetadataUndoIfNeeded(previous: previousState)
@@ -162,7 +194,8 @@ extension AppModel {
             stagedFiles: stagedFiles.count,
             stagedFields: stagedFields,
             skippedFields: skippedFields,
-            warnings: warnings
+            warnings: warnings,
+            assignmentOutcomes: assignmentOutcomes
         )
     }
 }

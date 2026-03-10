@@ -6,6 +6,8 @@ These fixtures support the manual check-off sheet at `docs/import-manual-smoke-c
 
 - `exiftool-safe.csv`: CSV with unique `SourceFile` values (`001.jpg`..`003.jpg`) for filename auto-match.
 - `exiftool-fallback-row-order.csv`: CSV that should force row-order fallback (blank + duplicate `SourceFile`).
+- `exiftool-review-warnings-partial.csv`: CSV for post-import review mode on successful import (parser warnings + partial outcomes when `If no match` is `Skip`).
+- `exiftool-review-conflicts.csv`: CSV with missing filenames to trigger unresolved conflicts and post-import review mode.
 - `eos1v-smoke.csv`: EOS 1V sample with 3 frames.
 - `gpx-smoke.gpx`: GPX sample with two points around `2026-01-01T12:00:00Z`.
 
