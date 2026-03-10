@@ -2,7 +2,7 @@
   "fill" : {
     "linear-gradient" : [
       "display-p3:0.34902,0.67451,0.63922,1.00000",
-      "display-p3:0.38824,0.76078,0.72549,1.00000"
+      "display-p3:0.27075,0.55273,0.52393,1.00000"
     ],
     "orientation" : {
       "start" : {
@@ -17,22 +17,19 @@
   },
   "groups" : [
     {
-      "blend-mode" : "normal",
+      "blend-mode" : "screen",
       "blur-material" : null,
       "hidden" : false,
       "layers" : [
         {
-          "blend-mode" : "normal",
-          "fill" : {
-            "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
-          },
-          "image-name" : "icon 2.svg",
-          "name" : "icon 2",
+          "fill" : "automatic",
+          "image-name" : "Ledger Icon.svg",
+          "name" : "Ledger Icon",
           "position" : {
-            "scale" : 2.3,
+            "scale" : 1,
             "translation-in-points" : [
-              0,
-              27.600000000000023
+              -5.754339917767538,
+              44.510897767785366
             ]
           }
         }
@@ -44,7 +41,7 @@
       },
       "specular" : true,
       "translucency" : {
-        "enabled" : true,
+        "enabled" : false,
         "value" : 0.5
       }
     }

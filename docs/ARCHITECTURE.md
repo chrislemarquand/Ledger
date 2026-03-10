@@ -1,7 +1,7 @@
 # Architecture
 
 macOS-only photo metadata editor (EXIF / IPTC / XMP) built on exiftool.
-**Target**: macOS 15+. **Swift**: 6.2 strict concurrency. **No iPad / iOS target.**
+**Target**: macOS 26+. **Swift**: 6.0 (strict concurrency enabled). **No iPad / iOS target.**
 
 ---
 
@@ -19,7 +19,22 @@ ExifEdit (Swift Package)
 │
 └── Sources/Ledger       — executable; AppKit + SwiftUI
     ├── LedgerApp.swift       — @main; pure AppKit entry (LedgerMain + AppDelegate)
-    ├── AppModel.swift        — @MainActor ObservableObject; all UI state (~4,900 lines)
+    ├── AppModel.swift        — @MainActor ObservableObject core types/state + bootstrap (~782 lines)
+    ├── AppModel+Sidebar.swift
+    ├── AppModel+FileLoading.swift
+    ├── AppModel+MetadataPipeline.swift
+    ├── AppModel+MetadataValues.swift
+    ├── AppModel+Editing.swift
+    ├── AppModel+Actions.swift
+    ├── AppModel+ApplyRestore.swift
+    ├── AppModel+Import.swift
+    ├── AppModel+Preview.swift
+    ├── AppModel+Navigation.swift
+    ├── AppModel+Presets.swift
+    ├── AppModel+FieldCatalog.swift
+    ├── AppModel+InspectorFields.swift
+    ├── AppModel+UndoStatus.swift
+    ├── AppModel+Formatters.swift
     ├── MainContentView.swift — NativeThreePaneSplitViewController + AppKit menus/toolbar + browser container
     ├── NavigationSidebarView.swift
     ├── BrowserListView.swift
@@ -28,7 +43,7 @@ ExifEdit (Swift Package)
     └── PresetSheets.swift
 
 Tests/ExifEditCoreTests       — runnable via `swift test` and xcodebuild
-Tests/LedgerTests        — compiles but NOT runnable (see Tests section below)
+Tests/LedgerTests        — runnable (see Tests section below)
 ```
 
 The Xcode project (`Ledger.xcodeproj`) wraps the SPM package. Build settings and version are in `Config/Base.xcconfig`.
@@ -86,7 +101,11 @@ The toolbar is built entirely in AppKit (`NativeToolbarDelegate`). Top-level men
 
 ## AppModel
 
-`AppModel` is a `@MainActor` `ObservableObject` that holds all application state. There is one instance, created by `AppDelegate` and passed into every view. Key state groups:
+`AppModel` is a `@MainActor` `ObservableObject` that holds all application state. There is one instance, created by `AppDelegate` and passed into every view.
+
+As of v1.1 refactors, `AppModel` is split by concern across extension files (total ~6,253 LOC) rather than one monolith. `AppModel.swift` now contains shared types/constants/bootstrap state, with behavior moved into `AppModel+*.swift` files listed above.
+
+Key state groups:
 
 | Group | Key properties |
 |-------|---------------|
@@ -111,7 +130,7 @@ Multi-file selection works like Finder:
 - **Shift-click**: range from `selectionAnchorURL` to target
 - **Cmd+Shift-click**: additive range (union)
 
-Entry point: `AppModel.selectFile(_:modifiers:in:)`. `selectionAnchorURL` and `selectionFocusURL` are both `private`.
+Entry point: `AppModel.selectFile(_:modifiers:in:)`. `selectionAnchorURL` and `selectionFocusURL` are model-internal state used by selection/editing extensions.
 
 The browser views (list and gallery) are AppKit `NSTableView` / `NSCollectionView`. They carry an `isApplyingProgrammaticSelection` flag that suppresses delegate callbacks during model→view syncs to prevent selection bouncing. Modified-click events are intercepted in custom `NSTableView`/`NSCollectionView` subclasses and routed to `selectFile(_:modifiers:in:)` before the view syncs back.
 
@@ -258,8 +277,8 @@ Must-fail conditions:
 - `Publishing changes from within view updates is not allowed`
 - `NSHostingView is being laid out reentrantly while rendering its SwiftUI content`
 
-Known friction areas (candidates for future AppKit rewrite — see ROADMAP R13, R16–R18):
-- `InspectorView`: `inspectorRefreshRevision` UInt64 hack forces refreshes; `suppressNextFocusScrollAnimation` flag; manual edit-session `@State` snapshots instead of `UndoManager`
+Known friction areas (candidates for future AppKit rewrite — see roadmap items under v2.0+):
+- `InspectorView`: `inspectorRefreshRevision` UInt64 refresh token and `suppressNextFocusScrollAnimation` focus workaround remain technical debt; edit-session snapshots are now model-owned in `AppModel`.
 - `NavigationSidebarView`: SwiftUI `List` scroll-position instability; notification-based focus routing
 - `PresetManagerSheet`: same List instability
 
@@ -294,7 +313,8 @@ This is harmless — ignore it.
 
 | Target | Run with | Status |
 |--------|----------|--------|
-| `ExifEditCoreTests` | `swift test` or xcodebuild | Runnable |
-| `ExifEditMacTests` (in `Tests/LedgerTests`) | — | Compiles but **not runnable**: `AppModel` depends on AppKit and the full app environment; the executable target limitation prevents running these tests in isolation |
+| `ExifEditCoreTests` | `./scripts/test/run_all.sh --filter ExifEditCoreTests` | Runnable |
+| `ExifEditMacTests` (in `Tests/LedgerTests`) | `./scripts/test/run_all.sh --filter ExifEditMacTests` | Runnable |
 
-Run `swift test` or `xcodebuild test` to execute `ExifEditCoreTests` only.
+Run `./scripts/test/run_all.sh` for the full test suite.
+`swift test --parallel` is used intentionally because serial `swift test` can intermittently stall in this environment.

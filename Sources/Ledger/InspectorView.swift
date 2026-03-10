@@ -61,7 +61,7 @@ private struct InspectorPreviewActionLabel: View {
 }
 
 struct InspectorView: View {
-    let model: AppModel
+    @ObservedObject var model: AppModel
     private let topScrollStartInset: CGFloat = 56
     private let contentHorizontalInset: CGFloat = 16
     private let sectionInnerInset: CGFloat = 12
@@ -72,13 +72,10 @@ struct InspectorView: View {
         return formatter
     }()
     @FocusState private var focusedTagID: String?
-    @State private var editSessionSnapshots: [String: AppModel.EditSessionSnapshot] = [:]
     @State private var activeEditTagID: String?
     @State private var suppressNextFocusScrollAnimation = false
-    @State private var inspectorRefreshRevision: UInt64 = 0
 
     var body: some View {
-        let _ = inspectorRefreshRevision
         ScrollViewReader { proxy in
             ScrollView {
                 if model.selectedFileURLs.isEmpty {
@@ -190,7 +187,7 @@ struct InspectorView: View {
                         .padding(.horizontal, contentHorizontalInset)
                     }
 
-                    ForEach(model.groupedEditableTags, id: \.section) { grouped in
+                    ForEach(model.orderedEditableTagSections) { grouped in
                         DisclosureGroup(
                             isExpanded: Binding(
                                 get: { !model.isInspectorSectionCollapsed(grouped.section) },
@@ -351,25 +348,7 @@ struct InspectorView: View {
                         .padding(.horizontal, contentHorizontalInset)
                     }
 
-                    if let lastResult = model.lastResult {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Last Operation")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .tracking(0.4)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Succeeded: \(lastResult.succeeded.count)")
-                                Text("Failed: \(lastResult.failed.count)")
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(sectionInnerInset)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(.quaternary.opacity(0.35))
-                            )
-                        }
-                        .padding(.horizontal, contentHorizontalInset)
-                    }
+
                 }
                     .padding(.vertical, 12)
                 }
@@ -403,7 +382,7 @@ struct InspectorView: View {
         }
         .onChange(of: model.selectedFileURLs) { _, _ in
             model.endUndoCoalescing()
-            editSessionSnapshots.removeAll()
+            model.clearEditSessionSnapshots()
             activeEditTagID = nil
             suppressNextFocusScrollAnimation = true
             // Defer @FocusState clear: setting it synchronously during the SwiftUI
@@ -414,16 +393,10 @@ struct InspectorView: View {
                 focusedTagID = nil
             }
         }
-        .onAppear {
-            inspectorRefreshRevision = model.inspectorRefreshRevision
-        }
-        .onReceive(model.$inspectorRefreshRevision.removeDuplicates()) { revision in
-            inspectorRefreshRevision = revision
-        }
         .onExitCommand {
             let targetTagID = focusedTagID ?? activeEditTagID
             guard let targetTagID,
-                  let snapshot = editSessionSnapshots[targetTagID]
+                  let snapshot = model.editSessionSnapshot(forTagID: targetTagID)
             else {
                 self.focusedTagID = nil
                 NotificationCenter.default.post(name: .inspectorDidRequestBrowserFocus, object: nil)
@@ -436,7 +409,7 @@ struct InspectorView: View {
             DispatchQueue.main.async {
                 model.restoreEditSession(snapshot)
             }
-            editSessionSnapshots.removeValue(forKey: targetTagID)
+            model.removeEditSessionSnapshot(forTagID: targetTagID)
             activeEditTagID = nil
             self.focusedTagID = nil
             NotificationCenter.default.post(name: .inspectorDidRequestBrowserFocus, object: nil)
@@ -468,6 +441,16 @@ struct InspectorView: View {
             }
         )) {
             PresetManagerSheet(model: model)
+        }
+        .sheet(item: Binding(
+            get: { model.pendingImportSourceKind },
+            set: { newValue in
+                Task { @MainActor in
+                    model.pendingImportSourceKind = newValue
+                }
+            }
+        )) { sourceKind in
+            ImportSheetView(model: model, sourceKind: sourceKind)
         }
     }
 
@@ -561,45 +544,78 @@ struct InspectorView: View {
     }
 
     private func parseCoordinate(_ raw: String) -> Double? {
-        let upper = raw.uppercased()
-        let hasWestOrSouth = upper.contains("W") || upper.contains("S")
-        let hasEastOrNorth = upper.contains("E") || upper.contains("N")
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
 
-        if let direct = Double(raw) {
-            if direct == 0, hasWestOrSouth {
-                return -0
-            }
-            return hasWestOrSouth ? -abs(direct) : direct
+        if let direct = Double(trimmed), direct.isFinite {
+            return direct
         }
 
-        let numberMatches = raw.matches(of: /-?\d+(?:\.\d+)?/).map { Double($0.0) ?? 0 }
-        guard let first = numberMatches.first else { return nil }
+        let ns = trimmed as NSString
+        let regex = try? NSRegularExpression(pattern: "-?\\d+(?:\\.\\d+)?")
+        let matches = regex?.matches(in: trimmed, range: NSRange(location: 0, length: ns.length)) ?? []
+        guard let firstMatch = matches.first else { return nil }
 
-        let absoluteValue: Double
-        if numberMatches.count >= 3 {
+        let numbers: [Double] = matches.compactMap { Double(ns.substring(with: $0.range)) }
+        guard let first = numbers.first else { return nil }
+
+        let hasExplicitNegative = ns.substring(with: firstMatch.range)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .hasPrefix("-")
+
+        let magnitude: Double
+        if numbers.count >= 3 {
             let degrees = abs(first)
-            let minutes = abs(numberMatches[1])
-            let seconds = abs(numberMatches[2])
-            absoluteValue = degrees + (minutes / 60) + (seconds / 3600)
+            let minutes = abs(numbers[1])
+            let seconds = abs(numbers[2])
+            magnitude = degrees + (minutes / 60) + (seconds / 3600)
         } else {
-            absoluteValue = abs(first)
+            magnitude = abs(first)
         }
 
-        let hasExplicitNegative = first < 0
-        let signed = hasExplicitNegative || hasWestOrSouth
-            ? -absoluteValue
-            : absoluteValue
-
-        if hasEastOrNorth, signed == -0 {
-            return 0
+        let parsed = hasExplicitNegative ? -magnitude : magnitude
+        if let direction = coordinateDirection(in: trimmed) {
+            switch direction {
+            case .south, .west:
+                return -abs(parsed)
+            case .north, .east:
+                return abs(parsed)
+            }
         }
-        return signed
+        return parsed
+    }
+
+    private enum CoordinateDirection {
+        case north
+        case south
+        case east
+        case west
+    }
+
+    private func coordinateDirection(in raw: String) -> CoordinateDirection? {
+        let tokens = raw
+            .uppercased()
+            .split(whereSeparator: { !$0.isLetter })
+            .map(String.init)
+        for token in tokens.reversed() {
+            switch token {
+            case "N", "NORTH":
+                return .north
+            case "S", "SOUTH":
+                return .south
+            case "E", "EAST":
+                return .east
+            case "W", "WEST":
+                return .west
+            default:
+                continue
+            }
+        }
+        return nil
     }
 
     private func beginEditSessionIfNeeded(for tag: AppModel.EditableTag) {
-        if editSessionSnapshots[tag.id] == nil {
-            editSessionSnapshots[tag.id] = model.makeEditSessionSnapshot(for: tag)
-        }
+        model.beginEditSessionSnapshotIfNeeded(for: tag)
         activeEditTagID = tag.id
     }
 
@@ -625,7 +641,7 @@ struct InspectorView: View {
     }
 
     private func focusableInspectorTagIDs() -> [String] {
-        model.groupedEditableTags
+        model.orderedEditableTagSections
             .filter { !model.isInspectorSectionCollapsed($0.section) }
             .flatMap(\.tags)
             .filter { tag in

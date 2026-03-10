@@ -18,6 +18,7 @@ enum LedgerMain {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindowController: MainWindowController?
+    private var settingsWindowController: SettingsWindowController?
     private var isShowingTerminateConfirmation = false
     private var allowImmediateTermination = false
     var appModel: AppModel? { mainWindowController?.appModel }
@@ -27,9 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appName = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
             ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
             ?? AppBrand.displayName
-        let shortVersion = (bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.0.0"
-        let buildVersion = (bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? "1"
-        let combinedVersion = "\(shortVersion) (\(buildVersion))"
+        let shortVersion = (bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.0"
         let exifToolVersion = bundledExifToolVersion() ?? "Unknown"
 
         let purpose = "Edit photo metadata — EXIF, IPTC, and XMP — powered by ExifTool."
@@ -62,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let options: [NSApplication.AboutPanelOptionKey: Any] = [
             .applicationName: appName,
-            .applicationVersion: combinedVersion,
+            .applicationVersion: shortVersion,
             .credits: credits,
             NSApplication.AboutPanelOptionKey(rawValue: "Copyright"): "© 2026 Chris Le Marquand",
         ]
@@ -73,6 +72,92 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     func showAboutPanelMenuAction(_: Any?) {
         showAboutPanel()
+    }
+
+    @objc
+    func showSettingsWindowAction(_: Any?) {
+        settingsWindowController?.showWindowAndActivate()
+    }
+
+    private func configureApplicationMenu() {
+        let appName = AppBrand.displayName
+        let mainMenu = NSApp.mainMenu ?? NSMenu(title: "MainMenu")
+        if NSApp.mainMenu == nil {
+            NSApp.mainMenu = mainMenu
+        }
+
+        let appMenuItem: NSMenuItem
+        if let first = mainMenu.items.first {
+            appMenuItem = first
+        } else {
+            appMenuItem = NSMenuItem(title: appName, action: nil, keyEquivalent: "")
+            mainMenu.insertItem(appMenuItem, at: 0)
+        }
+        appMenuItem.title = appName
+
+        let appMenu = appMenuItem.submenu ?? NSMenu(title: appName)
+        appMenuItem.submenu = appMenu
+        appMenu.removeAllItems()
+
+        let aboutItem = NSMenuItem(
+            title: "About \(appName)",
+            action: #selector(showAboutPanelMenuAction(_:)),
+            keyEquivalent: ""
+        )
+        aboutItem.target = self
+        aboutItem.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: nil)
+        appMenu.addItem(aboutItem)
+        appMenu.addItem(.separator())
+
+        let settingsItem = NSMenuItem(
+            title: "Settings…",
+            action: #selector(showSettingsWindowAction(_:)),
+            keyEquivalent: ","
+        )
+        settingsItem.keyEquivalentModifierMask = .command
+        settingsItem.target = nil
+        settingsItem.image = NSImage(systemSymbolName: "gear", accessibilityDescription: nil)
+        appMenu.addItem(settingsItem)
+        appMenu.addItem(.separator())
+
+        let servicesRoot = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
+        let servicesMenu = NSMenu(title: "Services")
+        servicesRoot.submenu = servicesMenu
+        NSApp.servicesMenu = servicesMenu
+        appMenu.addItem(servicesRoot)
+        appMenu.addItem(.separator())
+
+        let hideItem = NSMenuItem(
+            title: "Hide \(appName)",
+            action: #selector(NSApplication.hide(_:)),
+            keyEquivalent: "h"
+        )
+        hideItem.keyEquivalentModifierMask = .command
+        appMenu.addItem(hideItem)
+
+        let hideOthersItem = NSMenuItem(
+            title: "Hide Others",
+            action: #selector(NSApplication.hideOtherApplications(_:)),
+            keyEquivalent: "h"
+        )
+        hideOthersItem.keyEquivalentModifierMask = [.command, .option]
+        appMenu.addItem(hideOthersItem)
+
+        let showAllItem = NSMenuItem(
+            title: "Show All",
+            action: #selector(NSApplication.unhideAllApplications(_:)),
+            keyEquivalent: ""
+        )
+        appMenu.addItem(showAllItem)
+        appMenu.addItem(.separator())
+
+        let quitItem = NSMenuItem(
+            title: "Quit \(appName)",
+            action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q"
+        )
+        quitItem.keyEquivalentModifierMask = .command
+        appMenu.addItem(quitItem)
     }
 
     private func bundledExifToolVersion() -> String? {
@@ -110,10 +195,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSWindow.allowsAutomaticWindowTabbing = false
-        // Belt-and-braces: disable system "Reopen windows when logging back in"
-        // behavior for this app so stale restoration metadata is ignored.
-        UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")
+        configureApplicationMenu()
         let model = AppModel()
+        settingsWindowController = SettingsWindowController(model: model)
         let windowController = MainWindowController(model: model)
         mainWindowController = windowController
         windowController.showWindow(nil)
@@ -125,11 +209,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldSaveApplicationState(_ sender: NSApplication) -> Bool {
-        false
+        true
     }
 
     func applicationShouldRestoreApplicationState(_ sender: NSApplication) -> Bool {
-        false
+        true
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -149,8 +233,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "You have unsaved changes."
-        alert.informativeText = "Do you want to quit and discard your changes?"
+        alert.messageText = "You have unsaved metadata changes."
+        alert.informativeText = "Quit and discard your prepared changes?"
         alert.addButton(withTitle: "Quit and Discard")
         alert.addButton(withTitle: "Cancel")
 
@@ -191,12 +275,12 @@ final class MainWindowController: NSWindowController {
         appModel = model
         let contentController = NativeThreePaneSplitViewController(model: model)
         let window = NSWindow(contentViewController: contentController)
-        window.setContentSize(NSSize(width: 1320, height: 860))
+        window.setContentSize(NSSize(width: 1300, height: 800))
         window.minSize = NSSize(width: 1200, height: 720)
         window.title = AppBrand.displayName
         window.isReleasedWhenClosed = false
-        window.isRestorable = false
-        window.restorationClass = nil
+        window.isRestorable = true
+        window.setFrameAutosaveName("\(AppBrand.identifierPrefix).MainWindow")
         super.init(window: window)
         shouldCascadeWindows = true
     }

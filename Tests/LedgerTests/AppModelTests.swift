@@ -6,6 +6,13 @@ import XCTest
 
 @MainActor
 final class AppModelTests: XCTestCase {
+    func testImportTagCatalogMirrorsGroupedEditableTags() {
+        let model = makeModel()
+        let groupedIDs = model.orderedEditableTagSections.flatMap(\.tags).map(\.id)
+        let catalogIDs = model.importTagCatalog.map(\.id)
+        XCTAssertEqual(groupedIDs, catalogIDs)
+    }
+
     func testSidebarSectionOrderMatchesV1Sidebar() {
         let model = makeModel()
         XCTAssertEqual(model.sidebarSectionOrder, ["Sources", "Pinned", "Recents"])
@@ -301,6 +308,38 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(applyAfterClear.isEnabled)
     }
 
+    func testSendToPhotosActionStateEnabledOnlyWithSelection() {
+        let fileURL = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        let model = makeModel()
+
+        let disabled = model.fileActionState(for: .sendToPhotos, targetURLs: [])
+        XCTAssertFalse(disabled.isEnabled)
+
+        let enabled = model.fileActionState(for: .sendToPhotos, targetURLs: [fileURL])
+        XCTAssertTrue(enabled.isEnabled)
+    }
+
+    func testSendToPhotosWithoutSelectionShowsGuidanceMessage() {
+        let model = makeModel()
+        model.sendToPhotos([])
+        XCTAssertEqual(model.statusMessage, "Select images to send to Photos.")
+    }
+
+    func testSendToLightroomClassicActionStateDisabledWhenSelectionEmpty() {
+        let fileURL = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        let model = makeModel()
+
+        let disabled = model.fileActionState(for: .sendToLightroomClassic, targetURLs: [])
+        XCTAssertFalse(disabled.isEnabled)
+        _ = model.fileActionState(for: .sendToLightroomClassic, targetURLs: [fileURL])
+    }
+
+    func testSendToLightroomClassicWithoutSelectionShowsGuidanceMessage() {
+        let model = makeModel()
+        model.sendToLightroomClassic([])
+        XCTAssertEqual(model.statusMessage, "Select images to send to Lightroom Classic.")
+    }
+
     func testRotateFourTimesNormalizesToNoPendingImageEdits() throws {
         let fileURL = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
         let model = makeModel()
@@ -357,6 +396,46 @@ final class AppModelTests: XCTestCase {
         try await Task.sleep(nanoseconds: 200_000_000)
 
         XCTAssertEqual(model.valueForTag(makeTag), "Canon")
+    }
+
+    func testApplyingNegativeLongitudeWritesGPSLongitudeRefWest() async throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let fileURL = temp.appendingPathComponent("sample.jpg")
+        try Data().write(to: fileURL)
+
+        let service = RecordingExifToolService()
+        let model = AppModel(
+            exifToolService: service,
+            presetStore: InMemoryPresetStore(),
+            favoritesStore: InMemoryFavoritesStore(),
+            recentLocationsStore: InMemoryRecentLocationsStore()
+        )
+
+        _ = model.stageImportAssignments(
+            [ImportAssignment(targetURL: fileURL, fields: [.init(tagID: "exif-gps-lon", value: "-0.2159974")])],
+            sourceKind: .gpx,
+            emptyValuePolicy: .clear
+        )
+        model.applyChanges(for: [fileURL])
+
+        for _ in 0..<300 {
+            if model.isApplyingMetadata == false {
+                break
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+
+        let operations = await service.recordedOperations
+        guard let operation = operations.last else {
+            XCTFail("Expected a recorded write operation")
+            return
+        }
+
+        let byKey = Dictionary(uniqueKeysWithValues: operation.changes.map { ("\($0.namespace.rawValue):\($0.key)", $0.newValue) })
+        XCTAssertEqual(byKey["EXIF:GPSLongitude"], "0.2159974")
+        XCTAssertEqual(byKey["EXIF:GPSLongitudeRef"], "W")
     }
 
     // MARK: - Empty state and enumeration
@@ -576,6 +655,19 @@ private struct StubExifToolService: ExifToolServiceProtocol {
 
     func writeMetadata(operation: EditOperation) async -> OperationResult {
         OperationResult(operationID: operation.id, succeeded: operation.targetFiles, failed: [], backupLocation: nil, duration: 0)
+    }
+}
+
+private actor RecordingExifToolService: ExifToolServiceProtocol {
+    private(set) var recordedOperations: [EditOperation] = []
+
+    func readMetadata(files _: [URL]) async throws -> [FileMetadataSnapshot] {
+        []
+    }
+
+    func writeMetadata(operation: EditOperation) async -> OperationResult {
+        recordedOperations.append(operation)
+        return OperationResult(operationID: operation.id, succeeded: operation.targetFiles, failed: [], backupLocation: nil, duration: 0)
     }
 }
 
