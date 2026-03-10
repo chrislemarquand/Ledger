@@ -17,7 +17,7 @@ extension AppModel {
         return allPatches
     }
 
-    func patchesForTag(_ tag: EditableTag, rawValue: String) -> [MetadataPatch] {
+    private func patchesForTag(_ tag: EditableTag, rawValue: String) -> [MetadataPatch] {
         if tag.id == "exif-gps-lat" {
             return gpsPatches(
                 rawValue: rawValue,
@@ -102,7 +102,7 @@ extension AppModel {
         return patches
     }
 
-    func gpsPatches(
+    private func gpsPatches(
         rawValue: String,
         valueKey: String,
         refKey: String,
@@ -139,7 +139,7 @@ extension AppModel {
         ]
     }
 
-    func normalizedWriteValue(_ value: String, for tag: EditableTag) -> String {
+    private func normalizedWriteValue(_ value: String, for tag: EditableTag) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard tag.id == "exif-shutter" else { return trimmed }
         guard !trimmed.isEmpty else { return trimmed }
@@ -271,7 +271,7 @@ extension AppModel {
         )
     }
 
-    func preferredFieldValue(
+    private func preferredFieldValue(
         in snapshot: FileMetadataSnapshot,
         candidateKeys: [String],
         candidateNamespaces: [MetadataNamespace]
@@ -296,7 +296,7 @@ extension AppModel {
         return fallback
     }
 
-    func prioritizedFieldValue(
+    private func prioritizedFieldValue(
         in snapshot: FileMetadataSnapshot,
         candidates: [(keys: [String], namespaces: [MetadataNamespace])]
     ) -> String? {
@@ -373,7 +373,7 @@ extension AppModel {
         return first
     }
 
-    func parseSignedCoordinateForWrite(
+    private func parseSignedCoordinateForWrite(
         _ raw: String,
         negativeRef: String,
         positiveRef: String
@@ -392,7 +392,7 @@ extension AppModel {
         return parsed
     }
 
-    func containsStandaloneDirection(_ direction: String, in text: String) -> Bool {
+    private func containsStandaloneDirection(_ direction: String, in text: String) -> Bool {
         guard let directionChar = direction.uppercased().first else { return false }
         let chars = Array(text)
         for index in chars.indices where chars[index] == directionChar {
@@ -406,7 +406,7 @@ extension AppModel {
         return false
     }
 
-    func isAlphanumeric(_ character: Character) -> Bool {
+    private func isAlphanumeric(_ character: Character) -> Bool {
         character.unicodeScalars.allSatisfy { CharacterSet.alphanumerics.contains($0) }
     }
 
@@ -423,7 +423,7 @@ extension AppModel {
         }
     }
 
-    func performRecalculateInspectorState(forceNotify: Bool = false) {
+    private func performRecalculateInspectorState(forceNotify: Bool = false) {
         let selectedURLs = Array(selectedFileURLs)
         var didChange = false
         guard !selectedURLs.isEmpty else {
@@ -526,7 +526,7 @@ extension AppModel {
         inspectorRefreshRevision &+= 1
     }
 
-    func canonicalInspectorValue(_ value: String, for tag: EditableTag) -> String {
+    private func canonicalInspectorValue(_ value: String, for tag: EditableTag) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
 
@@ -570,7 +570,7 @@ extension AppModel {
         return trimmed
     }
 
-    func normalizeEnumRawValue(_ raw: String) -> String {
+    private func normalizeEnumRawValue(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let number = Double(trimmed), number.isFinite else { return trimmed }
         let rounded = number.rounded()
@@ -580,7 +580,7 @@ extension AppModel {
         return trimmed
     }
 
-    func normalizeNumericRawValue(_ raw: String) -> String {
+    private func normalizeNumericRawValue(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
 
@@ -601,7 +601,7 @@ extension AppModel {
         return trimmed
     }
 
-    func formatExposureTime(_ raw: String) -> String {
+    private func formatExposureTime(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return raw }
         if trimmed.contains("/") { return trimmed }
@@ -623,7 +623,7 @@ extension AppModel {
         return "\(fraction.numerator)/\(fraction.denominator)"
     }
 
-    static func approximateFraction(_ value: Double, maxDenominator: Int) -> (numerator: Int, denominator: Int) {
+    private static func approximateFraction(_ value: Double, maxDenominator: Int) -> (numerator: Int, denominator: Int) {
         var x = value
         var a = floor(x)
         var h1 = 1.0
@@ -648,7 +648,7 @@ extension AppModel {
         return (numerator / divisor, denominator / divisor)
     }
 
-    static func gcd(_ a: Int, _ b: Int) -> Int {
+    private static func gcd(_ a: Int, _ b: Int) -> Int {
         var x = abs(a)
         var y = abs(b)
         while y != 0 {

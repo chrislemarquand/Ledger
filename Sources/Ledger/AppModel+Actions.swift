@@ -39,7 +39,7 @@ extension AppModel {
         }
     }
 
-    func defaultAppDisplayName(for fileURL: URL?) -> String {
+    private func defaultAppDisplayName(for fileURL: URL?) -> String {
         guard let fileURL,
               let appURL = NSWorkspace.shared.urlForApplication(toOpen: fileURL)
         else {
@@ -59,7 +59,7 @@ extension AppModel {
         return appURL.deletingPathExtension().lastPathComponent
     }
 
-    func openSelectedInDefaultApp() {
+    private func openSelectedInDefaultApp() {
         guard let url = selectedFileURLs.sorted(by: { $0.path < $1.path }).first else {
             statusMessage = "Select an image to open in the default app."
             return
@@ -141,7 +141,7 @@ extension AppModel {
         }
     }
 
-    func makePhotosImportStagingDirectory(for fileURLs: [URL]) throws -> URL {
+    private func makePhotosImportStagingDirectory(for fileURLs: [URL]) throws -> URL {
         if let existing = photosImportStagingDirectory {
             try? FileManager.default.removeItem(at: existing)
             photosImportStagingDirectory = nil
@@ -178,7 +178,7 @@ extension AppModel {
         return stagingDirectory
     }
 
-    func uniqueImportFilename(_ preferred: String, usedNames: inout Set<String>) -> String {
+    private func uniqueImportFilename(_ preferred: String, usedNames: inout Set<String>) -> String {
         let base = (preferred as NSString).deletingPathExtension
         let ext = (preferred as NSString).pathExtension
 
@@ -193,7 +193,7 @@ extension AppModel {
         return candidate
     }
 
-    func photosImportDisplayFolderName(for fileURLs: [URL]) -> String {
+    private func photosImportDisplayFolderName(for fileURLs: [URL]) -> String {
         let parentFolders = Set(fileURLs.map { $0.deletingLastPathComponent().standardizedFileURL.path })
         let rawName: String
         if parentFolders.count == 1, let path = parentFolders.first {
@@ -205,7 +205,7 @@ extension AppModel {
         return sanitizedImportFolderName(rawName)
     }
 
-    func sanitizedImportFolderName(_ name: String) -> String {
+    private func sanitizedImportFolderName(_ name: String) -> String {
         let disallowed = CharacterSet(charactersIn: "/:\u{0}")
         let cleanedScalars = name.unicodeScalars.map { disallowed.contains($0) ? "-" : Character($0) }
         let cleaned = String(cleanedScalars).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -216,7 +216,7 @@ extension AppModel {
         resolveLightroomClassicAppURL(for: fileURLs)
     }
 
-    func resolveLightroomClassicAppURL(for fileURLs: [URL]) -> URL? {
+    private func resolveLightroomClassicAppURL(for fileURLs: [URL]) -> URL? {
         func isLightroomClassicApp(_ appURL: URL) -> Bool {
             let name = FileManager.default.displayName(atPath: appURL.path).lowercased()
             if name.contains("lightroom classic") { return true }

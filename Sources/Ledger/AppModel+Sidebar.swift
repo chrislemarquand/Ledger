@@ -202,7 +202,7 @@ extension AppModel {
         refreshSidebarItems(selectFirstWhenMissing: false)
     }
 
-    func clearRecentFolders() {
+    private func clearRecentFolders() {
         locationItems.removeAll()
         recentLocationLastOpenedAtByID.removeAll()
         persistRecentLocations()
@@ -350,7 +350,7 @@ extension AppModel {
         return nsError.code == NSFileNoSuchFileError || nsError.code == NSFileReadNoSuchFileError
     }
 
-    func isPrivacySensitiveFileSystemURL(_ url: URL) -> Bool {
+    private func isPrivacySensitiveFileSystemURL(_ url: URL) -> Bool {
         let candidate = url.standardizedFileURL
         let desktop = desktopDirectoryURL().standardizedFileURL
         let downloads = downloadsDirectoryURL().standardizedFileURL
@@ -377,7 +377,7 @@ extension AppModel {
         return candidatePath == root.standardizedFileURL.path || candidatePath.hasPrefix(rootPath)
     }
 
-    func canonicalSidebarURL(_ url: URL, validateExistence: Bool = true) -> URL? {
+    private func canonicalSidebarURL(_ url: URL, validateExistence: Bool = true) -> URL? {
         let standardized = url.standardizedFileURL
         if !validateExistence {
             // Startup/background paths for privacy-sensitive locations should avoid

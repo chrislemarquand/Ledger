@@ -53,7 +53,7 @@ extension AppModel {
         activeInspectorFieldCatalog.first(where: { $0.id == fieldID })?.isEnabled ?? false
     }
 
-    func isInspectorSectionEnabled(_ section: String) -> Bool {
+    private func isInspectorSectionEnabled(_ section: String) -> Bool {
         let fields = activeInspectorFieldCatalog.filter { $0.section == section }
         guard !fields.isEmpty else { return false }
         return fields.allSatisfy(\.isEnabled)

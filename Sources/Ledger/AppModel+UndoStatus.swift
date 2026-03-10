@@ -89,7 +89,7 @@ extension AppModel {
         recalculateInspectorState(forceNotify: true)
     }
 
-    func dropPendingEditsForDisabledFields() {
+    private func dropPendingEditsForDisabledFields() {
         let enabledIDs = Set(activeInspectorFieldCatalog.filter(\.isEnabled).map(\.id))
         var changed = false
         for fileURL in pendingEditsByFile.keys {
