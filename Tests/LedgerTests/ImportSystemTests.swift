@@ -1756,13 +1756,443 @@ final class ImportSystemTests: XCTestCase {
         session.preparedRun = preparedRun
         let success = await session.performImport(model: model)
         XCTAssertFalse(success)
-        XCTAssertEqual(session.previewError, "⚠ Import cancelled while choosing EOS lens values.")
+        XCTAssertEqual(session.previewError, "Import was cancelled while choosing EOS lens values.")
 
         let snapshots = await model.importMetadataSnapshots(for: [file])
         let lens = snapshots[file]?.fields.first(where: { $0.namespace == .exif && $0.key == "LensModel" })?.value
         let title = snapshots[file]?.fields.first(where: { $0.namespace == .xmp && $0.key == "Title" })?.value
         XCTAssertNil(lens)
         XCTAssertNil(title)
+    }
+
+    func testImportSessionEOSDoesNotPromptForLensWhenFocalFieldExcluded() async throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let mappingCSV = temp.appendingPathComponent("lensfocalength.csv")
+        try """
+        Focal length (mm),Lens 1,Lens 2,Lens 3
+        40,EF24-105mm f4L IS USM,EF40mm f2.8 STM,
+        """.write(to: mappingCSV, atomically: true, encoding: .utf8)
+
+        let model = makeModel()
+        let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.browserItems = [
+            AppModel.BrowserItem(url: file, name: file.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+        ]
+        model.metadataByFile = [file: FileMetadataSnapshot(fileURL: file, fields: [])]
+
+        var options = ImportRunOptions.defaults(for: .eos1v)
+        options.scope = .folder
+        options.selectedTagIDs = ["xmp-title"] // Explicitly excludes focal and lens.
+
+        let row = ImportRow(
+            sourceLine: 2,
+            sourceIdentifier: "001.jpg",
+            targetSelector: .rowNumber(1),
+            fields: [
+                .init(tagID: "exif-focal", value: "40 mm"),
+                .init(tagID: "xmp-title", value: "Only Title"),
+            ]
+        )
+        let preparedRun = ImportPreparedRun(
+            options: options,
+            parsedAsSourceKind: .eos1v,
+            parseResult: ImportParseResult(rows: [row], warnings: []),
+            matchResult: ImportMatchResult(
+                matched: [ImportRowMatch(row: row, targetURL: file)],
+                conflicts: [],
+                warnings: []
+            ),
+            previewSummary: ImportPreviewSummary(
+                sourceKind: .eos1v,
+                parsedRows: 1,
+                matchedRows: 1,
+                conflictedRows: 0,
+                warnings: 0,
+                fieldWrites: 2
+            )
+        )
+
+        var promptCount = 0
+        let session = ImportSession(
+            model: model,
+            sourceKind: .eos1v,
+            eosLensMappingURL: mappingCSV,
+            lensChoiceProvider: { _ in
+                promptCount += 1
+                return "EF40mm f2.8 STM"
+            }
+        )
+        session.preparedRun = preparedRun
+        session.options.selectedTagIDs = ["xmp-title"]
+
+        let success = await session.performImport(model: model)
+        XCTAssertTrue(success)
+        XCTAssertEqual(promptCount, 0, "Lens prompt should not appear when focal length is excluded.")
+
+        let snapshots = await model.importMetadataSnapshots(for: [file])
+        let title = snapshots[file]?.fields.first(where: { $0.namespace == .xmp && $0.key == "Title" })?.value
+        let lens = snapshots[file]?.fields.first(where: { $0.namespace == .exif && $0.key == "LensModel" })?.value
+        XCTAssertEqual(title, "Only Title")
+        XCTAssertNil(lens, "Lens should not be staged when focal length is excluded.")
+    }
+
+    func testImportSessionEOSDependencyBannerStateWhenFocalDeselected() async throws {
+        let model = makeModel()
+        let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.browserItems = [
+            AppModel.BrowserItem(url: file, name: file.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+        ]
+
+        var options = ImportRunOptions.defaults(for: .eos1v)
+        options.scope = .folder
+
+        let row = ImportRow(
+            sourceLine: 2,
+            sourceIdentifier: "001.jpg",
+            targetSelector: .rowNumber(1),
+            fields: [.init(tagID: "exif-focal", value: "40 mm")]
+        )
+        let preparedRun = ImportPreparedRun(
+            options: options,
+            parsedAsSourceKind: .eos1v,
+            parseResult: ImportParseResult(rows: [row], warnings: []),
+            matchResult: ImportMatchResult(
+                matched: [ImportRowMatch(row: row, targetURL: file)],
+                conflicts: [],
+                warnings: []
+            ),
+            previewSummary: ImportPreviewSummary(
+                sourceKind: .eos1v,
+                parsedRows: 1,
+                matchedRows: 1,
+                conflictedRows: 0,
+                warnings: 0,
+                fieldWrites: 1
+            )
+        )
+
+        let session = ImportSession(model: model, sourceKind: .eos1v)
+        session.preparedRun = preparedRun
+        XCTAssertFalse(session.shouldShowEOSLensDependencyBanner)
+
+        session.options.selectedTagIDs = ["xmp-title"]
+        XCTAssertTrue(session.shouldShowEOSLensDependencyBanner)
+    }
+
+    func testImportSessionEOSPreviewFieldCountTracksFocalToggleAsPlusMinusTwo() async throws {
+        let model = makeModel()
+        let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.browserItems = [
+            AppModel.BrowserItem(url: file, name: file.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+        ]
+
+        var options = ImportRunOptions.defaults(for: .eos1v)
+        options.scope = .folder
+        let row = ImportRow(
+            sourceLine: 2,
+            sourceIdentifier: "001.jpg",
+            targetSelector: .rowNumber(1),
+            fields: [
+                .init(tagID: "exif-focal", value: "40 mm"),
+                .init(tagID: "xmp-title", value: "Shot 1"),
+            ]
+        )
+        let preparedRun = ImportPreparedRun(
+            options: options,
+            parsedAsSourceKind: .eos1v,
+            parseResult: ImportParseResult(rows: [row], warnings: []),
+            matchResult: ImportMatchResult(
+                matched: [ImportRowMatch(row: row, targetURL: file)],
+                conflicts: [],
+                warnings: []
+            ),
+            previewSummary: ImportPreviewSummary(
+                sourceKind: .eos1v,
+                parsedRows: 1,
+                matchedRows: 1,
+                conflictedRows: 0,
+                warnings: 0,
+                fieldWrites: 2
+            )
+        )
+
+        let session = ImportSession(model: model, sourceKind: .eos1v)
+        session.preparedRun = preparedRun
+
+        // Default selection includes both focal and derived lens for EOS preview counts.
+        XCTAssertTrue(session.previewText.contains("(3 fields)"))
+
+        // Excluding focal excludes both focal and lens, leaving only title.
+        session.options.selectedTagIDs = ["xmp-title"]
+        XCTAssertTrue(session.previewText.contains("(1 fields)"))
+    }
+
+    func testImportSessionEOSAllowsFocalWithoutLensWhenLensDeselected() async throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let mappingCSV = temp.appendingPathComponent("lensfocalength.csv")
+        try """
+        Focal length (mm),Lens 1,Lens 2,Lens 3
+        40,EF24-105mm f4L IS USM,EF40mm f2.8 STM,
+        """.write(to: mappingCSV, atomically: true, encoding: .utf8)
+
+        let model = makeModel()
+        let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.browserItems = [
+            AppModel.BrowserItem(url: file, name: file.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+        ]
+        model.metadataByFile = [file: FileMetadataSnapshot(fileURL: file, fields: [])]
+
+        var options = ImportRunOptions.defaults(for: .eos1v)
+        options.scope = .folder
+        options.selectedTagIDs = ["exif-focal", "xmp-title"] // lens intentionally excluded
+
+        let row = ImportRow(
+            sourceLine: 2,
+            sourceIdentifier: "001.jpg",
+            targetSelector: .rowNumber(1),
+            fields: [
+                .init(tagID: "exif-focal", value: "40 mm"),
+                .init(tagID: "xmp-title", value: "Shot 1"),
+            ]
+        )
+        let preparedRun = ImportPreparedRun(
+            options: options,
+            parsedAsSourceKind: .eos1v,
+            parseResult: ImportParseResult(rows: [row], warnings: []),
+            matchResult: ImportMatchResult(
+                matched: [ImportRowMatch(row: row, targetURL: file)],
+                conflicts: [],
+                warnings: []
+            ),
+            previewSummary: ImportPreviewSummary(
+                sourceKind: .eos1v,
+                parsedRows: 1,
+                matchedRows: 1,
+                conflictedRows: 0,
+                warnings: 0,
+                fieldWrites: 2
+            )
+        )
+
+        var promptCount = 0
+        let session = ImportSession(
+            model: model,
+            sourceKind: .eos1v,
+            eosLensMappingURL: mappingCSV,
+            lensChoiceProvider: { _ in
+                promptCount += 1
+                return "EF40mm f2.8 STM"
+            }
+        )
+        session.preparedRun = preparedRun
+        session.options.selectedTagIDs = ["exif-focal", "xmp-title"]
+
+        let success = await session.performImport(model: model)
+        XCTAssertTrue(success)
+        XCTAssertEqual(promptCount, 0, "Lens prompt should not appear when Lens Model is deselected.")
+
+        let snapshots = await model.importMetadataSnapshots(for: [file])
+        let focal = snapshots[file]?.fields.first(where: { $0.namespace == .exif && $0.key == "FocalLength" })?.value
+        let lens = snapshots[file]?.fields.first(where: { $0.namespace == .exif && $0.key == "LensModel" })?.value
+        XCTAssertEqual(focal, "40 mm")
+        XCTAssertNil(lens)
+    }
+
+    func testImportSessionGeneratesStructuredReportOnSuccessfulImport() async throws {
+        let model = makeModel()
+        let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.browserItems = [
+            AppModel.BrowserItem(url: file, name: file.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+        ]
+        model.metadataByFile = [file: FileMetadataSnapshot(fileURL: file, fields: [])]
+
+        var options = ImportRunOptions.defaults(for: .csv)
+        options.scope = .folder
+        let row = ImportRow(
+            sourceLine: 2,
+            sourceIdentifier: "row-1",
+            targetSelector: .filename(file.lastPathComponent),
+            fields: [.init(tagID: "xmp-title", value: "New Title")]
+        )
+        let preparedRun = ImportPreparedRun(
+            options: options,
+            parsedAsSourceKind: .csv,
+            parseResult: ImportParseResult(rows: [row], warnings: []),
+            matchResult: ImportMatchResult(
+                matched: [ImportRowMatch(row: row, targetURL: file)],
+                conflicts: [],
+                warnings: []
+            ),
+            previewSummary: ImportPreviewSummary(
+                sourceKind: .csv,
+                parsedRows: 1,
+                matchedRows: 1,
+                conflictedRows: 0,
+                warnings: 0,
+                fieldWrites: 1
+            )
+        )
+
+        let session = ImportSession(model: model, sourceKind: .csv)
+        session.preparedRun = preparedRun
+        let success = await session.performImport(model: model)
+        XCTAssertTrue(success)
+
+        let report = session.importReport
+        XCTAssertNotNil(report)
+        XCTAssertEqual(report?.summary.parsedRows, 1)
+        XCTAssertEqual(report?.summary.matchedRows, 1)
+        XCTAssertEqual(report?.summary.stagedFiles, 1)
+        XCTAssertEqual(report?.summary.stagedFields, 1)
+        XCTAssertEqual(report?.rows.count, 1)
+        XCTAssertEqual(report?.rows.first?.status, .staged)
+        XCTAssertEqual(report?.rows.first?.sourceLine, 2)
+        XCTAssertEqual(report?.rows.first?.targetURL, file)
+        XCTAssertFalse(session.shouldEnterPostImportReview)
+    }
+
+    func testImportSessionGeneratesStructuredReportForUnresolvedConflicts() async throws {
+        let model = makeModel()
+        let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.browserItems = [
+            AppModel.BrowserItem(url: file, name: file.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+        ]
+
+        var options = ImportRunOptions.defaults(for: .csv)
+        options.scope = .folder
+        let conflict = ImportConflict(
+            id: UUID(),
+            kind: .missingTarget,
+            sourceLine: 12,
+            sourceIdentifier: "row-12",
+            rowFields: [.init(tagID: "xmp-title", value: "Value")],
+            candidateTargets: [],
+            message: "No target file named row-12 in scope."
+        )
+        let preparedRun = ImportPreparedRun(
+            options: options,
+            parsedAsSourceKind: .csv,
+            parseResult: ImportParseResult(rows: [], warnings: []),
+            matchResult: ImportMatchResult(
+                matched: [],
+                conflicts: [conflict],
+                warnings: []
+            ),
+            previewSummary: ImportPreviewSummary(
+                sourceKind: .csv,
+                parsedRows: 0,
+                matchedRows: 0,
+                conflictedRows: 1,
+                warnings: 0,
+                fieldWrites: 0
+            )
+        )
+
+        let session = ImportSession(model: model, sourceKind: .csv)
+        session.preparedRun = preparedRun
+        let success = await session.performImport(model: model)
+        XCTAssertFalse(success)
+        XCTAssertEqual(session.importReport?.summary.conflictCount, 1)
+        XCTAssertEqual(session.importReport?.conflicts.first?.sourceLine, 12)
+        XCTAssertEqual(session.importReport?.conflicts.first?.sourceIdentifier, "row-12")
+        XCTAssertTrue(session.shouldEnterPostImportReview)
+    }
+
+    func testImportSessionEntersPostImportReviewWhenWarningsExist() async throws {
+        let model = makeModel()
+        let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.browserItems = [
+            AppModel.BrowserItem(url: file, name: file.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+        ]
+        model.metadataByFile = [file: FileMetadataSnapshot(fileURL: file, fields: [])]
+
+        var options = ImportRunOptions.defaults(for: .csv)
+        options.scope = .folder
+        let row = ImportRow(
+            sourceLine: 2,
+            sourceIdentifier: file.lastPathComponent,
+            targetSelector: .filename(file.lastPathComponent),
+            fields: [.init(tagID: "xmp-title", value: "Warn Path")]
+        )
+        let preparedRun = ImportPreparedRun(
+            options: options,
+            parsedAsSourceKind: .csv,
+            parseResult: ImportParseResult(rows: [row], warnings: []),
+            matchResult: ImportMatchResult(
+                matched: [ImportRowMatch(row: row, targetURL: file)],
+                conflicts: [],
+                warnings: [
+                    ImportWarning(
+                        sourceLine: nil,
+                        message: "Using row-order matching: SourceFile values are incomplete for one or more rows.",
+                        severity: .warning
+                    ),
+                ]
+            ),
+            previewSummary: ImportPreviewSummary(
+                sourceKind: .csv,
+                parsedRows: 1,
+                matchedRows: 1,
+                conflictedRows: 0,
+                warnings: 1,
+                fieldWrites: 1
+            )
+        )
+
+        let session = ImportSession(model: model, sourceKind: .csv)
+        session.preparedRun = preparedRun
+        let success = await session.performImport(model: model)
+        XCTAssertTrue(success)
+        XCTAssertTrue(session.shouldEnterPostImportReview)
+    }
+
+    func testImportSessionEntersPostImportReviewWhenOnlyPartialOutcomesOccur() async throws {
+        let model = makeModel()
+        let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.browserItems = [
+            AppModel.BrowserItem(url: file, name: file.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+        ]
+        model.metadataByFile = [file: FileMetadataSnapshot(fileURL: file, fields: [])]
+
+        var options = ImportRunOptions.defaults(for: .csv)
+        options.scope = .folder
+        options.emptyValuePolicy = .skip
+        let row = ImportRow(
+            sourceLine: 2,
+            sourceIdentifier: file.lastPathComponent,
+            targetSelector: .filename(file.lastPathComponent),
+            fields: [.init(tagID: "xmp-title", value: "")]
+        )
+        let preparedRun = ImportPreparedRun(
+            options: options,
+            parsedAsSourceKind: .csv,
+            parseResult: ImportParseResult(rows: [row], warnings: []),
+            matchResult: ImportMatchResult(
+                matched: [ImportRowMatch(row: row, targetURL: file)],
+                conflicts: [],
+                warnings: []
+            ),
+            previewSummary: ImportPreviewSummary(
+                sourceKind: .csv,
+                parsedRows: 1,
+                matchedRows: 1,
+                conflictedRows: 0,
+                warnings: 0,
+                fieldWrites: 1
+            )
+        )
+
+        let session = ImportSession(model: model, sourceKind: .csv)
+        session.preparedRun = preparedRun
+        session.options.emptyValuePolicy = .skip
+        let success = await session.performImport(model: model)
+        XCTAssertFalse(success)
+        XCTAssertTrue(session.shouldEnterPostImportReview)
+        XCTAssertEqual(session.importReport?.rows.first?.status, .skippedByPolicy)
     }
 
     func testImportSessionUsesCurrentEmptyPolicyWhenPreparedRunExists() async throws {

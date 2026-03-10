@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async></script>
+<title>Batch Rename Sheet</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #1e1e1e;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    font-size: 13px;
+    color: #e8e8e8;
+  }
+
+  .sheet {
+    background: #2b2b2b;
+    border-radius: 12px;
+    width: 560px;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Header */
+  .header {
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid #3a3a3a;
+  }
+  .header h1 { font-size: 15px; font-weight: 600; color: #f0f0f0; }
+  .header .subtitle { font-size: 12px; color: #888; margin-top: 2px; }
+
+  /* Scrollable content */
+  .content {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
+  /* GroupBox */
+  .groupbox {
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .groupbox-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 8px 12px 4px;
+    background: #2f2f2f;
+    border-bottom: 1px solid #3a3a3a;
+  }
+  .groupbox-body {
+    padding: 10px 12px;
+    background: #272727;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  /* Token rows */
+  .token-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #333;
+    border-radius: 6px;
+    padding: 6px 10px;
+  }
+  .token-icon {
+    width: 16px;
+    height: 16px;
+    opacity: 0.7;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+  }
+  .token-label { flex: 1; color: #d0d0d0; font-size: 13px; }
+  .token-field {
+    background: #1e1e1e;
+    border: 1px solid #4a4a4a;
+    border-radius: 4px;
+    padding: 2px 6px;
+    color: #d0d0d0;
+    font-size: 12px;
+    font-family: "SF Mono", "Menlo", monospace;
+    width: 52px;
+  }
+  .token-field-wide { width: 80px; }
+  .token-mini-label { font-size: 11px; color: #777; }
+  .token-remove {
+    width: 16px;
+    height: 16px;
+    color: #e05252;
+    font-size: 16px;
+    cursor: pointer;
+    line-height: 1;
+    flex-shrink: 0;
+    opacity: 0.8;
+  }
+
+  /* Add token button */
+  .add-token-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: #3a3a3a;
+    border: 1px solid #4a4a4a;
+    border-radius: 5px;
+    color: #b0b0b0;
+    font-size: 12px;
+    cursor: pointer;
+    align-self: flex-start;
+  }
+  .add-token-btn .chevron { font-size: 9px; opacity: 0.6; }
+
+  /* Extension toggle row */
+  .ext-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .toggle {
+    width: 28px; height: 16px;
+    background: #09c275;
+    border-radius: 8px;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .toggle-knob {
+    width: 12px; height: 12px;
+    background: white;
+    border-radius: 50%;
+    position: absolute;
+    top: 2px; right: 2px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  }
+  .ext-label { color: #d0d0d0; }
+  .ext-field {
+    background: #1e1e1e;
+    border: 1px solid #4a4a4a;
+    border-radius: 4px;
+    padding: 3px 8px;
+    color: #d0d0d0;
+    font-size: 12px;
+    width: 80px;
+  }
+
+  /* Preview table */
+  .preview-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0;
+    font-family: "SF Mono", "Menlo", monospace;
+    font-size: 11px;
+  }
+  .preview-source { color: #888; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .preview-arrow { color: #555; flex-shrink: 0; }
+  .preview-target { color: #d0d0d0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .conflict-badge {
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  /* Footer */
+  .footer {
+    padding: 14px 20px;
+    border-top: 1px solid #3a3a3a;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    background: #2b2b2b;
+  }
+  .btn {
+    padding: 5px 14px;
+    border-radius: 5px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+  }
+  .btn-cancel {
+    background: #3a3a3a;
+    color: #d0d0d0;
+    border: 1px solid #4a4a4a;
+  }
+  .btn-primary {
+    background: #09c275;
+    color: #fff;
+  }
+  .btn-primary:disabled {
+    background: #2a6045;
+    color: #678;
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>Batch Rename</h1>
+    <div class="subtitle">Renaming 12 selected files</div>
+  </div>
+
+  <!-- Content -->
+  <div class="content">
+
+    <!-- Pattern builder -->
+    <div class="groupbox">
+      <div class="groupbox-title">Rename Pattern</div>
+      <div class="groupbox-body">
+
+        <!-- Token: Original Name -->
+        <div class="token-row">
+          <div class="token-icon">📄</div>
+          <div class="token-label">Original Name</div>
+          <div class="token-remove">⊖</div>
+        </div>
+
+        <!-- Token: Text -->
+        <div class="token-row">
+          <div class="token-icon">✏️</div>
+          <input class="token-field token-field-wide" type="text" value="_trip" placeholder="Custom text">
+          <div class="token-remove">⊖</div>
+        </div>
+
+        <!-- Token: Sequence -->
+        <div class="token-row">
+          <div class="token-icon">#</div>
+          <div class="token-mini-label">Start:</div>
+          <input class="token-field" type="text" value="1">
+          <div class="token-mini-label">Step:</div>
+          <input class="token-field" type="text" value="1">
+          <div class="token-mini-label">Pad:</div>
+          <input class="token-field" type="text" value="3">
+          <div class="token-remove">⊖</div>
+        </div>
+
+        <!-- Add token -->
+        <button class="add-token-btn">Add Token <span class="chevron">▼</span></button>
+      </div>
+    </div>
+
+    <!-- Extension -->
+    <div class="groupbox">
+      <div class="groupbox-title">Extension</div>
+      <div class="groupbox-body">
+        <div class="ext-row">
+          <div class="toggle"><div class="toggle-knob"></div></div>
+          <span class="ext-label">Override extension</span>
+          <input class="ext-field" type="text" value="jpg" placeholder="e.g. jpg">
+        </div>
+      </div>
+    </div>
+
+    <!-- Preview -->
+    <div class="groupbox">
+      <div class="groupbox-title">Preview (up to 20 files)</div>
+      <div class="groupbox-body">
+        <div class="preview-row">
+          <span class="preview-source">IMG_4821.JPG</span>
+          <span class="preview-arrow">→</span>
+          <span class="preview-target">IMG_4821_trip001.jpg</span>
+        </div>
+        <div class="preview-row">
+          <span class="preview-source">IMG_4822.JPG</span>
+          <span class="preview-arrow">→</span>
+          <span class="preview-target">IMG_4822_trip002.jpg</span>
+        </div>
+        <div class="preview-row">
+          <span class="preview-source">IMG_4823.JPG</span>
+          <span class="preview-arrow">→</span>
+          <span class="preview-target">IMG_4823_trip003.jpg</span>
+        </div>
+        <div class="preview-row">
+          <span class="preview-source">IMG_4824.JPG</span>
+          <span class="preview-arrow">→</span>
+          <span class="preview-target">IMG_4824_trip003.jpg</span>
+          <span class="conflict-badge" title="Disambiguated to avoid collision">⚠️</span>
+        </div>
+        <div class="preview-row">
+          <span class="preview-source">IMG_4825.JPG</span>
+          <span class="preview-arrow">→</span>
+          <span class="preview-target">IMG_4825_trip004.jpg</span>
+        </div>
+        <div class="preview-row">
+          <span class="preview-source">IMG_4826.JPG</span>
+          <span class="preview-arrow">→</span>
+          <span class="preview-target">IMG_4826_trip005.jpg</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <button class="btn btn-cancel">Cancel</button>
+    <button class="btn btn-primary">Rename…</button>
+  </div>
+
+</div>
+</body>
+</html>

@@ -26,8 +26,8 @@ Released: **2026-03-04**.
 Primary objective: get import right end-to-end.
 
 ### General UX
-- [ ] Status bar message audit: review all status messages for necessity; promote any that warrant it to modal dialogs.
-- [ ] UI/UX polish: settings pane layout and sizes.
+- [x] Status bar message audit: review all status messages for necessity; promote any that warrant it to modal dialogs.
+- [x] UI/UX polish: settings pane layout and sizes.
 
 ### Inspector Groundwork (prerequisite for Settings)
 - [x] `inspectorRefreshRevision`: eliminate the duplicate `@State` copy in `InspectorView`; model's `@Published` value is now the single source of truth.
@@ -43,30 +43,26 @@ Primary objective: get import right end-to-end.
 - [x] Single import flow: load source -> match/preview/conflicts -> target scope (selection/folder) -> apply.
 - [x] EOS 1V ingest parity in Swift (mapping/normalization/matching semantics from existing EOS 1V tool).
 - [x] EOS 1V lens-tag resolver architecture: remove hardcoded lens inference and route through a policy layer that can read future Settings defaults plus per-import overrides.
-- [ ] Import sheet preview/stage parity hardening + structured import report output.
+- [x] Import sheet preview/stage parity hardening + structured import report output.
 - [x] **Reference-based metadata apply**: select one image as reference, apply chosen metadata fields to a selection. Uses ExifTool `-tagsFromFile`. Sheet UI: select reference file → choose field groups → preview diff → confirm.
-
-### Browser
-- [ ] Click-to-drag rubber-band selection in list and gallery views.
 
 ### Settings
 - [x] Inspector field visibility controls.
 - [x] Backup enable/disable controls with menu/context behavior alignment.
-- [ ] Backup retention policy.
+- [x] Backup retention policy — deferred to v2.0.
 - [x] Clear recent folders action (handled via existing context-menu remove flow).
-- [ ] EOS 1V import lens-tag policy controls:
-  - [ ] Policy mode: `Do not write lens`, `Single lens for import`, `Focal-length mapping table`.
-  - [ ] Unknown focal length behavior: `Leave empty`, `Use fallback`, or `Warn/skip`.
-  - [ ] Named lens profiles + import-sheet override selector.
+
+###Export
+- [x] Exiftool CSV export feature
+- [x] Send to Photos handoff workflow.
+- [x] Send to Lightroom Classic handoff workflow.
 
 ---
 
 ## v1.2 (Minor) — Editing Productivity
 
-- [ ] Batch Rename (first release).
-- [ ] Metadata copy/paste:
-  - [ ] Field-level copy/paste.
-  - [ ] Metadata-set copy/paste.
+- [ ] Batch Rename (first release)
+- [ ] Add more Exif fields to Inspector view (including rating)
 - [ ] Rename hardening:
   - [ ] Collision handling.
   - [ ] Preview determinism.
@@ -87,9 +83,10 @@ Merges former v1.3 and v1.4 into one release.
 - [ ] List column category editing (including Exif-backed columns).
 - [ ] Gallery metadata lines/subtitle customisation.
 - [ ] Toolbar customisation/editing.
-- [ ] Send to Photos handoff workflow.
-- [ ] Send to Lightroom Classic handoff workflow.
 - [ ] **Full native QuickLook rewrite**: replace current preview implementation with a fully native QuickLook integration.
+- [ ] Metadata copy/paste:
+  - [ ] Field-level copy/paste.
+  - [ ] Metadata-set copy/paste.
 
 ---
 
@@ -111,18 +108,26 @@ Moves before performance: search will expose large-folder performance gaps, maki
 - [ ] Thumbnail cache TTL / age-based eviction (currently LRU only; cross-folder sessions accumulate stale entries).
 - [ ] Inspector preview cache size cap (currently trimmed by URL list only; large folders cache all previews with no memory ceiling).
 - [ ] Continued targeted AppKit groundwork.
+- [ ] **Full native QuickLook rewrite**: replace current preview implementation with a fully native QuickLook integration.
 
 ---
 
 ## v2.0 (Major) — Gallery + Power User Features
 
 - [ ] Major gallery/browser architecture rewrite (AppKit-shell-first, Mondrian-inspired — see `photos-reverse-engineering.md`).
+- [ ] Click-to-drag rubber-band selection in list and gallery views (after gallery rewrite).
 - [ ] Sidebar rewritten in AppKit.
 - [ ] **Finder-style gallery view**: filmstrip along bottom, large preview at top — third browser mode alongside list and grid.
 - [ ] **Metadata export CSV/JSON**: select fields, export to CSV or JSON for spreadsheet editing or audit reporting.
 - [ ] **Import conflict-resolution UI (power-user)**: dedicated conflict workspace for unresolved/ambiguous import rows with per-row target choice, side-by-side field diff, and bulk resolve actions.
 - [ ] **EOS lens-tag resolver enhancements**: advanced policy presets and richer per-import/per-project lens mapping controls.
+- [ ] **EOS 1V import lens-tag policy controls**:
+  - [ ] Policy mode: `Do not write lens`, `Single lens for import`, `Focal-length mapping table`.
+  - [ ] Unknown focal length behavior: `Leave empty`, `Use fallback`, or `Warn/skip`.
+  - [ ] Named lens profiles + import-sheet override selector.
+- [ ] **ExifTool-native Date Time Digitized backfill**: optional post-import/apply pass that fills missing `EXIF:CreateDate` from `FileCreateDate` only (no app-side date parsing, no overwrite of existing values).
 - [ ] Inspector clear-field control (candidate): evaluate optional trailing `x.circle.fill` action per field for staged-clear UX, balancing discoverability vs native macOS conventions.
+- [ ] **Backup retention policy**: keep-last-N model, persistence, prune path wiring, and Settings UI controls.
 - [ ] **Sidecar management**: XMP sidecar create/rebuild/apply; browser badges for sidecar-exists and sidecar-differs-from-embedded states.
 - [ ] ExifTool console: live readout of ExifTool commands and output as operations run, mirroring what would appear if running ExifTool directly in the terminal.
 - [ ] Architecture reference docs:

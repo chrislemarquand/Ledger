@@ -18,3 +18,6 @@ dist/
 debugconsoleoutput.txt
 output/
 tmp/
+
+# Local test fixtures (not for sharing)
+docs/fixtures/

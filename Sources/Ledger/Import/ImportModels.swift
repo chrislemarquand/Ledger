@@ -19,7 +19,7 @@ enum ImportSourceKind: String, CaseIterable, Codable, Sendable {
         case .referenceImage:
             return "Reference Image…"
         case .eos1v:
-            return "EOS 1V CSV…"
+            return "EOS-1V…"
         }
     }
 
@@ -34,7 +34,7 @@ enum ImportSourceKind: String, CaseIterable, Codable, Sendable {
         case .referenceImage:
             return "Reference Image"
         case .eos1v:
-            return "EOS 1V CSV"
+            return "EOS-1V"
         }
     }
 }
@@ -137,6 +137,12 @@ struct ImportRow: Hashable, Sendable {
     let sourceIdentifier: String
     let targetSelector: ImportTargetSelector
     let fields: [ImportFieldValue]
+}
+
+enum ImportRowLabelFormatter {
+    static func fallbackRowLabel(_ rowNumber: Int) -> String {
+        String(format: "Row %03d", max(1, rowNumber))
+    }
 }
 
 enum ImportWarningSeverity: String, Codable, Sendable {
@@ -334,6 +340,65 @@ struct ImportStageSummary: Hashable, Sendable {
     let stagedFields: Int
     let skippedFields: Int
     let warnings: [String]
+    var assignmentOutcomes: [ImportAssignmentOutcome] = []
+}
+
+enum ImportRowOutcomeStatus: String, Codable, Sendable {
+    case staged
+    case skippedByPolicy
+    case unchanged
+    case unsupported
+}
+
+struct ImportAssignmentOutcome: Hashable, Sendable {
+    let targetURL: URL
+    let attemptedFields: Int
+    let stagedFields: Int
+    let skippedByPolicy: Int
+    let unchangedFields: Int
+    let unsupportedFields: Int
+    let warnings: [String]
+}
+
+struct ImportConflictReportItem: Hashable, Sendable {
+    let sourceLine: Int
+    let sourceIdentifier: String
+    let message: String
+}
+
+struct ImportRowReportItem: Hashable, Sendable {
+    let sourceLine: Int?
+    let sourceIdentifier: String
+    let targetURL: URL
+    let targetDisplayName: String
+    let status: ImportRowOutcomeStatus
+    let attemptedFields: Int
+    let stagedFields: Int
+    let skippedByPolicy: Int
+    let unchangedFields: Int
+    let unsupportedFields: Int
+    let warnings: [String]
+}
+
+struct ImportRunReportSummary: Hashable, Sendable {
+    let parsedRows: Int
+    let matchedRows: Int
+    let conflictedRows: Int
+    let stagedFiles: Int
+    let stagedFields: Int
+    let skippedFields: Int
+    let warningCount: Int
+    let conflictCount: Int
+}
+
+struct ImportRunReport: Hashable, Sendable {
+    let sourceKind: ImportSourceKind
+    let scope: ImportScope
+    let createdAt: Date
+    let summary: ImportRunReportSummary
+    let warnings: [String]
+    let conflicts: [ImportConflictReportItem]
+    let rows: [ImportRowReportItem]
 }
 
 extension ImportSourceKind: Identifiable {
