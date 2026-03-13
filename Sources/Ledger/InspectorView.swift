@@ -91,10 +91,17 @@ struct InspectorView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         if model.selectedFileURLs.count == 1,
                            let first = model.selectedFileURLs.first {
-                            Text(first.deletingPathExtension().lastPathComponent)
-                                .font(.title3.weight(.semibold))
-                                .lineLimit(1)
-                                .truncationMode(.middle)
+                            HStack(spacing: 6) {
+                                if model.pendingRenameByFile[first] != nil {
+                                    Image(systemName: "circle.fill")
+                                        .font(.system(size: 6))
+                                        .foregroundStyle(.orange)
+                                }
+                                Text(inspectorTitle(for: first))
+                                    .font(.title3.weight(.semibold))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
                             if let subtitle = singleSelectionSubtitle {
                                 Text(subtitle)
                                     .font(.subheadline)
@@ -469,6 +476,13 @@ struct InspectorView: View {
 
     private var primarySelectedFileURL: URL? {
         model.selectedFileURLs.sorted { $0.path < $1.path }.first
+    }
+
+    private func inspectorTitle(for fileURL: URL) -> String {
+        if let stagedName = model.pendingRenameByFile[fileURL], !stagedName.isEmpty {
+            return URL(fileURLWithPath: stagedName).deletingPathExtension().lastPathComponent
+        }
+        return fileURL.deletingPathExtension().lastPathComponent
     }
 
     private func sectionHeaderTitle(_ title: String) -> String {

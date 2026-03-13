@@ -253,18 +253,20 @@ extension AppModel {
     }
 
     func applyMetadataSelectionTitle(for targetURLs: [URL]) -> String {
-        let count = Set(targetURLs).count
-        guard count > 0 else {
-            return "Apply Metadata Changes to Selection"
+        let normalized = Array(Set(targetURLs))
+        guard !normalized.isEmpty else {
+            return "Apply Changes to Selection"
         }
+        let count = normalized.filter { hasAnyPendingChanges(for: $0) }.count
+        guard count > 0 else { return "Apply Changes to Selection" }
         let suffix = count == 1 ? "" : "s"
-        return "Apply Metadata Changes to \(count) Image\(suffix)"
+        return "Apply Changes to \(count) File\(suffix)"
     }
 
     func fileActionState(for id: FileActionID, targetURLs: [URL]) -> FileActionState {
         let normalized = Array(Set(targetURLs)).sorted { $0.path < $1.path }
         let hasSelection = !normalized.isEmpty
-        let hasPending = normalized.contains { hasPendingEdits(for: $0) }
+        let hasPendingAny = normalized.contains { hasAnyPendingChanges(for: $0) }
         let hasRestorable = normalized.contains { hasRestorableBackup(for: $0) }
         let openAppName = defaultAppDisplayName(for: normalized.first)
         let hasLightroomClassic: Bool = {
@@ -304,16 +306,16 @@ extension AppModel {
         case .applyMetadataChanges:
             return FileActionState(
                 id: id,
-                title: "Apply Metadata Changes",
+                title: "Apply Changes",
                 symbolName: "square.and.arrow.down",
-                isEnabled: hasPending
+                isEnabled: hasPendingAny
             )
         case .clearMetadataChanges:
             return FileActionState(
                 id: id,
-                title: "Clear Metadata Changes",
+                title: "Clear Changes",
                 symbolName: "xmark.circle",
-                isEnabled: hasPending
+                isEnabled: hasPendingAny
             )
         case .restoreFromLastBackup:
             return FileActionState(
@@ -321,6 +323,20 @@ extension AppModel {
                 title: "Restore from Backup",
                 symbolName: "arrow.uturn.backward.circle",
                 isEnabled: keepBackups && hasRestorable
+            )
+        case .batchRenameSelection:
+            return FileActionState(
+                id: id,
+                title: "Batch Rename Selection…",
+                symbolName: "pencil.and.list.clipboard",
+                isEnabled: hasSelection
+            )
+        case .batchRenameFolder:
+            return FileActionState(
+                id: id,
+                title: "Batch Rename Folder…",
+                symbolName: "pencil.and.list.clipboard",
+                isEnabled: !browserItems.isEmpty
             )
         }
     }
@@ -343,6 +359,10 @@ extension AppModel {
             clearPendingEdits(for: normalized)
         case .restoreFromLastBackup:
             restoreLastOperation(for: normalized)
+        case .batchRenameSelection:
+            beginBatchRename(scope: .selection)
+        case .batchRenameFolder:
+            beginBatchRename(scope: .folder)
         }
     }
 
@@ -438,7 +458,100 @@ extension AppModel {
     func openSidebarItemInFinder(_ item: SidebarItem) {
         guard let url = sidebarOpenURL(for: item.kind) else { return }
         if !NSWorkspace.shared.open(url) {
-            statusMessage = "Couldn’t open “\(item.title)” in Finder."
+            statusMessage = "Couldn\u{2019}t open \u{201C}\(item.title)\u{201D} in Finder."
+        }
+    }
+
+    func beginBatchRename(scope: BatchRenameScope) {
+        let canRename: Bool
+        switch scope {
+        case .selection:
+            canRename = !selectedFileURLs.isEmpty
+        case .folder:
+            canRename = !browserItems.isEmpty
+        }
+        guard canRename else { return }
+        pendingBatchRenameScope = scope
+    }
+
+    func dismissBatchRenameSheet() {
+        pendingBatchRenameScope = nil
+    }
+
+    func previewBatchRename(pattern: RenamePattern, scope: BatchRenameScope) async -> [RenamePlanEntry] {
+        let files = renameFilesForBatchRename(scope)
+        let service = BatchRenameService()
+        return await service.buildPlan(files: files, pattern: pattern)
+    }
+
+    func previewBatchRenameAssessment(pattern: RenamePattern, scope: BatchRenameScope) async -> RenamePlanAssessment {
+        let files = renameFilesForBatchRename(scope)
+        let service = BatchRenameService()
+        return await service.assessPlan(files: files, pattern: pattern, metadata: metadataByFile)
+    }
+
+    func stageBatchRename(operation: RenameOperation) async {
+        guard !operation.files.isEmpty else { return }
+        let service = BatchRenameService()
+        let assessment = await service.assessPlan(files: operation.files, pattern: operation.pattern, metadata: metadataByFile)
+        guard assessment.issues.isEmpty else {
+            let firstMessage = assessment.issues.first?.message ?? "Rename pattern is invalid."
+            statusMessage = "Couldn’t prepare name changes. \(firstMessage)"
+            return
+        }
+        let plan = assessment.entries
+        var didChangePendingRenames = false
+        for entry in plan {
+            let proposed = entry.finalTargetURL.lastPathComponent
+            if pendingRenameByFile[entry.sourceURL] != proposed {
+                pendingRenameByFile[entry.sourceURL] = proposed
+                didChangePendingRenames = true
+            }
+        }
+        if didChangePendingRenames {
+            // Reuse the existing browser invalidation signal so staged rename names/colors
+            // appear immediately without waiting for unrelated metadata edits.
+            stagedOpsDisplayToken &+= 1
+        }
+        let n = plan.count
+        let files = n == 1 ? "1 file" : "\(n) files"
+        setStatusMessage("Prepared name changes for \(files). Ready to apply.", autoClearAfterSuccess: true)
+        pendingBatchRenameScope = nil
+    }
+
+    func discardStagedRenames() {
+        guard !pendingRenameByFile.isEmpty else { return }
+        pendingRenameByFile.removeAll()
+        stagedOpsDisplayToken &+= 1
+        setStatusMessage("Cleared prepared name changes.", autoClearAfterSuccess: true)
+    }
+
+    func discardStagedRenames(for urls: [URL]) {
+        var didChangePendingRenames = false
+        for url in urls {
+            if pendingRenameByFile.removeValue(forKey: url) != nil {
+                didChangePendingRenames = true
+            }
+        }
+        if didChangePendingRenames {
+            stagedOpsDisplayToken &+= 1
+        }
+    }
+
+    func renameFilesForBatchRename(_ scope: BatchRenameScope) -> [URL] {
+        switch scope {
+        case .selection:
+            return Array(selectedFileURLs).sorted {
+                let cmp = $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent)
+                if cmp != .orderedSame { return cmp == .orderedAscending }
+                return $0.path < $1.path
+            }
+        case .folder:
+            return browserItems.map(\.url).sorted {
+                let cmp = $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent)
+                if cmp != .orderedSame { return cmp == .orderedAscending }
+                return $0.path < $1.path
+            }
         }
     }
 }

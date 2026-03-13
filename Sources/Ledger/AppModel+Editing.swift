@@ -184,6 +184,10 @@ extension AppModel {
         !(pendingEditsByFile[fileURL]?.isEmpty ?? true) || !effectiveImageOperations(for: fileURL).isEmpty
     }
 
+    func hasAnyPendingChanges(for fileURL: URL) -> Bool {
+        hasPendingEdits(for: fileURL) || pendingRenameByFile[fileURL] != nil
+    }
+
     func hasPendingImageEdits(for fileURL: URL) -> Bool {
         !effectiveImageOperations(for: fileURL).isEmpty
     }
@@ -213,6 +217,9 @@ extension AppModel {
     func listColumnValue(for fileURL: URL, columnID: String, fallbackItem: BrowserItem?) -> String {
         switch columnID {
         case "name":
+            if let proposed = pendingRenameByFile[fileURL] {
+                return proposed
+            }
             return fallbackItem?.name ?? fileURL.lastPathComponent
         case "created":
             if let date = fallbackItem?.createdAt {
@@ -335,10 +342,13 @@ extension AppModel {
     }
 
     var pendingEditedFileCount: Int {
-        browserItems
-            .map(\.url)
-            .filter { hasPendingEdits(for: $0) }
-            .count
+        let metadataOrImagePending = Set(
+            browserItems
+                .map(\.url)
+                .filter { hasAnyPendingChanges(for: $0) }
+        )
+        let renamedPending = Set(pendingRenameByFile.keys)
+        return metadataOrImagePending.union(renamedPending).count
     }
 
     func stageImageOperation(_ operation: StagedImageOperation, for fileURL: URL) {

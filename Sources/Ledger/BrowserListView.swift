@@ -613,6 +613,11 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
     private func configureNameCell(_ cell: BrowserListNameCellView, for item: AppModel.BrowserItem) {
         cell.textField?.lineBreakMode = .byTruncatingMiddle
         cell.textField?.stringValue = model.listColumnValue(for: item.url, columnID: "name", fallbackItem: item)
+        if model.pendingRenameByFile[item.url] != nil {
+            cell.textField?.textColor = .systemOrange
+        } else {
+            cell.textField?.textColor = nil
+        }
         cell.applyPending(hasPendingEdits: model.hasPendingEdits(for: item.url))
 
         let iconView = cell.iconView

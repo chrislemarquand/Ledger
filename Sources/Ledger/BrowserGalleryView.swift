@@ -385,10 +385,11 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
                     ?? ThumbnailPipeline.fallbackIcon(for: item.url, side: 128)
                 let displayImage = model.displayImageForCurrentStagedState(baseImage, fileURL: item.url)
                 cell.configure(
-                    name: item.name,
+                    name: model.pendingRenameByFile[item.url] ?? item.name,
                     image: displayImage,
                     isSelected: selectedURLs.contains(item.url),
                     hasPendingEdits: pendingURLs.contains(item.url),
+                    isPendingRename: model.pendingRenameByFile[item.url] != nil,
                     tileSide: max(layout.tileSide, 40),
                     preferredAspectRatio: preferredAspectRatio(for: item.url)
                 )
@@ -545,10 +546,11 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
         let displayImage = model.displayImageForCurrentStagedState(baseImage, fileURL: item.url)
 
         cell.configure(
-            name: item.name,
+            name: model.pendingRenameByFile[item.url] ?? item.name,
             image: displayImage,
             isSelected: model.selectedFileURLs.contains(item.url),
             hasPendingEdits: model.hasPendingEdits(for: item.url),
+            isPendingRename: model.pendingRenameByFile[item.url] != nil,
             tileSide: max(layout.tileSide, 40),
             preferredAspectRatio: preferredAspectRatio(for: item.url)
         )
@@ -887,10 +889,12 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         image: NSImage?,
         isSelected: Bool,
         hasPendingEdits: Bool,
+        isPendingRename: Bool = false,
         tileSide: CGFloat,
         preferredAspectRatio: CGFloat?
     ) {
         titleField.stringValue = name
+        titleField.textColor = isPendingRename ? .systemOrange : nil
         self.preferredAspectRatio = preferredAspectRatio
         setImage(image, animated: false)
         applySelection(isSelected: isSelected)

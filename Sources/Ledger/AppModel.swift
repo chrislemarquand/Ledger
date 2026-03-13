@@ -295,6 +295,8 @@ final class AppModel: ObservableObject {
         case applyMetadataChanges
         case clearMetadataChanges
         case restoreFromLastBackup
+        case batchRenameSelection
+        case batchRenameFolder
     }
 
     struct FileActionState: Hashable {
@@ -509,6 +511,12 @@ final class AppModel: ObservableObject {
     @Published var pendingImportSourceKind: ImportSourceKind? {
         didSet { notifyInspectorDidChange() }
     }
+    @Published var pendingBatchRenameScope: BatchRenameScope?
+    @Published var isRenaming = false
+    @Published var renameProgress: (completed: Int, total: Int) = (0, 0)
+    /// Maps current on-disk URL → proposed final filename (basename + ext).
+    /// Populated when the user stages a batch rename; cleared on apply or discard.
+    @Published var pendingRenameByFile: [URL: String] = [:]
     // Search UI removed for v1.0 (name-only, aesthetically wrong). Property kept
     // so filteredBrowserItems/rebuildFilteredBrowserItems can be wired up for R14
     // (metadata-aware search) without a data-model rewrite.
@@ -579,7 +587,7 @@ final class AppModel: ObservableObject {
     let favoritesStore: SidebarFavoritesStoreProtocol
     let recentLocationsStore: RecentLocationsStoreProtocol
     var lastOperationIDs: [UUID] = []
-    var lastOperationFilesByID: [UUID: URL] = [:]
+    var lastOperationFilesByID: [UUID: Set<URL>] = [:]
     var statusResetTask: Task<Void, Never>?
     var inspectorDebounceTask: Task<Void, Never>?
     var metadataUndoStack: [PendingEditState] = []
@@ -633,6 +641,9 @@ final class AppModel: ObservableObject {
 
     var hasUnsavedEdits: Bool {
         if !pendingEditsByFile.isEmpty {
+            return true
+        }
+        if !pendingRenameByFile.isEmpty {
             return true
         }
         return pendingImageOpsByFile.values.contains { !Self.normalizeStagedImageOperations($0).isEmpty }

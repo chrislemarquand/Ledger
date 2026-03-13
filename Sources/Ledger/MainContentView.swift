@@ -670,6 +670,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         static let imageSavePreset = 9_309
         static let imageManagePresets = 9_310
         static let imageApplyPreset = 9_311
+        static let imageBatchRenameSelection = 9_312
+        static let imageBatchRenameFolder = 9_313
 
         static let helpExifToolDocs = 9_401
     }
@@ -1118,7 +1120,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     private func rebuildImageMenu(_ menu: NSMenu) {
         menu.removeAllItems()
 
-        let applySelectionItem = NSMenuItem(title: "Apply Metadata Changes to Selection", action: #selector(applySelectionAction(_:)), keyEquivalent: "s")
+        let applySelectionItem = NSMenuItem(title: "Apply Changes to Selection", action: #selector(applySelectionAction(_:)), keyEquivalent: "s")
         applySelectionItem.keyEquivalentModifierMask = .command
         applySelectionItem.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
         applySelectionItem.tag = MenuTag.imageApplySelection
@@ -1132,7 +1134,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         refreshSelectionItem.target = self
         menu.addItem(refreshSelectionItem)
 
-        let clearSelectionItem = NSMenuItem(title: "Clear Metadata Changes", action: #selector(clearChangesAction(_:)), keyEquivalent: "k")
+        let clearSelectionItem = NSMenuItem(title: "Clear Changes", action: #selector(clearChangesAction(_:)), keyEquivalent: "k")
         clearSelectionItem.keyEquivalentModifierMask = .command
         clearSelectionItem.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
         clearSelectionItem.tag = MenuTag.imageClearSelection
@@ -1148,7 +1150,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
         menu.addItem(.separator())
 
-        let applyAllItem = NSMenuItem(title: "Apply Metadata Changes to All Images", action: #selector(applyFolderAction(_:)), keyEquivalent: "S")
+        let applyAllItem = NSMenuItem(title: "Apply Changes to All Images", action: #selector(applyFolderAction(_:)), keyEquivalent: "S")
         applyAllItem.keyEquivalentModifierMask = [.command, .option, .shift]
         applyAllItem.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
         applyAllItem.tag = MenuTag.imageApplyAll
@@ -1162,7 +1164,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         refreshAllItem.target = self
         menu.addItem(refreshAllItem)
 
-        let clearAllItem = NSMenuItem(title: "Clear Metadata Changes from All Images", action: #selector(clearAllChangesAction(_:)), keyEquivalent: "k")
+        let clearAllItem = NSMenuItem(title: "Clear Changes from All Images", action: #selector(clearAllChangesAction(_:)), keyEquivalent: "k")
         clearAllItem.keyEquivalentModifierMask = [.command, .option]
         clearAllItem.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
         clearAllItem.tag = MenuTag.imageClearAll
@@ -1182,6 +1184,28 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         presetsItem.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: nil)
         presetsItem.submenu = makePresetsSubmenu()
         menu.addItem(presetsItem)
+
+        menu.addItem(.separator())
+
+        let batchRenameSelectionItem = NSMenuItem(
+            title: "Batch Rename Selection\u{2026}",
+            action: #selector(batchRenameSelectionAction(_:)),
+            keyEquivalent: ""
+        )
+        batchRenameSelectionItem.image = NSImage(systemSymbolName: "pencil.and.list.clipboard", accessibilityDescription: nil)
+        batchRenameSelectionItem.tag = MenuTag.imageBatchRenameSelection
+        batchRenameSelectionItem.target = self
+        menu.addItem(batchRenameSelectionItem)
+
+        let batchRenameFolderItem = NSMenuItem(
+            title: "Batch Rename Folder\u{2026}",
+            action: #selector(batchRenameFolderAction(_:)),
+            keyEquivalent: ""
+        )
+        batchRenameFolderItem.image = NSImage(systemSymbolName: "pencil.and.list.clipboard", accessibilityDescription: nil)
+        batchRenameFolderItem.tag = MenuTag.imageBatchRenameFolder
+        batchRenameFolderItem.target = self
+        menu.addItem(batchRenameFolderItem)
     }
 
     private func makePresetsSubmenu() -> NSMenu {
@@ -1320,6 +1344,10 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             return !selection.isEmpty
         } else if menuItem.action == #selector(applyPresetFromMenuAction(_:)) {
             return !selection.isEmpty
+        } else if menuItem.action == #selector(batchRenameSelectionAction(_:)) {
+            return model.fileActionState(for: .batchRenameSelection, targetURLs: Array(model.selectedFileURLs)).isEnabled
+        } else if menuItem.action == #selector(batchRenameFolderAction(_:)) {
+            return model.fileActionState(for: .batchRenameFolder, targetURLs: model.browserItems.map(\.url)).isEnabled
         } else if menuItem.action == #selector(zoomInAction(_:)) {
             return model.browserViewMode == .gallery && model.canIncreaseGalleryZoom
         } else if menuItem.action == #selector(zoomOutAction(_:)) {
@@ -1482,8 +1510,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             if self.model.hasPendingEdits(inImportScope: scope) {
                 let alert = NSAlert()
                 alert.alertStyle = .warning
-                alert.messageText = "Staged edits are not included in ExifTool CSV export."
-                alert.informativeText = "Export reads current file metadata from disk. Apply staged edits first if you want them included."
+                alert.messageText = "Prepared changes are not included in ExifTool CSV export."
+                alert.informativeText = "Export reads current file metadata from disk. Apply your changes first if you want them included."
                 alert.addButton(withTitle: "Cancel")
                 alert.addButton(withTitle: "Export Anyway")
                 guard alert.runModal() == .alertSecondButtonReturn else { return }
@@ -1720,7 +1748,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Apply changes to \(images)?"
-        alert.informativeText = "Metadata changes will be written to disk. This can’t be undone."
+        alert.informativeText = "Prepared changes will be written to disk. This can’t be undone."
         alert.addButton(withTitle: "Apply")
         alert.addButton(withTitle: "Cancel")
         if let window = view.window {
@@ -1850,6 +1878,16 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         }
         model.selectedPresetID = presetID
         confirmAndApplyPreset(preset: preset)
+    }
+
+    @objc
+    func batchRenameSelectionAction(_: Any?) {
+        model.beginBatchRename(scope: .selection)
+    }
+
+    @objc
+    func batchRenameFolderAction(_: Any?) {
+        model.beginBatchRename(scope: .folder)
     }
 
     @objc
@@ -2118,7 +2156,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 item.autovalidates = false
                 item.target = controller
                 item.action = #selector(NativeThreePaneSplitViewController.applyChangesAction(_:))
-                item.toolTip = "Apply metadata changes"
+                item.toolTip = "Apply prepared changes"
                 if #available(macOS 26.0, *) {
                     item.style = controller.model.canApplyMetadataChanges ? .prominent : .plain
                 }

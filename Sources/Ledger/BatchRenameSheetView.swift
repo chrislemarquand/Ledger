@@ -7,105 +7,170 @@ struct BatchRenameSheetView: View {
     @ObservedObject var model: AppModel
     let scope: BatchRenameScope
 
-    @State private var tokens: [RenameToken] = [.originalName]
-    @State private var extensionOverrideEnabled = false
-    @State private var extensionOverrideText = ""
+    @State private var tokens: [RenameToken] = [.text("")]
+    @State private var showPreview = false
     @State private var preview: [RenamePlanEntry] = []
+    @State private var previewIssues: [RenameValidationIssue] = []
     @State private var isLoadingPreview = false
-    @State private var showConfirmation = false
 
     private var fileCount: Int {
-        switch scope {
-        case .selection: return model.selectedFileURLs.count
-        case .folder: return model.browserItems.count
-        }
+        model.renameFilesForBatchRename(scope).count
     }
 
     private var pattern: RenamePattern {
-        RenamePattern(
-            tokens: tokens,
-            extensionOverride: extensionOverrideEnabled && !extensionOverrideText.isEmpty
-                ? extensionOverrideText : nil
-        )
+        RenamePattern(tokens: tokens)
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 12) {
             // Header
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Batch Rename")
-                        .font(.headline)
-                    Text(scopeSummary)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-            .padding([.horizontal, .top])
-            .padding(.bottom, 12)
-
-            Divider()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    // Token builder
-                    tokenBuilderSection
-
-                    // Extension override
-                    extensionSection
-
-                    // Live preview
-                    previewSection
-                }
-                .padding()
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Batch Rename")
+                    .font(.title3.weight(.semibold))
+                Text(scopeSummary)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
 
-            Divider()
+            // Token rows
+            VStack(spacing: 0) {
+                ForEach(Array(tokens.enumerated()), id: \.offset) { index, token in
+                    TokenRow(
+                        token: token,
+                        isOnlyRow: tokens.count == 1,
+                        onUpdate: { tokens[index] = $0 },
+                        onDelete: { tokens.remove(at: index) },
+                        onInsertAfter: { tokens.insert(.text(""), at: index + 1) }
+                    )
+                }
+            }
 
-            // Buttons
+            // Inline preview — always same two-line structure to prevent height toggling
+            inlinePreview
+
+            // Footer
             HStack {
+                Button("Preview…") {
+                    if preview.isEmpty && !isLoadingPreview {
+                        Task { await refreshPreview() }
+                    }
+                    showPreview = true
+                }
+                .popover(isPresented: $showPreview) {
+                    previewPopover
+                }
+
                 Spacer()
+
                 Button("Cancel") {
                     model.dismissBatchRenameSheet()
                 }
                 .keyboardShortcut(.cancelAction)
 
-                Button("Rename…") {
-                    showConfirmation = true
+                Button("Rename") {
+                    let files = model.renameFilesForBatchRename(scope)
+                    let operation = RenameOperation(files: files, pattern: pattern)
+                    Task { @MainActor in
+                        await model.stageBatchRename(operation: operation)
+                    }
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(tokens.isEmpty || isLoadingPreview)
+                .disabled(tokens.isEmpty || !previewIssues.isEmpty)
             }
-            .padding()
         }
-        .frame(width: 560, height: 520)
+        .padding(20)
+        .frame(width: 580)
         .task(id: pattern) {
             await refreshPreview()
         }
-        .confirmationDialog(confirmationTitle, isPresented: $showConfirmation, titleVisibility: .visible) {
-            Button("Rename Files", role: .destructive) {
-                let files: [URL]
-                switch scope {
-                case .selection:
-                    files = model.filteredBrowserItems
-                        .map(\.url)
-                        .filter { model.selectedFileURLs.contains($0) }
-                case .folder:
-                    files = model.filteredBrowserItems.map(\.url)
+    }
+
+    // MARK: - Inline preview
+
+    private var inlinePreview: some View {
+        let currentName: String
+        let newName: String
+        if let first = preview.first, previewIssues.isEmpty {
+            currentName = first.sourceURL.lastPathComponent
+            newName = first.finalTargetURL.lastPathComponent
+        } else if let issue = previewIssues.first {
+            currentName = issue.message
+            newName = ""
+        } else {
+            currentName = "—"
+            newName = "—"
+        }
+        return VStack(alignment: .leading, spacing: 4) {
+            Text("Current filename: \(currentName)")
+                .font(.system(size: 13))
+                .foregroundStyle(previewIssues.isEmpty ? Color.secondary : Color.red)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Text("New filename: \(newName)")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Preview popover
+
+    @ViewBuilder
+    private var previewPopover: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if isLoadingPreview {
+                ProgressView()
+                    .frame(maxWidth: .infinity, minHeight: 80)
+                    .padding()
+            } else if !previewIssues.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(previewIssues.prefix(4).enumerated()), id: \.offset) { _, issue in
+                        Text(issue.message)
+                            .foregroundStyle(.red)
+                            .font(.caption)
+                    }
                 }
-                let operation = RenameOperation(files: files, pattern: pattern)
-                Task { @MainActor in
-                    await model.applyBatchRename(operation: operation)
+                .padding()
+            } else if preview.isEmpty {
+                Text("No files match the current scope.")
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+                    .padding()
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(preview.enumerated()), id: \.offset) { _, entry in
+                            HStack(spacing: 6) {
+                                Text(entry.sourceURL.lastPathComponent)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .foregroundStyle(.secondary)
+                                Image(systemName: "arrow.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                                Text(entry.finalTargetURL.lastPathComponent)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                if hasConflict(entry) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundStyle(.yellow)
+                                        .help("Disambiguated to avoid collision")
+                                }
+                            }
+                            .font(.system(.caption, design: .monospaced))
+                            .padding(.vertical, 2)
+                        }
+                    }
+                    .padding()
                 }
+                .frame(width: 540, height: 320)
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Files on disk will be renamed. You can restore original names from Backup via Image > Restore from Backup.")
         }
     }
 
-    // MARK: - Sections
+    // MARK: - Helpers
 
     private var scopeSummary: String {
         let n = fileCount
@@ -116,106 +181,12 @@ struct BatchRenameSheetView: View {
         }
     }
 
-    private var confirmationTitle: String {
-        "Rename \(fileCount) \(fileCount == 1 ? "File" : "Files")?"
-    }
-
-    @ViewBuilder
-    private var tokenBuilderSection: some View {
-        GroupBox("Rename Pattern") {
-            VStack(alignment: .leading, spacing: 8) {
-                if tokens.isEmpty {
-                    Text("Add at least one token.")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
-                }
-                ForEach(Array(tokens.enumerated()), id: \.offset) { index, token in
-                    TokenRow(
-                        token: token,
-                        onUpdate: { updated in
-                            tokens[index] = updated
-                        },
-                        onDelete: {
-                            tokens.remove(at: index)
-                        }
-                    )
-                }
-
-                Menu("Add Token") {
-                    Button("Original Name") { tokens.append(.originalName) }
-                    Button("Custom Text…") { tokens.append(.text("")) }
-                    Button("Sequence Number") { tokens.append(.sequence(start: 1, step: 1, padding: 3)) }
-                    Button("Date (yyyyMMdd)") { tokens.append(.date(format: "yyyyMMdd")) }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(6)
-        }
-    }
-
-    @ViewBuilder
-    private var extensionSection: some View {
-        GroupBox("Extension") {
-            HStack(spacing: 10) {
-                Toggle("Override extension", isOn: $extensionOverrideEnabled)
-                if extensionOverrideEnabled {
-                    TextField("e.g. jpg", text: $extensionOverrideText)
-                        .frame(width: 80)
-                        .textFieldStyle(.roundedBorder)
-                }
-                Spacer()
-            }
-            .padding(6)
-        }
-    }
-
-    @ViewBuilder
-    private var previewSection: some View {
-        GroupBox("Preview (up to 20 files)") {
-            if isLoadingPreview {
-                ProgressView()
-                    .frame(maxWidth: .infinity, minHeight: 60)
-            } else if preview.isEmpty {
-                Text("No files match the current scope.")
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
-                    .padding(6)
-            } else {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(preview.prefix(20).enumerated()), id: \.offset) { _, entry in
-                        HStack(spacing: 6) {
-                            Text(entry.sourceURL.lastPathComponent)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .foregroundStyle(.secondary)
-                            Image(systemName: "arrow.right")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                            Text(entry.finalTargetURL.lastPathComponent)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            if hasConflict(entry) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundStyle(.yellow)
-                                    .help("Disambiguated to avoid collision")
-                            }
-                        }
-                        .font(.system(.caption, design: .monospaced))
-                        .padding(.vertical, 2)
-                    }
-                }
-                .padding(6)
-            }
-        }
-    }
-
-    // MARK: - Helpers
-
     private func refreshPreview() async {
         isLoadingPreview = true
         let currentPattern = pattern
-        let entries = await model.previewBatchRename(pattern: currentPattern, scope: scope)
-        preview = entries
+        let assessment = await model.previewBatchRenameAssessment(pattern: currentPattern, scope: scope)
+        preview = assessment.entries
+        previewIssues = assessment.issues
         isLoadingPreview = false
     }
 
@@ -227,82 +198,169 @@ struct BatchRenameSheetView: View {
 
 // MARK: - Token Row
 
+private enum TokenKind: CaseIterable, Identifiable, Equatable {
+    case text, newExtension, sequenceNumber, sequenceLetter, dateTime
+
+    var id: Self { self }
+
+    var displayName: String {
+        switch self {
+        case .text:           return "Text"
+        case .newExtension:   return "New extension"
+        case .sequenceNumber: return "Sequence number"
+        case .sequenceLetter: return "Sequence letter"
+        case .dateTime:       return "Date Time"
+        }
+    }
+
+    init(token: RenameToken) {
+        switch token {
+        case .text:           self = .text
+        case .extension:      self = .newExtension
+        case .sequence:       self = .sequenceNumber
+        case .sequenceLetter: self = .sequenceLetter
+        case .date:           self = .dateTime
+        case .originalName:   self = .text
+        }
+    }
+
+    var defaultToken: RenameToken {
+        switch self {
+        case .text:           return .text("")
+        case .newExtension:   return .extension("")
+        case .sequenceNumber: return .sequence(start: 1, padding: .three)
+        case .sequenceLetter: return .sequenceLetter(uppercase: true)
+        case .dateTime:       return .date(source: .dateTimeOriginal, format: .yyyymmdd)
+        }
+    }
+}
+
 private struct TokenRow: View {
     let token: RenameToken
+    let isOnlyRow: Bool
     let onUpdate: (RenameToken) -> Void
     let onDelete: () -> Void
+    let onInsertAfter: () -> Void
+
+    private var kindBinding: Binding<TokenKind> {
+        Binding(
+            get: { TokenKind(token: token) },
+            set: { newKind in
+                if TokenKind(token: token) != newKind {
+                    onUpdate(newKind.defaultToken)
+                }
+            }
+        )
+    }
 
     var body: some View {
         HStack(spacing: 8) {
-            tokenEditor
-            Spacer()
-            Button(action: onDelete) {
-                Image(systemName: "minus.circle.fill")
-                    .foregroundStyle(.red)
+            Picker("", selection: kindBinding) {
+                ForEach(TokenKind.allCases) { kind in
+                    Text(kind.displayName).tag(kind)
+                }
             }
-            .buttonStyle(.plain)
+            .labelsHidden()
+            .frame(width: 152)
+
+            tokenContent
+
+            Button(action: onDelete) {
+                Text("−")
+                    .frame(width: 16, height: 16)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(isOnlyRow)
+
+            Button(action: onInsertAfter) {
+                Text("+")
+                    .frame(width: 16, height: 16)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
-        .padding(4)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(6)
+        .padding(.vertical, 5)
     }
 
     @ViewBuilder
-    private var tokenEditor: some View {
+    private var tokenContent: some View {
         switch token {
-        case .originalName:
-            Label("Original Name", systemImage: "doc.text")
-                .font(.caption)
         case .text(let value):
-            HStack {
-                Image(systemName: "character.cursor.ibeam")
-                TextField("Custom text", text: Binding(
-                    get: { value },
-                    set: { onUpdate(.text($0)) }
-                ))
-                .textFieldStyle(.plain)
-                .font(.caption)
-                .frame(minWidth: 80)
-            }
-        case .sequence(let start, let step, let padding):
-            HStack(spacing: 6) {
-                Image(systemName: "number")
-                Text("Start:").font(.caption)
-                TextField("", value: Binding(
+            TextField("Type text", text: Binding(
+                get: { value },
+                set: { onUpdate(.text($0)) }
+            ))
+            .textFieldStyle(.roundedBorder)
+
+        case .extension(let value):
+            TextField("Type extension", text: Binding(
+                get: { value },
+                set: { onUpdate(.extension($0)) }
+            ))
+            .textFieldStyle(.roundedBorder)
+
+        case .sequence(let start, let padding):
+            HStack(spacing: 8) {
+                TextField("1", value: Binding(
                     get: { start },
-                    set: { onUpdate(.sequence(start: $0, step: step, padding: padding)) }
+                    set: { onUpdate(.sequence(start: $0, padding: padding)) }
                 ), format: .number)
-                .textFieldStyle(.plain)
-                .frame(width: 36)
-                .font(.caption)
-                Text("Step:").font(.caption)
-                TextField("", value: Binding(
-                    get: { step },
-                    set: { onUpdate(.sequence(start: start, step: $0, padding: padding)) }
-                ), format: .number)
-                .textFieldStyle(.plain)
-                .frame(width: 30)
-                .font(.caption)
-                Text("Pad:").font(.caption)
-                TextField("", value: Binding(
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: .infinity)
+
+                Picker("", selection: Binding(
                     get: { padding },
-                    set: { onUpdate(.sequence(start: start, step: step, padding: $0)) }
-                ), format: .number)
-                .textFieldStyle(.plain)
-                .frame(width: 30)
-                .font(.caption)
+                    set: { onUpdate(.sequence(start: start, padding: $0)) }
+                )) {
+                    ForEach(SequencePadding.allCases) { p in
+                        Text(p.displayName).tag(p)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
             }
-        case .date(let format):
-            HStack {
-                Image(systemName: "calendar")
-                TextField("Date format", text: Binding(
+
+        case .sequenceLetter(let uppercase):
+            Picker("", selection: Binding(
+                get: { uppercase },
+                set: { onUpdate(.sequenceLetter(uppercase: $0)) }
+            )) {
+                Text("UPPERCASE").tag(true)
+                Text("lowercase").tag(false)
+            }
+            .labelsHidden()
+            .frame(maxWidth: .infinity)
+
+        case .date(let source, let format):
+            HStack(spacing: 8) {
+                Picker("", selection: Binding(
+                    get: { source },
+                    set: { onUpdate(.date(source: $0, format: format)) }
+                )) {
+                    ForEach(DateSource.allCases) { s in
+                        Text(s.displayName).tag(s)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
+
+                Picker("", selection: Binding(
                     get: { format },
-                    set: { onUpdate(.date(format: $0)) }
-                ))
-                .textFieldStyle(.plain)
-                .font(.caption)
-                .frame(minWidth: 80)
+                    set: { onUpdate(.date(source: source, format: $0)) }
+                )) {
+                    ForEach(DateFormat.allCases) { f in
+                        Text(f.displayName).tag(f)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
             }
+
+        case .originalName:
+            Text("Current filename")
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
