@@ -97,7 +97,7 @@ struct PresetEditorSheet: View {
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(16)
+        .padding(20)
         .frame(width: 760)
         .onAppear {
             validationMessage = nil
@@ -389,7 +389,7 @@ struct PresetManagerSheet: View {
                 .keyboardShortcut(.cancelAction)
             }
         }
-        .padding(16)
+        .padding(20)
         .frame(minWidth: 480, minHeight: 420)
         .onAppear {
             pendingDeletePresetID = nil

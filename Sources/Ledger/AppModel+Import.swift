@@ -34,7 +34,7 @@ extension AppModel {
     }
 
     func hasPendingEdits(inImportScope scope: ImportScope) -> Bool {
-        importTargetFiles(for: scope).contains(where: { hasPendingEdits(for: $0) })
+        importTargetFiles(for: scope).contains(where: { hasAnyPendingChanges(for: $0) })
     }
 
     func exportExifToolCSV(scope: ImportScope, destinationURL: URL) async throws -> Int {

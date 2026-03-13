@@ -951,7 +951,7 @@ struct ImportSheetView: View {
         }
         .fixedSize(horizontal: false, vertical: true)
         .padding(20)
-        .frame(width: 560)
+        .frame(width: 580)
         .onChange(of: session.options.sourceURLPath) { _, _ in
             isPostImportReviewMode = false
             session.schedulePreviewRefresh(model: model)

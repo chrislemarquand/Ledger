@@ -233,7 +233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "You have unsaved metadata changes."
+        alert.messageText = "You have unsaved changes."
         alert.informativeText = "Quit and discard your prepared changes?"
         alert.addButton(withTitle: "Quit and Discard")
         alert.addButton(withTitle: "Cancel")

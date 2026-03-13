@@ -18,6 +18,7 @@
 		A10000210000000000000001 /* Sources/ExifEditCore/ExifToolCommandBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000140000000000000001 /* Sources/ExifEditCore/ExifToolCommandBuilder.swift */; };
 		A10000220000000000000001 /* Sources/ExifEditCore/ExifToolService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000150000000000000001 /* Sources/ExifEditCore/ExifToolService.swift */; };
 		A10000230000000000000001 /* Sources/ExifEditCore/MetadataValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000160000000000000001 /* Sources/ExifEditCore/MetadataValidator.swift */; };
+		A10000B10000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000B20000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift */; };
 		A10000240000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000180000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift */; };
 		A10000250000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000190000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift */; };
 		A10000260000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100001A0000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift */; };
@@ -104,6 +105,7 @@
 		A10000140000000000000001 /* Sources/ExifEditCore/ExifToolCommandBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/ExifToolCommandBuilder.swift; sourceTree = SOURCE_ROOT; };
 		A10000150000000000000001 /* Sources/ExifEditCore/ExifToolService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/ExifToolService.swift; sourceTree = SOURCE_ROOT; };
 		A10000160000000000000001 /* Sources/ExifEditCore/MetadataValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/MetadataValidator.swift; sourceTree = SOURCE_ROOT; };
+		A10000B20000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/BatchRenameService.swift; sourceTree = SOURCE_ROOT; };
 		A10000180000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/BackupManagerTests.swift; sourceTree = SOURCE_ROOT; };
 		A10000190000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift; sourceTree = SOURCE_ROOT; };
 		A100001A0000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/MetadataValidatorTests.swift; sourceTree = SOURCE_ROOT; };
@@ -295,6 +297,7 @@
 				A10000140000000000000001 /* Sources/ExifEditCore/ExifToolCommandBuilder.swift */,
 				A10000150000000000000001 /* Sources/ExifEditCore/ExifToolService.swift */,
 				A10000160000000000000001 /* Sources/ExifEditCore/MetadataValidator.swift */,
+				A10000B20000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift */,
 			);
 			path = Sources/ExifEditCore;
 			sourceTree = SOURCE_ROOT;
@@ -519,6 +522,7 @@
 				A10000210000000000000001 /* Sources/ExifEditCore/ExifToolCommandBuilder.swift in Sources */,
 				A10000220000000000000001 /* Sources/ExifEditCore/ExifToolService.swift in Sources */,
 				A10000230000000000000001 /* Sources/ExifEditCore/MetadataValidator.swift in Sources */,
+				A10000B10000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -7,8 +7,8 @@ extension AppModel {
     func confirmDiscardUnsavedChanges(for actionDescription: String) -> Bool {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "You have unsaved metadata changes."
-        alert.informativeText = "Discard unsaved edits before \(actionDescription)?"
+        alert.messageText = "You have unsaved changes."
+        alert.informativeText = "Discard your prepared changes before \(actionDescription)?"
         alert.addButton(withTitle: "Discard Changes")
         alert.addButton(withTitle: "Cancel")
         return alert.runModal() == .alertFirstButtonReturn
@@ -16,29 +16,41 @@ extension AppModel {
 
     func discardUnsavedEdits() {
         registerMetadataUndoIfNeeded(previous: currentPendingEditState())
+        let didClearRenames = !pendingRenameByFile.isEmpty
         pendingEditsByFile.removeAll()
         pendingImageOpsByFile.removeAll()
+        pendingRenameByFile.removeAll()
+        if didClearRenames {
+            stagedOpsDisplayToken &+= 1
+        }
         removeAllStagedQuickLookPreviewFiles()
         invalidateAllBrowserThumbnails()
         invalidateInspectorPreviews(for: browserItems.map(\.url))
         recalculateInspectorState(forceNotify: true)
-        setStatusMessage("Discarded unsaved metadata changes.", autoClearAfterSuccess: true)
+        setStatusMessage("Discarded unsaved changes.", autoClearAfterSuccess: true)
     }
 
     func clearPendingEdits(for fileURLs: [URL]) {
         let uniqueURLs = Array(Set(fileURLs))
         guard !uniqueURLs.isEmpty else { return }
         registerMetadataUndoIfNeeded(previous: currentPendingEditState())
+        var didClearRenames = false
         for fileURL in uniqueURLs {
             pendingEditsByFile[fileURL] = nil
             pendingImageOpsByFile[fileURL] = nil
+            if pendingRenameByFile.removeValue(forKey: fileURL) != nil {
+                didClearRenames = true
+            }
             removeStagedQuickLookPreviewFile(for: fileURL)
+        }
+        if didClearRenames {
+            stagedOpsDisplayToken &+= 1
         }
         invalidateBrowserThumbnails(for: uniqueURLs)
         invalidateInspectorPreviews(for: uniqueURLs)
         recalculateInspectorState(forceNotify: true)
         let cleared = uniqueURLs.count == 1 ? "1 file" : "\(uniqueURLs.count) files"
-        setStatusMessage("Cleared metadata changes for \(cleared).", autoClearAfterSuccess: true)
+        setStatusMessage("Cleared prepared changes for \(cleared).", autoClearAfterSuccess: true)
     }
 
     func applyChanges() {
@@ -51,15 +63,17 @@ extension AppModel {
     func applyChanges(for fileURLs: [URL]) {
         let files = Array(Set(fileURLs)).sorted { $0.path < $1.path }
             .filter { hasPendingEdits(for: $0) }
-        guard !files.isEmpty else {
-            setStatusMessage("No metadata changes to apply.", autoClearAfterSuccess: true)
+        let hasPendingRenames = !pendingRenameByFile.isEmpty
+
+        guard !files.isEmpty || hasPendingRenames else {
+            setStatusMessage("No changes to apply.", autoClearAfterSuccess: true)
             return
         }
 
         let reachableFiles = files.filter { FileManager.default.isReadableFile(atPath: $0.path) }
         let unreachableCount = files.count - reachableFiles.count
 
-        guard !reachableFiles.isEmpty else {
+        guard !reachableFiles.isEmpty || hasPendingRenames else {
             setStatusMessage(
                 "Selected source is unavailable. Reconnect the drive, then refresh and apply again.",
                 autoClearAfterSuccess: false
@@ -94,7 +108,7 @@ extension AppModel {
             }
         }
 
-        guard !writableFiles.isEmpty else {
+        guard !writableFiles.isEmpty || hasPendingRenames else {
             let n = preflightFailed.count
             setStatusMessage(
                 "\(n == 1 ? "1 file is" : "\(n) files are") locked or not writable — no changes applied.",
@@ -107,6 +121,7 @@ extension AppModel {
         applyMetadataCompleted = 0
         applyMetadataTotal = writableFiles.count
         let shouldKeepBackups = keepBackups
+        let stagedRenames = pendingRenameByFile
 
         Task {
             let startedAt = Date()
@@ -114,7 +129,7 @@ extension AppModel {
             var failed: [FileError] = preflightFailed
             var firstBackupLocation: URL?
             var operationIDs: [UUID] = []
-            var operationFilesByID: [UUID: URL] = [:]
+            var operationFilesByID: [UUID: Set<URL>] = [:]
 
             for (index, fileURL) in writableFiles.enumerated() {
                 let patches = buildPatches(for: fileURL)
@@ -132,7 +147,7 @@ extension AppModel {
                         if shouldKeepBackups {
                             result = try await engine.apply(operation: operation)
                             operationIDs.append(result.operationID)
-                            operationFilesByID[result.operationID] = fileURL
+                            operationFilesByID[result.operationID] = [fileURL]
                             if firstBackupLocation == nil {
                                 firstBackupLocation = result.backupLocation
                             }
@@ -151,7 +166,7 @@ extension AppModel {
                         var didApplyImageOps = false
                         if shouldKeepBackups {
                             let backupLocation = try await engine.createBackup(operationID: operationID, files: [fileURL])
-                            operationFilesByID[operationID] = fileURL
+                            operationFilesByID[operationID] = [fileURL]
                             if firstBackupLocation == nil {
                                 firstBackupLocation = backupLocation
                             }
@@ -173,7 +188,7 @@ extension AppModel {
                             if metadataResult.failed.isEmpty {
                                 if shouldKeepBackups {
                                     operationIDs.append(metadataResult.operationID)
-                                    operationFilesByID[metadataResult.operationID] = fileURL
+                                    operationFilesByID[metadataResult.operationID] = [fileURL]
                                 }
                                 succeeded.append(fileURL)
                                 pendingCommitsByFile[fileURL] = pendingEditsByFile[fileURL]?.mapValues(\.value)
@@ -223,38 +238,153 @@ extension AppModel {
                 }
             }
 
-            if result.failed.isEmpty {
-                let n = result.succeeded.count
-                setStatusMessage(
-                    "Applied \(n) \(n == 1 ? "image" : "images")",
-                    autoClearAfterSuccess: true
-                )
-            } else if result.succeeded.isEmpty {
-                let firstError = result.failed.first?.message ?? "Unknown write error."
-                statusMessage = "Couldn’t apply changes. \(firstError)"
-                let failedNames = result.failed.prefix(5).map { $0.fileURL.lastPathComponent }.joined(separator: "\n")
+            // Execute staged renames
+            var renamedCount = 0
+            var renameFailedCount = 0
+            var renameFailureMessage: String?
+            var renameFailedNames: [String] = []
+            var didMutatePendingRenames = false
+            var didReloadFiles = false
+            if !stagedRenames.isEmpty {
+                let renameService = BatchRenameService()
+                let renameOperationID = UUID()
+                let renameTargets = stagedRenames.filter { sourceURL, proposedFilename in
+                    sourceURL.lastPathComponent != proposedFilename
+                }
+
+                if !renameTargets.isEmpty {
+                    do {
+                        let renameBackupManager: BackupManager? = shouldKeepBackups
+                            ? BackupManager(baseDirectory: AppBrand.currentSupportDirectoryURL().appendingPathComponent("Backups", isDirectory: true))
+                            : nil
+                        let renameResult = try await renameService.executeStagedMappings(
+                            targetsBySource: renameTargets,
+                            operationID: renameOperationID,
+                            backupManager: renameBackupManager
+                        )
+
+                        renamedCount = renameResult.succeeded.count
+                        for sourceURL in renameTargets.keys {
+                            if pendingRenameByFile.removeValue(forKey: sourceURL) != nil {
+                                didMutatePendingRenames = true
+                            }
+                        }
+                        if shouldKeepBackups {
+                            operationIDs.append(renameOperationID)
+                            operationFilesByID[renameOperationID] = Set(renameTargets.keys)
+                            if firstBackupLocation == nil {
+                                firstBackupLocation = renameResult.backupLocation
+                            }
+                        }
+                    } catch {
+                        renameFailedCount = renameTargets.count
+                        renameFailureMessage = error.localizedDescription
+                        renameFailedNames = renameTargets.keys
+                            .map(\.lastPathComponent)
+                            .sorted()
+                        logger.error("Staged atomic rename failed: \(error)")
+                    }
+                }
+
+                let unchangedCount = stagedRenames.count - renameTargets.count
+                if unchangedCount > 0 {
+                    renamedCount += unchangedCount
+                    for (sourceURL, proposedFilename) in stagedRenames where sourceURL.lastPathComponent == proposedFilename {
+                        if pendingRenameByFile.removeValue(forKey: sourceURL) != nil {
+                            didMutatePendingRenames = true
+                        }
+                    }
+                }
+
+                if didMutatePendingRenames {
+                    stagedOpsDisplayToken &+= 1
+                }
+
+                if renamedCount > 0, let item = selectedSidebarItem {
+                    // loadFiles calls clearLoadedContentState, which always wipes
+                    // pendingEditsByFile. Any edits that failed to apply (their entries
+                    // were not cleared by the metadata loop) would be silently lost.
+                    // Capture them here and restore after the reload, re-keyed to the
+                    // post-rename URL for files that were successfully renamed.
+                    var survivingEdits: [URL: [EditableTag: StagedEditRecord]] = [:]
+                    for (oldURL, edits) in pendingEditsByFile {
+                        if let newFilename = renameTargets[oldURL] {
+                            survivingEdits[oldURL.deletingLastPathComponent().appendingPathComponent(newFilename)] = edits
+                        } else {
+                            survivingEdits[oldURL] = edits
+                        }
+                    }
+                    // Stale old-URL entries in inspectorPreviewImages survive
+                    // clearLoadedContentState (preserveSessionCaches: true). Purge them
+                    // before loadFiles so no racing task can sneak a stale image back in
+                    // after the clear, and the new URLs start from a clean slate.
+                    invalidateInspectorPreviews(for: Array(renameTargets.keys))
+                    await loadFiles(for: item.kind)
+                    didReloadFiles = true
+                    for (url, edits) in survivingEdits {
+                        pendingEditsByFile[url] = edits
+                    }
+                    if !survivingEdits.isEmpty {
+                        recalculateInspectorState(forceNotify: true)
+                    }
+                }
+            }
+
+            // Status message
+            let metadataApplied = result.succeeded.count
+            let metadataFailed = result.failed.count
+            if metadataFailed == 0 && renameFailedCount == 0 {
+                var parts: [String] = []
+                if metadataApplied > 0 {
+                    let files = metadataApplied == 1 ? "1 file" : "\(metadataApplied) files"
+                    parts.append("Applied changes to \(files)")
+                }
+                if renamedCount > 0 {
+                    let files = renamedCount == 1 ? "1 file" : "\(renamedCount) files"
+                    parts.append("Renamed \(files)")
+                }
+                setStatusMessage(parts.joined(separator: ". ") + ".", autoClearAfterSuccess: true)
+            } else if metadataApplied == 0 && result.succeeded.isEmpty && renameFailedCount > 0 && renamedCount == 0 {
+                let firstError = renameFailureMessage ?? "Unknown error."
+                statusMessage = "Couldn’t apply name changes. \(firstError)"
+                let failedNames = renameFailedNames.prefix(5).joined(separator: "\n")
                 Task { @MainActor in
-                    let n = result.failed.count
-                    let images = n == 1 ? "1 image" : "\(n) images"
+                    let n = renameFailedCount
+                    let files = n == 1 ? "1 file" : "\(n) files"
                     let alert = NSAlert()
-                    alert.messageText = "Couldn't Apply Changes"
-                    alert.informativeText = "Metadata couldn't be written to \(images):\n\(failedNames)\n\n\(firstError)"
+                    alert.messageText = "Couldn’t Apply Name Changes"
+                    alert.informativeText = "Couldn’t rename \(files). No files were renamed.\n\(failedNames)\n\n\(firstError)"
                     alert.alertStyle = .warning
                     alert.addButton(withTitle: "OK")
                     alert.runModal()
                 }
             } else {
-                statusMessage = "Applied \(result.succeeded.count) of \(result.succeeded.count + result.failed.count) — \(result.failed.count) failed"
+                var parts: [String] = []
+                let attemptedMetadata = metadataApplied + metadataFailed
+                if attemptedMetadata > 0 {
+                    parts.append("Applied changes to \(metadataApplied) of \(attemptedMetadata) files")
+                }
+                let attemptedRenames = renamedCount + renameFailedCount
+                if attemptedRenames > 0 {
+                    parts.append("Renamed \(renamedCount) of \(attemptedRenames) files")
+                }
+                let failureCount = metadataFailed + renameFailedCount
+                if failureCount > 0 {
+                    parts.append("\(failureCount) \(failureCount == 1 ? "file" : "files") failed")
+                }
+                statusMessage = parts.joined(separator: ". ") + "."
             }
             applyMetadataCompleted = applyMetadataTotal
             clearMetadataUndoHistory()
 
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                if self.autoRefreshMetadataAfterApply {
-                    await self.loadMetadataForSelection()
-                } else {
-                    self.recalculateInspectorState(forceNotify: true)
+                if !didReloadFiles {
+                    if self.autoRefreshMetadataAfterApply {
+                        await self.loadMetadataForSelection()
+                    } else {
+                        self.recalculateInspectorState(forceNotify: true)
+                    }
                 }
                 self.isApplyingMetadata = false
             }
@@ -262,7 +392,7 @@ extension AppModel {
     }
 
     func hasRestorableBackup(for fileURL: URL) -> Bool {
-        lastOperationFilesByID.values.contains(fileURL)
+        lastOperationFilesByID.values.contains { $0.contains(fileURL) }
     }
 
     func clearAllBackups() throws -> Int {
@@ -326,7 +456,7 @@ extension AppModel {
             statusMessage = "No backup to restore."
             return
         }
-        let files = lastOperationIDs.compactMap { lastOperationFilesByID[$0] }
+        let files = lastOperationIDs.flatMap { Array(lastOperationFilesByID[$0] ?? []) }
         restoreLastOperation(for: files)
     }
 
@@ -343,11 +473,12 @@ extension AppModel {
 
         let requestedSet = Set(requestedFiles)
         let operationIDsToRestore = lastOperationIDs.filter { operationID in
-            guard let fileURL = lastOperationFilesByID[operationID] else { return false }
-            return requestedSet.contains(fileURL)
+            guard let files = lastOperationFilesByID[operationID] else { return false }
+            return !files.intersection(requestedSet).isEmpty
         }
 
-        let skippedCount = requestedFiles.count - operationIDsToRestore.count
+        let restorableFiles = Set(operationIDsToRestore.flatMap { lastOperationFilesByID[$0] ?? [] })
+        let skippedCount = requestedSet.subtracting(restorableFiles).count
         guard !operationIDsToRestore.isEmpty else {
             statusMessage = "No backup available for the selected images."
             return
@@ -370,7 +501,7 @@ extension AppModel {
                     succeeded.append(contentsOf: result.succeeded)
                     failed.append(contentsOf: result.failed)
                 } catch {
-                    guard let fileURL = operationFilesByID[operationID] else { continue }
+                    guard let files = operationFilesByID[operationID], let fileURL = files.first else { continue }
                     failed.append(FileError(fileURL: fileURL, message: error.localizedDescription))
                 }
             }
@@ -396,8 +527,8 @@ extension AppModel {
                 // no backup remains for the selection.
                 let succeededSet = Set(summary.succeeded)
                 for opID in operationIDsToRestore {
-                    guard let fileURL = operationFilesByID[opID],
-                          succeededSet.contains(fileURL) else { continue }
+                    guard let files = operationFilesByID[opID],
+                          files.isSubset(of: succeededSet) else { continue }
                     lastOperationIDs.removeAll { $0 == opID }
                     lastOperationFilesByID.removeValue(forKey: opID)
                 }
