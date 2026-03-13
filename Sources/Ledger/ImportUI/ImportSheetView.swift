@@ -894,11 +894,7 @@ struct ImportSheetView: View {
             }
 
             if let banner = activeBanner {
-                InlineSheetMessageBanner(
-                    tone: banner.tone,
-                    title: banner.title,
-                    messages: banner.messages
-                )
+                InlineSheetMessageBanner(messages: banner)
             }
 
             ProgressView(value: importProgress ?? 0)
@@ -986,30 +982,18 @@ struct ImportSheetView: View {
         return count > 0 ? "Selection (\(count))" : "Selection"
     }
 
-    private var activeBanner: (tone: InlineSheetMessageTone, title: String, messages: [String])? {
+    private var activeBanner: [String]? {
         if isPostImportReviewMode, session.requiresPostImportReview, let report = session.importReport {
-            return (
-                .warning,
-                "Import completed with issues",
-                [
-                    "\(report.summary.warningCount) warnings · \(report.summary.conflictCount) conflicts",
-                    "Review Details… before closing.",
-                ]
-            )
+            return [
+                "\(report.summary.warningCount) warnings · \(report.summary.conflictCount) conflicts",
+                "Review Details… before closing.",
+            ]
         }
         if !session.rowOrderFallbackWarnings.isEmpty {
-            return (
-                .warning,
-                "Matching images by position",
-                ["Images will be matched to CSV rows in order rather than by filename. Check the preview carefully."]
-            )
+            return ["Images will be matched to CSV rows in order rather than by filename. Check the preview carefully."]
         }
         if session.shouldShowEOSLensDependencyBanner {
-            return (
-                .info,
-                "Lens Model requires Focal Length",
-                ["Enable Focal Length in Fields to include lens tags."]
-            )
+            return ["Lens Model requires Focal Length — enable it in Fields to include lens tags."]
         }
         return nil
     }
@@ -1028,10 +1012,8 @@ struct ImportSheetView: View {
 
     @ViewBuilder
     private func optionGroup(_ title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        HStack(alignment: .top, spacing: 8) {
             Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
             content()
         }
     }
@@ -1289,39 +1271,16 @@ struct ImportSheetView: View {
     }
 }
 
-enum InlineSheetMessageTone {
-    case info
-    case warning
-    case error
-}
-
 struct InlineSheetMessageBanner: View {
-    let tone: InlineSheetMessageTone
-    let title: String
     let messages: [String]
 
-    private var iconName: String {
-        switch tone {
-        case .info:
-            return "info.circle.fill"
-        case .warning:
-            return "exclamationmark.triangle.fill"
-        case .error:
-            return "xmark.octagon.fill"
-        }
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Label(title, systemImage: iconName)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 4) {
             ForEach(messages, id: \.self) { message in
                 Text(message)
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.leading, 20)
             }
         }
     }

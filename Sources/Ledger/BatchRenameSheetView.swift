@@ -102,12 +102,12 @@ struct BatchRenameSheetView: View {
         }
         return VStack(alignment: .leading, spacing: 4) {
             Text("Current filename: \(currentName)")
-                .font(.system(size: 13))
+                .font(.callout)
                 .foregroundStyle(previewIssues.isEmpty ? Color.secondary : Color.red)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Text("New filename: \(newName)")
-                .font(.system(size: 13))
+                .font(.callout)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
