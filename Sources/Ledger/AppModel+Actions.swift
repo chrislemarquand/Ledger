@@ -2,6 +2,98 @@ import AppKit
 import ExifEditCore
 import Foundation
 
+private enum ExternalPhotoAppTarget {
+    case lightroom
+    case lightroomClassic
+
+    var actionTitle: String {
+        switch self {
+        case .lightroom:
+            return "Send to Lightroom"
+        case .lightroomClassic:
+            return "Send to Lightroom Classic"
+        }
+    }
+
+    var unavailableMessage: String {
+        switch self {
+        case .lightroom:
+            return "Lightroom isn’t available on this Mac."
+        case .lightroomClassic:
+            return "Lightroom Classic isn’t available on this Mac."
+        }
+    }
+
+    var destinationName: String {
+        switch self {
+        case .lightroom:
+            return "Lightroom"
+        case .lightroomClassic:
+            return "Lightroom Classic"
+        }
+    }
+
+    var preferredBundleIdentifiers: [String] {
+        switch self {
+        case .lightroom:
+            return [
+                "com.adobe.lightroomcc",
+            ]
+        case .lightroomClassic:
+            return [
+                "com.adobe.lightroomclassiccc7",
+            ]
+        }
+    }
+
+    func matches(_ appURL: URL) -> Bool {
+        let displayName = FileManager.default.displayName(atPath: appURL.path).lowercased()
+        let bundle = Bundle(url: appURL)
+        let bundleName = (bundle?.object(forInfoDictionaryKey: "CFBundleName") as? String)?.lowercased()
+        let bundleID = bundle?.bundleIdentifier?.lowercased()
+
+        func containsLightroom(_ value: String?) -> Bool {
+            value?.contains("lightroom") == true
+        }
+
+        func containsClassic(_ value: String?) -> Bool {
+            value?.contains("lightroom classic") == true || value?.contains("lightroomclassic") == true
+        }
+
+        switch self {
+        case .lightroom:
+            if let bundleID, preferredBundleIdentifiers.contains(bundleID) {
+                return true
+            }
+            let hasLightroom = containsLightroom(displayName) || containsLightroom(bundleName) || containsLightroom(bundleID)
+            let hasClassic = containsClassic(displayName) || containsClassic(bundleName) || containsClassic(bundleID)
+            let looksAdobe = displayName.contains("adobe") || bundleName?.contains("adobe") == true || bundleID?.contains("com.adobe") == true
+            return hasLightroom && !hasClassic && looksAdobe
+        case .lightroomClassic:
+            if let bundleID, preferredBundleIdentifiers.contains(bundleID) {
+                return true
+            }
+            return containsClassic(displayName) || containsClassic(bundleName) || containsClassic(bundleID)
+        }
+    }
+
+    var commonInstallPaths: [String] {
+        switch self {
+        case .lightroom:
+            return [
+                "/Applications/Adobe Lightroom CC/Adobe Lightroom.app",
+                "/Applications/Adobe Lightroom/Adobe Lightroom.app",
+                "/Applications/Lightroom.app",
+            ]
+        case .lightroomClassic:
+            return [
+                "/Applications/Adobe Lightroom Classic/Adobe Lightroom Classic.app",
+                "/Applications/Lightroom Classic.app",
+            ]
+        }
+    }
+}
+
 @MainActor
 extension AppModel {
     func increaseGalleryZoom() {
@@ -109,14 +201,22 @@ extension AppModel {
         }
     }
 
+    func sendToLightroom(_ fileURLs: [URL]) {
+        sendToExternalPhotoApp(.lightroom, fileURLs: fileURLs)
+    }
+
     func sendToLightroomClassic(_ fileURLs: [URL]) {
+        sendToExternalPhotoApp(.lightroomClassic, fileURLs: fileURLs)
+    }
+
+    private func sendToExternalPhotoApp(_ target: ExternalPhotoAppTarget, fileURLs: [URL]) {
         let uniqueURLs = Array(Set(fileURLs)).sorted { $0.path < $1.path }
         guard !uniqueURLs.isEmpty else {
-            statusMessage = "Select images to send to Lightroom Classic."
+            statusMessage = "Select images to send to \(target.destinationName)."
             return
         }
-        guard let lightroomAppURL = resolveLightroomClassicAppURL(for: uniqueURLs) else {
-            statusMessage = "Lightroom Classic isn’t available on this Mac."
+        guard let appURL = resolveExternalPhotoAppURL(target, for: uniqueURLs) else {
+            statusMessage = target.unavailableMessage
             return
         }
 
@@ -124,7 +224,7 @@ extension AppModel {
         config.activates = true
         NSWorkspace.shared.open(
             uniqueURLs,
-            withApplicationAt: lightroomAppURL,
+            withApplicationAt: appURL,
             configuration: config
         ) { [weak self] _, error in
             Task { @MainActor in
@@ -132,11 +232,11 @@ extension AppModel {
                 if let error {
                     let n = uniqueURLs.count
                     let images = n == 1 ? "1 image" : "\(n) images"
-                    self.statusMessage = "Couldn’t send \(images) to Lightroom Classic. \(error.localizedDescription)"
+                    self.statusMessage = "Couldn’t send \(images) to \(target.destinationName). \(error.localizedDescription)"
                     return
                 }
                 let suffix = uniqueURLs.count == 1 ? "" : "s"
-                self.setStatusMessage("Sent \(uniqueURLs.count) image\(suffix) to Lightroom Classic.", autoClearAfterSuccess: true)
+                self.setStatusMessage("Sent \(uniqueURLs.count) image\(suffix) to \(target.destinationName).", autoClearAfterSuccess: true)
             }
         }
     }
@@ -212,41 +312,32 @@ extension AppModel {
         return cleaned.isEmpty ? "Imported Images" : cleaned
     }
 
-    func lightroomClassicApplicationURL(for fileURLs: [URL]) -> URL? {
-        resolveLightroomClassicAppURL(for: fileURLs)
+    func lightroomApplicationURL(for fileURLs: [URL]) -> URL? {
+        resolveExternalPhotoAppURL(.lightroom, for: fileURLs)
     }
 
-    private func resolveLightroomClassicAppURL(for fileURLs: [URL]) -> URL? {
-        func isLightroomClassicApp(_ appURL: URL) -> Bool {
-            let name = FileManager.default.displayName(atPath: appURL.path).lowercased()
-            if name.contains("lightroom classic") { return true }
-            if let bundle = Bundle(url: appURL),
-               let bundleName = (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)?.lowercased(),
-               bundleName.contains("lightroom classic") {
-                return true
+    func lightroomClassicApplicationURL(for fileURLs: [URL]) -> URL? {
+        resolveExternalPhotoAppURL(.lightroomClassic, for: fileURLs)
+    }
+
+    private func resolveExternalPhotoAppURL(_ target: ExternalPhotoAppTarget, for fileURLs: [URL]) -> URL? {
+        for path in target.commonInstallPaths {
+            let url = URL(fileURLWithPath: path)
+            if FileManager.default.fileExists(atPath: url.path), target.matches(url) {
+                return url
             }
-            if let bundleID = Bundle(url: appURL)?.bundleIdentifier?.lowercased(),
-               bundleID.contains("lightroomclassic") {
-                return true
-            }
-            return false
         }
 
         if let firstURL = fileURLs.first {
             let compatibleApps = NSWorkspace.shared.urlsForApplications(toOpen: firstURL)
-            if let matched = compatibleApps.first(where: isLightroomClassicApp) {
+            if let matched = compatibleApps.first(where: { appURL in
+                let bundleID = Bundle(url: appURL)?.bundleIdentifier?.lowercased()
+                return bundleID.map(target.preferredBundleIdentifiers.contains) == true
+            }) {
                 return matched
             }
-        }
-
-        let commonInstallPaths = [
-            "/Applications/Adobe Lightroom Classic/Adobe Lightroom Classic.app",
-            "/Applications/Lightroom Classic.app",
-        ]
-        for path in commonInstallPaths {
-            let url = URL(fileURLWithPath: path)
-            if FileManager.default.fileExists(atPath: url.path), isLightroomClassicApp(url) {
-                return url
+            if let matched = compatibleApps.first(where: target.matches(_:)) {
+                return matched
             }
         }
         return nil
@@ -269,9 +360,13 @@ extension AppModel {
         let hasPendingAny = normalized.contains { hasAnyPendingChanges(for: $0) }
         let hasRestorable = normalized.contains { hasRestorableBackup(for: $0) }
         let openAppName = defaultAppDisplayName(for: normalized.first)
+        let hasLightroom: Bool = {
+            guard hasSelection else { return false }
+            return resolveExternalPhotoAppURL(.lightroom, for: normalized) != nil
+        }()
         let hasLightroomClassic: Bool = {
             guard hasSelection else { return false }
-            return resolveLightroomClassicAppURL(for: normalized) != nil
+            return resolveExternalPhotoAppURL(.lightroomClassic, for: normalized) != nil
         }()
 
         switch id {
@@ -288,6 +383,13 @@ extension AppModel {
                 title: "Import in Photos…",
                 symbolName: "photo.on.rectangle",
                 isEnabled: hasSelection
+            )
+        case .sendToLightroom:
+            return FileActionState(
+                id: id,
+                title: "Send to Lightroom…",
+                symbolName: "square.and.arrow.up",
+                isEnabled: hasLightroom
             )
         case .sendToLightroomClassic:
             return FileActionState(
@@ -349,6 +451,8 @@ extension AppModel {
             openInDefaultApp(normalized)
         case .sendToPhotos:
             sendToPhotos(normalized)
+        case .sendToLightroom:
+            sendToLightroom(normalized)
         case .sendToLightroomClassic:
             sendToLightroomClassic(normalized)
         case .refreshMetadata:

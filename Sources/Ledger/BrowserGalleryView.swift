@@ -440,7 +440,8 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
 
         let openState = model.fileActionState(for: .openInDefaultApp, targetURLs: contextMenuTargetURLs)
         let photosState = model.fileActionState(for: .sendToPhotos, targetURLs: contextMenuTargetURLs)
-        let lightroomState = model.fileActionState(for: .sendToLightroomClassic, targetURLs: contextMenuTargetURLs)
+        let lightroomState = model.fileActionState(for: .sendToLightroom, targetURLs: contextMenuTargetURLs)
+        let lightroomClassicState = model.fileActionState(for: .sendToLightroomClassic, targetURLs: contextMenuTargetURLs)
         let refreshState = model.fileActionState(for: .refreshMetadata, targetURLs: contextMenuTargetURLs)
         let applyState = model.fileActionState(for: .applyMetadataChanges, targetURLs: contextMenuTargetURLs)
         let clearState = model.fileActionState(for: .clearMetadataChanges, targetURLs: contextMenuTargetURLs)
@@ -459,7 +460,8 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
         menu.autoenablesItems = false
         menu.addItem(makeItem(openState.title, action: #selector(openFromContextMenu(_:)), symbolName: openState.symbolName, enabled: openState.isEnabled))
         menu.addItem(makeItem(photosState.title, action: #selector(sendToPhotosFromContextMenu(_:)), symbolName: photosState.symbolName, enabled: photosState.isEnabled))
-        menu.addItem(makeItem(lightroomState.title, action: #selector(sendToLightroomClassicFromContextMenu(_:)), symbolName: lightroomState.symbolName, enabled: lightroomState.isEnabled))
+        menu.addItem(makeItem(lightroomState.title, action: #selector(sendToLightroomFromContextMenu(_:)), symbolName: lightroomState.symbolName, enabled: lightroomState.isEnabled))
+        menu.addItem(makeItem(lightroomClassicState.title, action: #selector(sendToLightroomClassicFromContextMenu(_:)), symbolName: lightroomClassicState.symbolName, enabled: lightroomClassicState.isEnabled))
         menu.addItem(makeItem("Reveal in Finder", action: #selector(revealInFinderFromContextMenu(_:)), symbolName: "folder", enabled: !contextMenuTargetURLs.isEmpty))
         menu.addItem(.separator())
         menu.addItem(makeItem(applyTitle, action: #selector(applyFromContextMenu(_:)), symbolName: applyState.symbolName, enabled: applyState.isEnabled))
@@ -485,6 +487,12 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
     private func sendToPhotosFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty else { return }
         model.performFileAction(.sendToPhotos, targetURLs: contextMenuTargetURLs)
+    }
+
+    @objc
+    private func sendToLightroomFromContextMenu(_: Any?) {
+        guard !contextMenuTargetURLs.isEmpty else { return }
+        model.performFileAction(.sendToLightroom, targetURLs: contextMenuTargetURLs)
     }
 
     @objc

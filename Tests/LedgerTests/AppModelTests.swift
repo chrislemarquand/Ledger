@@ -325,6 +325,21 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.statusMessage, "Select images to send to Photos.")
     }
 
+    func testSendToLightroomActionStateDisabledWhenSelectionEmpty() {
+        let fileURL = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        let model = makeModel()
+
+        let disabled = model.fileActionState(for: .sendToLightroom, targetURLs: [])
+        XCTAssertFalse(disabled.isEnabled)
+        _ = model.fileActionState(for: .sendToLightroom, targetURLs: [fileURL])
+    }
+
+    func testSendToLightroomWithoutSelectionShowsGuidanceMessage() {
+        let model = makeModel()
+        model.sendToLightroom([])
+        XCTAssertEqual(model.statusMessage, "Select images to send to Lightroom.")
+    }
+
     func testSendToLightroomClassicActionStateDisabledWhenSelectionEmpty() {
         let fileURL = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
         let model = makeModel()
@@ -389,8 +404,10 @@ final class AppModelTests: XCTestCase {
         }
 
         XCTAssertFalse(model.isApplyingMetadata)
-        XCTAssertTrue(model.lastResult?.failed.isEmpty ?? false)
-        XCTAssertTrue(model.lastResult?.succeeded.contains(fileURL) ?? false)
+        XCTAssertEqual(model.applyMetadataCompleted, 1)
+        XCTAssertEqual(model.applyMetadataTotal, 1)
+        XCTAssertFalse(model.hasPendingEdits(for: fileURL))
+        XCTAssertTrue(model.hasRestorableBackup(for: fileURL))
 
         // Let post-apply metadata refresh settle.
         try await Task.sleep(nanoseconds: 200_000_000)
@@ -701,7 +718,7 @@ final class AppModelTests: XCTestCase {
         ]
         model.selectedFileURLs = Set(files)
         let plan = await model.previewBatchRename(
-            pattern: RenamePattern(tokens: [.sequence(start: 1, step: 1, padding: 2)]),
+            pattern: RenamePattern(tokens: [.sequence(start: 1, padding: .two)]),
             scope: .selection
         )
         // Plan should be sorted by name: a.jpg first, b.jpg second

@@ -654,7 +654,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         static let fileExportRoot = 9_116
         static let fileExportExifToolCSV = 9_117
         static let fileExportSendToPhotos = 9_118
-        static let fileExportSendToLightroomClassic = 9_119
+        static let fileExportSendToLightroom = 9_119
+        static let fileExportSendToLightroomClassic = 9_120
 
         static let editRotate = 9_201
         static let editFlip = 9_202
@@ -1012,9 +1013,23 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         sendToPhotosItem.isEnabled = !model.browserItems.isEmpty
         submenu.addItem(sendToPhotosItem)
 
+        let sendToLightroomItem = NSMenuItem(title: "Send to Lightroom…", action: #selector(sendToLightroomAction(_:)), keyEquivalent: "")
+        sendToLightroomItem.target = self
+        let lightroomTargets = model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)
+        if let lightroomAppURL = model.lightroomApplicationURL(for: lightroomTargets) {
+            let appIcon = NSWorkspace.shared.icon(forFile: lightroomAppURL.path)
+            appIcon.size = NSSize(width: 16, height: 16)
+            sendToLightroomItem.image = appIcon
+        } else {
+            sendToLightroomItem.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
+        }
+        sendToLightroomItem.tag = MenuTag.fileExportSendToLightroom
+        sendToLightroomItem.isEnabled = model.fileActionState(for: .sendToLightroom, targetURLs: lightroomTargets).isEnabled
+        submenu.addItem(sendToLightroomItem)
+
         let sendToLightroomClassicItem = NSMenuItem(title: "Send to Lightroom Classic…", action: #selector(sendToLightroomClassicAction(_:)), keyEquivalent: "")
         sendToLightroomClassicItem.target = self
-        if let lightroomAppURL = model.lightroomClassicApplicationURL(for: model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)) {
+        if let lightroomAppURL = model.lightroomClassicApplicationURL(for: lightroomTargets) {
             let appIcon = NSWorkspace.shared.icon(forFile: lightroomAppURL.path)
             appIcon.size = NSSize(width: 16, height: 16)
             sendToLightroomClassicItem.image = appIcon
@@ -1022,7 +1037,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             sendToLightroomClassicItem.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
         }
         sendToLightroomClassicItem.tag = MenuTag.fileExportSendToLightroomClassic
-        let lightroomTargets = model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)
         sendToLightroomClassicItem.isEnabled = model.fileActionState(for: .sendToLightroomClassic, targetURLs: lightroomTargets).isEnabled
         submenu.addItem(sendToLightroomClassicItem)
         return submenu
@@ -1299,6 +1313,11 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             let state = model.fileActionState(for: .sendToPhotos, targetURLs: targetURLs)
             menuItem.title = state.title
             return state.isEnabled
+        } else if menuItem.action == #selector(sendToLightroomAction(_:)) {
+            let targetURLs = model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)
+            let state = model.fileActionState(for: .sendToLightroom, targetURLs: targetURLs)
+            menuItem.title = state.title
+            return state.isEnabled
         } else if menuItem.action == #selector(sendToLightroomClassicAction(_:)) {
             let targetURLs = model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)
             let state = model.fileActionState(for: .sendToLightroomClassic, targetURLs: targetURLs)
@@ -1556,6 +1575,13 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     func sendToPhotosAction(_: Any?) {
         pickExportScope(actionTitle: "Send to Photos") { [weak self] _, targetURLs in
             self?.model.performFileAction(.sendToPhotos, targetURLs: targetURLs)
+        }
+    }
+
+    @objc
+    func sendToLightroomAction(_: Any?) {
+        pickExportScope(actionTitle: "Send to Lightroom") { [weak self] _, targetURLs in
+            self?.model.performFileAction(.sendToLightroom, targetURLs: targetURLs)
         }
     }
 
@@ -2339,14 +2365,31 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             }
             menu.addItem(sendToPhotosItem)
 
-            let lightroomState = model.fileActionState(for: .sendToLightroomClassic, targetURLs: targetURLs)
+            let lightroomState = model.fileActionState(for: .sendToLightroom, targetURLs: targetURLs)
+            let sendToLightroomItem = NSMenuItem(
+                title: "Send to Lightroom…",
+                action: #selector(NativeThreePaneSplitViewController.sendToLightroomAction(_:)),
+                keyEquivalent: ""
+            )
+            sendToLightroomItem.target = controller
+            sendToLightroomItem.isEnabled = lightroomState.isEnabled
+            if let lightroomAppURL = model.lightroomApplicationURL(for: targetURLs) {
+                let appIcon = NSWorkspace.shared.icon(forFile: lightroomAppURL.path)
+                appIcon.size = NSSize(width: 16, height: 16)
+                sendToLightroomItem.image = appIcon
+            } else {
+                sendToLightroomItem.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
+            }
+            menu.addItem(sendToLightroomItem)
+
+            let lightroomClassicState = model.fileActionState(for: .sendToLightroomClassic, targetURLs: targetURLs)
             let sendToLightroomClassicItem = NSMenuItem(
                 title: "Send to Lightroom Classic…",
                 action: #selector(NativeThreePaneSplitViewController.sendToLightroomClassicAction(_:)),
                 keyEquivalent: ""
             )
             sendToLightroomClassicItem.target = controller
-            sendToLightroomClassicItem.isEnabled = lightroomState.isEnabled
+            sendToLightroomClassicItem.isEnabled = lightroomClassicState.isEnabled
             if let lightroomAppURL = model.lightroomClassicApplicationURL(for: targetURLs) {
                 let appIcon = NSWorkspace.shared.icon(forFile: lightroomAppURL.path)
                 appIcon.size = NSSize(width: 16, height: 16)
