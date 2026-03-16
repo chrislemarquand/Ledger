@@ -290,6 +290,7 @@ final class AppModel: ObservableObject {
     enum FileActionID: CaseIterable {
         case openInDefaultApp
         case sendToPhotos
+        case sendToLightroom
         case sendToLightroomClassic
         case refreshMetadata
         case applyMetadataChanges

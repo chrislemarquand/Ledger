@@ -296,7 +296,7 @@ final class BatchRenameServiceTests: XCTestCase {
         let files = makeFiles(names: ["a.jpg"])
         let assessment = await service.assessPlan(
             files: files,
-            pattern: RenamePattern(tokens: [.text("bad/name")])
+            pattern: RenamePattern(tokens: [.text("bad:name")])
         )
         XCTAssertFalse(assessment.issues.isEmpty)
     }
