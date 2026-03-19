@@ -2722,19 +2722,9 @@ private struct BrowserPlaceholderView: View {
             Color(nsColor: .windowBackgroundColor)
             switch content {
             case .loading:
-                VStack(spacing: 10) {
-                    ProgressView()
-                        .controlSize(.regular)
-                    Text("Loading…")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.primary)
-                }
+                PlaceholderView(symbolName: "folder", title: "Loading", isLoading: true)
             case let .unavailable(title, symbolName, message):
-                ContentUnavailableView {
-                    Label(title, systemImage: symbolName)
-                } description: {
-                    Text(message)
-                }
+                PlaceholderView(symbolName: symbolName, title: title, description: message)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
