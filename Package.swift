@@ -10,11 +10,17 @@ let package = Package(
         .library(name: "ExifEditCore", targets: ["ExifEditCore"]),
         .executable(name: "ExifEditMac", targets: ["ExifEditMac"])
     ],
+    dependencies: [
+        .package(path: "../SharedUI")
+    ],
     targets: [
         .target(name: "ExifEditCore"),
         .executableTarget(
             name: "ExifEditMac",
-            dependencies: ["ExifEditCore"],
+            dependencies: [
+                "ExifEditCore",
+                .product(name: "SharedUI", package: "SharedUI")
+            ],
             path: "Sources/Ledger"
         ),
         .testTarget(
