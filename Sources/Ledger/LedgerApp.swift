@@ -287,8 +287,8 @@ final class MainWindowController: NSWindowController {
         window.isReleasedWhenClosed = false
         window.isRestorable = true
         window.setFrameAutosaveName("\(AppBrand.identifierPrefix).MainWindow")
+        window.center()
         super.init(window: window)
-        shouldCascadeWindows = true
     }
 
     @available(*, unavailable)
