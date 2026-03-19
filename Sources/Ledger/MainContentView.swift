@@ -14,11 +14,6 @@ extension Notification.Name {
     static let browserDidSwitchViewMode = Notification.Name("\(AppBrand.identifierPrefix).BrowserDidSwitchViewMode")
 }
 
-enum Motion {
-    static let duration: Double = 0.16
-    static var timingFunction: CAMediaTimingFunction { CAMediaTimingFunction(name: .easeInEaseOut) }
-}
-
 enum KeyCode {
     static let tab: UInt16 = 48
     static let space: UInt16 = 49
@@ -66,13 +61,6 @@ enum UIMetrics {
     }
 }
 
-func appAnimation() -> Animation? {
-    if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-        return nil
-    }
-    return .easeInOut(duration: Motion.duration)
-}
-
 actor SharedThumbnailRequestBroker {
     static let shared = SharedThumbnailRequestBroker()
 
@@ -83,19 +71,6 @@ actor SharedThumbnailRequestBroker {
             forceRefresh: forceRefresh
         )
     }
-}
-
-private func observeEquatable<P: Publisher>(
-    _ publisher: P,
-    storeIn cancellables: inout [AnyCancellable],
-    onChange: @escaping () -> Void
-) where P.Output: Equatable, P.Failure == Never {
-    publisher
-        .removeDuplicates()
-        .sink { _ in
-            onChange()
-        }
-        .store(in: &cancellables)
 }
 
 final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NSMenuItemValidation, NSMenuDelegate {
