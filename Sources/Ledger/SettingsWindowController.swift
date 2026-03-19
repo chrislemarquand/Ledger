@@ -1,140 +1,22 @@
 import AppKit
+import SharedUI
 
 @MainActor
-final class SettingsWindowController: NSWindowController {
-    private let tabsController: SettingsTabViewController
-    private let contentWidth: CGFloat = 620
-
-    init(model: AppModel) {
-        tabsController = SettingsTabViewController(model: model)
-        let window = NSWindow(contentViewController: tabsController)
-        window.title = "General"
-        window.styleMask = [.titled, .closable, .miniaturizable]
-        window.setContentSize(NSSize(width: contentWidth, height: 100))
-        window.minSize = NSSize(width: contentWidth, height: 100)
-        window.maxSize = NSSize(width: contentWidth, height: 1200)
-        window.toolbarStyle = .preference
-        window.isReleasedWhenClosed = false
-        super.init(window: window)
-        tabsController.refreshWindowForSelectedTab(animated: false)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    func showWindowAndActivate() {
-        showWindow(nil)
-        window?.center()
-        window?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
-}
-
-@MainActor
-private final class SettingsTabViewController: NSTabViewController {
-    private let generalController: GeneralSettingsViewController
-    private let inspectorController: InspectorSettingsViewController
-
-    private let inspectorHeight: CGFloat = 620
-
-    init(model: AppModel) {
-        generalController = GeneralSettingsViewController(model: model)
-        inspectorController = InspectorSettingsViewController(model: model)
-        super.init(nibName: nil, bundle: nil)
-        tabStyle = .toolbar
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-
-        generalController.title = "General"
-        let generalItem = NSTabViewItem(viewController: generalController)
-        generalItem.label = "General"
-        generalItem.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "General")
-
-        inspectorController.title = "Inspector"
-        let inspectorItem = NSTabViewItem(viewController: inspectorController)
-        inspectorItem.label = "Inspector"
-        inspectorItem.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: "Inspector")
-
-        addTabViewItem(generalItem)
-        addTabViewItem(inspectorItem)
-        selectedTabViewItemIndex = 0
-        title = "General"
-    }
-
-    override func viewDidAppear() {
-        super.viewDidAppear()
-        refreshWindowForSelectedTab(animated: false)
-    }
-
-    override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
-        refreshWindowForSelectedTab(animated: true)
-    }
-
-    func refreshWindowForSelectedTab(animated: Bool) {
-        guard let window = view.window else { return }
-        let selected = tabViewItems.indices.contains(selectedTabViewItemIndex) ? tabViewItems[selectedTabViewItemIndex] : nil
-        let selectedTitle = selected?.label ?? "Settings"
-        selected?.viewController?.title = selectedTitle
-        title = selectedTitle
-        window.title = selectedTitle
-
-        let targetContentHeight: CGFloat
-        switch selected?.label {
-        case "Inspector":
-            targetContentHeight = inspectorHeight
-        default:
-            if let vc = selected?.viewController {
-                vc.view.layoutSubtreeIfNeeded()
-                targetContentHeight = vc.view.fittingSize.height
-            } else {
-                return
-            }
-        }
-
-        let frame = window.frame
-        let currentContentRect = window.contentRect(forFrameRect: frame)
-        let chromeHeight = frame.height - currentContentRect.height
-        let maxContentHeight = (window.screen?.visibleFrame.height ?? 800) - chromeHeight
-        let clampedContentHeight = min(targetContentHeight, maxContentHeight)
-        let delta = clampedContentHeight - currentContentRect.height
-        guard abs(delta) > 0.5 else { return }
-
-        var targetFrame = frame
-        targetFrame.size.height += delta
-        targetFrame.origin.y -= delta
-        let constrainedFrame = window.constrainFrameRect(targetFrame, to: window.screen)
-        window.setFrame(constrainedFrame, display: true, animate: animated)
-    }
-}
-
-@MainActor
-private final class GeneralSettingsViewController: NSViewController {
+final class GeneralSettingsViewController: SettingsGridViewController {
     private unowned let model: AppModel
 
     private lazy var confirmBeforeApplyButton = makeCheckbox(
         title: "Confirm before Apply",
         action: #selector(confirmBeforeApplyToggled(_:))
     )
-
     private lazy var autoRefreshAfterApplyButton = makeCheckbox(
         title: "Auto-refresh metadata after Apply",
         action: #selector(autoRefreshAfterApplyToggled(_:))
     )
-
     private lazy var keepBackupsButton = makeCheckbox(
         title: "Keep backups",
         action: #selector(keepBackupsToggled(_:))
     )
-
     private lazy var clearBackupsButton = makeActionButton(
         title: "Clear backups...",
         action: #selector(clearBackupsAction(_:))
@@ -146,73 +28,20 @@ private final class GeneralSettingsViewController: NSViewController {
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func loadView() {
-        let root = NSView()
-        root.translatesAutoresizingMaskIntoConstraints = false
-        view = root
-    }
+    required init?(coder: NSCoder) { fatalError() }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        buildUI()
         refreshFromModel()
     }
 
-    private func buildUI() {
-        let applyLabel = makeCategoryLabel(title: "Apply:")
-        let backupsLabel = makeCategoryLabel(title: "Backups:")
-        let blankLabel = makeCategoryLabel(title: "")
-        let blankLabel2 = makeCategoryLabel(title: "")
-
-        let grid = NSGridView(views: [
-            [applyLabel, confirmBeforeApplyButton],
-            [blankLabel, autoRefreshAfterApplyButton],
-            [backupsLabel, keepBackupsButton],
-            [blankLabel2, clearBackupsButton],
-        ])
-        grid.translatesAutoresizingMaskIntoConstraints = false
-        grid.rowSpacing = 12
-        grid.columnSpacing = 14
-        grid.yPlacement = .center
-        grid.column(at: 0).xPlacement = .trailing
-        grid.column(at: 1).xPlacement = .leading
-
-        view.addSubview(grid)
-
-        NSLayoutConstraint.activate([
-            grid.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            grid.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 24),
-            grid.topAnchor.constraint(equalTo: view.topAnchor, constant: 24),
-            grid.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24),
-            grid.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -24),
-        ])
-    }
-
-    private func makeCheckbox(title: String, action: Selector) -> NSButton {
-        let button = NSButton(checkboxWithTitle: title, target: self, action: action)
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.setContentCompressionResistancePriority(.required, for: .vertical)
-        return button
-    }
-
-    private func makeActionButton(title: String, action: Selector) -> NSButton {
-        let button = NSButton(title: title, target: self, action: action)
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.bezelStyle = .rounded
-        button.setContentCompressionResistancePriority(.required, for: .vertical)
-        return button
-    }
-
-    private func makeCategoryLabel(title: String) -> NSTextField {
-        let label = NSTextField(labelWithString: title)
-        label.translatesAutoresizingMaskIntoConstraints = false
-        label.alignment = .right
-        label.textColor = .labelColor
-        return label
+    override func makeRows() -> [[NSView]] {
+        [
+            [makeCategoryLabel(title: "Apply:"),   confirmBeforeApplyButton],
+            [makeCategoryLabel(title: ""),          autoRefreshAfterApplyButton],
+            [makeCategoryLabel(title: "Backups:"),  keepBackupsButton],
+            [makeCategoryLabel(title: ""),          clearBackupsButton],
+        ]
     }
 
     private func refreshFromModel() {
@@ -221,23 +50,19 @@ private final class GeneralSettingsViewController: NSViewController {
         keepBackupsButton.state = model.keepBackups ? .on : .off
     }
 
-    @objc
-    private func confirmBeforeApplyToggled(_ sender: NSButton) {
+    @objc private func confirmBeforeApplyToggled(_ sender: NSButton) {
         model.confirmBeforeApply = (sender.state == .on)
     }
 
-    @objc
-    private func autoRefreshAfterApplyToggled(_ sender: NSButton) {
+    @objc private func autoRefreshAfterApplyToggled(_ sender: NSButton) {
         model.autoRefreshMetadataAfterApply = (sender.state == .on)
     }
 
-    @objc
-    private func keepBackupsToggled(_ sender: NSButton) {
+    @objc private func keepBackupsToggled(_ sender: NSButton) {
         model.keepBackups = (sender.state == .on)
     }
 
-    @objc
-    private func clearBackupsAction(_: Any?) {
+    @objc private func clearBackupsAction(_: Any?) {
         let trashName = AppBrand.localizedTrashDisplayName
         let alert = NSAlert()
         alert.alertStyle = .warning
@@ -252,7 +77,7 @@ private final class GeneralSettingsViewController: NSViewController {
             do {
                 _ = try self.model.clearAllBackups()
             } catch {
-                self.model.statusMessage = "Couldn’t clear backups. \(error.localizedDescription)"
+                self.model.statusMessage = "Couldn't clear backups. \(error.localizedDescription)"
             }
         }
 
@@ -269,7 +94,7 @@ private final class FlippedView: NSView {
 }
 
 @MainActor
-private final class InspectorSettingsViewController: NSViewController {
+final class InspectorSettingsViewController: NSViewController {
     private unowned let model: AppModel
 
     private let scrollView = NSScrollView()
@@ -288,9 +113,7 @@ private final class InspectorSettingsViewController: NSViewController {
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
+    required init?(coder: NSCoder) { fatalError() }
 
     override func loadView() {
         let root = NSView()
@@ -415,8 +238,7 @@ private final class InspectorSettingsViewController: NSViewController {
         }
     }
 
-    @objc
-    private func sectionToggled(_ sender: NSButton) {
+    @objc private func sectionToggled(_ sender: NSButton) {
         guard let section = sectionByButtonID[ObjectIdentifier(sender)] else { return }
         let enable = sender.state != .off
         model.setInspectorSectionEnabled(section: section, isEnabled: enable)
@@ -428,8 +250,7 @@ private final class InspectorSettingsViewController: NSViewController {
         recalculateSectionToggleState(for: section)
     }
 
-    @objc
-    private func fieldToggled(_ sender: NSButton) {
+    @objc private func fieldToggled(_ sender: NSButton) {
         guard let fieldID = fieldByButtonID[ObjectIdentifier(sender)] else { return }
         model.setInspectorFieldEnabled(fieldID: fieldID, isEnabled: sender.state == .on)
         if let section = sectionForFieldID[fieldID] {
