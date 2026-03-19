@@ -1,5 +1,6 @@
 @preconcurrency import AppKit
 import ExifEditCore
+import SharedUI
 
 @MainActor
 final class BrowserGalleryViewController: NSViewController, NSCollectionViewDataSource, NSCollectionViewDelegate {
