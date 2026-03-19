@@ -281,8 +281,8 @@ final class MainWindowController: NSWindowController {
         appModel = model
         let contentController = NativeThreePaneSplitViewController(model: model)
         let window = NSWindow(contentViewController: contentController)
-        window.setContentSize(NSSize(width: 1300, height: 800))
-        window.minSize = NSSize(width: 1200, height: 720)
+        window.setContentSize(ThreePaneSplitViewController.Metrics.windowDefault)
+        window.minSize = ThreePaneSplitViewController.Metrics.windowMinimum
         window.title = AppBrand.displayName
         window.isReleasedWhenClosed = false
         window.isRestorable = true
