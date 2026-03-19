@@ -27,7 +27,8 @@
 		A10001440000000000000001 /* Sources/Ledger/BrowserGalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001430000000000000001 /* Sources/Ledger/BrowserGalleryView.swift */; };
 		A10001460000000000000001 /* Sources/Ledger/BrowserListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001450000000000000001 /* Sources/Ledger/BrowserListView.swift */; };
 		A10001480000000000000001 /* Sources/Ledger/InspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001470000000000000001 /* Sources/Ledger/InspectorView.swift */; };
-		A100014A0000000000000001 /* Sources/Ledger/NavigationSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001490000000000000001 /* Sources/Ledger/NavigationSidebarView.swift */; };
+		DD0001010000000000000001 /* Sources/Ledger/LedgerSidebarTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0001000000000000000001 /* Sources/Ledger/LedgerSidebarTypes.swift */; };
+		DD0002020000000000000001 /* SharedUI in Frameworks */ = {isa = PBXBuildFile; productRef = DD0002010000000000000001 /* SharedUI */; };
 		A100014C0000000000000001 /* Sources/Ledger/PresetSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014B0000000000000001 /* Sources/Ledger/PresetSheets.swift */; };
 		A100014E0000000000000001 /* Sources/Ledger/ThumbnailService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014D0000000000000001 /* Sources/Ledger/ThumbnailService.swift */; };
 		A10001500000000000000001 /* Sources/Ledger/SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014F0000000000000001 /* Sources/Ledger/SettingsWindowController.swift */; };
@@ -111,7 +112,7 @@
 		A10001430000000000000001 /* Sources/Ledger/BrowserGalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/BrowserGalleryView.swift; sourceTree = SOURCE_ROOT; };
 		A10001450000000000000001 /* Sources/Ledger/BrowserListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/BrowserListView.swift; sourceTree = SOURCE_ROOT; };
 		A10001470000000000000001 /* Sources/Ledger/InspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/InspectorView.swift; sourceTree = SOURCE_ROOT; };
-		A10001490000000000000001 /* Sources/Ledger/NavigationSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/NavigationSidebarView.swift; sourceTree = SOURCE_ROOT; };
+		DD0001000000000000000001 /* Sources/Ledger/LedgerSidebarTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/LedgerSidebarTypes.swift; sourceTree = SOURCE_ROOT; };
 		A100014B0000000000000001 /* Sources/Ledger/PresetSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/PresetSheets.swift; sourceTree = SOURCE_ROOT; };
 		A100014D0000000000000001 /* Sources/Ledger/ThumbnailService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/ThumbnailService.swift; sourceTree = SOURCE_ROOT; };
 		A100014F0000000000000001 /* Sources/Ledger/SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/SettingsWindowController.swift; sourceTree = SOURCE_ROOT; };
@@ -154,6 +155,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000280000000000000001 /* libExifEditCore.a in Frameworks */,
+				DD0002020000000000000001 /* SharedUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -275,7 +277,7 @@
 				A10001430000000000000001 /* Sources/Ledger/BrowserGalleryView.swift */,
 				A10001450000000000000001 /* Sources/Ledger/BrowserListView.swift */,
 				A10001470000000000000001 /* Sources/Ledger/InspectorView.swift */,
-				A10001490000000000000001 /* Sources/Ledger/NavigationSidebarView.swift */,
+				DD0001000000000000000001 /* Sources/Ledger/LedgerSidebarTypes.swift */,
 				A100014B0000000000000001 /* Sources/Ledger/PresetSheets.swift */,
 				A100014D0000000000000001 /* Sources/Ledger/ThumbnailService.swift */,
 				A100014F0000000000000001 /* Sources/Ledger/SettingsWindowController.swift */,
@@ -343,6 +345,9 @@
 				A10000900000000000000001 /* PBXTargetDependency */,
 			);
 			name = Ledger;
+			packageProductDependencies = (
+				DD0002010000000000000001 /* SharedUI */,
+			);
 			productName = Ledger;
 			productReference = A10000010000000000000001 /* Ledger.app */;
 			productType = "com.apple.product-type.application";
@@ -413,6 +418,9 @@
 			mainGroup = A10000500000000000000001;
 			productRefGroup = A10000360000000000000001 /* Products */;
 			projectDirPath = "";
+			packageReferences = (
+				DD0002000000000000000001 /* XCLocalSwiftPackageReference "SharedUI" */,
+			);
 			projectRoot = "";
 			targets = (
 				A10000600000000000000001 /* Ledger */,
@@ -483,7 +491,7 @@
 				A10001440000000000000001 /* Sources/Ledger/BrowserGalleryView.swift in Sources */,
 				A10001460000000000000001 /* Sources/Ledger/BrowserListView.swift in Sources */,
 				A10001480000000000000001 /* Sources/Ledger/InspectorView.swift in Sources */,
-				A100014A0000000000000001 /* Sources/Ledger/NavigationSidebarView.swift in Sources */,
+				DD0001010000000000000001 /* Sources/Ledger/LedgerSidebarTypes.swift in Sources */,
 				A100014C0000000000000001 /* Sources/Ledger/PresetSheets.swift in Sources */,
 				A100014E0000000000000001 /* Sources/Ledger/ThumbnailService.swift in Sources */,
 				A10001500000000000000001 /* Sources/Ledger/SettingsWindowController.swift in Sources */,
@@ -770,6 +778,21 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		DD0002000000000000000001 /* XCLocalSwiftPackageReference "SharedUI" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../SharedUI;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		DD0002010000000000000001 /* SharedUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DD0002000000000000000001 /* XCLocalSwiftPackageReference "SharedUI" */;
+			productName = SharedUI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = A10001000000000000000001 /* Project object */;
 }
