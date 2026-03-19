@@ -10,7 +10,7 @@ enum LedgerSidebarSection: String, CaseIterable, AppKitSidebarSectionType {
     var title: String { rawValue }
 }
 
-struct LedgerSidebarItem: Hashable, AppKitSidebarItemType {
+struct LedgerSidebarItem: AppKitSidebarItemType {
     let id: String
     let section: LedgerSidebarSection
     let title: String
@@ -18,6 +18,12 @@ struct LedgerSidebarItem: Hashable, AppKitSidebarItemType {
     let badgeText: String?
     // Retained for menu predicate queries in NativeThreePaneSplitViewController.
     let kind: AppModel.SidebarKind
+
+    // Identity is the stable folder/location id — badgeText and title are display state
+    // and must not participate in equality. Without this, a count loading asynchronously
+    // would change the item's hash, causing reloadData() to fail to restore the selection.
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.id == rhs.id }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
 
     init(from item: AppModel.SidebarItem, section: LedgerSidebarSection, countText: String?) {
         self.id = item.id
