@@ -2,6 +2,7 @@
 import Combine
 import ExifEditCore
 import MapKit
+import SharedUI
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -100,7 +101,7 @@ private func observeEquatable<P: Publisher>(
 final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuItemValidation, NSMenuDelegate {
     private var model: AppModel
 
-    private let sidebarController: NSHostingController<AnyView>
+    private let sidebarController: AppKitSidebarController<LedgerSidebarSection, LedgerSidebarItem>
     private let browserController: BrowserContainerViewController
     private let inspectorController: NSHostingController<AnyView>
     private let contentSplitController: NSSplitViewController
@@ -130,16 +131,20 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     private var lastWindowSubtitleText = ""
     private var isPaneStateSyncScheduled = false
     private var isModelUIRefreshScheduled = false
+    private var isSidebarReloadScheduled = false
+    private var isSidebarSelectionSyncScheduled = false
     init(model: AppModel) {
         self.model = model
 
-        sidebarController = NSHostingController(rootView: AnyView(NavigationSidebarView(model: model).tint(AppTheme.accentColor)))
+        sidebarController = AppKitSidebarController(
+            sections: Self.buildSidebarSections(from: model),
+            items: Self.buildSidebarItems(from: model)
+        )
         browserController = BrowserContainerViewController(model: model)
         inspectorController = NSHostingController(rootView: AnyView(InspectorView(model: model).tint(AppTheme.accentColor)))
         contentSplitController = NSSplitViewController()
 
-        // Embedded hosting controllers should not drive container sizing from SwiftUI content updates.
-        sidebarController.sizingOptions = []
+        // Prevent inspector content from forcing pane expansion during SwiftUI view updates.
         inspectorController.sizingOptions = []
 
         sidebarItem = NSSplitViewItem(sidebarWithViewController: sidebarController)
@@ -174,6 +179,13 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
         addSplitViewItem(sidebarItem)
         addSplitViewItem(contentItem)
+
+        sidebarController.onSelectionChange = { [weak self] item in
+            self?.model.handleExplicitSidebarSelectionChange(to: item.id)
+        }
+        sidebarController.menuProvider = { [weak self] item in
+            self?.buildSidebarContextMenu(for: item)
+        }
 
         installUIRefreshObservers()
     }
@@ -244,6 +256,19 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         observe(model.$isInspectorCollapsed)
         observe(model.$inspectorRefreshRevision)
         observe(model.$stagedOpsDisplayToken)
+
+        // Sidebar data — rebuild and reload when the item list or image counts change.
+        observeEquatable(model.$sidebarItems, storeIn: &uiRefreshObservers) { [weak self] in
+            self?.scheduleSidebarReload()
+        }
+        observeEquatable(model.$sidebarImageCounts, storeIn: &uiRefreshObservers) { [weak self] in
+            self?.scheduleSidebarReload()
+        }
+        // Sidebar selection — sync model-driven selection changes back to the controller
+        // (e.g. when an unsaved-edits guard reverts the selection, or programmatic changes).
+        observeEquatable(model.$selectedSidebarID, storeIn: &uiRefreshObservers) { [weak self] in
+            self?.scheduleSidebarSelectionSync()
+        }
     }
 
     private func scheduleModelDrivenUIRefresh() {
@@ -255,6 +280,104 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             self.nativeToolbarDelegate?.refreshFromModel()
             self.refreshWindowTitleSubtitleIfNeeded()
         }
+    }
+
+    private func scheduleSidebarReload() {
+        guard !isSidebarReloadScheduled else { return }
+        isSidebarReloadScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isSidebarReloadScheduled = false
+            self.sidebarController.sections = Self.buildSidebarSections(from: self.model)
+            self.sidebarController.items = Self.buildSidebarItems(from: self.model)
+            self.sidebarController.reloadData()
+        }
+    }
+
+    private func scheduleSidebarSelectionSync() {
+        guard !isSidebarSelectionSyncScheduled else { return }
+        isSidebarSelectionSyncScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isSidebarSelectionSyncScheduled = false
+            let id = self.model.selectedSidebarID
+            self.sidebarController.selectItem(where: { $0.id == id })
+        }
+    }
+
+    private static func buildSidebarSections(from model: AppModel) -> [LedgerSidebarSection] {
+        LedgerSidebarSection.allCases.filter { section in
+            model.sidebarItems.contains { $0.section == section.rawValue }
+        }
+    }
+
+    private static func buildSidebarItems(from model: AppModel) -> [LedgerSidebarItem] {
+        model.sidebarItems.compactMap { item in
+            guard let section = LedgerSidebarSection(rawValue: item.section) else { return nil }
+            let countText = model.sidebarImageCounts[item.id].map { "\($0)" }
+            return LedgerSidebarItem(from: item, section: section, countText: countText)
+        }
+    }
+
+    private func buildSidebarContextMenu(for ledgerItem: LedgerSidebarItem) -> NSMenu? {
+        guard let appItem = model.sidebarItems.first(where: { $0.id == ledgerItem.id }) else {
+            return nil
+        }
+
+        let canFinder = model.canOpenSidebarItemInFinder(appItem)
+        let canPin    = model.canPinSidebarItem(appItem)
+        let canUnpin  = model.canUnpinSidebarItem(appItem)
+        let canRemove = model.canRemoveRecentSidebarItem(appItem)
+        let canUp     = model.canMoveFavoriteUp(appItem)
+        let canDown   = model.canMoveFavoriteDown(appItem)
+
+        guard canFinder || canPin || canUnpin || canRemove else { return nil }
+
+        let menu = NSMenu()
+
+        if canFinder {
+            menu.addItem(ClosureMenuItem(title: "Open in Finder", image: NSImage(systemSymbolName: "folder", accessibilityDescription: nil)) {
+                [weak self] in self?.model.openSidebarItemInFinder(appItem)
+            })
+        }
+
+        if canPin {
+            if canFinder { menu.addItem(.separator()) }
+            menu.addItem(ClosureMenuItem(title: "Pin", image: NSImage(systemSymbolName: "pin", accessibilityDescription: nil)) {
+                [weak self] in self?.model.pinSidebarItem(appItem)
+            })
+            if canRemove {
+                menu.addItem(ClosureMenuItem(title: "Remove", image: NSImage(systemSymbolName: "minus.circle", accessibilityDescription: nil)) {
+                    [weak self] in self?.model.removeRecentSidebarItem(appItem)
+                })
+            }
+        }
+
+        if canUnpin {
+            menu.addItem(ClosureMenuItem(title: "Unpin", image: NSImage(systemSymbolName: "pin.slash", accessibilityDescription: nil)) {
+                [weak self] in self?.model.unpinSidebarItem(appItem)
+            })
+            if canRemove {
+                menu.addItem(ClosureMenuItem(title: "Remove", image: NSImage(systemSymbolName: "minus.circle", accessibilityDescription: nil)) {
+                    [weak self] in self?.model.removeRecentSidebarItem(appItem)
+                })
+            }
+            if canUp || canDown {
+                menu.addItem(.separator())
+                let upItem = ClosureMenuItem(title: "Move Up", image: NSImage(systemSymbolName: "arrow.up", accessibilityDescription: nil)) {
+                    [weak self] in self?.model.moveFavoriteUp(appItem)
+                }
+                upItem.isEnabled = canUp
+                menu.addItem(upItem)
+                let downItem = ClosureMenuItem(title: "Move Down", image: NSImage(systemSymbolName: "arrow.down", accessibilityDescription: nil)) {
+                    [weak self] in self?.model.moveFavoriteDown(appItem)
+                }
+                downItem.isEnabled = canDown
+                menu.addItem(downItem)
+            }
+        }
+
+        return menu
     }
 
     override func viewDidLoad() {
@@ -1385,7 +1508,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
         let inBrowser = responderView === browserController.view || responderView.isDescendant(of: browserController.view)
         if inBrowser {
-            NotificationCenter.default.post(name: .sidebarDidRequestFocus, object: nil)
+            sidebarController.focusSidebar()
         }
     }
 
@@ -2576,6 +2699,25 @@ final class BrowserContainerViewController: NSViewController {
         }
         return NSHostingView(rootView: BrowserPlaceholderView(content: content))
     }
+}
+
+// MARK: - Closure-based NSMenuItem
+
+// Used by buildSidebarContextMenu(for:) to avoid proliferating @objc action methods.
+private final class ClosureMenuItem: NSMenuItem {
+    private let closure: () -> Void
+
+    init(title: String, image: NSImage?, _ closure: @escaping () -> Void) {
+        self.closure = closure
+        super.init(title: title, action: #selector(performClosure), keyEquivalent: "")
+        self.target = self
+        self.image = image
+    }
+
+    @available(*, unavailable)
+    required init(coder: NSCoder) { fatalError() }
+
+    @objc private func performClosure() { closure() }
 }
 
 // MARK: - Browser placeholder (SwiftUI island)
