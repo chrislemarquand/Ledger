@@ -1,4 +1,5 @@
 import AppKit
+import SharedUI
 
 @MainActor
 @main
@@ -197,7 +198,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWindow.allowsAutomaticWindowTabbing = false
         configureApplicationMenu()
         let model = AppModel()
-        settingsWindowController = SettingsWindowController(model: model)
+        settingsWindowController = SettingsWindowController(tabs: [
+            SettingsTabDescriptor(symbolName: "gearshape", label: "General",
+                viewController: GeneralSettingsViewController(model: model)),
+            SettingsTabDescriptor(symbolName: "slider.horizontal.3", label: "Inspector",
+                viewController: InspectorSettingsViewController(model: model), preferredHeight: 620),
+        ])
         let windowController = MainWindowController(model: model)
         mainWindowController = windowController
         windowController.showWindow(nil)
