@@ -98,18 +98,12 @@ private func observeEquatable<P: Publisher>(
         .store(in: &cancellables)
 }
 
-final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuItemValidation, NSMenuDelegate {
+final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NSMenuItemValidation, NSMenuDelegate {
     private var model: AppModel
 
     private let sidebarController: AppKitSidebarController<LedgerSidebarSection, LedgerSidebarItem>
     private let browserController: BrowserContainerViewController
     private let inspectorController: NSHostingController<AnyView>
-    private let contentSplitController: NSSplitViewController
-
-    private let sidebarItem: NSSplitViewItem
-    private let contentItem: NSSplitViewItem
-    private let browserItem: NSSplitViewItem
-    private let inspectorItem: NSSplitViewItem
 
     private var didConfigureWindow = false
     private var nativeToolbarDelegate: NativeToolbarDelegate?
@@ -122,68 +116,50 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     private var uiRefreshObservers: [AnyCancellable] = []
     private var spacebarMonitor: Any?
     private var browserFocusRequestObserver: NSObjectProtocol?
-    private var splitResizeObserver: NSObjectProtocol?
     private var toolbarAppearanceAdapter: ToolbarAppearanceAdapter?
-    private var didApplyInitialContentSplit = false
-    private var didApplyInitialInspectorVisibility = false
     private var lastWindowTitleText = ""
     private var lastWindowSubtitleText = ""
-    private var isPaneStateSyncScheduled = false
     private var isModelUIRefreshScheduled = false
     private var isSidebarReloadScheduled = false
     private var isSidebarSelectionSyncScheduled = false
     init(model: AppModel) {
         self.model = model
 
-        sidebarController = AppKitSidebarController(
+        let sc = AppKitSidebarController(
             sections: Self.buildSidebarSections(from: model),
             items: Self.buildSidebarItems(from: model)
         )
-        browserController = BrowserContainerViewController(model: model)
-        inspectorController = NSHostingController(rootView: AnyView(InspectorView(model: model).tint(AppTheme.accentColor)))
-        contentSplitController = NSSplitViewController()
-
+        let bc = BrowserContainerViewController(model: model)
+        let ic = NSHostingController(rootView: AnyView(InspectorView(model: model).tint(AppTheme.accentColor)))
         // Prevent inspector content from forcing pane expansion during SwiftUI view updates.
-        inspectorController.sizingOptions = []
+        ic.sizingOptions = []
 
-        sidebarItem = NSSplitViewItem(sidebarWithViewController: sidebarController)
-        contentItem = NSSplitViewItem(viewController: contentSplitController)
-        browserItem = NSSplitViewItem(viewController: browserController)
-        inspectorItem = NSSplitViewItem(viewController: inspectorController)
+        self.sidebarController = sc
+        self.browserController = bc
+        self.inspectorController = ic
 
-        super.init(nibName: nil, bundle: nil)
+        super.init(
+            sidebar: sc,
+            content: bc,
+            inspector: ic,
+            mainSplitAutosaveName: Self.mainSplitAutosaveName,
+            contentSplitAutosaveName: Self.contentSplitAutosaveName
+        )
 
-        sidebarItem.minimumThickness = 220
-        sidebarItem.maximumThickness = 430
-        sidebarItem.canCollapse = true
-        sidebarItem.allowsFullHeightLayout = true
-        sidebarItem.holdingPriority = .defaultHigh
-
-        browserItem.minimumThickness = 280
-        browserItem.holdingPriority = .defaultLow
-
-        inspectorItem.minimumThickness = 260
-        inspectorItem.maximumThickness = 900
-        inspectorItem.canCollapse = true
-        inspectorItem.holdingPriority = .defaultLow
-
-        // Prevent inspector or sidebar content from forcing pane expansion during view updates.
-        sidebarController.view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        sidebarController.view.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        inspectorController.view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        inspectorController.view.setContentHuggingPriority(.defaultLow, for: .horizontal)
-
-        contentSplitController.addSplitViewItem(browserItem)
-        contentSplitController.addSplitViewItem(inspectorItem)
-
-        addSplitViewItem(sidebarItem)
-        addSplitViewItem(contentItem)
-
-        sidebarController.onSelectionChange = { [weak self] item in
+        sc.onSelectionChange = { [weak self] item in
             self?.model.handleExplicitSidebarSelectionChange(to: item.id)
         }
-        sidebarController.menuProvider = { [weak self] item in
+        sc.menuProvider = { [weak self] item in
             self?.buildSidebarContextMenu(for: item)
+        }
+
+        onPaneStateChanged = { [weak self] in
+            guard let self else { return }
+            let sc = self.isSidebarCollapsed
+            let ic = self.isInspectorCollapsed
+            if self.model.isSidebarCollapsed != sc { self.model.isSidebarCollapsed = sc }
+            if self.model.isInspectorCollapsed != ic { self.model.isInspectorCollapsed = ic }
+            self.nativeToolbarDelegate?.refreshFromModel()
         }
 
         installUIRefreshObservers()
@@ -217,10 +193,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         if let browserFocusRequestObserver {
             NotificationCenter.default.removeObserver(browserFocusRequestObserver)
             self.browserFocusRequestObserver = nil
-        }
-        if let splitResizeObserver {
-            NotificationCenter.default.removeObserver(splitResizeObserver)
-            self.splitResizeObserver = nil
         }
         if let menuTrackingObserver {
             NotificationCenter.default.removeObserver(menuTrackingObserver)
@@ -382,14 +354,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     override func viewDidLoad() {
         super.viewDidLoad()
         resetSplitAutosaveStateIfNeeded()
-        splitView.isVertical = true
-        splitView.dividerStyle = .thin
-        splitView.autosaveName = NSSplitView.AutosaveName(Self.mainSplitAutosaveName)
-        contentSplitController.splitView.isVertical = true
-        contentSplitController.splitView.dividerStyle = .thin
-        contentSplitController.splitView.autosaveName = NSSplitView.AutosaveName(Self.contentSplitAutosaveName)
-        schedulePaneStateSync()
-        installSplitResizeObserverIfNeeded()
     }
 
     private func resetSplitAutosaveStateIfNeeded() {
@@ -406,54 +370,11 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
     override func viewDidAppear() {
         super.viewDidAppear()
-        ensureInitialInspectorVisibilityIfNeeded()
         if toolbarAppearanceAdapter == nil, let window = view.window {
             toolbarAppearanceAdapter = ToolbarAppearanceAdapter(window: window) { [weak self] in
                 self?.rebuildToolbarForCurrentAppearance()
             }
         }
-    }
-
-    override func viewDidLayout() {
-        super.viewDidLayout()
-        applyInitialContentSplitIfNeeded()
-    }
-
-    private func applyInitialContentSplitIfNeeded() {
-        guard !didApplyInitialContentSplit else { return }
-        if hasPersistedContentSplitLayout() {
-            didApplyInitialContentSplit = true
-            return
-        }
-        let split = contentSplitController.splitView
-        let panes = split.arrangedSubviews
-        guard panes.count == 2 else { return }
-
-        let totalWidth = split.bounds.width
-        guard totalWidth > 0 else { return }
-        // Avoid capturing an early transitional width before the outer split reaches its settled size.
-        let stableWidthThreshold = max(browserItem.minimumThickness + inspectorItem.minimumThickness + 240, 860)
-        guard totalWidth >= stableWidthThreshold else { return }
-
-        let browserMin = browserItem.minimumThickness
-        let inspectorMin = inspectorItem.minimumThickness
-        let browserTarget = min(max(totalWidth * 0.7, browserMin), totalWidth - inspectorMin)
-        guard browserTarget.isFinite, browserTarget > 0 else { return }
-        split.setPosition(browserTarget, ofDividerAt: 0)
-        didApplyInitialContentSplit = true
-    }
-
-    private func ensureInitialInspectorVisibilityIfNeeded() {
-        guard !didApplyInitialInspectorVisibility else { return }
-        didApplyInitialInspectorVisibility = true
-        inspectorItem.isCollapsed = false
-        schedulePaneStateSync()
-    }
-
-    private func hasPersistedContentSplitLayout() -> Bool {
-        let defaults = UserDefaults.standard
-        return defaults.object(forKey: "NSSplitView Subview Frames \(Self.contentSplitAutosaveName)") != nil
-            || defaults.object(forKey: "NSSplitView Divider Positions \(Self.contentSplitAutosaveName)") != nil
     }
 
     private func installMainToolbar(on window: NSWindow, resetDelegateState: Bool) {
@@ -493,9 +414,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 
         installMainToolbar(on: window, resetDelegateState: true)
         nativeToolbarDelegate?.refreshFromModel()
-        if sidebarItem.isCollapsed {
-            sidebarItem.isCollapsed = false
-        }
+        if isSidebarCollapsed { isSidebarCollapsed = false }
         schedulePaneStateSync()
         refreshWindowTitleSubtitleIfNeeded()
         installSpacebarQuickLookMonitorIfNeeded()
@@ -680,67 +599,10 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         }
     }
 
-    private func installSplitResizeObserverIfNeeded() {
-        guard splitResizeObserver == nil else { return }
-        splitResizeObserver = NotificationCenter.default.addObserver(
-            forName: NSSplitView.didResizeSubviewsNotification,
-            object: splitView,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.schedulePaneStateSync()
-            }
-        }
-    }
+    func isSidebarCollapsedForMenu() -> Bool { isSidebarCollapsed }
+    func isInspectorCollapsedForMenu() -> Bool { isInspectorCollapsed }
 
-    func isSidebarCollapsedForMenu() -> Bool {
-        sidebarItem.isCollapsed
-    }
-
-    func isInspectorCollapsedForMenu() -> Bool {
-        inspectorItem.isCollapsed
-    }
-
-    @objc
-    func toggleInspectorAction(_: Any?) {
-        let previousResponder = view.window?.firstResponder
-        inspectorItem.animator().isCollapsed.toggle()
-        schedulePaneStateSync()
-
-        DispatchQueue.main.async { [weak self] in
-            guard let self, let window = self.view.window else { return }
-            if let previousResponder {
-                _ = window.makeFirstResponder(previousResponder)
-            }
-        }
-    }
-
-    private func syncSidebarCollapsedState() {
-        let collapsed = sidebarItem.isCollapsed
-        if model.isSidebarCollapsed != collapsed {
-            model.isSidebarCollapsed = collapsed
-        }
-        nativeToolbarDelegate?.refreshFromModel()
-    }
-
-    private func syncInspectorCollapsedState() {
-        let collapsed = inspectorItem.isCollapsed
-        if model.isInspectorCollapsed != collapsed {
-            model.isInspectorCollapsed = collapsed
-        }
-        nativeToolbarDelegate?.refreshFromModel()
-    }
-
-    private func schedulePaneStateSync() {
-        guard !isPaneStateSyncScheduled else { return }
-        isPaneStateSyncScheduled = true
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.isPaneStateSyncScheduled = false
-            self.syncSidebarCollapsedState()
-            self.syncInspectorCollapsedState()
-        }
-    }
+    @objc func toggleInspectorAction(_ sender: Any?) { toggleInspector(sender) }
 
     private enum MenuTag {
         static let fileOpenFolder = 9_101
@@ -1400,7 +1262,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         } else if menuItem.action == #selector(flipSelectionMenuAction(_:)) {
             return !selection.isEmpty
         } else if menuItem.action == #selector(toggleInspectorAction(_:)) {
-            menuItem.title = inspectorItem.isCollapsed ? "Show Inspector" : "Hide Inspector"
+            menuItem.title = isInspectorCollapsed ? "Show Inspector" : "Hide Inspector"
         } else if menuItem.action == #selector(switchToGalleryAction(_:)) {
             menuItem.state = model.browserViewMode == .gallery ? .on : .off
         } else if menuItem.action == #selector(switchToListAction(_:)) {
@@ -2101,7 +1963,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 // Bind tracking to the inner browser/inspector divider.
                 return NSTrackingSeparatorToolbarItem(
                     identifier: .inspectorTrackingSeparator,
-                    splitView: controller.contentSplitController.splitView,
+                    splitView: controller.innerSplitView,
                     dividerIndex: 0
                 )
             case .viewMode:
@@ -2233,7 +2095,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 return item
             case .toggleInspector:
                 let item = NSToolbarItem(itemIdentifier: itemIdentifier)
-                let collapsed = controller.inspectorItem.isCollapsed
+                let collapsed = controller.isInspectorCollapsed
                 let label = collapsed ? "Show Inspector" : "Hide Inspector"
                 item.label = label
                 item.paletteLabel = "Toggle Inspector"
