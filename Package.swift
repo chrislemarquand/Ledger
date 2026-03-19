@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "ExifEdit",
     platforms: [
-        .macOS(.v15)
+        .macOS(.v26)
     ],
     products: [
         .library(name: "ExifEditCore", targets: ["ExifEditCore"]),
