@@ -1,5 +1,6 @@
 import AppKit
 import MapKit
+import SharedUI
 import SwiftUI
 
 private struct InspectorPreviewActionPressedKey: EnvironmentKey {
@@ -79,10 +80,10 @@ struct InspectorView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 if model.selectedFileURLs.isEmpty {
-                    ContentUnavailableView(
-                        "No Selection",
-                        systemImage: "slider.horizontal.3",
-                        description: Text("Select one or more images to view and edit their metadata.")
+                    PlaceholderView(
+                        symbolName: "slider.horizontal.3",
+                        title: "No Selection",
+                        description: "Select one or more images to view and edit their metadata."
                     )
                     .frame(maxWidth: .infinity)
                     .containerRelativeFrame(.vertical, alignment: .center)
