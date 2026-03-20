@@ -260,13 +260,6 @@ struct RecentLocationsStore: RecentLocationsStoreProtocol {
     }
 }
 
-enum MoveCommandDirection {
-    case up
-    case down
-    case left
-    case right
-}
-
 @MainActor
 final class AppModel: ObservableObject {
     static let galleryColumnRange = 2 ... 9

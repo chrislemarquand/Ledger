@@ -671,7 +671,7 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
 
 private final class AppKitGalleryCollectionView: NSCollectionView {
     var onBackgroundClick: (() -> Void)?
-    var onMoveSelection: ((MoveCommandDirection) -> Void)?
+    var onMoveSelection: ((SharedUI.MoveCommandDirection) -> Void)?
     var onModifiedItemClick: ((IndexPath, NSEvent.ModifierFlags) -> Void)?
     var contextMenuProvider: ((IndexPath) -> NSMenu?)?
     var onDoubleClick: ((IndexPath) -> Void)?
@@ -712,7 +712,7 @@ private final class AppKitGalleryCollectionView: NSCollectionView {
             return
         }
 
-        let direction: MoveCommandDirection?
+        let direction: SharedUI.MoveCommandDirection?
         switch event.keyCode {
         case KeyCode.leftArrow: direction = .left
         case KeyCode.rightArrow: direction = .right
