@@ -1339,7 +1339,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         return keyWindow === window
     }
 
-    private func moveDirection(forKeyCode keyCode: UInt16) -> MoveCommandDirection? {
+    private func moveDirection(forKeyCode keyCode: UInt16) -> SharedUI.MoveCommandDirection? {
         switch keyCode {
         case KeyCode.leftArrow: return .left
         case KeyCode.rightArrow: return .right
@@ -1945,52 +1945,32 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                 viewModeControl = control
                 return item
             case .browserLoading:
-                let spinner = NSProgressIndicator(frame: .zero)
-                spinner.style = .spinning
-                spinner.controlSize = .small
-                spinner.translatesAutoresizingMaskIntoConstraints = false
-                spinner.isDisplayedWhenStopped = false
-
-                let container = NSView(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
-                container.translatesAutoresizingMaskIntoConstraints = false
-                container.addSubview(spinner)
-                NSLayoutConstraint.activate([
-                    container.widthAnchor.constraint(equalToConstant: 16),
-                    container.heightAnchor.constraint(equalToConstant: 16),
-                    spinner.centerXAnchor.constraint(equalTo: container.centerXAnchor),
-                    spinner.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-                ])
-
-                let item = NSToolbarItem(itemIdentifier: itemIdentifier)
-                item.label = "Loading"
-                item.paletteLabel = "Loading"
-                item.view = container
-                item.isBordered = false
-                item.visibilityPriority = .low
+                let spinnerItem = ToolbarItemFactory.makeSpinnerItem(
+                    identifier: itemIdentifier,
+                    label: "Loading",
+                    paletteLabel: "Loading"
+                )
+                let item = spinnerItem.item
                 loadingItem = item
-                loadingSpinner = spinner
+                loadingSpinner = spinnerItem.spinner
                 updateLoadingIndicator(with: controller.model)
                 return item
             case .zoomOut:
-                let item = NSToolbarItem(itemIdentifier: itemIdentifier)
-                item.label = "Zoom Out"
-                item.paletteLabel = "Zoom Out"
-                item.image = NSImage(systemSymbolName: "minus", accessibilityDescription: "Zoom out")
-                item.autovalidates = false
-                item.target = controller
-                item.action = #selector(NativeThreePaneSplitViewController.zoomOutAction(_:))
-                item.toolTip = "Zoom out"
+                let item = ToolbarItemFactory.makeZoomItem(
+                    identifier: itemIdentifier,
+                    direction: .zoomOut,
+                    target: controller,
+                    action: #selector(NativeThreePaneSplitViewController.zoomOutAction(_:))
+                )
                 zoomOutItem = item
                 return item
             case .zoomIn:
-                let item = NSToolbarItem(itemIdentifier: itemIdentifier)
-                item.label = "Zoom In"
-                item.paletteLabel = "Zoom In"
-                item.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "Zoom in")
-                item.autovalidates = false
-                item.target = controller
-                item.action = #selector(NativeThreePaneSplitViewController.zoomInAction(_:))
-                item.toolTip = "Zoom in"
+                let item = ToolbarItemFactory.makeZoomItem(
+                    identifier: itemIdentifier,
+                    direction: .zoomIn,
+                    target: controller,
+                    action: #selector(NativeThreePaneSplitViewController.zoomInAction(_:))
+                )
                 zoomInItem = item
                 return item
             case .sort:
@@ -2053,15 +2033,15 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                 applyChangesItem = item
                 return item
             case .toggleInspector:
-                let item = NSToolbarItem(itemIdentifier: itemIdentifier)
                 let collapsed = controller.isInspectorCollapsed
                 let label = collapsed ? "Show Inspector" : "Hide Inspector"
-                item.label = label
-                item.paletteLabel = "Toggle Inspector"
-                item.image = NSImage(systemSymbolName: "sidebar.trailing", accessibilityDescription: "Show or hide the inspector")
-                item.target = controller
-                item.action = #selector(NativeThreePaneSplitViewController.toggleInspectorAction(_:))
-                item.toolTip = label
+                let item = ToolbarItemFactory.makeInspectorToggleItem(
+                    identifier: itemIdentifier,
+                    label: label,
+                    target: controller,
+                    action: #selector(NativeThreePaneSplitViewController.toggleInspectorAction(_:)),
+                    toolTip: label
+                )
                 inspectorToggleItem = item
                 return item
             default:
