@@ -190,9 +190,7 @@ struct InspectorView: View {
                                                         .font(.system(size: 6))
                                                         .foregroundStyle(.orange)
                                                 }
-                                                Text(tag.label)
-                                                    .font(.caption)
-                                                    .foregroundStyle(.secondary)
+                                                InspectorFieldLabel(tag.label)
                                             }
                                         } value: {
                                         if model.isDateTimeTag(tag) {
@@ -618,5 +616,4 @@ struct InspectorView: View {
             .map(\.id)
     }
 }
-
 

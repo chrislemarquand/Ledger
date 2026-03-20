@@ -1,6 +1,7 @@
 import AppKit
 import ExifEditCore
 import Foundation
+import SharedUI
 
 @MainActor
 extension AppModel {
@@ -152,7 +153,7 @@ extension AppModel {
                 alert.messageText = "\u{201c}\(folderName)\u{201d} No Longer Available"
                 alert.informativeText = "This folder could not be found — it may have been deleted or moved. It has been removed from \(sectionLabel) in \(AppBrand.displayName)."
                 alert.addButton(withTitle: "OK")
-                alert.runModal()
+                alert.runSheetOrModal(for: NSApp.keyWindow) { _ in }
             }
         }
 

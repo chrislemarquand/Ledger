@@ -1,6 +1,7 @@
 import AppKit
 import ExifEditCore
 import Foundation
+import SharedUI
 
 @MainActor
 extension AppModel {
@@ -11,7 +12,9 @@ extension AppModel {
         alert.informativeText = "Discard unsaved edits before \(actionDescription)?"
         alert.addButton(withTitle: "Discard Changes")
         alert.addButton(withTitle: "Cancel")
-        return alert.runModal() == .alertFirstButtonReturn
+        var response: NSApplication.ModalResponse = .abort
+        alert.runSheetOrModal(for: nil) { response = $0 }
+        return response == .alertFirstButtonReturn
     }
 
     func discardUnsavedEdits() {
@@ -241,7 +244,7 @@ extension AppModel {
                     alert.informativeText = "Metadata couldn't be written to \(images):\n\(failedNames)\n\n\(firstError)"
                     alert.alertStyle = .warning
                     alert.addButton(withTitle: "OK")
-                    alert.runModal()
+                    alert.runSheetOrModal(for: NSApp.keyWindow) { _ in }
                 }
             } else {
                 statusMessage = "Applied \(result.succeeded.count) of \(result.succeeded.count + result.failed.count) — \(result.failed.count) failed"
@@ -427,7 +430,7 @@ extension AppModel {
                     alert.informativeText = "Could not restore \(failedFiles):\n\(failedNames)\n\n\(firstError)"
                     alert.alertStyle = .warning
                     alert.addButton(withTitle: "OK")
-                    alert.runModal()
+                    alert.runSheetOrModal(for: NSApp.keyWindow) { _ in }
                 }
             } else {
                 statusMessage = "Restored \(summary.succeeded.count) of \(summary.succeeded.count + summary.failed.count) — \(summary.failed.count) failed"

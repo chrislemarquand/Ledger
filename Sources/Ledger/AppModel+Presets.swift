@@ -1,6 +1,7 @@
 import AppKit
 import ExifEditCore
 import Foundation
+import SharedUI
 
 @MainActor
 extension AppModel {
@@ -22,7 +23,7 @@ extension AppModel {
                 alert.informativeText = "Your presets were saved by a newer version of \(AppBrand.displayName) and can't be read. Update \(AppBrand.displayName) to access them."
                 alert.alertStyle = .warning
                 alert.addButton(withTitle: "OK")
-                alert.runModal()
+                alert.runSheetOrModal(for: nil) { _ in }
             }
         } catch {
             presets = []
