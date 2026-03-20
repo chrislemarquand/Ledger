@@ -187,7 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let keyWindow = NSApp.keyWindow ?? mainWindowController?.window
         if let keyWindow {
-            alert.beginSheetModal(for: keyWindow) { [weak self] response in
+            alert.runSheetOrModal(for: keyWindow) { [weak self] response in
                 guard let self else { return }
                 self.isShowingTerminateConfirmation = false
                 if response == .alertFirstButtonReturn {
@@ -200,13 +200,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                let response = alert.runModal()
-                self.isShowingTerminateConfirmation = false
-                if response == .alertFirstButtonReturn {
-                    self.allowImmediateTermination = true
-                    sender.terminate(nil)
-                } else {
-                    NSApp.activate(ignoringOtherApps: true)
+                alert.runSheetOrModal(for: nil) { response in
+                    self.isShowingTerminateConfirmation = false
+                    if response == .alertFirstButtonReturn {
+                        self.allowImmediateTermination = true
+                        sender.terminate(nil)
+                    } else {
+                        NSApp.activate(ignoringOtherApps: true)
+                    }
                 }
             }
         }

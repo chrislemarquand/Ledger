@@ -11,7 +11,7 @@ let package = Package(
         .executable(name: "ExifEditMac", targets: ["ExifEditMac"])
     ],
     dependencies: [
-        .package(path: "../SharedUI")
+        .package(url: "https://github.com/chrislemarquand/SharedUI.git", exact: "1.0.0")
     ],
     targets: [
         .target(name: "ExifEditCore"),

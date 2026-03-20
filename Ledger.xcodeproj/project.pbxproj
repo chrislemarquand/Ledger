@@ -419,7 +419,7 @@
 			productRefGroup = A10000360000000000000001 /* Products */;
 			projectDirPath = "";
 			packageReferences = (
-				DD0002000000000000000001 /* XCLocalSwiftPackageReference "SharedUI" */,
+				DD0002000000000000000001 /* XCRemoteSwiftPackageReference "SharedUI" */,
 			);
 			projectRoot = "";
 			targets = (
@@ -779,17 +779,21 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		DD0002000000000000000001 /* XCLocalSwiftPackageReference "SharedUI" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = ../SharedUI;
+/* Begin XCRemoteSwiftPackageReference section */
+		DD0002000000000000000001 /* XCRemoteSwiftPackageReference "SharedUI" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/chrislemarquand/SharedUI.git";
+			requirement = {
+				kind = exactVersion;
+				version = 1.0.0;
+			};
 		};
-/* End XCLocalSwiftPackageReference section */
+/* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		DD0002010000000000000001 /* SharedUI */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = DD0002000000000000000001 /* XCLocalSwiftPackageReference "SharedUI" */;
+			package = DD0002000000000000000001 /* XCRemoteSwiftPackageReference "SharedUI" */;
 			productName = SharedUI;
 		};
 /* End XCSwiftPackageProductDependency section */

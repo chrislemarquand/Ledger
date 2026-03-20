@@ -1,0 +1,15 @@
+{
+  "originHash" : "3868c3712806a489354f327b83b87194f807850798c0b13de66c85d0cb848f8a",
+  "pins" : [
+    {
+      "identity" : "sharedui",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/chrislemarquand/SharedUI.git",
+      "state" : {
+        "revision" : "f261d5ee7aa6bdd49f301d313b38d20183cbc560",
+        "version" : "1.0.0"
+      }
+    }
+  ],
+  "version" : 3
+}

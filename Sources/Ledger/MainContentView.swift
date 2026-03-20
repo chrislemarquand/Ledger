@@ -86,7 +86,8 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
 
         let sc = AppKitSidebarController(
             sections: Self.buildSidebarSections(from: model),
-            items: Self.buildSidebarItems(from: model)
+            items: Self.buildSidebarItems(from: model),
+            initialSelectionBehavior: .noInitialSelection
         )
         let bc = BrowserContainerViewController(model: model)
         let ic = NSHostingController(rootView: AnyView(InspectorView(model: model).tint(AppTheme.accentColor)))
@@ -231,7 +232,11 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             guard let self else { return }
             self.isSidebarSelectionSyncScheduled = false
             let id = self.model.selectedSidebarID
-            self.sidebarController.selectItem(where: { $0.id == id })
+            if let id {
+                self.sidebarController.selectItem(where: { $0.id == id })
+            } else {
+                self.sidebarController.clearSelection()
+            }
         }
     }
 
@@ -1414,7 +1419,9 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                 alert.informativeText = "Export reads current file metadata from disk. Apply staged edits first if you want them included."
                 alert.addButton(withTitle: "Cancel")
                 alert.addButton(withTitle: "Export Anyway")
-                guard alert.runModal() == .alertSecondButtonReturn else { return }
+                var response: NSApplication.ModalResponse = .abort
+                alert.runSheetOrModal(for: nil) { response = $0 }
+                guard response == .alertSecondButtonReturn else { return }
             }
 
             let panel = NSSavePanel()
@@ -1435,7 +1442,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                         alert.messageText = "Export Failed"
                         alert.informativeText = error.localizedDescription
                         alert.addButton(withTitle: "OK")
-                        alert.runModal()
+                        alert.runSheetOrModal(for: self.view.window) { _ in }
                     }
                 }
             }
@@ -1486,13 +1493,8 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                 alert.informativeText = "You have unapplied changes that won't be included. Apply them first if you want them exported."
                 alert.addButton(withTitle: "Export Anyway")
                 alert.addButton(withTitle: "Cancel")
-                if let window = view.window {
-                    alert.beginSheetModal(for: window) { response in
-                        guard response == .alertFirstButtonReturn else { return }
-                        completion(.folder, folderURLs)
-                    }
-                } else {
-                    guard alert.runModal() == .alertFirstButtonReturn else { return }
+                alert.runSheetOrModal(for: view.window) { response in
+                    guard response == .alertFirstButtonReturn else { return }
                     completion(.folder, folderURLs)
                 }
             } else {
@@ -1509,18 +1511,12 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         alert.addButton(withTitle: "Folder")
         alert.addButton(withTitle: "Cancel")
 
-        if let window = view.window {
-            alert.beginSheetModal(for: window) { response in
-                switch response {
-                case .alertFirstButtonReturn: completion(.selection, selectionURLs)
-                case .alertSecondButtonReturn: completion(.folder, folderURLs)
-                default: break
-                }
-            }
-        } else {
-            switch alert.runModal() {
-            case .alertFirstButtonReturn: completion(.selection, selectionURLs)
-            case .alertSecondButtonReturn: completion(.folder, folderURLs)
+        alert.runSheetOrModal(for: view.window) { response in
+            switch response {
+            case .alertFirstButtonReturn:
+                completion(.selection, selectionURLs)
+            case .alertSecondButtonReturn:
+                completion(.folder, folderURLs)
             default: break
             }
         }
@@ -1651,13 +1647,9 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         alert.informativeText = "Metadata changes will be written to disk. This can’t be undone."
         alert.addButton(withTitle: "Apply")
         alert.addButton(withTitle: "Cancel")
-        if let window = view.window {
-            alert.beginSheetModal(for: window) { [weak self] response in
-                guard response == .alertFirstButtonReturn else { return }
-                self?.model.applyChanges()
-            }
-        } else if alert.runModal() == .alertFirstButtonReturn {
-            model.applyChanges()
+        alert.runSheetOrModal(for: view.window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            self?.model.applyChanges()
         }
     }
 
@@ -1805,13 +1797,9 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         alert.addButton(withTitle: "Apply")
         alert.addButton(withTitle: "Cancel")
 
-        if let window = view.window {
-            alert.beginSheetModal(for: window) { [weak self] response in
-                guard response == .alertFirstButtonReturn else { return }
-                self?.model.applyPreset(presetID: preset.id)
-            }
-        } else if alert.runModal() == .alertFirstButtonReturn {
-            model.applyPreset(presetID: preset.id)
+        alert.runSheetOrModal(for: view.window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            self?.model.applyPreset(presetID: preset.id)
         }
     }
 

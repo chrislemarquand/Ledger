@@ -3,6 +3,7 @@ import ExifEditCore
 import Foundation
 import OSLog
 import Quartz
+import SharedUI
 import SwiftUI
 
 let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "ExifEdit", category: "AppModel")
@@ -694,7 +695,7 @@ final class AppModel: ObservableObject {
                 alert.informativeText = "The exiftool executable could not be found. The app bundle may be corrupted. Please reinstall \(AppBrand.displayName)."
                 alert.alertStyle = .critical
                 alert.addButton(withTitle: "OK")
-                alert.runModal()
+                alert.runSheetOrModal(for: nil) { _ in }
             }
         }
 
