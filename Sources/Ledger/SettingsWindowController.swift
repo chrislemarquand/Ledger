@@ -81,11 +81,7 @@ final class GeneralSettingsViewController: SettingsGridViewController {
             }
         }
 
-        if let window = view.window {
-            alert.beginSheetModal(for: window, completionHandler: handleResponse)
-        } else {
-            handleResponse(alert.runModal())
-        }
+        alert.runSheetOrModal(for: view.window, completion: handleResponse)
     }
 }
 

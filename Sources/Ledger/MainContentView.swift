@@ -14,22 +14,6 @@ extension Notification.Name {
     static let browserDidSwitchViewMode = Notification.Name("\(AppBrand.identifierPrefix).BrowserDidSwitchViewMode")
 }
 
-enum KeyCode {
-    static let tab: UInt16 = 48
-    static let space: UInt16 = 49
-    static let escape: UInt16 = 53
-    static let `return`: UInt16 = 36
-    static let numpadReturn: UInt16 = 76
-    static let equal: UInt16 = 24
-    static let minus: UInt16 = 27
-    static let numpadPlus: UInt16 = 69
-    static let numpadMinus: UInt16 = 78
-    static let leftArrow: UInt16 = 123
-    static let rightArrow: UInt16 = 124
-    static let downArrow: UInt16 = 125
-    static let upArrow: UInt16 = 126
-}
-
 enum UIMetrics {
     enum Sidebar {
         static let sectionItemIndent: CGFloat = 11
