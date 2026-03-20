@@ -389,8 +389,8 @@ final class AppModelTests: XCTestCase {
         }
 
         XCTAssertFalse(model.isApplyingMetadata)
-        XCTAssertTrue(model.lastResult?.failed.isEmpty ?? false)
-        XCTAssertTrue(model.lastResult?.succeeded.contains(fileURL) ?? false)
+        XCTAssertTrue(model.lastOperationFilesByID.values.contains(fileURL))
+        XCTAssertTrue(model.hasRestorableBackup(for: fileURL))
 
         // Let post-apply metadata refresh settle.
         try await Task.sleep(nanoseconds: 200_000_000)
