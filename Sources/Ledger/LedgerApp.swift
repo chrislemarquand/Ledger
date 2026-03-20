@@ -25,49 +25,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var appModel: AppModel? { mainWindowController?.appModel }
 
     func showAboutPanel() {
-        let bundle = Bundle.main
-        let appName = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
-            ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
-            ?? AppBrand.displayName
-        let shortVersion = (bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.0"
         let exifToolVersion = bundledExifToolVersion() ?? "Unknown"
-
-        let purpose = "Edit photo metadata — EXIF, IPTC, and XMP — powered by ExifTool."
-        let nativeFont = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
-        let nativeColor = NSColor.secondaryLabelColor
-        let centred = NSMutableParagraphStyle()
-        centred.alignment = .center
-        let baseAttributes: [NSAttributedString.Key: Any] = [
-            .font: nativeFont,
-            .foregroundColor: nativeColor,
-            .paragraphStyle: centred
-        ]
-        let credits = NSMutableAttributedString(
-            string: "\(purpose)\n\nUses ExifTool \(exifToolVersion) by Phil Harvey\n",
-            attributes: baseAttributes
-        )
-        let linkText = "https://exiftool.org/"
-        let linkRange = NSRange(location: credits.length, length: (linkText as NSString).length)
-        credits.append(NSAttributedString(
-            string: linkText,
-            attributes: baseAttributes
-        ))
-        credits.addAttributes(
-            [
-                .link: linkText,
-                .underlineStyle: NSUnderlineStyle.single.rawValue
+        SharedUI.showAboutPanel(
+            purpose: "Edit photo metadata — EXIF, IPTC, and XMP — powered by ExifTool.",
+            credits: [
+                AboutPanelCredit(text: "Uses ExifTool \(exifToolVersion) by Phil Harvey", linkURL: "https://exiftool.org/"),
             ],
-            range: linkRange
+            copyright: "© 2026 Chris Le Marquand"
         )
-
-        let options: [NSApplication.AboutPanelOptionKey: Any] = [
-            .applicationName: appName,
-            .applicationVersion: shortVersion,
-            .credits: credits,
-            NSApplication.AboutPanelOptionKey(rawValue: "Copyright"): "© 2026 Chris Le Marquand",
-        ]
-        NSApp.orderFrontStandardAboutPanel(options: options)
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc
@@ -152,6 +117,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
+    }
+
+    func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
         true
     }
 

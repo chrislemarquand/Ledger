@@ -804,7 +804,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
 
     func applySelection(isSelected: Bool) {
         selectionBackgroundView.layer?.backgroundColor = isSelected
-            ? AppTheme.accentStrongNSColor.withAlphaComponent(0.22).cgColor
+            ? AppTheme.accentNSColor.withAlphaComponent(0.22).cgColor
             : NSColor.clear.cgColor
     }
 
