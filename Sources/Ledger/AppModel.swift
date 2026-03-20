@@ -100,27 +100,11 @@ enum AppBrand {
 
 enum AppTheme {
     static var accentNSColor: NSColor {
-        NSColor(named: "BrandAccent") ?? .systemTeal
-    }
-
-    static var accentStrongNSColor: NSColor {
-        NSColor(named: "BrandAccentStrong") ?? accentNSColor
-    }
-
-    static var accentSoftNSColor: NSColor {
-        NSColor(named: "BrandAccentSoft") ?? accentNSColor.withAlphaComponent(0.18)
+        NSColor(named: "AccentColor") ?? .systemTeal
     }
 
     static var accentColor: Color {
         Color(nsColor: accentNSColor)
-    }
-
-    static var accentStrongColor: Color {
-        Color(nsColor: accentStrongNSColor)
-    }
-
-    static var accentSoftColor: Color {
-        Color(nsColor: accentSoftNSColor)
     }
 }
 
