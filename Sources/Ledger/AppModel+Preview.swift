@@ -2,6 +2,7 @@ import AppKit
 import ExifEditCore
 import Foundation
 import Quartz
+import SharedUI
 
 @MainActor
 final class QuickLookPreviewController: NSObject, @preconcurrency QLPreviewPanelDataSource, @preconcurrency QLPreviewPanelDelegate {
@@ -138,10 +139,10 @@ final class QuickLookPreviewController: NSObject, @preconcurrency QLPreviewPanel
 
         switch event.keyCode {
         case 123, 126: // left, up
-            let direction: MoveCommandDirection = event.keyCode == 123 ? .left : .up
+            let direction: SharedUI.MoveCommandDirection = event.keyCode == 123 ? .left : .up
             return moveSelection(in: panel, direction: direction)
         case 124, 125: // right, down
-            let direction: MoveCommandDirection = event.keyCode == 124 ? .right : .down
+            let direction: SharedUI.MoveCommandDirection = event.keyCode == 124 ? .right : .down
             return moveSelection(in: panel, direction: direction)
         default:
             return false
@@ -153,7 +154,7 @@ final class QuickLookPreviewController: NSObject, @preconcurrency QLPreviewPanel
         model?.setSelectionFromQuickLook(sourceItems[index])
     }
 
-    private func moveSelection(in panel: QLPreviewPanel, direction: MoveCommandDirection) -> Bool {
+    private func moveSelection(in panel: QLPreviewPanel, direction: SharedUI.MoveCommandDirection) -> Bool {
         guard !sourceItems.isEmpty else { return false }
 
         if let model {

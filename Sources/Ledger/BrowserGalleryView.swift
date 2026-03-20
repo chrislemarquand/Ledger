@@ -1,5 +1,6 @@
 @preconcurrency import AppKit
 import ExifEditCore
+import SharedUI
 
 @MainActor
 final class BrowserGalleryViewController: NSViewController, NSCollectionViewDataSource, NSCollectionViewDelegate {
@@ -7,8 +8,11 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
     private var items: [AppModel.BrowserItem]
 
     private let scrollView = NSScrollView()
-    private let collectionView = AppKitGalleryCollectionView()
-    private var layout = AppKitGalleryLayout()
+    private let collectionView = SharedGalleryCollectionView()
+    private var layout = SharedGalleryLayout(
+        showsSupplementaryDetail: true,
+        supplementaryDetailHeight: UIMetrics.Gallery.titleGap + 22
+    )
 
     private var isApplyingProgrammaticSelection = false
     private var contextMenuTargetURLs: [URL] = []
@@ -21,9 +25,7 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
     private var pendingThumbnailRefreshURLs: Set<URL> = []
     private var isRenderingState = false
     private var zoomRestoreToken = 0
-    private var pinchAccumulator: CGFloat = 0
-    private var lastMagnification: CGFloat = 0
-    private let pinchThreshold: CGFloat = 0.14
+    private let pinchZoomAccumulator = PinchZoomAccumulator()
     private var browserFocusObserver: NSObjectProtocol?
     private var viewModeObserver: NSObjectProtocol?
     private var lastRenderedViewMode: AppModel.BrowserViewMode?
@@ -126,8 +128,10 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
         collectionView.onBackgroundClick = { [weak self] in
             self?.model.clearSelection()
         }
-        collectionView.onMoveSelection = { [weak self] direction in
-            self?.model.moveSelectionInGallery(direction: direction, extendingSelection: false)
+        collectionView.allowsShiftExtendedMovement = false
+        collectionView.handlesActivateOnReturn = true
+        collectionView.onMoveSelection = { [weak self] direction, extendingSelection in
+            self?.model.moveSelectionInGallery(direction: direction, extendingSelection: extendingSelection)
         }
         collectionView.onDoubleClick = { [weak self] indexPath in
             guard let self, indexPath.item >= 0, indexPath.item < self.items.count else { return }
@@ -502,26 +506,14 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
 
     @objc
     private func handleMagnification(_ gesture: NSMagnificationGestureRecognizer) {
-        switch gesture.state {
-        case .began:
-            pinchAccumulator = 0
-            lastMagnification = 0
-        case .changed:
-            let delta = gesture.magnification - lastMagnification
-            lastMagnification = gesture.magnification
-            pinchAccumulator += delta
-
-            while pinchAccumulator >= pinchThreshold {
-                model.adjustGalleryGridLevel(by: -1)
-                pinchAccumulator -= pinchThreshold
+        pinchZoomAccumulator.handle(gesture) { [weak self] step in
+            guard let self else { return }
+            switch step {
+            case .zoomIn:
+                self.model.adjustGalleryGridLevel(by: -1)
+            case .zoomOut:
+                self.model.adjustGalleryGridLevel(by: 1)
             }
-            while pinchAccumulator <= -pinchThreshold {
-                model.adjustGalleryGridLevel(by: 1)
-                pinchAccumulator += pinchThreshold
-            }
-        default:
-            pinchAccumulator = 0
-            lastMagnification = 0
         }
     }
 
@@ -668,129 +660,15 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
     }
 }
 
-private final class AppKitGalleryCollectionView: NSCollectionView {
-    var onBackgroundClick: (() -> Void)?
-    var onMoveSelection: ((MoveCommandDirection) -> Void)?
-    var onModifiedItemClick: ((IndexPath, NSEvent.ModifierFlags) -> Void)?
-    var contextMenuProvider: ((IndexPath) -> NSMenu?)?
-    var onDoubleClick: ((IndexPath) -> Void)?
-    var onActivateSelection: (() -> Void)?
-
-    override func mouseDown(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
-        guard let indexPath = indexPathForItem(at: point) else {
-            deselectAll(nil)
-            onBackgroundClick?()
-            return
-        }
-        let selectionModifiers = event.modifierFlags.intersection([.command, .shift])
-        if !selectionModifiers.isEmpty {
-            onModifiedItemClick?(indexPath, selectionModifiers)
-            return
-        }
-        super.mouseDown(with: event)
-        if event.clickCount == 2 {
-            onDoubleClick?(indexPath)
-        }
-    }
-
-    override func keyDown(with event: NSEvent) {
-        guard event.modifierFlags.intersection([.command, .control, .option, .shift, .function]).isEmpty else {
-            super.keyDown(with: event)
-            return
-        }
-
-        if event.keyCode == KeyCode.escape {
-            deselectAll(nil)
-            onBackgroundClick?()
-            return
-        }
-
-        if event.keyCode == KeyCode.return || event.keyCode == KeyCode.numpadReturn {
-            onActivateSelection?()
-            return
-        }
-
-        let direction: MoveCommandDirection?
-        switch event.keyCode {
-        case KeyCode.leftArrow: direction = .left
-        case KeyCode.rightArrow: direction = .right
-        case KeyCode.downArrow: direction = .down
-        case KeyCode.upArrow: direction = .up
-        default: direction = nil
-        }
-
-        if let direction {
-            onMoveSelection?(direction)
-            return
-        }
-        super.keyDown(with: event)
-    }
-
-    override func menu(for event: NSEvent) -> NSMenu? {
-        let point = convert(event.locationInWindow, from: nil)
-        guard let indexPath = indexPathForItem(at: point) else { return nil }
-        return contextMenuProvider?(indexPath)
-    }
-}
-
-private final class AppKitGalleryLayout: NSCollectionViewFlowLayout {
-    var columnCount: Int = 4 {
-        didSet {
-            if oldValue != columnCount {
-                invalidateLayout()
-            }
-        }
-    }
-
-    private let defaultInsets = NSEdgeInsets(top: 18, left: 18, bottom: 18, right: 18)
-    private let horizontalSpacing: CGFloat = 14
-    private let verticalSpacing: CGFloat = 16
-    private let titleHeight: CGFloat = 22
-    private let titleGap: CGFloat = 6
-
-    var tileSide: CGFloat {
-        max(40, floor(itemSize.width))
-    }
-
-    override init() {
-        super.init()
-        sectionInset = defaultInsets
-        minimumInteritemSpacing = horizontalSpacing
-        minimumLineSpacing = verticalSpacing
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func prepare() {
-        super.prepare()
-        guard let collectionView else { return }
-
-        let columns = max(columnCount, 1)
-        let usableWidth = max(
-            collectionView.bounds.width - sectionInset.left - sectionInset.right - CGFloat(columns - 1) * minimumInteritemSpacing,
-            1
-        )
-        let side = max(1, floor(usableWidth / CGFloat(columns)))
-        itemSize = NSSize(width: side, height: side + titleGap + titleHeight)
-    }
-
-    override func shouldInvalidateLayout(forBoundsChange newBounds: NSRect) -> Bool {
-        true
-    }
-}
-
 private final class AppKitGalleryItem: NSCollectionViewItem {
     static let reuseIdentifier = NSUserInterfaceItemIdentifier("AppKitGalleryItem")
-    private let imageInset: CGFloat = 4
+    private let imageInset: CGFloat = GalleryMetrics.default.imageInset
+    private let thumbnailCornerRadius: CGFloat = GalleryMetrics.default.thumbnailCornerRadius
 
     private let selectionBackgroundView = NSView(frame: .zero)
     let thumbnailImageView = NSImageView(frame: .zero)
     private let thumbnailContainer = NSView(frame: .zero)
-    private let pendingDot = NSImageView(frame: .zero)
+    private var pendingDot: NSImageView?
     private let titleField = NSTextField(labelWithString: "")
     private var preferredAspectRatio: CGFloat?
     private var currentTileSide: CGFloat = 40
@@ -822,7 +700,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
 
         selectionBackgroundView.translatesAutoresizingMaskIntoConstraints = false
         selectionBackgroundView.wantsLayer = true
-        selectionBackgroundView.layer?.cornerRadius = UIMetrics.Gallery.thumbnailCornerRadius
+        selectionBackgroundView.layer?.cornerRadius = thumbnailCornerRadius
         selectionBackgroundView.layer?.masksToBounds = true
         selectionBackgroundView.layer?.backgroundColor = NSColor.clear.cgColor
         thumbnailContainer.addSubview(selectionBackgroundView, positioned: .below, relativeTo: thumbnailImageView)
@@ -834,15 +712,19 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         thumbnailImageView.translatesAutoresizingMaskIntoConstraints = false
         thumbnailImageView.imageScaling = .scaleProportionallyUpOrDown
         thumbnailImageView.wantsLayer = true
-        thumbnailImageView.layer?.cornerRadius = UIMetrics.Gallery.thumbnailCornerRadius
+        thumbnailImageView.layer?.cornerRadius = thumbnailCornerRadius
         thumbnailImageView.layer?.masksToBounds = true
         thumbnailContainer.addSubview(thumbnailImageView)
 
-        pendingDot.translatesAutoresizingMaskIntoConstraints = false
-        pendingDot.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: nil)
-        pendingDot.contentTintColor = .systemOrange
-        pendingDot.isHidden = true
-        thumbnailContainer.addSubview(pendingDot)
+        pendingDot = makeGalleryOverlaySymbol(
+            in: thumbnailImageView,
+            symbolName: "circle.fill",
+            tintColor: .systemOrange,
+            position: .topLeading,
+            size: UIMetrics.Gallery.pendingDotSize,
+            inset: UIMetrics.Gallery.pendingDotInset
+        )
+        pendingDot?.isHidden = true
 
         titleField.translatesAutoresizingMaskIntoConstraints = false
         titleField.alignment = .center
@@ -864,11 +746,6 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
 
             thumbnailImageView.centerXAnchor.constraint(equalTo: thumbnailContainer.centerXAnchor),
             thumbnailImageView.centerYAnchor.constraint(equalTo: thumbnailContainer.centerYAnchor),
-
-            pendingDot.widthAnchor.constraint(equalToConstant: UIMetrics.Gallery.pendingDotSize),
-            pendingDot.heightAnchor.constraint(equalToConstant: UIMetrics.Gallery.pendingDotSize),
-            pendingDot.leadingAnchor.constraint(equalTo: thumbnailImageView.leadingAnchor, constant: UIMetrics.Gallery.pendingDotInset),
-            pendingDot.topAnchor.constraint(equalTo: thumbnailImageView.topAnchor, constant: UIMetrics.Gallery.pendingDotInset),
 
             titleField.topAnchor.constraint(equalTo: thumbnailContainer.bottomAnchor, constant: UIMetrics.Gallery.titleGap),
             titleField.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -932,7 +809,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
     }
 
     func applyPending(hasPendingEdits: Bool) {
-        pendingDot.isHidden = !hasPendingEdits
+        pendingDot?.isHidden = !hasPendingEdits
     }
 
     func setImage(_ image: NSImage?, animated: Bool = true) {
