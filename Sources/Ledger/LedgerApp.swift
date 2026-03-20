@@ -1,4 +1,5 @@
 import AppKit
+import SharedUI
 
 @MainActor
 @main
@@ -94,70 +95,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mainMenu.insertItem(appMenuItem, at: 0)
         }
         appMenuItem.title = appName
-
-        let appMenu = appMenuItem.submenu ?? NSMenu(title: appName)
-        appMenuItem.submenu = appMenu
-        appMenu.removeAllItems()
-
-        let aboutItem = NSMenuItem(
-            title: "About \(appName)",
-            action: #selector(showAboutPanelMenuAction(_:)),
-            keyEquivalent: ""
+        appMenuItem.submenu = makeStandardAppMenu(
+            appName: appName,
+            aboutAction: #selector(showAboutPanelMenuAction(_:)),
+            settingsAction: #selector(showSettingsWindowAction(_:))
         )
-        aboutItem.target = self
-        aboutItem.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: nil)
-        appMenu.addItem(aboutItem)
-        appMenu.addItem(.separator())
-
-        let settingsItem = NSMenuItem(
-            title: "Settings…",
-            action: #selector(showSettingsWindowAction(_:)),
-            keyEquivalent: ","
-        )
-        settingsItem.keyEquivalentModifierMask = .command
-        settingsItem.target = nil
-        settingsItem.image = NSImage(systemSymbolName: "gear", accessibilityDescription: nil)
-        appMenu.addItem(settingsItem)
-        appMenu.addItem(.separator())
-
-        let servicesRoot = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
-        let servicesMenu = NSMenu(title: "Services")
-        servicesRoot.submenu = servicesMenu
-        NSApp.servicesMenu = servicesMenu
-        appMenu.addItem(servicesRoot)
-        appMenu.addItem(.separator())
-
-        let hideItem = NSMenuItem(
-            title: "Hide \(appName)",
-            action: #selector(NSApplication.hide(_:)),
-            keyEquivalent: "h"
-        )
-        hideItem.keyEquivalentModifierMask = .command
-        appMenu.addItem(hideItem)
-
-        let hideOthersItem = NSMenuItem(
-            title: "Hide Others",
-            action: #selector(NSApplication.hideOtherApplications(_:)),
-            keyEquivalent: "h"
-        )
-        hideOthersItem.keyEquivalentModifierMask = [.command, .option]
-        appMenu.addItem(hideOthersItem)
-
-        let showAllItem = NSMenuItem(
-            title: "Show All",
-            action: #selector(NSApplication.unhideAllApplications(_:)),
-            keyEquivalent: ""
-        )
-        appMenu.addItem(showAllItem)
-        appMenu.addItem(.separator())
-
-        let quitItem = NSMenuItem(
-            title: "Quit \(appName)",
-            action: #selector(NSApplication.terminate(_:)),
-            keyEquivalent: "q"
-        )
-        quitItem.keyEquivalentModifierMask = .command
-        appMenu.addItem(quitItem)
     }
 
     private func bundledExifToolVersion() -> String? {
@@ -197,7 +139,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWindow.allowsAutomaticWindowTabbing = false
         configureApplicationMenu()
         let model = AppModel()
-        settingsWindowController = SettingsWindowController(model: model)
+        settingsWindowController = SettingsWindowController(tabs: [
+            SettingsTabDescriptor(symbolName: "gearshape", label: "General",
+                viewController: GeneralSettingsViewController(model: model)),
+            SettingsTabDescriptor(symbolName: "slider.horizontal.3", label: "Inspector",
+                viewController: InspectorSettingsViewController(model: model), preferredHeight: 620),
+        ])
         let windowController = MainWindowController(model: model)
         mainWindowController = windowController
         windowController.showWindow(nil)
@@ -240,7 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let keyWindow = NSApp.keyWindow ?? mainWindowController?.window
         if let keyWindow {
-            alert.beginSheetModal(for: keyWindow) { [weak self] response in
+            alert.runSheetOrModal(for: keyWindow) { [weak self] response in
                 guard let self else { return }
                 self.isShowingTerminateConfirmation = false
                 if response == .alertFirstButtonReturn {
@@ -253,13 +200,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                let response = alert.runModal()
-                self.isShowingTerminateConfirmation = false
-                if response == .alertFirstButtonReturn {
-                    self.allowImmediateTermination = true
-                    sender.terminate(nil)
-                } else {
-                    NSApp.activate(ignoringOtherApps: true)
+                alert.runSheetOrModal(for: nil) { response in
+                    self.isShowingTerminateConfirmation = false
+                    if response == .alertFirstButtonReturn {
+                        self.allowImmediateTermination = true
+                        sender.terminate(nil)
+                    } else {
+                        NSApp.activate(ignoringOtherApps: true)
+                    }
                 }
             }
         }
@@ -275,14 +223,14 @@ final class MainWindowController: NSWindowController {
         appModel = model
         let contentController = NativeThreePaneSplitViewController(model: model)
         let window = NSWindow(contentViewController: contentController)
-        window.setContentSize(NSSize(width: 1300, height: 800))
-        window.minSize = NSSize(width: 1200, height: 720)
+        window.setContentSize(ThreePaneSplitViewController.Metrics.windowDefault)
+        window.minSize = ThreePaneSplitViewController.Metrics.windowMinimum
         window.title = AppBrand.displayName
         window.isReleasedWhenClosed = false
         window.isRestorable = true
         window.setFrameAutosaveName("\(AppBrand.identifierPrefix).MainWindow")
+        window.center()
         super.init(window: window)
-        shouldCascadeWindows = true
     }
 
     @available(*, unavailable)

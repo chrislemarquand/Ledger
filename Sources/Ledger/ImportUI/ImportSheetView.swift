@@ -1,4 +1,5 @@
 import AppKit
+import SharedUI
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -309,7 +310,7 @@ final class ImportSession: ObservableObject {
         alert.messageText = title
         alert.informativeText = message
         alert.addButton(withTitle: "OK")
-        alert.runModal()
+        alert.runSheetOrModal(for: NSApp.keyWindow) { _ in }
     }
 
     /// Tag IDs that actually appear in the parsed data. Nil until a run is prepared.
@@ -589,7 +590,8 @@ final class ImportSession: ObservableObject {
         alert.addButton(withTitle: "Use Lens")
         alert.addButton(withTitle: "Cancel")
 
-        let response = alert.runModal()
+        var response: NSApplication.ModalResponse = .abort
+        alert.runSheetOrModal(for: nil) { response = $0 }
         guard response == .alertFirstButtonReturn,
               let selectedLens = popup.titleOfSelectedItem,
               !CSVSupport.trim(selectedLens).isEmpty
