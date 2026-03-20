@@ -835,7 +835,6 @@ struct ImportSheetView: View {
     @State private var showFields = false
     @State private var showAdvanced = false
     @State private var showPreview = false
-    @State private var showInfo = false
     @State private var importProgress: Double?
     @State private var isPostImportReviewMode = false
 
@@ -846,27 +845,7 @@ struct ImportSheetView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Title with inline ⓘ
-            HStack(spacing: 6) {
-                Text("Import from \(sourceKind.title)")
-                    .font(.title3.weight(.semibold))
-                Button {
-                    showInfo.toggle()
-                } label: {
-                    Image(systemName: "info.circle")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .popover(isPresented: $showInfo) {
-                    Text(infoText)
-                        .font(.callout)
-                        .padding()
-                        .frame(minWidth: 260, maxWidth: 340)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
+        WorkflowSheetContainer(title: "Import from \(sourceKind.title)", infoText: infoText) {
             // File picker row
             HStack {
                 TextField("", text: .constant(session.options.sourceURLPath ?? ""))
@@ -880,7 +859,7 @@ struct ImportSheetView: View {
 
             // Options row: Apply to | If no match
             HStack(alignment: .top, spacing: 28) {
-                optionGroup("Apply to:") {
+                WorkflowOptionGroup("Apply to:") {
                     Picker("", selection: $session.options.scope) {
                         Text("Folder").tag(ImportScope.folder)
                         Text(selectionLabel).tag(ImportScope.selection)
@@ -890,7 +869,7 @@ struct ImportSheetView: View {
                     .disabled(isPostImportReviewMode)
                 }
 
-                optionGroup("If no match:") {
+                WorkflowOptionGroup("If no match:") {
                     Picker("", selection: $session.options.emptyValuePolicy) {
                         Text("Clear").tag(ImportEmptyValuePolicy.clear)
                         Text("Skip").tag(ImportEmptyValuePolicy.skip)
@@ -902,11 +881,7 @@ struct ImportSheetView: View {
             }
 
             if let banner = activeBanner {
-                InlineSheetMessageBanner(
-                    tone: banner.tone,
-                    title: banner.title,
-                    messages: banner.messages
-                )
+                WorkflowInlineMessageBanner(messages: banner)
             }
 
             ProgressView(value: importProgress ?? 0)
@@ -957,9 +932,6 @@ struct ImportSheetView: View {
                 .disabled(isPostImportReviewMode ? false : (session.options.sourceURL == nil || session.isBusy || importProgress != nil))
             }
         }
-        .fixedSize(horizontal: false, vertical: true)
-        .padding(20)
-        .frame(width: 560)
         .onChange(of: session.options.sourceURLPath) { _, _ in
             isPostImportReviewMode = false
             session.schedulePreviewRefresh(model: model)
@@ -994,30 +966,18 @@ struct ImportSheetView: View {
         return count > 0 ? "Selection (\(count))" : "Selection"
     }
 
-    private var activeBanner: (tone: InlineSheetMessageTone, title: String, messages: [String])? {
+    private var activeBanner: [String]? {
         if isPostImportReviewMode, session.requiresPostImportReview, let report = session.importReport {
-            return (
-                .warning,
-                "Import completed with issues",
-                [
-                    "\(report.summary.warningCount) warnings · \(report.summary.conflictCount) conflicts",
-                    "Review Details… before closing.",
-                ]
-            )
+            return [
+                "\(report.summary.warningCount) warnings · \(report.summary.conflictCount) conflicts",
+                "Review Details… before closing.",
+            ]
         }
         if !session.rowOrderFallbackWarnings.isEmpty {
-            return (
-                .warning,
-                "Matching images by position",
-                ["Images will be matched to CSV rows in order rather than by filename. Check the preview carefully."]
-            )
+            return ["Images will be matched to CSV rows in order rather than by filename. Check the preview carefully."]
         }
         if session.shouldShowEOSLensDependencyBanner {
-            return (
-                .info,
-                "Lens Model requires Focal Length",
-                ["Enable Focal Length in Fields to include lens tags."]
-            )
+            return ["Lens Model requires Focal Length — enable it in Fields to include lens tags."]
         }
         return nil
     }
@@ -1033,16 +993,6 @@ struct ImportSheetView: View {
     }
 
     // MARK: - View Helpers
-
-    @ViewBuilder
-    private func optionGroup(_ title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            content()
-        }
-    }
 
     @ViewBuilder
     private var fieldsPopover: some View {
@@ -1292,44 +1242,6 @@ struct ImportSheetView: View {
                 if session.shouldEnterPostImportReview {
                     isPostImportReviewMode = true
                 }
-            }
-        }
-    }
-}
-
-enum InlineSheetMessageTone {
-    case info
-    case warning
-    case error
-}
-
-struct InlineSheetMessageBanner: View {
-    let tone: InlineSheetMessageTone
-    let title: String
-    let messages: [String]
-
-    private var iconName: String {
-        switch tone {
-        case .info:
-            return "info.circle.fill"
-        case .warning:
-            return "exclamationmark.triangle.fill"
-        case .error:
-            return "xmark.octagon.fill"
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Label(title, systemImage: iconName)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            ForEach(messages, id: \.self) { message in
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.leading, 20)
             }
         }
     }
