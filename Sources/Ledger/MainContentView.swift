@@ -1289,36 +1289,25 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     }
 
     private func shouldHandlePaneTabSwitchCommands() -> Bool {
-        guard let window = view.window else { return false }
-        guard canHandleBrowserShortcuts(in: window) else { return false }
-
-        if let textView = window.firstResponder as? NSTextView, textView.isEditable {
-            return false
-        }
-
-        guard let responderView = window.firstResponder as? NSView else { return false }
-        let inBrowser = responderView === browserController.view || responderView.isDescendant(of: browserController.view)
-        let inSidebar = responderView === sidebarController.view || responderView.isDescendant(of: sidebarController.view)
-        return inBrowser || inSidebar
+        KeyboardShortcutSupport.shouldHandlePaneTabSwitch(
+            in: view.window,
+            sidebarView: sidebarController.view,
+            contentView: browserController.view
+        )
     }
 
     private func togglePaneFocusBetweenSidebarAndBrowser() {
-        guard let window = view.window,
-              let responderView = window.firstResponder as? NSView
-        else {
-            return
-        }
-
-        let inSidebar = responderView === sidebarController.view || responderView.isDescendant(of: sidebarController.view)
-        if inSidebar {
-            focusBrowserPane()
-            return
-        }
-
-        let inBrowser = responderView === browserController.view || responderView.isDescendant(of: browserController.view)
-        if inBrowser {
-            sidebarController.focusSidebar()
-        }
+        KeyboardShortcutSupport.togglePaneFocus(
+            in: view.window,
+            sidebarView: sidebarController.view,
+            contentView: browserController.view,
+            focusSidebar: { [weak self] in
+                self?.sidebarController.focusSidebar()
+            },
+            focusContent: { [weak self] in
+                self?.focusBrowserPane()
+            }
+        )
     }
 
     private func focusBrowserPane() {
@@ -1328,19 +1317,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     }
 
     private func canHandleBrowserShortcuts(in window: NSWindow) -> Bool {
-        // If any app-modal panel (e.g. NSOpenPanel.runModal) is active, browser shortcuts must be disabled.
-        if NSApp.modalWindow != nil {
-            return false
-        }
-
-        // If our window is presenting a sheet (e.g. preset editor), don't route keyboard shortcuts to the browser.
-        if window.attachedSheet != nil {
-            return false
-        }
-
-        // Only handle browser shortcuts while our main split window is key.
-        guard let keyWindow = NSApp.keyWindow else { return false }
-        return keyWindow === window
+        KeyboardShortcutSupport.canHandleWindowShortcuts(in: window)
     }
 
     private func moveDirection(forKeyCode keyCode: UInt16) -> SharedUI.MoveCommandDirection? {
