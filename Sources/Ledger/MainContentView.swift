@@ -381,6 +381,9 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         if isSidebarCollapsed { isSidebarCollapsed = false }
         schedulePaneStateSync()
         refreshWindowTitleSubtitleIfNeeded()
+        installContentKeyboardMonitor(contentView: browserController.view) { [weak self] in
+            self?.model.quickLookSelection()
+        }
         installSpacebarQuickLookMonitorIfNeeded()
         installBrowserFocusRequestObserverIfNeeded()
         DispatchQueue.main.async { [weak self] in
@@ -484,10 +487,6 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             case KeyCode.escape:
                 guard modifiers.isEmpty else { return event }
                 model.clearSelection()
-                return nil
-            case KeyCode.space:
-                guard modifiers.intersection([.command, .control, .option, .function]).isEmpty else { return event }
-                model.quickLookSelection()
                 return nil
             case _ where event.characters == "a":
                 guard modifiers == [.command] else { return event }
