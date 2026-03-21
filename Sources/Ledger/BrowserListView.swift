@@ -449,20 +449,20 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
     private func menuForRow(_ row: Int) -> NSMenu? {
         guard row >= 0, row < items.count else { return nil }
         let clickedURL = items[row].url
+        let selectedURLs = model.selectedFileURLs
+        let orderedURLs = items.map(\.url)
 
-        let targetURLs: [URL]
-        if model.selectedFileURLs.contains(clickedURL) {
-            targetURLs = items.compactMap { item in
-                model.selectedFileURLs.contains(item.url) ? item.url : nil
-            }
-        } else {
-            targetURLs = [clickedURL]
-            model.setSelectionFromList(Set(targetURLs), focusedURL: clickedURL)
+        if !selectedURLs.contains(clickedURL) {
+            model.setSelectionFromList([clickedURL], focusedURL: clickedURL)
             isApplyingProgrammaticSelection = true
             tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
             isApplyingProgrammaticSelection = false
         }
-
+        let targetURLs = ContextMenuSupport.targetSelection(
+            clicked: clickedURL,
+            selected: selectedURLs,
+            orderedItems: orderedURLs
+        )
         contextMenuTargetURLs = targetURLs
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -473,25 +473,19 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
         let restoreState = model.fileActionState(for: .restoreFromLastBackup, targetURLs: targetURLs)
         let applyTitle = model.applyMetadataSelectionTitle(for: targetURLs)
 
-        func makeItem(title: String, action: Selector, symbolName: String, isEnabled: Bool) -> NSMenuItem {
-            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-            item.target = self
-            item.isEnabled = isEnabled
-            item.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
-            return item
-        }
-
-        let openItem = makeItem(
+        let openItem = ContextMenuSupport.makeMenuItem(
             title: openState.title,
             action: #selector(openFromContextMenu(_:)),
+            target: self,
             symbolName: openState.symbolName,
             isEnabled: openState.isEnabled
         )
         menu.addItem(openItem)
 
-        let revealItem = makeItem(
+        let revealItem = ContextMenuSupport.makeMenuItem(
             title: "Reveal in Finder",
             action: #selector(revealInFinderFromContextMenu(_:)),
+            target: self,
             symbolName: "folder",
             isEnabled: !targetURLs.isEmpty
         )
@@ -499,33 +493,37 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
 
         menu.addItem(.separator())
 
-        let applyItem = makeItem(
+        let applyItem = ContextMenuSupport.makeMenuItem(
             title: applyTitle,
             action: #selector(applyFromContextMenu(_:)),
+            target: self,
             symbolName: applyState.symbolName,
             isEnabled: applyState.isEnabled
         )
         menu.addItem(applyItem)
 
-        let refreshItem = makeItem(
+        let refreshItem = ContextMenuSupport.makeMenuItem(
             title: refreshState.title,
             action: #selector(refreshFromContextMenu(_:)),
+            target: self,
             symbolName: refreshState.symbolName,
             isEnabled: refreshState.isEnabled
         )
         menu.addItem(refreshItem)
 
-        let clearItem = makeItem(
+        let clearItem = ContextMenuSupport.makeMenuItem(
             title: clearState.title,
             action: #selector(clearFromContextMenu(_:)),
+            target: self,
             symbolName: clearState.symbolName,
             isEnabled: clearState.isEnabled
         )
         menu.addItem(clearItem)
 
-        let restoreItem = makeItem(
+        let restoreItem = ContextMenuSupport.makeMenuItem(
             title: restoreState.title,
             action: #selector(restoreFromContextMenu(_:)),
+            target: self,
             symbolName: restoreState.symbolName,
             isEnabled: restoreState.isEnabled
         )
