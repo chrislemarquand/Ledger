@@ -112,6 +112,9 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         sc.menuProvider = { [weak self] item in
             self?.buildSidebarContextMenu(for: item)
         }
+        sc.onItemsReordered = { [weak self] reorderedItems in
+            self?.applySidebarReorder(from: reorderedItems)
+        }
 
         onPaneStateChanged = { [weak self] in
             guard let self else { return }
@@ -236,6 +239,13 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                 self.sidebarController.clearSelection()
             }
         }
+    }
+
+    private func applySidebarReorder(from reorderedItems: [LedgerSidebarItem]) {
+        let reorderedFavoriteIDs = reorderedItems
+            .filter { $0.section == .pinned && $0.isSidebarReorderable }
+            .map(\.id)
+        model.applyFavoriteOrder(sidebarIDs: reorderedFavoriteIDs)
     }
 
     private static func buildSidebarSections(from model: AppModel) -> [LedgerSidebarSection] {
