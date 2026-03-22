@@ -1978,6 +1978,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                 item.label = "Open Folder"
                 item.paletteLabel = "Open Folder"
                 item.image = NSImage(systemSymbolName: "folder.badge.plus", accessibilityDescription: "Open Folder")
+                item.isBordered = true
                 item.target = controller
                 item.action = #selector(NativeThreePaneSplitViewController.openFolderAction(_:))
                 item.toolTip = "Open a folder"
@@ -1988,6 +1989,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                 item.paletteLabel = "Apply Changes"
                 item.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "Save and apply")
                 item.autovalidates = false
+                item.isBordered = true
                 item.target = controller
                 item.action = #selector(NativeThreePaneSplitViewController.applyChangesAction(_:))
                 item.toolTip = "Apply metadata changes"
