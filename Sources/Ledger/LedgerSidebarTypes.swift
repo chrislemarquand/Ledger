@@ -18,6 +18,11 @@ struct LedgerSidebarItem: AppKitSidebarItemType {
     let badgeText: String?
     // Retained for menu predicate queries in NativeThreePaneSplitViewController.
     let kind: AppModel.SidebarKind
+    var sidebarReorderID: String? { id }
+    var isSidebarReorderable: Bool {
+        if case .favorite = kind { return true }
+        return false
+    }
 
     // Identity is the stable folder/location id — badgeText and title are display state
     // and must not participate in equality. Without this, a count loading asynchronously
