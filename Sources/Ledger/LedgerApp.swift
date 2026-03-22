@@ -253,6 +253,7 @@ final class MainWindowController: NSWindowController {
         window.title = AppBrand.displayName
         window.isReleasedWhenClosed = false
         window.isRestorable = true
+        configureWindowForToolbar(window)
         let frameAutosaveName = "\(AppBrand.identifierPrefix).MainWindow"
         super.init(window: window)
         framePersistenceController = WindowFramePersistenceController(
