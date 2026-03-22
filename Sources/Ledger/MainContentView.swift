@@ -65,7 +65,8 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     private let inspectorController: NSHostingController<AnyView>
 
     private var didConfigureWindow = false
-    private var nativeToolbarDelegate: NativeToolbarDelegate?
+    private var mainToolbarController: MainToolbarController?
+    private var toolbarShellController: ToolbarShellController?
     private weak var fileMenuForInjection: NSMenu?
     private weak var editMenuForInjection: NSMenu?
     private weak var viewMenuForSortInjection: NSMenu?
@@ -75,7 +76,6 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     private var uiRefreshObservers: [AnyCancellable] = []
     private var spacebarMonitor: Any?
     private var browserFocusRequestObserver: NSObjectProtocol?
-    private var toolbarAppearanceAdapter: ToolbarAppearanceAdapter?
     private var lastWindowTitleText = ""
     private var lastWindowSubtitleText = ""
     private var isModelUIRefreshScheduled = false
@@ -119,7 +119,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             let ic = self.isInspectorCollapsed
             if self.model.isSidebarCollapsed != sc { self.model.isSidebarCollapsed = sc }
             if self.model.isInspectorCollapsed != ic { self.model.isInspectorCollapsed = ic }
-            self.nativeToolbarDelegate?.refreshFromModel()
+            self.refreshToolbarState()
         }
 
         installUIRefreshObservers()
@@ -158,8 +158,6 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             NotificationCenter.default.removeObserver(menuTrackingObserver)
             self.menuTrackingObserver = nil
         }
-        toolbarAppearanceAdapter?.invalidate()
-        toolbarAppearanceAdapter = nil
     }
 
     private func installUIRefreshObservers() {
@@ -208,7 +206,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.isModelUIRefreshScheduled = false
-            self.nativeToolbarDelegate?.refreshFromModel()
+            self.refreshToolbarState()
             self.refreshWindowTitleSubtitleIfNeeded()
         }
     }
@@ -332,42 +330,28 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         defaults.set(true, forKey: key)
     }
 
-    override func viewDidAppear() {
-        super.viewDidAppear()
-        if toolbarAppearanceAdapter == nil, let window = view.window {
-            toolbarAppearanceAdapter = ToolbarAppearanceAdapter(window: window) { [weak self] in
-                self?.rebuildToolbarForCurrentAppearance()
-            }
-        }
-    }
-
     private func installMainToolbar(on window: NSWindow, resetDelegateState: Bool) {
-        let delegate: NativeToolbarDelegate
-        if let existingDelegate = nativeToolbarDelegate {
-            delegate = existingDelegate
+        let toolbarContent: MainToolbarController
+        if let existing = mainToolbarController {
+            toolbarContent = existing
             if resetDelegateState {
-                delegate.resetCachedToolbarReferences()
+                toolbarContent.resetCachedToolbarReferences()
             }
         } else {
-            delegate = NativeToolbarDelegate(controller: self)
+            toolbarContent = MainToolbarController(controller: self)
         }
-        nativeToolbarDelegate = delegate
+        mainToolbarController = toolbarContent
 
-        // Recreate the toolbar through AppKit so item views are rebuilt for the
-        // current titlebar appearance (light/dark/high-contrast).
-        let toolbar = NSToolbar(identifier: "\(AppBrand.identifierPrefix).MainToolbar.v5")
-        toolbar.delegate = delegate
-        toolbar.displayMode = .iconOnly
-        toolbar.allowsUserCustomization = false
-        toolbar.autosavesConfiguration = false
-        window.toolbar = toolbar
-    }
-
-    private func rebuildToolbarForCurrentAppearance() {
-        guard let window = view.window else { return }
-        installMainToolbar(on: window, resetDelegateState: true)
-        nativeToolbarDelegate?.refreshFromModel()
-        window.toolbar?.validateVisibleItems()
+        let shell = toolbarShellController ?? ToolbarShellController(content: toolbarContent)
+        shell.setContent(toolbarContent)
+        toolbarShellController = shell
+        _ = shell.installToolbar(
+            on: window,
+            identifier: "\(AppBrand.identifierPrefix).MainToolbar.v5",
+            displayMode: .iconOnly,
+            allowsUserCustomization: false,
+            autosavesConfiguration: false
+        )
     }
 
     private func configureWindowIfNeeded() {
@@ -377,7 +361,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         configureWindowForToolbar(window)
 
         installMainToolbar(on: window, resetDelegateState: true)
-        nativeToolbarDelegate?.refreshFromModel()
+        toolbarShellController?.syncAndValidate(window: window)
         if isSidebarCollapsed { isSidebarCollapsed = false }
         schedulePaneStateSync()
         refreshWindowTitleSubtitleIfNeeded()
@@ -427,6 +411,10 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         }
     }
 
+    private func refreshToolbarState() {
+        toolbarShellController?.syncAndValidate(window: view.window)
+    }
+
     private func installSpacebarQuickLookMonitorIfNeeded() {
         guard spacebarMonitor == nil else { return }
         spacebarMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -467,7 +455,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                     guard model.browserViewMode == .gallery else { return nil }
                     guard model.canIncreaseGalleryZoom else { return nil }
                     model.increaseGalleryZoom()
-                    nativeToolbarDelegate?.refreshFromModel()
+                    refreshToolbarState()
                     return nil
                 }
 
@@ -476,7 +464,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                     guard model.browserViewMode == .gallery else { return nil }
                     guard model.canDecreaseGalleryZoom else { return nil }
                     model.decreaseGalleryZoom()
-                    nativeToolbarDelegate?.refreshFromModel()
+                    refreshToolbarState()
                     return nil
                 }
             }
@@ -1665,52 +1653,52 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     func zoomOutAction(_: Any?) {
         guard model.browserViewMode == .gallery else { return }
         model.decreaseGalleryZoom()
-        nativeToolbarDelegate?.refreshFromModel()
+        refreshToolbarState()
     }
 
     @objc
     func zoomInAction(_: Any?) {
         guard model.browserViewMode == .gallery else { return }
         model.increaseGalleryZoom()
-        nativeToolbarDelegate?.refreshFromModel()
+        refreshToolbarState()
     }
 
     @objc
     func switchToGalleryAction(_: Any?) {
         model.browserViewMode = .gallery
-        nativeToolbarDelegate?.refreshFromModel()
+        refreshToolbarState()
         NotificationCenter.default.post(name: .browserDidSwitchViewMode, object: nil)
     }
 
     @objc
     func switchToListAction(_: Any?) {
         model.browserViewMode = .list
-        nativeToolbarDelegate?.refreshFromModel()
+        refreshToolbarState()
         NotificationCenter.default.post(name: .browserDidSwitchViewMode, object: nil)
     }
 
     @objc
     func sortByNameAction(_: Any?) {
         model.browserSort = .name
-        nativeToolbarDelegate?.refreshFromModel()
+        refreshToolbarState()
     }
 
     @objc
     func sortByCreatedAction(_: Any?) {
         model.browserSort = .created
-        nativeToolbarDelegate?.refreshFromModel()
+        refreshToolbarState()
     }
 
     @objc
     func sortBySizeAction(_: Any?) {
         model.browserSort = .size
-        nativeToolbarDelegate?.refreshFromModel()
+        refreshToolbarState()
     }
 
     @objc
     func sortByKindAction(_: Any?) {
         model.browserSort = .kind
-        nativeToolbarDelegate?.refreshFromModel()
+        refreshToolbarState()
     }
 
     @objc
@@ -1749,9 +1737,9 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     }
 
     @objc
-    private func viewModeChanged(_ sender: NSSegmentedControl) {
-        model.browserViewMode = sender.selectedSegment == 1 ? .list : .gallery
-        nativeToolbarDelegate?.refreshFromModel()
+    private func viewModeChanged(_ sender: NSToolbarItemGroup) {
+        model.browserViewMode = sender.selectedIndex == 1 ? .list : .gallery
+        refreshToolbarState()
         NotificationCenter.default.post(name: .browserDidSwitchViewMode, object: nil)
         DispatchQueue.main.async { [weak self] in
             self?.focusBrowserPane()
@@ -1780,12 +1768,10 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     }
 
     @MainActor
-    private final class NativeToolbarDelegate: NSObject, NSToolbarDelegate {
+    private final class MainToolbarController: NSObject, ToolbarShellContent {
         private weak var controller: NativeThreePaneSplitViewController?
 
-        private var viewModeControl: NSSegmentedControl?
-        private var loadingItem: NSToolbarItem?
-        private var loadingSpinner: NSProgressIndicator?
+        private var viewModeGroupItem: NSToolbarItemGroup?
         private var zoomOutItem: NSToolbarItem?
         private var zoomInItem: NSToolbarItem?
         private var applyChangesItem: NSToolbarItem?
@@ -1805,9 +1791,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         }
 
         func resetCachedToolbarReferences() {
-            viewModeControl = nil
-            loadingItem = nil
-            loadingSpinner = nil
+            viewModeGroupItem = nil
             zoomOutItem = nil
             zoomInItem = nil
             applyChangesItem = nil
@@ -1828,7 +1812,6 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                 .openFolder,
                 .toggleSidebar,
                 .sidebarTrackingSeparator,
-                .browserLoading,
                 .viewMode,
                 .sort,
                 .zoomOut,
@@ -1849,7 +1832,6 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                 .openFolder,
                 .toggleSidebar,
                 .sidebarTrackingSeparator,
-                .browserLoading,
                 .viewMode,
                 .sort,
                 .zoomOut,
@@ -1890,51 +1872,43 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                     dividerIndex: 0
                 )
             case .viewMode:
-                let control = NSSegmentedControl(
-                    labels: ["", ""],
-                    trackingMode: .selectOne,
+                let galleryImage = NSImage(systemSymbolName: "square.grid.3x2", accessibilityDescription: "Gallery")
+                    ?? NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: "Gallery")
+                    ?? NSImage()
+                let listImage = NSImage(systemSymbolName: "list.bullet", accessibilityDescription: "List") ?? NSImage()
+                let item = NSToolbarItemGroup(
+                    itemIdentifier: itemIdentifier,
+                    images: [galleryImage, listImage],
+                    selectionMode: .selectOne,
+                    labels: ["Gallery", "List"],
                     target: controller,
                     action: #selector(NativeThreePaneSplitViewController.viewModeChanged(_:))
                 )
-                control.setImage(NSImage(systemSymbolName: "square.grid.3x2", accessibilityDescription: "Gallery"), forSegment: 0)
-                control.setImage(NSImage(systemSymbolName: "list.bullet", accessibilityDescription: "List"), forSegment: 1)
-                control.setWidth(44, forSegment: 0)
-                control.setWidth(44, forSegment: 1)
-
-                let item = NSToolbarItem(itemIdentifier: itemIdentifier)
                 item.label = "View"
                 item.paletteLabel = "View"
-                item.view = control
                 item.toolTip = "Switch browser view"
-                viewModeControl = control
-                return item
-            case .browserLoading:
-                let spinnerItem = ToolbarItemFactory.makeSpinnerItem(
-                    identifier: itemIdentifier,
-                    label: "Loading",
-                    paletteLabel: "Loading"
-                )
-                let item = spinnerItem.item
-                loadingItem = item
-                loadingSpinner = spinnerItem.spinner
-                updateLoadingIndicator(with: controller.model)
+                viewModeGroupItem = item
                 return item
             case .zoomOut:
-                let item = ToolbarItemFactory.makeZoomItem(
-                    identifier: itemIdentifier,
-                    direction: .zoomOut,
-                    target: controller,
-                    action: #selector(NativeThreePaneSplitViewController.zoomOutAction(_:))
-                )
+                let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+                item.label = "Zoom Out"
+                item.paletteLabel = "Zoom Out"
+                item.image = NSImage(systemSymbolName: "minus", accessibilityDescription: "Zoom out")
+                item.isBordered = true
+                item.target = controller
+                item.action = #selector(NativeThreePaneSplitViewController.zoomOutAction(_:))
+                item.toolTip = "Zoom out"
                 zoomOutItem = item
                 return item
             case .zoomIn:
-                let item = ToolbarItemFactory.makeZoomItem(
-                    identifier: itemIdentifier,
-                    direction: .zoomIn,
-                    target: controller,
-                    action: #selector(NativeThreePaneSplitViewController.zoomInAction(_:))
-                )
+                let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+                item.label = "Zoom In"
+                item.paletteLabel = "Zoom In"
+                item.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "Zoom in")
+                item.isBordered = true
+                item.target = controller
+                item.action = #selector(NativeThreePaneSplitViewController.zoomInAction(_:))
+                item.toolTip = "Zoom in"
                 zoomInItem = item
                 return item
             case .sort:
@@ -1942,6 +1916,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                 item.label = "Sort"
                 item.paletteLabel = "Sort"
                 item.image = NSImage(systemSymbolName: "arrow.up.arrow.down", accessibilityDescription: "Sort")
+                item.isBordered = true
                 item.toolTip = "Sort images"
                 sortItem = item
                 updateSortMenu(with: controller.model)
@@ -1951,6 +1926,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                 item.label = "Import"
                 item.paletteLabel = "Import"
                 item.image = NSImage(systemSymbolName: "checklist.checked", accessibilityDescription: "Import")
+                item.isBordered = true
                 item.toolTip = "Import metadata"
                 importItem = item
                 updateImportMenu(with: controller.model)
@@ -1960,6 +1936,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                 item.label = "Export"
                 item.paletteLabel = "Export"
                 item.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: "Export")
+                item.isBordered = true
                 item.toolTip = "Export and handoff"
                 exportItem = item
                 updateExportMenu(with: controller.model)
@@ -1969,6 +1946,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                 item.label = "Presets"
                 item.paletteLabel = "Presets"
                 item.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: "Presets")
+                item.isBordered = true
                 item.toolTip = "Presets"
                 presetsItem = item
                 updatePresetsMenu(with: controller.model)
@@ -1988,25 +1966,22 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                 item.label = "Apply Changes"
                 item.paletteLabel = "Apply Changes"
                 item.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "Save and apply")
-                item.autovalidates = false
+                item.isBordered = true
                 item.target = controller
                 item.action = #selector(NativeThreePaneSplitViewController.applyChangesAction(_:))
                 item.toolTip = "Apply metadata changes"
-                if #available(macOS 26.0, *) {
-                    item.style = controller.model.canApplyMetadataChanges ? .prominent : .plain
-                }
                 applyChangesItem = item
                 return item
             case .toggleInspector:
                 let collapsed = controller.isInspectorCollapsed
                 let label = collapsed ? "Show Inspector" : "Hide Inspector"
-                let item = ToolbarItemFactory.makeInspectorToggleItem(
-                    identifier: itemIdentifier,
-                    label: label,
-                    target: controller,
-                    action: #selector(NativeThreePaneSplitViewController.toggleInspectorAction(_:)),
-                    toolTip: label
-                )
+                let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+                item.label = label
+                item.paletteLabel = "Toggle Inspector"
+                item.image = NSImage(systemSymbolName: "sidebar.trailing", accessibilityDescription: "Show or hide the inspector")
+                item.target = controller
+                item.action = #selector(NativeThreePaneSplitViewController.toggleInspectorAction(_:))
+                item.toolTip = label
                 inspectorToggleItem = item
                 return item
             default:
@@ -2014,38 +1989,20 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             }
         }
 
-        func refreshFromModel() {
+        func syncToolbarState() {
             guard let controller else { return }
             let model = controller.model
             updateViewMode(with: model)
-            updateLoadingIndicator(with: model)
-            updateZoom(with: model)
             updateSortMenu(with: model)
             updateImportMenu(with: model)
             updateExportMenu(with: model)
             updatePresetsMenu(with: model)
-            updateApplyEnabled(with: model)
-            updateInspectorToggle(with: model)
+            updateApplyStyle(with: model)
+            updateInspectorLabels(with: model)
         }
 
         private func updateViewMode(with model: AppModel) {
-            viewModeControl?.selectedSegment = model.browserViewMode == .gallery ? 0 : 1
-        }
-
-        private func updateLoadingIndicator(with model: AppModel) {
-            let isLoading = model.isFolderContentLoading || model.isFolderMetadataLoading
-            loadingItem?.isEnabled = isLoading
-            loadingItem?.view?.isHidden = !isLoading
-            if isLoading {
-                loadingSpinner?.startAnimation(nil)
-            } else {
-                loadingSpinner?.stopAnimation(nil)
-            }
-        }
-
-        private func updateZoom(with model: AppModel) {
-            zoomOutItem?.isEnabled = model.browserViewMode == .gallery && model.canDecreaseGalleryZoom
-            zoomInItem?.isEnabled = model.browserViewMode == .gallery && model.canIncreaseGalleryZoom
+            viewModeGroupItem?.selectedIndex = model.browserViewMode == .gallery ? 0 : 1
         }
 
         private func updateSortMenu(with model: AppModel) {
@@ -2073,18 +2030,50 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             exportItem?.menu = menu
         }
 
-        private func updateApplyEnabled(with model: AppModel) {
-            let canApply = model.canApplyMetadataChanges
-            applyChangesItem?.isEnabled = canApply
+        private func updateApplyStyle(with model: AppModel) {
             if #available(macOS 26.0, *) {
-                applyChangesItem?.style = canApply ? .prominent : .plain
+                applyChangesItem?.style = model.canApplyMetadataChanges ? .prominent : .plain
             }
         }
 
-        private func updateInspectorToggle(with model: AppModel) {
+        private func updateInspectorLabels(with model: AppModel) {
             let label = model.isInspectorCollapsed ? "Show Inspector" : "Hide Inspector"
             inspectorToggleItem?.label = label
             inspectorToggleItem?.toolTip = label
+        }
+
+        func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
+            guard let controller else { return false }
+            let model = controller.model
+
+            switch item.itemIdentifier {
+            case .zoomOut:
+                return model.browserViewMode == .gallery && model.canDecreaseGalleryZoom
+            case .zoomIn:
+                return model.browserViewMode == .gallery && model.canIncreaseGalleryZoom
+            case .applyChanges:
+                updateApplyStyle(with: model)
+                return model.canApplyMetadataChanges
+            case .toggleInspector:
+                updateInspectorLabels(with: model)
+                return true
+            case .sort:
+                updateSortMenu(with: model)
+                return !model.browserItems.isEmpty
+            case .importTools:
+                updateImportMenu(with: model)
+                return !model.browserItems.isEmpty
+            case .exportTools:
+                updateExportMenu(with: model)
+                return !model.browserItems.isEmpty
+            case .presetTools:
+                updatePresetsMenu(with: model)
+                return true
+            case .viewMode, .openFolder, .toggleSidebar, .sidebarTrackingSeparator, .inspectorTrackingSeparator:
+                return true
+            default:
+                return true
+            }
         }
 
         private func makeSortMenu(model: AppModel) -> NSMenu {
@@ -2245,7 +2234,6 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
 }
 
 private extension NSToolbarItem.Identifier {
-    static let browserLoading = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.BrowserLoading")
     static let viewMode = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ViewMode")
     static let sort = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.Sort")
     static let importTools = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.Import")

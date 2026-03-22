@@ -244,19 +244,23 @@ private func presentAboutPanel(
 @MainActor
 final class MainWindowController: NSWindowController {
     let appModel: AppModel
+    private var framePersistenceController: WindowFramePersistenceController?
 
     init(model: AppModel) {
         appModel = model
         let contentController = NativeThreePaneSplitViewController(model: model)
         let window = NSWindow(contentViewController: contentController)
-        window.setContentSize(ThreePaneSplitViewController.Metrics.windowDefault)
-        window.minSize = ThreePaneSplitViewController.Metrics.windowMinimum
         window.title = AppBrand.displayName
         window.isReleasedWhenClosed = false
         window.isRestorable = true
-        window.setFrameAutosaveName("\(AppBrand.identifierPrefix).MainWindow")
-        window.center()
+        let frameAutosaveName = "\(AppBrand.identifierPrefix).MainWindow"
         super.init(window: window)
+        framePersistenceController = WindowFramePersistenceController(
+            window: window,
+            autosaveName: frameAutosaveName,
+            minSize: ThreePaneSplitViewController.Metrics.windowMinimum,
+            defaultContentSize: ThreePaneSplitViewController.Metrics.windowDefault
+        )
     }
 
     @available(*, unavailable)
