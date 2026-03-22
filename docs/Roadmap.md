@@ -61,6 +61,7 @@ Primary objective: get import right end-to-end.
 
 ## v1.2 (Minor) — Editing Productivity
 
+- [ ] Welcome/version screen using `AppWelcomeViewController` from SharedUI (WhatsNewKit-backed). Show on first run; reuse for "What's New" on major version updates.
 - [ ] Batch Rename (first release)
 - [ ] Add more Exif fields to Inspector view (including rating)
 - [ ] Rename hardening:
