@@ -1985,13 +1985,12 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             case .toggleInspector:
                 let collapsed = controller.isInspectorCollapsed
                 let label = collapsed ? "Show Inspector" : "Hide Inspector"
-                let item = NSToolbarItem(itemIdentifier: itemIdentifier)
-                item.label = label
-                item.paletteLabel = "Toggle Inspector"
-                item.image = NSImage(systemSymbolName: "sidebar.trailing", accessibilityDescription: "Show or hide the inspector")
-                item.target = controller
-                item.action = #selector(NativeThreePaneSplitViewController.toggleInspectorAction(_:))
-                item.toolTip = label
+                let item = ToolbarItemFactory.makeInspectorToggleItem(
+                    identifier: itemIdentifier,
+                    label: label,
+                    action: #selector(NativeThreePaneSplitViewController.toggleInspectorAction(_:)),
+                    toolTip: label
+                )
                 inspectorToggleItem = item
                 return item
             default:
