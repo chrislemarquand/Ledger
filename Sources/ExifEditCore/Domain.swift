@@ -5,6 +5,9 @@ public enum MetadataNamespace: String, Codable, CaseIterable, Sendable {
     case iptc = "IPTC"
     case xmp = "XMP"
     case xmpDM = "XMP-xmpDM"
+    case xmpPhotoshop = "XMP-photoshop"
+    case xmpIptcCore  = "XMP-iptcCore"
+    case xmpRights    = "XMP-xmpRights"
 }
 
 public enum MetadataValueType: String, Codable, Sendable {
