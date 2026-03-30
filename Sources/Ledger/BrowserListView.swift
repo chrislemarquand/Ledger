@@ -229,16 +229,6 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
         tableView.scrollRowToVisible(row)
     }
 
-    private func focusInspectorFromBrowser() {
-        guard model.browserViewMode == .list else { return }
-        guard !model.selectedFileURLs.isEmpty else { return }
-        _ = NSApp.sendAction(
-            #selector(NativeThreePaneSplitViewController.focusInspectorEntryAction(_:)),
-            to: nil,
-            from: self
-        )
-    }
-
     private func configureList() {
         sharedListController.host = self
         addChild(sharedListController)
@@ -257,9 +247,6 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
 
         sharedListController.contextMenuProvider = { [weak self] row in
             self?.menuForRow(row)
-        }
-        sharedListController.onActivateSelection = { [weak self] in
-            self?.focusInspectorFromBrowser()
         }
         sharedListController.setSortDescriptor(
             NSSortDescriptor(key: model.browserSort.rawValue, ascending: model.browserSortAscending)
