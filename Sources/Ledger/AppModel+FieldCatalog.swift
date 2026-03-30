@@ -66,6 +66,18 @@ extension AppModel {
             .init(value: "255", label: "Other"),
         ]
 
+        let ratingEntries = [EditableTag.rating, EditableTag.pick, EditableTag.label].map { tag in
+            FieldCatalogEntry(
+                id: tag.id,
+                namespace: tag.namespace,
+                key: tag.key,
+                label: tag.label,
+                section: tag.section,
+                inputKind: .text,
+                isEnabled: true
+            )
+        }
+
         var entries = EditableTag.common.map { tag -> FieldCatalogEntry in
             let inputKind: ImportFieldInputKind
             switch tag.id {
@@ -95,18 +107,6 @@ extension AppModel {
             )
         }
 
-        for tag in [EditableTag.rating, EditableTag.pick, EditableTag.label] {
-            entries.append(FieldCatalogEntry(
-                id: tag.id,
-                namespace: tag.namespace,
-                key: tag.key,
-                label: tag.label,
-                section: tag.section,
-                inputKind: .text,
-                isEnabled: true
-            ))
-        }
-
-        return entries
+        return ratingEntries + entries
     }
 }
