@@ -1,320 +1,94 @@
 # Architecture
 
-macOS-only photo metadata editor (EXIF / IPTC / XMP) built on exiftool.
-**Target**: macOS 26+. **Swift**: 6.0 (strict concurrency enabled). **No iPad / iOS target.**
+Ledger is a macOS-only photo metadata editor.
 
----
+- Deployment target: `macOS 26`
+- Swift language mode: `Swift 6`
+- UI model: AppKit shell with SwiftUI feature surfaces
+- Shared dependency: `SharedUI` (pinned tag)
 
-## Package structure
+## Repo and targets
 
-```
-ExifEdit (Swift Package)
-├── Sources/ExifEditCore      — library; no AppKit/SwiftUI dependency
-│   ├── Domain.swift          — value types: MetadataField, FileMetadataSnapshot, MetadataPatch, EditOperation, OperationResult
-│   ├── ExifEditEngine.swift  — public actor; orchestrates read/write/restore
-│   ├── ExifToolService.swift — spawns the exiftool subprocess; protocol + impl
-│   ├── ExifToolCommandBuilder.swift — builds exiftool CLI arguments
-│   ├── BackupManager.swift   — copies originals before every write; protocol + impl
-│   └── MetadataValidator.swift — validates patches before write
-│
-└── Sources/Ledger       — executable; AppKit + SwiftUI
-    ├── LedgerApp.swift       — @main; pure AppKit entry (LedgerMain + AppDelegate)
-    ├── AppModel.swift        — @MainActor ObservableObject core types/state + bootstrap (~782 lines)
-    ├── AppModel+Sidebar.swift
-    ├── AppModel+FileLoading.swift
-    ├── AppModel+MetadataPipeline.swift
-    ├── AppModel+MetadataValues.swift
-    ├── AppModel+Editing.swift
-    ├── AppModel+Actions.swift
-    ├── AppModel+ApplyRestore.swift
-    ├── AppModel+Import.swift
-    ├── AppModel+Preview.swift
-    ├── AppModel+Navigation.swift
-    ├── AppModel+Presets.swift
-    ├── AppModel+FieldCatalog.swift
-    ├── AppModel+InspectorFields.swift
-    ├── AppModel+UndoStatus.swift
-    ├── AppModel+Formatters.swift
-    ├── MainContentView.swift — NativeThreePaneSplitViewController + AppKit menus/toolbar + browser container
-    ├── NavigationSidebarView.swift
-    ├── BrowserListView.swift
-    ├── BrowserGalleryView.swift
-    ├── InspectorView.swift
-    └── PresetSheets.swift
+Ledger is a Swift Package with an Xcode project wrapper.
 
-Tests/ExifEditCoreTests       — runnable via `swift test` and xcodebuild
-Tests/LedgerTests        — runnable (see Tests section below)
+```text
+Sources/
+  ExifEditCore/        # metadata engine + exiftool integration (no app UI)
+  Ledger/              # app target (AppKit + SwiftUI + SharedUI)
+Tests/
+  ExifEditCoreTests/
+  LedgerTests/
+Config/
+  Base.xcconfig
+  Debug.xcconfig
+  Release.xcconfig
 ```
 
-The Xcode project (`Ledger.xcodeproj`) wraps the SPM package. Build settings and version are in `Config/Base.xcconfig`.
+`Package.swift` defines:
+- library target: `ExifEditCore`
+- executable target: `ExifEditMac` (path: `Sources/Ledger`)
 
----
+`Ledger.xcodeproj` builds the macOS app and uses explicit Info.plist/entitlements from `Config/`.
 
-## Layer architecture
+## Runtime architecture
 
-```
-┌─────────────────────────────────────────┐
-│              ExifEditMac                │
-│                                         │
-│  LedgerMain (@main) ──▶ AppDelegate     │
-│                        └──────────────▶  │
-│                        NativeThreePaneSplitVC  ← AppKit window controller
-│                    │                   │
-│          ┌─────────┼──────────┐        │
-│          ▼         ▼          ▼        │
-│     Sidebar      Browser   Inspector     │
-│     (SwiftUI)    (AppKit)   (SwiftUI)    │
-│                                         │
-│  AppModel (@MainActor ObservableObject) │  ← single source of truth
-│        │                                │
-│        ▼                                │
-│  ExifEditEngine (actor)                 │  ← ExifEditCore
-│        │                                │
-│   ExifToolService  BackupManager        │
-│        │                                │
-│      exiftool binary (bundled)          │
-└─────────────────────────────────────────┘
+```text
+NSApplication + AppDelegate
+  -> NSWindow
+    -> NativeThreePaneSplitViewController (AppKit shell)
+       -> Sidebar (SwiftUI hosted in AppKit)
+       -> Browser area (AppKit list/gallery controllers)
+       -> Inspector (SwiftUI hosted in AppKit)
+
+AppModel (@MainActor, single source of truth)
+  -> ExifEditCore actor/services
+  -> filesystem/exiftool side effects
 ```
 
----
+Main ownership:
+- `AppModel` owns state, selection, pending edits, apply/restore/import orchestration.
+- AppKit shell owns split layout, toolbar/menu wiring, responder-chain actions.
+- SwiftUI views render model state and send explicit intents back to `AppModel`.
 
-## Window layout
+## SharedUI integration (current)
 
-`NativeThreePaneSplitViewController` (`MainContentView.swift`) is an `NSSplitViewController` that owns the entire window. It creates:
+Ledger now consumes core shared desktop UI pieces from `SharedUI`:
 
-```
-NSSplitViewController
-├── NSSplitViewItem (sidebar)   → NSHostingController<NavigationSidebarView>
-└── NSSplitViewController (nested content)
-    ├── NSSplitViewItem         → BrowserContainerViewController (pure AppKit)
-    │   (hosts BrowserListViewController + BrowserGalleryViewController and switches visibility by mode)
-    └── NSSplitViewItem         → NSHostingController<InspectorView>
-```
+- `ThreePaneSplitViewController` for canonical window split behavior and metrics.
+- `AppKitSidebarController` for the sidebar shell behavior.
+- `SharedGalleryCollectionView` + `SharedGalleryLayout` for gallery interaction/layout.
+- `PinchZoomAccumulator` for consistent pinch-zoom semantics.
+- `ToolbarAppearanceAdapter` for toolbar appearance refresh behavior.
+- `NSAlert.runSheetOrModal(...)` helper for consistent sheet/modal alert handling.
 
-All `NSHostingController` instances use `.sizingOptions = []` so SwiftUI does not drive pane sizing — the split view owns all geometry.
+These are intentionally generic and reusable across apps.
 
-The toolbar is built entirely in AppKit (`NativeToolbarDelegate`). Top-level menus are also rebuilt/injected in AppKit (`MainContentView.swift`) and validated through `NSMenuItemValidation`. Actions route through the responder chain with `NSApp.sendAction(_:to:from:)`.
+## What stays Ledger-specific
 
-**Toolbar vs menu enabled-state pattern**: menu items *pull* state on demand via `menuWillOpen` (always fresh). Toolbar items must be *pushed* — `NativeToolbarDelegate.refreshFromModel()` sets `item.isEnabled` and is called from `installUIRefreshObservers()` in `NativeThreePaneSplitViewController`. If a toolbar button fails to reflect a state change, the relevant `@Published` property is missing from that observer list.
+Ledger-specific logic remains in Ledger and is not moved into SharedUI:
 
----
+- Metadata domain model and write pipeline (`ExifEditCore` + `AppModel` extensions).
+- ExifTool command construction/execution and backup/restore behavior.
+- Import/export workflows and file-format specific handling.
+- Ledger-specific sidebar semantics, inspector field catalog, and editing policies.
+- Thumbnail engine details that are coupled to Ledger file-backed browsing.
 
-## AppModel
+## UI composition notes
 
-`AppModel` is a `@MainActor` `ObservableObject` that holds all application state. There is one instance, created by `AppDelegate` and passed into every view.
+- Browser list and gallery are AppKit-driven for high-volume interaction and keyboard control.
+- Sidebar/inspector are SwiftUI views hosted in AppKit panes.
+- Menu + toolbar commands route through AppKit selectors into model intents.
+- SharedUI primitives are used to keep shell behavior consistent with Librarian.
 
-As of v1.1 refactors, `AppModel` is split by concern across extension files (total ~6,253 LOC) rather than one monolith. `AppModel.swift` now contains shared types/constants/bootstrap state, with behavior moved into `AppModel+*.swift` files listed above.
+## Concurrency and safety
 
-Key state groups:
+- App state coordination remains `@MainActor` in `AppModel`.
+- Background work is isolated to explicit tasks/services (metadata reads/writes, thumbnailing, imports).
+- Swift 6 migration and backlog are tracked in `docs/Swift6 Migration Backlog.md`.
 
-| Group | Key properties |
-|-------|---------------|
-| Sidebar | `selectedSidebarID`, `sidebarItems`, `favourites` |
-| Browser | `browserItems`, `filteredBrowserItems` (@Published cached), `browserSort`, `browserViewMode` |
-| Selection | `selectedFileURLs` (Set), `selectionAnchorURL`, `selectionFocusURL` |
-| Metadata | `metadataByFile` ([URL: FileMetadataSnapshot]), `pendingEditsByFile`, `pendingCommitsByFile` |
-| Inspector | `inspectorState`, `collapsedInspectorSections` |
-| Status | `statusMessage`, `isLoadingFiles`, `isApplyingMetadata` |
-| Presets | `presets` ([EditPreset]) |
+## Key docs
 
-`filteredBrowserItems` is a cached `@Published private(set)` var rebuilt by `rebuildFilteredBrowserItems()` whenever `browserItems`, `searchQuery`, or `browserSort` change — do not recompute it ad-hoc.
-
----
-
-## Selection model
-
-Multi-file selection works like Finder:
-
-- **Plain click**: replaces `selectedFileURLs` with `{url}`; sets anchor + focus
-- **Cmd-click**: toggles url in/out of set; updates anchor + focus
-- **Shift-click**: range from `selectionAnchorURL` to target
-- **Cmd+Shift-click**: additive range (union)
-
-Entry point: `AppModel.selectFile(_:modifiers:in:)`. `selectionAnchorURL` and `selectionFocusURL` are model-internal state used by selection/editing extensions.
-
-The browser views (list and gallery) are AppKit `NSTableView` / `NSCollectionView`. They carry an `isApplyingProgrammaticSelection` flag that suppresses delegate callbacks during model→view syncs to prevent selection bouncing. Modified-click events are intercepted in custom `NSTableView`/`NSCollectionView` subclasses and routed to `selectFile(_:modifiers:in:)` before the view syncs back.
-
----
-
-## Metadata read / write flow
-
-**Read**
-```
-AppModel.loadMetadataForSelection(urls:)
-  └── ExifEditEngine.readMetadata(files:)   [actor hop]
-        └── ExifToolService.readMetadata()   [spawns exiftool process]
-              returns [FileMetadataSnapshot]
-  └── AppModel stores result in metadataByFile[url]
-  └── AppModel.recalculateInspectorState()  [debounced 100ms]
-```
-
-**Write (Apply)**
-```
-AppModel.applyChanges(for:)
-  └── builds metadata patches + staged image ops per file
-  └── ExifEditEngine.apply(operation:) / writeMetadataWithoutBackup(operation:) [actor hop]
-        └── MetadataValidator.validate()
-        └── BackupManager.createBackup()    → ~/Library/Application Support/<Brand>/Backups/<UUID>/
-        └── ExifToolService.writeMetadata() [spawns exiftool process]
-              returns OperationResult (succeeded:, failed:)
-  └── AppModel clears committed pending state, invalidates thumbnails/previews for succeeded files,
-      then re-reads stale metadata for the current selection
-```
-
-**Restore**
-```
-AppModel.restoreFromBackup(urls:)
-  └── ExifEditEngine.restore(operationID:)
-        └── BackupManager.restoreBackup()  [copies backup files back to originals]
-```
-
-Backups are pruned on launch via `BackupManager.pruneOperations(keepLast:)` (called in a detached Task from AppModel.init).
-
----
-
-## Thumbnail pipeline
-
-`ThumbnailPipeline` (top of `AppModel.swift`) is a stateless enum of static wrappers over `ThumbnailService`, which owns the thumbnail cache and generation.
-
-Generation order for likely-image files: ImageIO oriented thumbnail → QuickLook → `NSImage(contentsOf:)` → workspace icon fallback. For other file types: QuickLook first.
-
-Both `BrowserListViewController` and `BrowserGalleryViewController` use a `SharedThumbnailRequestBroker` actor to deduplicate concurrent requests for the same URL. After Apply/Restore/Clear, `AppModel` invalidates browser thumbnail URLs so both views refresh from disk-consistent data.
-
----
-
-## SwiftUI / AppKit hybrid notes
-
-The browser views (`BrowserListView`, `BrowserGalleryView`) are `NSViewControllerRepresentable` wrappers around full AppKit implementations. The SwiftUI outer shell is ~10 lines each; all logic lives in the AppKit controllers.
-
-The purely SwiftUI views (sidebar, inspector, preset sheets) are hosted in `NSHostingController` instances. They observe `AppModel` via `@ObservedObject`.
-
-### Permanent design principle (post-v1.0)
-
-Ledger follows an **AppKit shell + SwiftUI islands** architecture.
-
-- AppKit remains the owner of:
-  - window lifecycle/state restoration policy
-  - split layout and pane geometry/collapse
-  - menu and toolbar command lifecycle/validation
-  - responder chain and keyboard focus routing
-- SwiftUI is used selectively for contained feature surfaces (for example sidebar/inspector content), hosted inside AppKit.
-- `AppModel` remains the single state authority across both layers.
-- Cross-layer interactions must use explicit intent methods and targeted state observation, not broad invalidation or implicit ownership overlap.
-
-### Hybrid contract (A4, pre-v1.0 source of truth)
-
-This section is the authoritative contract for the v1.0 hybrid architecture (Roadmap A4–A10). New UI work must follow these rules.
-
-#### Ownership
-
-- AppKit owns:
-  - window lifecycle and restoration policy
-  - split-view geometry/collapse state
-  - menu construction/injection/validation
-  - first-responder routing and keyboard command dispatch
-- SwiftUI owns:
-  - sidebar and inspector content rendering only
-  - local view interaction state that does not define app truth
-- `AppModel` owns:
-  - all mutable app state (`@Published`) and side-effecting operations
-
-#### State-flow rules
-
-- Boundary direction is one-way by default: `AppModel` -> SwiftUI/AppKit render state.
-- User intents from SwiftUI/AppKit call explicit `AppModel` methods.
-- Do not rely on implicit two-way bindings for cross-boundary app state when a direct intent method exists.
-
-#### Update-cycle safety rules
-
-- Never synchronously mutate `@Published` from SwiftUI update callbacks that can run inside render/layout (`onChange`, `DisclosureGroup` setters, focus callbacks, picker callbacks).
-- When a boundary callback must update model state, defer to next runloop (`DispatchQueue.main.async` or `Task { @MainActor ... }`).
-- AppKit layout/resize notifications must not synchronously write SwiftUI-observed model state; use deferred/coalesced sync.
-
-#### Observation rules
-
-- AppKit host/controllers must not subscribe to broad `model.objectWillChange`.
-- Observe only specific `@Published` properties required by that controller.
-- Coalesce redundant updates (`removeDuplicates`) before triggering render/title/toolbar refresh work.
-
-#### Warning gate (must-fix pre-v1.0)
-
-- Must not occur on normal smoke path:
-  - `Publishing changes from within view updates is not allowed`
-  - `NSHostingView is being laid out reentrantly while rendering its SwiftUI content`
-- Framework-noise warnings (ICC/CMPhoto/IOSurface) are tracked separately unless tied to user-visible breakage.
-
-#### PR architecture checklist (required for UI changes)
-
-Before merging any UI-facing change, verify and record:
-
-- Shell ownership unchanged:
-  - no new SwiftUI ownership of window/split/menu/focus concerns
-- Boundary flow is explicit:
-  - user action -> explicit `AppModel` intent method
-  - no new implicit two-way cross-layer binding loops
-- Update-cycle safety:
-  - no synchronous `@Published` writes from SwiftUI update/layout callbacks
-  - layout/resize notifications do not synchronously publish SwiftUI-observed state
-- Observation scope:
-  - no new broad `objectWillChange` subscriptions in AppKit hosts
-  - targeted publishers with `removeDuplicates` where appropriate
-- Warning gate check:
-  - normal smoke path does not emit must-fix warnings listed above
-
-#### Hybrid release smoke checklist (run on each release candidate)
-
-Run this path on release candidates:
-
-1. Launch app to default window.
-2. Click sidebar folder/source (including privacy-sensitive entries where applicable).
-3. Click between thumbnails/list rows rapidly; verify selection remains stable.
-4. Switch to a different folder; verify browser repopulates and selection state is valid.
-5. Toggle inspector and sidebar; resize panes; verify no re-entrant warning.
-6. Edit metadata field in inspector and Apply; verify browser + inspector refresh coherently.
-7. Repeat steps 2–6 once more after view-mode switch (gallery <-> list).
-
-Must-fail conditions:
-- `Publishing changes from within view updates is not allowed`
-- `NSHostingView is being laid out reentrantly while rendering its SwiftUI content`
-
-Known friction areas (candidates for future AppKit rewrite — see roadmap items under v2.0+):
-- `InspectorView`: `inspectorRefreshRevision` UInt64 refresh token and `suppressNextFocusScrollAnimation` focus workaround remain technical debt; edit-session snapshots are now model-owned in `AppModel`.
-- `NavigationSidebarView`: SwiftUI `List` scroll-position instability; notification-based focus routing
-- `PresetManagerSheet`: same List instability
-
----
-
-## Build
-
-```bash
-# Debug build
-xcodebuild -project Ledger.xcodeproj \
-           -scheme Ledger \
-           -configuration Debug \
-           -destination 'platform=macOS' \
-           build
-```
-
-App binary lands at:
-`~/Library/Developer/Xcode/DerivedData/Ledger-*/Build/Products/Debug/Ledger.app`
-
-The only expected build warning is:
-> `appintentsmetadataprocessor: Metadata extraction skipped. No AppIntents.framework dependency found.`
-
-This is harmless — ignore it.
-
-**Marketing version / build number**: both live in `Config/Base.xcconfig`. Build number is auto-set by `.git/hooks/pre-commit` (`git rev-list --count HEAD + 1`). Do not edit `CURRENT_PROJECT_VERSION` manually.
-
-**exiftool binary**: bundled under `Vendor/`. Not a system dependency.
-
----
-
-## Tests
-
-| Target | Run with | Status |
-|--------|----------|--------|
-| `ExifEditCoreTests` | `./scripts/test/run_all.sh --filter ExifEditCoreTests` | Runnable |
-| `ExifEditMacTests` (in `Tests/LedgerTests`) | `./scripts/test/run_all.sh --filter ExifEditMacTests` | Runnable |
-
-Run `./scripts/test/run_all.sh` for the full test suite.
-`swift test --parallel` is used intentionally because serial `swift test` can intermittently stall in this environment.
+- `docs/Engineering Baseline.md`
+- `docs/RELEASE_CHECKLIST.md`
+- `docs/Swift6 Migration Backlog.md`
+- `docs/Roadmap.md`

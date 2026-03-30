@@ -1,6 +1,7 @@
 import AppKit
 import ExifEditCore
 import Foundation
+import SharedUI
 
 @MainActor
 extension AppModel {
@@ -756,7 +757,7 @@ extension AppModel {
         selectionChanged()
     }
 
-    func moveSelectionInList(direction: MoveCommandDirection, extendingSelection: Bool = false) {
+    func moveSelectionInList(direction: SharedUI.MoveCommandDirection, extendingSelection: Bool = false) {
         let items = filteredBrowserItems
         guard !items.isEmpty else { return }
 
@@ -777,7 +778,7 @@ extension AppModel {
         }
     }
 
-    func moveSelectionInGallery(direction: MoveCommandDirection, extendingSelection: Bool = false) {
+    func moveSelectionInGallery(direction: SharedUI.MoveCommandDirection, extendingSelection: Bool = false) {
         let items = filteredBrowserItems
         guard !items.isEmpty else { return }
 
