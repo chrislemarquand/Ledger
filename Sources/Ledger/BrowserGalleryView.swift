@@ -120,7 +120,6 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
         collectionView.isSelectable = true
         collectionView.allowsMultipleSelection = true
         collectionView.allowsEmptySelection = true
-        collectionView.focusRingType = .none
         collectionView.dataSource = self
         collectionView.delegate = self
         collectionView.prefetchDataSource = self
