@@ -282,6 +282,7 @@ final class AppModel: ObservableObject {
     enum BrowserSort: String, CaseIterable, Identifiable {
         case name
         case created
+        case modified
         case size
         case kind
 

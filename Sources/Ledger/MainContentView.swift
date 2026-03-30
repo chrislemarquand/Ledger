@@ -687,9 +687,11 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         nameItem.keyEquivalentModifierMask = [.command, .control, .option]
         let createdItem = sortMenu.addItem(withTitle: "Date Created", action: #selector(sortByCreatedAction(_:)), keyEquivalent: "2")
         createdItem.keyEquivalentModifierMask = [.command, .control, .option]
-        let sizeItem = sortMenu.addItem(withTitle: "Size", action: #selector(sortBySizeAction(_:)), keyEquivalent: "3")
+        let modifiedItem = sortMenu.addItem(withTitle: "Date Modified", action: #selector(sortByModifiedAction(_:)), keyEquivalent: "3")
+        modifiedItem.keyEquivalentModifierMask = [.command, .control, .option]
+        let sizeItem = sortMenu.addItem(withTitle: "Size", action: #selector(sortBySizeAction(_:)), keyEquivalent: "4")
         sizeItem.keyEquivalentModifierMask = [.command, .control, .option]
-        let kindItem = sortMenu.addItem(withTitle: "Kind", action: #selector(sortByKindAction(_:)), keyEquivalent: "4")
+        let kindItem = sortMenu.addItem(withTitle: "Kind", action: #selector(sortByKindAction(_:)), keyEquivalent: "5")
         kindItem.keyEquivalentModifierMask = [.command, .control, .option]
         let item = NSMenuItem(title: "Sort By", action: nil, keyEquivalent: "")
         item.image = NSImage(systemSymbolName: "arrow.up.arrow.down", accessibilityDescription: nil)
@@ -1313,6 +1315,8 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             menuItem.state = model.browserSort == .name ? .on : .off
         } else if menuItem.action == #selector(sortByCreatedAction(_:)) {
             menuItem.state = model.browserSort == .created ? .on : .off
+        } else if menuItem.action == #selector(sortByModifiedAction(_:)) {
+            menuItem.state = model.browserSort == .modified ? .on : .off
         } else if menuItem.action == #selector(sortBySizeAction(_:)) {
             menuItem.state = model.browserSort == .size ? .on : .off
         } else if menuItem.action == #selector(sortByKindAction(_:)) {
@@ -1762,6 +1766,12 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     }
 
     @objc
+    func sortByModifiedAction(_: Any?) {
+        model.browserSort = .modified
+        refreshToolbarState()
+    }
+
+    @objc
     func sortBySizeAction(_: Any?) {
         model.browserSort = .size
         refreshToolbarState()
@@ -2165,6 +2175,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             menu.autoenablesItems = false
             menu.addItem(withTitle: "Name", action: #selector(NativeThreePaneSplitViewController.sortByNameAction(_:)), keyEquivalent: "")
             menu.addItem(withTitle: "Date Created", action: #selector(NativeThreePaneSplitViewController.sortByCreatedAction(_:)), keyEquivalent: "")
+            menu.addItem(withTitle: "Date Modified", action: #selector(NativeThreePaneSplitViewController.sortByModifiedAction(_:)), keyEquivalent: "")
             menu.addItem(withTitle: "Size", action: #selector(NativeThreePaneSplitViewController.sortBySizeAction(_:)), keyEquivalent: "")
             menu.addItem(withTitle: "Kind", action: #selector(NativeThreePaneSplitViewController.sortByKindAction(_:)), keyEquivalent: "")
             for item in menu.items {
@@ -2183,6 +2194,8 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                 menu.item(withTitle: "Name")?.state = .on
             case .created:
                 menu.item(withTitle: "Date Created")?.state = .on
+            case .modified:
+                menu.item(withTitle: "Date Modified")?.state = .on
             case .size:
                 menu.item(withTitle: "Size")?.state = .on
             case .kind:

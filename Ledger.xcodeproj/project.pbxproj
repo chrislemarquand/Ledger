@@ -50,6 +50,8 @@
 		A100016D0000000000000001 /* AppModel+UndoStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001600000000000000001 /* AppModel+UndoStatus.swift */; };
 		A100016E0000000000000001 /* AppModel+FieldCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001610000000000000001 /* AppModel+FieldCatalog.swift */; };
 		A10001700000000000000001 /* WelcomeCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100016F0000000000000001 /* WelcomeCoordinator.swift */; };
+		A10001720000000000000001 /* ListColumnDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001710000000000000001 /* ListColumnDefinition.swift */; };
+		A10001740000000000000001 /* ListColumnStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001730000000000000001 /* ListColumnStore.swift */; };
 		B100001D0000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000D0000000000000001 /* Assets.xcassets */; };
 		C20002010000000000000001 /* CSVImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001010000000000000001 /* CSVImportAdapter.swift */; };
 		C20002020000000000000001 /* CSVSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001020000000000000001 /* CSVSupport.swift */; };
@@ -137,6 +139,8 @@
 		A10001600000000000000001 /* AppModel+UndoStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+UndoStatus.swift"; sourceTree = "<group>"; };
 		A10001610000000000000001 /* AppModel+FieldCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+FieldCatalog.swift"; sourceTree = "<group>"; };
 		A100016F0000000000000001 /* WelcomeCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WelcomeCoordinator.swift"; sourceTree = "<group>"; };
+		A10001710000000000000001 /* ListColumnDefinition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ListColumnDefinition.swift"; sourceTree = "<group>"; };
+		A10001730000000000000001 /* ListColumnStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ListColumnStore.swift"; sourceTree = "<group>"; };
 		B100000D0000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Assets.xcassets"; sourceTree = "<group>"; };
 		C20001010000000000000001 /* CSVImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CSVImportAdapter.swift"; sourceTree = "<group>"; };
 		C20001020000000000000001 /* CSVSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CSVSupport.swift"; sourceTree = "<group>"; };
@@ -287,6 +291,8 @@
 				A10001410000000000000001 /* Presets.swift */,
 				A10001430000000000000001 /* BrowserGalleryView.swift */,
 				A10001450000000000000001 /* BrowserListView.swift */,
+					A10001710000000000000001 /* ListColumnDefinition.swift */,
+					A10001730000000000000001 /* ListColumnStore.swift */,
 				A10001470000000000000001 /* InspectorView.swift */,
 				DD0001000000000000000001 /* LedgerSidebarTypes.swift */,
 				A100014B0000000000000001 /* PresetSheets.swift */,
@@ -508,6 +514,8 @@
 				A10001420000000000000001 /* Presets.swift in Sources */,
 				A10001440000000000000001 /* BrowserGalleryView.swift in Sources */,
 				A10001460000000000000001 /* BrowserListView.swift in Sources */,
+				A10001720000000000000001 /* ListColumnDefinition.swift in Sources */,
+				A10001740000000000000001 /* ListColumnStore.swift in Sources */,
 				A10001480000000000000001 /* InspectorView.swift in Sources */,
 				DD0001010000000000000001 /* LedgerSidebarTypes.swift in Sources */,
 				A100014C0000000000000001 /* PresetSheets.swift in Sources */,

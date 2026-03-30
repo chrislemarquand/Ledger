@@ -19,7 +19,7 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
     private var lastRenderedItemURLs: [URL] = []
     private var lastRenderedViewMode: AppModel.BrowserViewMode?
     private var contextMenuTargetURLs: [URL] = []
-    private var didApplyInitialColumnFit = false
+    private var columnStore = ListColumnStore(identifierPrefix: AppBrand.identifierPrefix)
     private var browserFocusObserver: NSObjectProtocol?
     private var viewModeObserver: NSObjectProtocol?
 
@@ -288,40 +288,29 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
             self?.focusInspectorFromBrowser()
         }
 
-        let nameColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
-        nameColumn.title = "Name"
-        nameColumn.minWidth = 60
-        nameColumn.width = 300
-        nameColumn.resizingMask = [.autoresizingMask, .userResizingMask]
-        nameColumn.sortDescriptorPrototype = NSSortDescriptor(key: AppModel.BrowserSort.name.rawValue, ascending: true)
+        for definition in ListColumnDefinition.all {
+            let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(definition.id))
+            column.title = definition.label
+            column.minWidth = definition.minWidth
+            column.width = definition.defaultWidth
+            column.resizingMask = definition.id == ListColumnDefinition.idName
+                ? [.autoresizingMask, .userResizingMask]
+                : .userResizingMask
+            if definition.isSortable {
+                column.sortDescriptorPrototype = NSSortDescriptor(key: definition.id, ascending: true)
+            }
+            column.isHidden = !columnStore.isVisible(definition)
+            tableView.addTableColumn(column)
+        }
 
-        let createdColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("created"))
-        createdColumn.title = "Date Created"
-        createdColumn.minWidth = 84
-        createdColumn.width = 160
-        createdColumn.resizingMask = .userResizingMask
-        createdColumn.sortDescriptorPrototype = NSSortDescriptor(key: AppModel.BrowserSort.created.rawValue, ascending: true)
+        // NSTableView handles column width and order persistence natively.
+        tableView.autosaveName = "\(AppBrand.identifierPrefix).BrowserList"
+        tableView.autosaveTableColumns = true
 
-        let sizeColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("size"))
-        sizeColumn.title = "Size"
-        sizeColumn.minWidth = 64
-        sizeColumn.width = 90
-        sizeColumn.resizingMask = .userResizingMask
-        sizeColumn.sortDescriptorPrototype = NSSortDescriptor(key: AppModel.BrowserSort.size.rawValue, ascending: true)
+        // Header right-click menu for toggling columns.
+        tableView.headerView?.menu = buildColumnHeaderMenu()
 
-        let kindColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("kind"))
-        kindColumn.title = "Kind"
-        kindColumn.minWidth = 84
-        kindColumn.width = 120
-        kindColumn.resizingMask = .userResizingMask
-        kindColumn.sortDescriptorPrototype = NSSortDescriptor(key: AppModel.BrowserSort.kind.rawValue, ascending: true)
-
-        tableView.addTableColumn(nameColumn)
-        tableView.addTableColumn(createdColumn)
-        tableView.addTableColumn(sizeColumn)
-        tableView.addTableColumn(kindColumn)
-
-        // Set initial sort indicator to match persisted model state.
+        // Restore persisted sort indicator.
         tableView.sortDescriptors = [NSSortDescriptor(key: model.browserSort.rawValue, ascending: model.browserSortAscending)]
 
         scrollView.documentView = tableView
@@ -332,6 +321,48 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
             scrollView.topAnchor.constraint(equalTo: view.topAnchor),
             scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
+    }
+
+    private func buildColumnHeaderMenu() -> NSMenu {
+        let menu = NSMenu()
+        let builtInIDs = Set(ListColumnDefinition.builtIn.map(\.id))
+        let builtInToggleable = ListColumnDefinition.toggleable.filter { builtInIDs.contains($0.id) }
+        let metadataToggleable = ListColumnDefinition.toggleable.filter { !builtInIDs.contains($0.id) }
+
+        for definition in builtInToggleable {
+            menu.addItem(makeColumnMenuItem(for: definition))
+        }
+        menu.addItem(.separator())
+        for definition in metadataToggleable {
+            menu.addItem(makeColumnMenuItem(for: definition))
+        }
+        return menu
+    }
+
+    private func makeColumnMenuItem(for definition: ListColumnDefinition) -> NSMenuItem {
+        let item = NSMenuItem(
+            title: definition.label,
+            action: #selector(toggleColumnFromHeader(_:)),
+            keyEquivalent: ""
+        )
+        item.target = self
+        item.representedObject = definition.id
+        let isVisible = tableView.tableColumns
+            .first(where: { $0.identifier.rawValue == definition.id })
+            .map { !$0.isHidden } ?? definition.defaultIsVisible
+        item.state = isVisible ? .on : .off
+        return item
+    }
+
+    @objc private func toggleColumnFromHeader(_ sender: NSMenuItem) {
+        guard let columnID = sender.representedObject as? String,
+              let column = tableView.tableColumns.first(where: { $0.identifier.rawValue == columnID }),
+              ListColumnDefinition.toggleable.contains(where: { $0.id == columnID })
+        else { return }
+        let newVisible = column.isHidden
+        column.isHidden = !newVisible
+        sender.state = newVisible ? .on : .off
+        columnStore.setVisible(columnID, newVisible, allDefinitions: ListColumnDefinition.all)
     }
 
     private func syncTableWidthToViewportIfNeeded() {
@@ -350,24 +381,23 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
     }
 
     private func applyInitialColumnFitIfNeeded() {
-        guard !didApplyInitialColumnFit else { return }
-        guard let nameColumn = tableView.tableColumns.first(where: { $0.identifier.rawValue == "name" }),
-              let createdColumn = tableView.tableColumns.first(where: { $0.identifier.rawValue == "created" }),
-              let sizeColumn = tableView.tableColumns.first(where: { $0.identifier.rawValue == "size" }),
-              let kindColumn = tableView.tableColumns.first(where: { $0.identifier.rawValue == "kind" })
-        else {
-            return
-        }
+        guard !columnStore.hasAppliedInitialFit else { return }
+        guard let nameColumn = tableView.tableColumns.first(where: {
+            $0.identifier.rawValue == ListColumnDefinition.idName
+        }) else { return }
 
         let viewportWidth = scrollView.contentView.bounds.width
         guard viewportWidth > 0 else { return }
 
-        let spacing = tableView.intercellSpacing.width * CGFloat(max(tableView.numberOfColumns - 1, 0))
-        let fixedWidth = createdColumn.width + sizeColumn.width + kindColumn.width + spacing + 8
-        let fittedNameWidth = max(nameColumn.minWidth, floor(viewportWidth - fixedWidth))
+        let visibleNonName = tableView.tableColumns.filter {
+            $0.identifier.rawValue != ListColumnDefinition.idName && !$0.isHidden
+        }
+        let fixedWidth = visibleNonName.reduce(0) { $0 + $1.width }
+        let spacing = tableView.intercellSpacing.width * CGFloat(visibleNonName.count)
+        let fittedNameWidth = max(nameColumn.minWidth, floor(viewportWidth - fixedWidth - spacing - 8))
         nameColumn.width = fittedNameWidth
         tableView.tile()
-        didApplyInitialColumnFit = true
+        columnStore.hasAppliedInitialFit = true
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int {

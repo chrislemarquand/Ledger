@@ -221,29 +221,134 @@ extension AppModel {
 
     func listColumnValue(for fileURL: URL, columnID: String, fallbackItem: BrowserItem?) -> String {
         switch columnID {
-        case "name":
+        case ListColumnDefinition.idName:
             if let proposed = pendingRenameByFile[fileURL] {
                 return proposed
             }
             return fallbackItem?.name ?? fileURL.lastPathComponent
-        case "created":
+        case ListColumnDefinition.idCreated:
             if let date = fallbackItem?.createdAt {
                 return Self.listDateFormatter.string(from: date)
             }
             return "—"
-        case "size":
+        case ListColumnDefinition.idModified:
+            if let date = fallbackItem?.modifiedAt {
+                return Self.listDateFormatter.string(from: date)
+            }
+            return "—"
+        case ListColumnDefinition.idSize:
             if let size = fallbackItem?.sizeBytes, size >= 0 {
                 return Self.byteCountFormatter.string(fromByteCount: Int64(size))
             }
             return "—"
-        case "kind":
+        case ListColumnDefinition.idKind:
             if let kind = fallbackItem?.kind, !kind.isEmpty {
                 return kind
             }
             return "—"
+        case ListColumnDefinition.idDimensions:
+            if let (w, h) = imagePixelDimensions(for: fileURL) {
+                return "\(w) × \(h)"
+            }
+            return "—"
+        case ListColumnDefinition.idRating:
+            return metadataStringValue(for: fileURL, keys: ["Rating"])
+        case ListColumnDefinition.idMake:
+            return metadataStringValue(for: fileURL, keys: ["Make"])
+        case ListColumnDefinition.idModel:
+            return metadataStringValue(for: fileURL, keys: ["Model"])
+        case ListColumnDefinition.idLens:
+            return metadataStringValue(for: fileURL, keys: ["LensModel", "Lens"])
+        case ListColumnDefinition.idAperture:
+            return metadataAperture(for: fileURL)
+        case ListColumnDefinition.idShutter:
+            return metadataShutter(for: fileURL)
+        case ListColumnDefinition.idISO:
+            return metadataISO(for: fileURL)
+        case ListColumnDefinition.idFocal:
+            return metadataFocalLength(for: fileURL)
+        case ListColumnDefinition.idDateTaken:
+            return metadataDateTaken(for: fileURL)
+        case ListColumnDefinition.idTitle:
+            return metadataStringValue(for: fileURL, keys: ["Title"])
+        case ListColumnDefinition.idDescription:
+            return metadataStringValue(for: fileURL, keys: ["Description", "Caption-Abstract"])
+        case ListColumnDefinition.idKeywords:
+            return metadataStringValue(for: fileURL, keys: ["Subject", "Keywords"])
+        case ListColumnDefinition.idCopyright:
+            return metadataStringValue(for: fileURL, keys: ["Copyright"])
+        case ListColumnDefinition.idCreator:
+            return metadataStringValue(for: fileURL, keys: ["Creator", "Artist"])
         default:
             return "—"
         }
+    }
+
+    private func metadataStringValue(for fileURL: URL, keys: [String]) -> String {
+        guard let snapshot = metadataByFile[fileURL] else { return "—" }
+        for key in keys {
+            if let value = snapshot.fields.first(where: { $0.key == key })?.value {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return trimmed }
+            }
+        }
+        return "—"
+    }
+
+    private func metadataAperture(for fileURL: URL) -> String {
+        let raw = metadataStringValue(for: fileURL, keys: ["FNumber", "Aperture"])
+        guard raw != "—" else { return raw }
+        if raw.lowercased().hasPrefix("f/") { return raw }
+        return "f/\(raw)"
+    }
+
+    private func metadataShutter(for fileURL: URL) -> String {
+        let raw = metadataStringValue(for: fileURL, keys: ["ExposureTime", "ShutterSpeedValue"])
+        guard raw != "—" else { return raw }
+        // ExifTool commonly returns "1/250" directly
+        if raw.contains("/") { return "\(raw) s" }
+        guard let value = Double(raw) else { return raw }
+        if value >= 1.0 {
+            let formatted = value.truncatingRemainder(dividingBy: 1) == 0
+                ? String(Int(value))
+                : String(format: "%.1f", value)
+            return "\(formatted) s"
+        } else if value > 0 {
+            let denominator = Int((1.0 / value).rounded())
+            return "1/\(denominator) s"
+        }
+        return raw
+    }
+
+    private func metadataISO(for fileURL: URL) -> String {
+        let raw = metadataStringValue(for: fileURL, keys: ["ISO"])
+        guard raw != "—" else { return raw }
+        if let d = Double(raw), d >= 0, d.truncatingRemainder(dividingBy: 1) == 0 {
+            return String(Int(d))
+        }
+        return raw
+    }
+
+    private func metadataFocalLength(for fileURL: URL) -> String {
+        let raw = metadataStringValue(for: fileURL, keys: ["FocalLength"])
+        guard raw != "—" else { return raw }
+        if raw.lowercased().contains("mm") { return raw }
+        if let d = Double(raw) {
+            if d.truncatingRemainder(dividingBy: 1) == 0 {
+                return "\(Int(d)) mm"
+            }
+            return "\(raw) mm"
+        }
+        return raw
+    }
+
+    private func metadataDateTaken(for fileURL: URL) -> String {
+        let raw = metadataStringValue(for: fileURL, keys: ["DateTimeOriginal", "CreateDate"])
+        guard raw != "—" else { return raw }
+        if let date = Self.exifDateFormatter.date(from: raw) {
+            return Self.listDateFormatter.string(from: date)
+        }
+        return raw
     }
 
     func imagePixelDimensions(for fileURL: URL) -> (Int, Int)? {
