@@ -1913,6 +1913,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             guard let controller else { return }
             let model = controller.model
             updateViewMode(with: model)
+            updateZoomItems(with: model)
             updateSortMenu(with: model)
             updateImportMenu(with: model)
             updateExportMenu(with: model)
@@ -1923,6 +1924,12 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
 
         private func updateViewMode(with model: AppModel) {
             viewModeGroupItem?.selectedIndex = model.browserViewMode == .gallery ? 0 : 1
+        }
+
+        private func updateZoomItems(with model: AppModel) {
+            let inGallery = model.browserViewMode == .gallery
+            zoomOutItem?.isEnabled = inGallery && model.canDecreaseGalleryZoom
+            zoomInItem?.isEnabled = inGallery && model.canIncreaseGalleryZoom
         }
 
         private func updateSortMenu(with model: AppModel) {
@@ -1968,8 +1975,10 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
 
             switch item.itemIdentifier {
             case .zoomOut:
+                updateZoomItems(with: model)
                 return model.browserViewMode == .gallery && model.canDecreaseGalleryZoom
             case .zoomIn:
+                updateZoomItems(with: model)
                 return model.browserViewMode == .gallery && model.canIncreaseGalleryZoom
             case .applyChanges:
                 updateApplyStyle(with: model)
