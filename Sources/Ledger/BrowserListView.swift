@@ -255,12 +255,6 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
         tableView.doubleAction = #selector(doubleClicked(_:))
         tableView.target = self
 
-        sharedListController.onBackgroundClick = { [weak self] in
-            self?.model.clearSelection()
-        }
-        sharedListController.onModifiedRowClick = { [weak self] row, modifiers in
-            self?.handleModifiedRowClick(row: row, modifiers: modifiers)
-        }
         sharedListController.contextMenuProvider = { [weak self] row in
             self?.menuForRow(row)
         }
@@ -551,21 +545,6 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
     private func restoreFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty else { return }
         model.performFileAction(.restoreFromLastBackup, targetURLs: contextMenuTargetURLs)
-    }
-
-    private func handleModifiedRowClick(row: Int, modifiers: NSEvent.ModifierFlags) {
-        guard row >= 0, row < items.count else { return }
-        model.selectFile(items[row].url, modifiers: modifiers, in: items)
-
-        let selectedIndexes = IndexSet(
-            items.enumerated().compactMap { index, item in
-                model.selectedFileURLs.contains(item.url) ? index : nil
-            }
-        )
-        isApplyingProgrammaticSelection = true
-        tableView.selectRowIndexes(selectedIndexes, byExtendingSelection: false)
-        isApplyingProgrammaticSelection = false
-        updateQuickLookSourceFrameFromCurrentSelection()
     }
 
     private func hasListChanged() -> Bool {
