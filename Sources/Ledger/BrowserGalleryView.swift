@@ -817,8 +817,13 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         }
     }
 
+    override var highlightState: NSCollectionViewItem.HighlightState {
+        didSet { applySelection(isSelected: isSelected) }
+    }
+
     func applySelection(isSelected: Bool) {
-        selectionBackgroundView.layer?.backgroundColor = isSelected
+        let highlighted = highlightState == .forSelection
+        selectionBackgroundView.layer?.backgroundColor = (isSelected || highlighted)
             ? AppTheme.accentNSColor.withAlphaComponent(0.22).cgColor
             : NSColor.clear.cgColor
     }
