@@ -140,9 +140,6 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
             self.model.setSelectionFromList([url], focusedURL: url)
             self.model.openInDefaultApp(url)
         }
-        collectionView.onModifiedItemClick = { [weak self] indexPath, modifiers in
-            self?.handleModifiedItemClick(indexPath: indexPath, modifiers: modifiers)
-        }
         collectionView.onActivateSelection = { [weak self] in
             self?.focusInspectorFromBrowser()
         }
@@ -624,21 +621,6 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
             return items[indexPath.item].url
         }
         model.setSelectionFromList(urls, focusedURL: focusedURL)
-        updateQuickLookArtifacts()
-    }
-
-    private func handleModifiedItemClick(indexPath: IndexPath, modifiers: NSEvent.ModifierFlags) {
-        guard indexPath.item >= 0, indexPath.item < items.count else { return }
-        model.selectFile(items[indexPath.item].url, modifiers: modifiers, in: items)
-
-        let selectedIndexPaths = Set(
-            items.enumerated().compactMap { index, item -> IndexPath? in
-                model.selectedFileURLs.contains(item.url) ? IndexPath(item: index, section: 0) : nil
-            }
-        )
-        isApplyingProgrammaticSelection = true
-        collectionView.selectionIndexPaths = selectedIndexPaths
-        isApplyingProgrammaticSelection = false
         updateQuickLookArtifacts()
     }
 
