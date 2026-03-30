@@ -126,23 +126,6 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
         collectionView.prefetchDataSource = self
         collectionView.register(AppKitGalleryItem.self, forItemWithIdentifier: AppKitGalleryItem.reuseIdentifier)
 
-        collectionView.onBackgroundClick = { [weak self] in
-            self?.model.clearSelection()
-        }
-        collectionView.allowsShiftExtendedMovement = false
-        collectionView.handlesActivateOnReturn = true
-        collectionView.onMoveSelection = { [weak self] direction, extendingSelection in
-            self?.model.moveSelectionInGallery(direction: direction, extendingSelection: extendingSelection)
-        }
-        collectionView.onDoubleClick = { [weak self] indexPath in
-            guard let self, indexPath.item >= 0, indexPath.item < self.items.count else { return }
-            let url = self.items[indexPath.item].url
-            self.model.setSelectionFromList([url], focusedURL: url)
-            self.model.openInDefaultApp(url)
-        }
-        collectionView.onActivateSelection = { [weak self] in
-            self?.focusInspectorFromBrowser()
-        }
         collectionView.contextMenuProvider = { [weak self] indexPath in
             self?.menuForItem(at: indexPath)
         }
@@ -183,16 +166,6 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
             guard let attrs = self.collectionView.collectionViewLayout?.layoutAttributesForItem(at: indexPath) else { return }
             self.collectionView.scrollToVisible(attrs.frame)
         }
-    }
-
-    private func focusInspectorFromBrowser() {
-        guard model.browserViewMode == .gallery else { return }
-        guard !model.selectedFileURLs.isEmpty else { return }
-        _ = NSApp.sendAction(
-            #selector(NativeThreePaneSplitViewController.focusInspectorEntryAction(_:)),
-            to: nil,
-            from: self
-        )
     }
 
     private func renderState() {
