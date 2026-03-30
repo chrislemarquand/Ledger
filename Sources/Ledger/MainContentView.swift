@@ -413,112 +413,6 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         toolbarShellController?.syncAndValidate(window: view.window)
     }
 
-    private enum BrowserKeyboardCommand: Equatable {
-        case passthrough
-        case consume
-        case togglePaneFocus
-        case inspectorTab(backward: Bool)
-        case zoomIn
-        case zoomOut
-        case clearSelection
-        case selectAllFiltered
-        case moveSelection(direction: SharedUI.MoveCommandDirection, extendingSelection: Bool)
-        case extendSelectionToBoundary(towardStart: Bool)
-    }
-
-    private struct BrowserKeyboardInput {
-        var keyCode: UInt16
-        var characters: String?
-        var modifiers: NSEvent.ModifierFlags
-        var browserViewMode: AppModel.BrowserViewMode
-        var canIncreaseGalleryZoom: Bool
-        var canDecreaseGalleryZoom: Bool
-        var shouldHandlePaneTabSwitch: Bool
-        var shouldHandleInspectorTabCommands: Bool
-        var shouldHandleBrowserKeyCommands: Bool
-    }
-
-    private enum BrowserKeyboardRouter {
-        static func route(_ input: BrowserKeyboardInput) -> BrowserKeyboardCommand {
-            let modifiers = input.modifiers.intersection([.command, .shift, .control, .option, .function])
-            let isTabWithoutCommand = input.keyCode == KeyCode.tab && (modifiers.isEmpty || modifiers == [.shift])
-
-            if isTabWithoutCommand && input.shouldHandlePaneTabSwitch {
-                return .togglePaneFocus
-            }
-
-            if input.shouldHandleInspectorTabCommands && input.keyCode == KeyCode.tab {
-                if modifiers.isEmpty {
-                    return .inspectorTab(backward: false)
-                }
-                if modifiers == [.shift] {
-                    return .inspectorTab(backward: true)
-                }
-            }
-
-            if input.keyCode == KeyCode.equal || input.keyCode == KeyCode.numpadPlus {
-                guard modifiers == [.command] || modifiers == [.command, .shift] else { return .passthrough }
-                guard input.browserViewMode == .gallery else { return .consume }
-                guard input.canIncreaseGalleryZoom else { return .consume }
-                return .zoomIn
-            }
-
-            if input.keyCode == KeyCode.minus || input.keyCode == KeyCode.numpadMinus {
-                guard modifiers == [.command] || modifiers == [.command, .shift] else { return .passthrough }
-                guard input.browserViewMode == .gallery else { return .consume }
-                guard input.canDecreaseGalleryZoom else { return .consume }
-                return .zoomOut
-            }
-
-            guard input.shouldHandleBrowserKeyCommands else { return .passthrough }
-
-            switch input.keyCode {
-            case KeyCode.escape:
-                guard modifiers.isEmpty else { return .passthrough }
-                return .clearSelection
-            case _ where input.characters == "a":
-                guard modifiers == [.command] else { return .passthrough }
-                return .selectAllFiltered
-            case _ where input.characters == "d":
-                guard modifiers == [.command] else { return .passthrough }
-                return .clearSelection
-            case KeyCode.leftArrow, KeyCode.rightArrow, KeyCode.downArrow, KeyCode.upArrow:
-                guard let direction = moveDirection(forKeyCode: input.keyCode) else { return .passthrough }
-                if modifiers.isEmpty {
-                    if input.browserViewMode == .gallery {
-                        return .moveSelection(direction: direction, extendingSelection: false)
-                    }
-                    if direction == .up || direction == .down {
-                        return .moveSelection(direction: direction, extendingSelection: false)
-                    }
-                    return .passthrough
-                }
-
-                let isShiftOnly = modifiers == [.shift]
-                let isCommandShift = modifiers == [.command, .shift]
-                guard isShiftOnly || isCommandShift else { return .passthrough }
-
-                if isCommandShift {
-                    let towardStart = direction == .left || direction == .up
-                    return .extendSelectionToBoundary(towardStart: towardStart)
-                }
-                return .moveSelection(direction: direction, extendingSelection: true)
-            default:
-                return .passthrough
-            }
-        }
-
-        private static func moveDirection(forKeyCode keyCode: UInt16) -> SharedUI.MoveCommandDirection? {
-            switch keyCode {
-            case KeyCode.leftArrow: return .left
-            case KeyCode.rightArrow: return .right
-            case KeyCode.downArrow: return .down
-            case KeyCode.upArrow: return .up
-            default: return nil
-            }
-        }
-    }
-
     private func installSpacebarQuickLookMonitorIfNeeded() {
         guard spacebarMonitor == nil else { return }
         spacebarMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -527,7 +421,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                 keyCode: event.keyCode,
                 characters: event.characters,
                 modifiers: event.modifierFlags,
-                browserViewMode: model.browserViewMode,
+                browserViewMode: model.browserViewMode == .gallery ? .gallery : .list,
                 canIncreaseGalleryZoom: model.canIncreaseGalleryZoom,
                 canDecreaseGalleryZoom: model.canDecreaseGalleryZoom,
                 shouldHandlePaneTabSwitch: shouldHandlePaneTabSwitchCommands(),
@@ -539,7 +433,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         }
     }
 
-    private func handleBrowserKeyboardCommand(_ command: BrowserKeyboardCommand, passthroughEvent event: NSEvent) -> NSEvent? {
+    private func handleBrowserKeyboardCommand(_ command: SharedUI.BrowserKeyboardCommand, passthroughEvent event: NSEvent) -> NSEvent? {
         switch command {
         case .passthrough:
             return event
