@@ -552,6 +552,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     func isInspectorCollapsedForMenu() -> Bool { isInspectorCollapsed }
 
     @objc func toggleInspectorAction(_ sender: Any?) { toggleInspector(sender) }
+    @objc func togglePathBarAction(_ sender: Any?) { browserController.setPathBarVisible(!browserController.isPathBarVisible) }
 
     private enum MenuTag {
         static let fileOpenFolder = 9_101
@@ -709,7 +710,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         var sidebarMenuItem: NSMenuItem?
         var inspectorMenuItem: NSMenuItem?
         var extraItems: [NSMenuItem] = []
-        let ownedTitles: Set<String> = ["as gallery", "as list", "sort by", "zoom in", "zoom out"]
+        let ownedTitles: Set<String> = ["as gallery", "as list", "sort by", "zoom in", "zoom out", "show path bar", "hide path bar"]
 
         for item in menu.items where !item.isSeparatorItem {
             let normalizedTitle = item.title.lowercased()
@@ -763,6 +764,14 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         menu.addItem(.separator())
         if let sidebarMenuItem  { menu.addItem(sidebarMenuItem) }
         if let inspectorMenuItem { menu.addItem(inspectorMenuItem) }
+        let pathBarItem = NSMenuItem(
+            title: browserController.isPathBarVisible ? "Hide Path Bar" : "Show Path Bar",
+            action: #selector(togglePathBarAction(_:)),
+            keyEquivalent: "p"
+        )
+        pathBarItem.keyEquivalentModifierMask = [.command, .option]
+        pathBarItem.image = NSImage(systemSymbolName: "square.bottomhalf.filled", accessibilityDescription: nil)
+        menu.addItem(pathBarItem)
         if !extraItems.isEmpty {
             menu.addItem(.separator())
             extraItems.forEach { menu.addItem($0) }
@@ -1264,6 +1273,8 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             return !selection.isEmpty
         } else if menuItem.action == #selector(toggleInspectorAction(_:)) {
             menuItem.title = isInspectorCollapsed ? "Show Inspector" : "Hide Inspector"
+        } else if menuItem.action == #selector(togglePathBarAction(_:)) {
+            menuItem.title = browserController.isPathBarVisible ? "Hide Path Bar" : "Show Path Bar"
         } else if menuItem.action == #selector(switchToGalleryAction(_:)) {
             menuItem.state = model.browserViewMode == .gallery ? .on : .off
         } else if menuItem.action == #selector(switchToListAction(_:)) {
@@ -2357,6 +2368,16 @@ final class BrowserContainerViewController: NSViewController {
     private var lastRenderedMode: AppModel.BrowserViewMode?
     private var isRenderScheduled = false
 
+    // Path bar
+    private var pathBarVC: PathBarViewController?
+    private var galleryBottomConstraint: NSLayoutConstraint?
+    private var listBottomConstraint: NSLayoutConstraint?
+    private let pathBarDefaultsKey = "\(AppBrand.identifierPrefix).pathBarVisible"
+
+    var isPathBarVisible: Bool {
+        UserDefaults.standard.bool(forKey: pathBarDefaultsKey)
+    }
+
     init(model: AppModel) {
         self.model = model
         galleryController = BrowserGalleryViewController(model: model, items: model.filteredBrowserItems)
@@ -2375,11 +2396,66 @@ final class BrowserContainerViewController: NSViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        installChild(galleryController)
-        installChild(listController)
+        galleryBottomConstraint = installChild(galleryController)
+        listBottomConstraint = installChild(listController)
+        if isPathBarVisible {
+            installPathBarIfNeeded()
+            adjustContentBottomConstraints(toPathBar: true)
+        }
         applyBrowserModeIfNeeded(force: true)
         installRenderObservers()
         render()
+    }
+
+    func setPathBarVisible(_ visible: Bool) {
+        guard visible != isPathBarVisible else { return }
+        UserDefaults.standard.set(visible, forKey: pathBarDefaultsKey)
+        if visible {
+            installPathBarIfNeeded()
+        }
+        pathBarVC?.view.isHidden = !visible
+        adjustContentBottomConstraints(toPathBar: visible)
+        updatePathBarURL()
+    }
+
+    private func installPathBarIfNeeded() {
+        guard pathBarVC == nil else { return }
+        let vc = PathBarViewController()
+        vc.placeholderString = "No Folder Selected"
+        vc.onItemClicked = { [weak self] url in
+            guard let self else { return }
+            let currentURL = model.selectedSidebarItem.flatMap { model.sidebarOpenURL(for: $0.kind) }
+            guard url != currentURL else { return }
+            model.openFolder(at: url)
+        }
+        addChild(vc)
+        vc.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(vc.view)
+        NSLayoutConstraint.activate([
+            vc.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            vc.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            vc.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            vc.view.heightAnchor.constraint(equalToConstant: PathBarViewController.preferredHeight),
+        ])
+        pathBarVC = vc
+    }
+
+    private func adjustContentBottomConstraints(toPathBar: Bool) {
+        guard let galleryBottomConstraint, let listBottomConstraint else { return }
+        NSLayoutConstraint.deactivate([galleryBottomConstraint, listBottomConstraint])
+        if toPathBar, let pathBarVC {
+            self.galleryBottomConstraint = galleryController.view.bottomAnchor.constraint(equalTo: pathBarVC.view.topAnchor)
+            self.listBottomConstraint = listController.view.bottomAnchor.constraint(equalTo: pathBarVC.view.topAnchor)
+        } else {
+            self.galleryBottomConstraint = galleryController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+            self.listBottomConstraint = listController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        }
+        NSLayoutConstraint.activate([self.galleryBottomConstraint!, self.listBottomConstraint!])
+    }
+
+    private func updatePathBarURL() {
+        guard let pathBarVC, !pathBarVC.view.isHidden else { return }
+        pathBarVC.url = model.selectedSidebarItem.flatMap { model.sidebarOpenURL(for: $0.kind) }
     }
 
     private func installRenderObservers() {
@@ -2420,16 +2496,19 @@ final class BrowserContainerViewController: NSViewController {
         renderObservers.removeAll()
     }
 
-    private func installChild(_ child: NSViewController) {
+    @discardableResult
+    private func installChild(_ child: NSViewController) -> NSLayoutConstraint {
         addChild(child)
         child.view.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(child.view)
+        let bottom = child.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         NSLayoutConstraint.activate([
             child.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             child.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             child.view.topAnchor.constraint(equalTo: view.topAnchor),
-            child.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            bottom,
         ])
+        return bottom
     }
 
     private func currentOverlayState() -> OverlayState {
@@ -2452,6 +2531,7 @@ final class BrowserContainerViewController: NSViewController {
     }
 
     private func render() {
+        updatePathBarURL()
         applyBrowserModeIfNeeded(force: false)
         let items = model.filteredBrowserItems
         galleryController.update(model: model, items: items)
