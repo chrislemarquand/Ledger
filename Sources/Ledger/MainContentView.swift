@@ -45,18 +45,6 @@ enum UIMetrics {
     }
 }
 
-actor SharedThumbnailRequestBroker {
-    static let shared = SharedThumbnailRequestBroker()
-
-    func request(url: URL, requiredSide: CGFloat, forceRefresh: Bool) async -> NSImage? {
-        await ThumbnailService.request(
-            url: url,
-            requiredSide: requiredSide,
-            forceRefresh: forceRefresh
-        )
-    }
-}
-
 final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NSMenuItemValidation, NSMenuDelegate {
     private var model: AppModel
 

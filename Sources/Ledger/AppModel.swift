@@ -29,13 +29,6 @@ enum ThumbnailPipeline {
         ThumbnailService.fallbackIcon(for: fileURL, side: side)
     }
 
-    static func generateThumbnail(fileURL: URL, maxPixelSize: CGFloat) async -> NSImage? {
-        await ThumbnailService.generateThumbnail(fileURL: fileURL, maxPixelSize: maxPixelSize)
-    }
-
-    static func isLikelyImageFile(_ fileURL: URL) -> Bool {
-        ThumbnailService.isLikelyImageFile(fileURL)
-    }
 }
 
 enum AppBrand {
@@ -338,12 +331,26 @@ final class AppModel: ObservableObject {
             .init(id: "exif-gps-lon", namespace: .exif, key: "GPSLongitude", label: "Longitude", section: "Location"),
             .init(id: "exif-gps-alt", namespace: .exif, key: "GPSAltitude", label: "Altitude", section: "Location"),
             .init(id: "exif-gps-direction", namespace: .exif, key: "GPSImgDirection", label: "Direction", section: "Location"),
+            .init(id: "iptc-sublocation",  namespace: .xmpIptcCore,  key: "Location",              label: "Sublocation",      section: "Location"),
+            .init(id: "iptc-city",         namespace: .xmpPhotoshop, key: "City",                  label: "City",             section: "Location"),
+            .init(id: "iptc-state",        namespace: .xmpPhotoshop, key: "State",                 label: "State / Province", section: "Location"),
+            .init(id: "iptc-country",      namespace: .xmpPhotoshop, key: "Country",               label: "Country",          section: "Location"),
+            .init(id: "iptc-country-code", namespace: .xmpIptcCore,  key: "CountryCode",           label: "Country Code",     section: "Location"),
             .init(id: "xmp-title", namespace: .xmp, key: "Title", label: "Title", section: "Descriptive"),
             .init(id: "xmp-description", namespace: .xmp, key: "Description", label: "Description", section: "Descriptive"),
             .init(id: "xmp-subject", namespace: .xmp, key: "Subject", label: "Keywords", section: "Descriptive"),
+            .init(id: "xmp-headline",      namespace: .xmpPhotoshop, key: "Headline",              label: "Headline",         section: "Descriptive"),
+            .init(id: "xmp-caption-writer", namespace: .xmpPhotoshop, key: "CaptionWriter",        label: "Caption Writer",   section: "Editorial"),
+            .init(id: "xmp-credit",         namespace: .xmpPhotoshop, key: "Credit",               label: "Credit",           section: "Editorial"),
+            .init(id: "xmp-source",         namespace: .xmpPhotoshop, key: "Source",               label: "Source",           section: "Editorial"),
+            .init(id: "xmp-instructions",   namespace: .xmpPhotoshop, key: "Instructions",         label: "Instructions",     section: "Editorial"),
+            .init(id: "xmp-job-id",         namespace: .xmpPhotoshop, key: "TransmissionReference", label: "Job ID",          section: "Editorial"),
             .init(id: "exif-artist", namespace: .exif, key: "Artist", label: "Artist", section: "Rights"),
             .init(id: "exif-copyright", namespace: .exif, key: "Copyright", label: "Copyright", section: "Rights"),
             .init(id: "xmp-creator", namespace: .xmp, key: "Creator", label: "Creator", section: "Rights"),
+            .init(id: "xmp-copyright-status", namespace: .xmpRights, key: "Marked",          label: "Copyright Status", section: "Rights"),
+            .init(id: "xmp-usage-terms",      namespace: .xmpRights, key: "UsageTerms",      label: "Usage Terms",      section: "Rights"),
+            .init(id: "xmp-copyright-url",    namespace: .xmpRights, key: "WebStatement",    label: "Copyright URL",    section: "Rights"),
         ]
 
         static let rating = EditableTag(id: "xmp-rating", namespace: .xmp,   key: "Rating", label: "Star Rating",  section: "Rating")
@@ -536,7 +543,6 @@ final class AppModel: ObservableObject {
     /// so the inspector shows the applied value during the reload gap rather than the old on-disk snapshot.
     var pendingCommitsByFile: [URL: [EditableTag: String]] = [:]
     @Published var inspectorPreviewImages: [URL: NSImage] = [:]
-    @Published var inspectorPreviewRenderedSide: [URL: CGFloat] = [:]
     var mixedTags: Set<EditableTag> = []
     var editSessionSnapshotsByTagID: [String: EditSessionSnapshot] = [:]
     /// Set to true the first time selectSidebar(id:) is called, meaning the user

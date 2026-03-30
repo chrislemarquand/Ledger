@@ -3,7 +3,7 @@ import ExifEditCore
 import SharedUI
 
 @MainActor
-final class BrowserGalleryViewController: NSViewController, NSCollectionViewDataSource, NSCollectionViewDelegate {
+final class BrowserGalleryViewController: NSViewController, NSCollectionViewDataSource, NSCollectionViewDelegate, NSCollectionViewPrefetching {
     private var model: AppModel
     private var items: [AppModel.BrowserItem]
 
@@ -123,6 +123,7 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
         collectionView.focusRingType = .none
         collectionView.dataSource = self
         collectionView.delegate = self
+        collectionView.prefetchDataSource = self
         collectionView.register(AppKitGalleryItem.self, forItemWithIdentifier: AppKitGalleryItem.reuseIdentifier)
 
         collectionView.onBackgroundClick = { [weak self] in
@@ -698,6 +699,26 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
     }
 }
 
+extension BrowserGalleryViewController {
+    func collectionView(_ collectionView: NSCollectionView, prefetchItemsAt indexPaths: [IndexPath]) {
+        let requiredSide = max(layout.tileSide, 120) * 1.5
+        for indexPath in indexPaths {
+            guard indexPath.item < items.count else { continue }
+            let url = items[indexPath.item].url
+            guard ThumbnailPipeline.cachedImage(for: url, minRenderedSide: requiredSide * 0.9) == nil else { continue }
+            Task(priority: .utility) {
+                _ = await ThumbnailService.request(url: url, requiredSide: requiredSide, forceRefresh: false)
+            }
+        }
+    }
+
+    func collectionView(_ collectionView: NSCollectionView, cancelPrefetchingForItemsAt indexPaths: [IndexPath]) {
+        // Deliberate no-op. Cancelling individual prefetch tasks risks cancelling a task that a
+        // now-visible cell is also awaiting (same dedup key). The broker's 4-slot concurrency
+        // limit and 200-waiter cap bound queue growth without per-task cancellation.
+    }
+}
+
 private final class AppKitGalleryItem: NSCollectionViewItem {
     static let reuseIdentifier = NSUserInterfaceItemIdentifier("AppKitGalleryItem")
     private let imageInset: CGFloat = GalleryMetrics.default.imageInset
@@ -901,7 +922,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
 
         thumbnailTask = Task { [weak self] in
             guard let self else { return }
-            let image = await SharedThumbnailRequestBroker.shared.request(
+            let image = await ThumbnailService.request(
                 url: url,
                 requiredSide: requiredSide,
                 forceRefresh: forceRefresh

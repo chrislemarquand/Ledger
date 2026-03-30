@@ -259,7 +259,6 @@ extension AppModel {
         removeAllStagedQuickLookPreviewFiles()
         if !preserveSessionCaches {
             inspectorPreviewImages = [:]
-            inspectorPreviewRenderedSide = [:]
             inspectorPreviewRecency = []
         }
         inspectorPreviewInflight = []
@@ -282,7 +281,7 @@ extension AppModel {
                 if await MainActor.run(body: { self.activeFolderLoadID != loadID }) {
                     return
                 }
-                _ = await SharedThumbnailRequestBroker.shared.request(
+                _ = await ThumbnailService.request(
                     url: fileURL,
                     requiredSide: Self.initialThumbnailWarmupSide,
                     forceRefresh: false
