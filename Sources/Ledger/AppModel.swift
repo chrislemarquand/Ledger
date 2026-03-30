@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import ExifEditCore
 import Foundation
 import OSLog
@@ -538,6 +539,12 @@ final class AppModel: ObservableObject {
 
     @Published var pendingEditsByFile: [URL: [EditableTag: StagedEditRecord]] = [:]
     @Published var pendingImageOpsByFile: [URL: [StagedImageOperation]] = [:]
+
+    var pendingEditsCount: Int {
+        pendingEditsByFile.keys.union(pendingImageOpsByFile.keys).count
+    }
+
+    private var badgeObservers: [AnyCancellable] = []
     /// Values written to disk but not yet confirmed by an exiftool re-read.
     /// Sits between pendingEditsByFile and availableSnapshot in the inspector priority order
     /// so the inspector shows the applied value during the reload gap rather than the old on-disk snapshot.
@@ -755,6 +762,16 @@ final class AppModel: ObservableObject {
             try? BackupManager(baseDirectory: backupDirectory).pruneOperations(keepLast: 20)
         }
 
+        Publishers.Merge(
+            $pendingEditsByFile.map { _ in () },
+            $pendingImageOpsByFile.map { _ in () }
+        )
+        .sink { [weak self] in
+            guard let self else { return }
+            let count = pendingEditsCount
+            NSApp.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
+        }
+        .store(in: &badgeObservers)
     }
 
 
