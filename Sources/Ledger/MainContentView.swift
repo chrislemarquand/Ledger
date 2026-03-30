@@ -2182,6 +2182,12 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     }
 }
 
+extension NativeThreePaneSplitViewController: NSToolbarItemValidation {
+    func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
+        mainToolbarController?.validateToolbarItem(item) ?? true
+    }
+}
+
 private extension NSToolbarItem.Identifier {
     static let viewMode = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ViewMode")
     static let sort = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.Sort")
