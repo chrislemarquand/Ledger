@@ -20,6 +20,7 @@ enum LedgerMain {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindowController: MainWindowController?
     private var settingsWindowController: SettingsWindowController?
+    private weak var welcomeViewController: AppWelcomeViewController?
     private var isShowingTerminateConfirmation = false
     private var allowImmediateTermination = false
     var appModel: AppModel? { mainWindowController?.appModel }
@@ -39,6 +40,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func showAboutPanelMenuAction(_: Any?) {
         showAboutPanel()
     }
+
+    func showWelcomeScreen() {
+        guard let window = mainWindowController?.window,
+              let contentVC = window.contentViewController else { return }
+        let vc = AppWelcomeViewController(
+            appName: AppBrand.displayName,
+            features: Self.welcomeFeatures,
+            primaryButtonTitle: "Get Started",
+            onDismiss: { [weak self] in
+                // Use presentingViewController?.dismiss() — nil-safe if the sheet was
+                // already dismissed by SwiftUI's presentationMode bridge before onDismiss fires.
+                if let vc = self?.welcomeViewController { vc.presentingViewController?.dismiss(vc) }
+                WelcomeCoordinator.markSeen()
+            }
+        )
+        welcomeViewController = vc
+        contentVC.presentAsSheet(vc)
+    }
+
+    @objc
+    func showWhatsNewAction(_: Any?) {
+        showWelcomeScreen()
+    }
+
+    private static let welcomeFeatures: [AppWelcomeFeature] = [
+        .init(
+            symbolName: "character.cursor.ibeam",
+            title: "Batch Rename",
+            subtitle: "Rename folders of files using custom patterns with date, sequence, and metadata tokens."
+        ),
+        .init(
+            symbolName: "star.leadinghalf.filled",
+            title: "Expanded Inspector",
+            subtitle: "Edit star ratings, flags, colour labels, and a wider range of EXIF and IPTC fields."
+        ),
+    ]
 
     @objc
     func showSettingsWindowAction(_: Any?) {
@@ -114,6 +151,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainWindowController = windowController
         windowController.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
+        if WelcomeCoordinator.shouldShowOnLaunch {
+            Task { @MainActor in self.showWelcomeScreen() }
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

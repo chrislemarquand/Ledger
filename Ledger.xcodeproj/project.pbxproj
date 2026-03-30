@@ -49,6 +49,7 @@
 		A100016C0000000000000001 /* AppModel+MetadataPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100015F0000000000000001 /* AppModel+MetadataPipeline.swift */; };
 		A100016D0000000000000001 /* AppModel+UndoStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001600000000000000001 /* AppModel+UndoStatus.swift */; };
 		A100016E0000000000000001 /* AppModel+FieldCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001610000000000000001 /* AppModel+FieldCatalog.swift */; };
+		A10001700000000000000001 /* WelcomeCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100016F0000000000000001 /* WelcomeCoordinator.swift */; };
 		B100001D0000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000D0000000000000001 /* Assets.xcassets */; };
 		C20002010000000000000001 /* CSVImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001010000000000000001 /* CSVImportAdapter.swift */; };
 		C20002020000000000000001 /* CSVSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001020000000000000001 /* CSVSupport.swift */; };
@@ -135,6 +136,7 @@
 		A100015F0000000000000001 /* AppModel+MetadataPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+MetadataPipeline.swift"; sourceTree = "<group>"; };
 		A10001600000000000000001 /* AppModel+UndoStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+UndoStatus.swift"; sourceTree = "<group>"; };
 		A10001610000000000000001 /* AppModel+FieldCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+FieldCatalog.swift"; sourceTree = "<group>"; };
+		A100016F0000000000000001 /* WelcomeCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WelcomeCoordinator.swift"; sourceTree = "<group>"; };
 		B100000D0000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Assets.xcassets"; sourceTree = "<group>"; };
 		C20001010000000000000001 /* CSVImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CSVImportAdapter.swift"; sourceTree = "<group>"; };
 		C20001020000000000000001 /* CSVSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CSVSupport.swift"; sourceTree = "<group>"; };
@@ -279,6 +281,7 @@
 					A100015F0000000000000001 /* AppModel+MetadataPipeline.swift */,
 					A10001600000000000000001 /* AppModel+UndoStatus.swift */,
 					A10001610000000000000001 /* AppModel+FieldCatalog.swift */,
+				A100016F0000000000000001 /* WelcomeCoordinator.swift */,
 					A100000C0000000000000001 /* LedgerApp.swift */,
 					A100000D0000000000000001 /* MainContentView.swift */,
 				A10001410000000000000001 /* Presets.swift */,
@@ -499,6 +502,7 @@
 					A100016C0000000000000001 /* AppModel+MetadataPipeline.swift in Sources */,
 					A100016D0000000000000001 /* AppModel+UndoStatus.swift in Sources */,
 					A100016E0000000000000001 /* AppModel+FieldCatalog.swift in Sources */,
+				A10001700000000000000001 /* WelcomeCoordinator.swift in Sources */,
 					A100001C0000000000000001 /* LedgerApp.swift in Sources */,
 					A100001D0000000000000001 /* MainContentView.swift in Sources */,
 				A10001420000000000000001 /* Presets.swift in Sources */,
