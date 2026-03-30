@@ -20,6 +20,7 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
     private var lastRenderedViewMode: AppModel.BrowserViewMode?
     private var contextMenuTargetURLs: [URL] = []
     private var columnStore = ListColumnStore(identifierPrefix: AppBrand.identifierPrefix)
+    private var isInColumnOverflow = false
     private var browserFocusObserver: NSObjectProtocol?
     private var viewModeObserver: NSObjectProtocol?
 
@@ -94,6 +95,7 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
         super.viewDidLayout()
         syncTableWidthToViewportIfNeeded()
         applyInitialColumnFitIfNeeded()
+        exitOverflowIfViewportFits()
         updateListPresentationState(hasItems: !items.isEmpty)
     }
 
@@ -250,7 +252,7 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
     private func configureList() {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
+        scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = false
@@ -299,13 +301,21 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
             if definition.isSortable {
                 column.sortDescriptorPrototype = NSSortDescriptor(key: definition.id, ascending: true)
             }
-            column.isHidden = !columnStore.isVisible(definition)
             tableView.addTableColumn(column)
         }
 
-        // NSTableView handles column width and order persistence natively.
+        // Enable autosave before applying visibility: autosave restores widths and
+        // column order from the previous session at this point. We then re-apply our
+        // stored visibility on top, since autosave also persists isHidden and would
+        // otherwise override columnStore's values.
         tableView.autosaveName = "\(AppBrand.identifierPrefix).BrowserList"
         tableView.autosaveTableColumns = true
+
+        for definition in ListColumnDefinition.all {
+            if let column = tableView.tableColumns.first(where: { $0.identifier.rawValue == definition.id }) {
+                column.isHidden = !columnStore.isVisible(definition)
+            }
+        }
 
         // Header right-click menu for toggling columns.
         tableView.headerView?.menu = buildColumnHeaderMenu()
@@ -363,9 +373,19 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
         column.isHidden = !newVisible
         sender.state = newVisible ? .on : .off
         columnStore.setVisible(columnID, newVisible, allDefinitions: ListColumnDefinition.all)
+        adjustTableForColumnToggle()
     }
 
+    private func updateListPresentationState(hasItems: Bool) {
+        tableView.usesAlternatingRowBackgroundColors = hasItems
+        tableView.headerView?.isHidden = !hasItems
+    }
+
+    /// Keeps the table frame pinned to the viewport width when not in overflow.
+    /// With firstColumnOnlyAutoresizingStyle this is sufficient for pane/window resize:
+    /// AppKit distributes the delta to the Name column automatically.
     private func syncTableWidthToViewportIfNeeded() {
+        guard !isInColumnOverflow else { return }
         let width = scrollView.contentView.bounds.width
         guard width > 0 else { return }
         if abs(tableView.frame.width - width) > 0.5 {
@@ -375,29 +395,77 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
         }
     }
 
-    private func updateListPresentationState(hasItems: Bool) {
-        tableView.usesAlternatingRowBackgroundColors = hasItems
-        tableView.headerView?.isHidden = !hasItems
-    }
-
+    /// Runs once on first launch (no autosave data) to size the Name column so all
+    /// default columns fill the viewport exactly. On subsequent launches autosave
+    /// restores the correct widths and firstColumnOnlyAutoresizingStyle takes over.
     private func applyInitialColumnFitIfNeeded() {
         guard !columnStore.hasAppliedInitialFit else { return }
         guard let nameColumn = tableView.tableColumns.first(where: {
             $0.identifier.rawValue == ListColumnDefinition.idName
         }) else { return }
-
         let viewportWidth = scrollView.contentView.bounds.width
         guard viewportWidth > 0 else { return }
-
         let visibleNonName = tableView.tableColumns.filter {
             $0.identifier.rawValue != ListColumnDefinition.idName && !$0.isHidden
         }
-        let fixedWidth = visibleNonName.reduce(0) { $0 + $1.width }
-        let spacing = tableView.intercellSpacing.width * CGFloat(visibleNonName.count)
-        let fittedNameWidth = max(nameColumn.minWidth, floor(viewportWidth - fixedWidth - spacing - 8))
-        nameColumn.width = fittedNameWidth
+        let fixedWidth = visibleNonName.reduce(0.0) { $0 + $1.width }
+        nameColumn.width = max(nameColumn.minWidth, floor(viewportWidth - fixedWidth))
         tableView.tile()
         columnStore.hasAppliedInitialFit = true
+    }
+
+    /// Called when a column is toggled. Sets the table into overflow mode (horizontal
+    /// scroll, Name clamped to minimum) when columns no longer fit, or back to normal
+    /// mode (Name fills viewport) when they do.
+    private func adjustTableForColumnToggle() {
+        let viewportWidth = scrollView.contentView.bounds.width
+        guard viewportWidth > 0 else { return }
+        guard let nameColumn = tableView.tableColumns.first(where: {
+            $0.identifier.rawValue == ListColumnDefinition.idName
+        }) else { return }
+        let nonName = tableView.tableColumns.filter {
+            !$0.isHidden && $0.identifier.rawValue != ListColumnDefinition.idName
+        }
+        let othersWidth = nonName.reduce(0.0) { $0 + $1.width }
+        let minTotal = othersWidth + nameColumn.minWidth
+
+        if minTotal > viewportWidth {
+            // Overflow: table grows beyond viewport, horizontal scroll appears.
+            isInColumnOverflow = true
+            tableView.autoresizingMask = []
+            nameColumn.width = nameColumn.minWidth
+            var frame = tableView.frame
+            frame.size.width = ceil(minTotal)
+            tableView.frame = frame
+        } else {
+            // Fits: restore normal mode, Name fills remaining space.
+            isInColumnOverflow = false
+            tableView.autoresizingMask = [.width]
+            nameColumn.width = max(nameColumn.minWidth, floor(viewportWidth - othersWidth))
+            syncTableWidthToViewportIfNeeded()
+        }
+        tableView.tile()
+    }
+
+    /// When in overflow mode and the viewport grows large enough to fit all columns,
+    /// transitions back to normal mode so Name can expand again.
+    private func exitOverflowIfViewportFits() {
+        guard isInColumnOverflow else { return }
+        let viewportWidth = scrollView.contentView.bounds.width
+        guard viewportWidth > 0 else { return }
+        guard let nameColumn = tableView.tableColumns.first(where: {
+            $0.identifier.rawValue == ListColumnDefinition.idName
+        }) else { return }
+        let nonName = tableView.tableColumns.filter {
+            !$0.isHidden && $0.identifier.rawValue != ListColumnDefinition.idName
+        }
+        let othersWidth = nonName.reduce(0.0) { $0 + $1.width }
+        guard othersWidth + nameColumn.minWidth <= viewportWidth else { return }
+        isInColumnOverflow = false
+        tableView.autoresizingMask = [.width]
+        nameColumn.width = max(nameColumn.minWidth, floor(viewportWidth - othersWidth))
+        syncTableWidthToViewportIfNeeded()
+        tableView.tile()
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int {
