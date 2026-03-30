@@ -118,6 +118,7 @@ enum ImportFieldInputKind: Hashable, Codable, Sendable {
     case decimal
     case gpsCoordinate
     case enumChoice([ImportEnumChoice])
+    case boolean
 }
 
 

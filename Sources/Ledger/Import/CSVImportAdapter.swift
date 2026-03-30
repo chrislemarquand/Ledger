@@ -345,6 +345,15 @@ struct CSVImportAdapter: ImportSourceAdapter {
                 return match
             }
             return nil
+        case .boolean:
+            switch trimmed.lowercased() {
+            case "1", "true", "yes", "copyrighted":
+                return "1"
+            case "0", "false", "no", "public domain":
+                return "0"
+            default:
+                return nil
+            }
         }
     }
 

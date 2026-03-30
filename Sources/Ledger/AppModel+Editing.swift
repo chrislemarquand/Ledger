@@ -148,6 +148,10 @@ extension AppModel {
         }
     }
 
+    func isBooleanTag(_ tag: EditableTag) -> Bool {
+        tag.id == "xmp-copyright-status"
+    }
+
     func dateValueForTag(_ tag: EditableTag) -> Date? {
         guard isDateTimeTag(tag) else { return nil }
         let raw = valueForTag(tag).trimmingCharacters(in: .whitespacesAndNewlines)

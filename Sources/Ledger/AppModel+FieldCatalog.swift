@@ -78,6 +78,13 @@ extension AppModel {
             )
         }
 
+        let defaultOffIDs: Set<String> = [
+            "iptc-sublocation", "iptc-city", "iptc-state", "iptc-country", "iptc-country-code",
+            "xmp-headline",
+            "xmp-caption-writer", "xmp-credit", "xmp-source", "xmp-instructions", "xmp-job-id",
+            "xmp-copyright-status", "xmp-usage-terms", "xmp-copyright-url",
+        ]
+
         var entries = EditableTag.common.map { tag -> FieldCatalogEntry in
             let inputKind: ImportFieldInputKind
             switch tag.id {
@@ -93,6 +100,8 @@ extension AppModel {
                 inputKind = .decimal
             case "exif-gps-lat", "exif-gps-lon":
                 inputKind = .gpsCoordinate
+            case "xmp-copyright-status":
+                inputKind = .boolean
             default:
                 inputKind = .text
             }
@@ -103,7 +112,7 @@ extension AppModel {
                 label: tag.label,
                 section: tag.section,
                 inputKind: inputKind,
-                isEnabled: true
+                isEnabled: !defaultOffIDs.contains(tag.id)
             )
         }
 
