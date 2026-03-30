@@ -417,65 +417,103 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         guard spacebarMonitor == nil else { return }
         spacebarMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
-            let keyboardInput = BrowserKeyboardInput(
-                keyCode: event.keyCode,
-                characters: event.characters,
-                modifiers: event.modifierFlags,
-                browserViewMode: model.browserViewMode == .gallery ? .gallery : .list,
-                canIncreaseGalleryZoom: model.canIncreaseGalleryZoom,
-                canDecreaseGalleryZoom: model.canDecreaseGalleryZoom,
-                shouldHandlePaneTabSwitch: shouldHandlePaneTabSwitchCommands(),
-                shouldHandleInspectorTabCommands: shouldHandleInspectorTabCommands(),
-                shouldHandleBrowserKeyCommands: shouldHandleBrowserKeyCommands()
-            )
-            let command = BrowserKeyboardRouter.route(keyboardInput)
-            return handleBrowserKeyboardCommand(command, passthroughEvent: event)
-        }
-    }
+            let modifiers = event.modifierFlags.intersection([.command, .shift, .control, .option, .function])
+            let isTabWithoutCommand = event.keyCode == KeyCode.tab && (modifiers.isEmpty || modifiers == [.shift])
 
-    private func handleBrowserKeyboardCommand(_ command: SharedUI.BrowserKeyboardCommand, passthroughEvent event: NSEvent) -> NSEvent? {
-        switch command {
-        case .passthrough:
-            return event
-        case .consume:
-            return nil
-        case .togglePaneFocus:
-            togglePaneFocusBetweenSidebarAndBrowser()
-            return nil
-        case let .inspectorTab(backward):
-            NotificationCenter.default.post(
-                name: .inspectorDidRequestFieldNavigation,
-                object: nil,
-                userInfo: ["backward": backward]
-            )
-            return nil
-        case .zoomIn:
-            model.increaseGalleryZoom()
-            refreshToolbarState()
-            return nil
-        case .zoomOut:
-            model.decreaseGalleryZoom()
-            refreshToolbarState()
-            return nil
-        case .clearSelection:
-            model.clearSelection()
-            return nil
-        case .selectAllFiltered:
-            model.selectAllFilteredFiles()
-            return nil
-        case .activateSelection:
-            focusInspectorEntryAction(self)
-            return nil
-        case let .moveSelection(direction, extendingSelection):
-            if model.browserViewMode == .gallery {
-                model.moveSelectionInGallery(direction: direction, extendingSelection: extendingSelection)
-            } else {
-                model.moveSelectionInList(direction: direction, extendingSelection: extendingSelection)
+            if isTabWithoutCommand && shouldHandlePaneTabSwitchCommands() {
+                togglePaneFocusBetweenSidebarAndBrowser()
+                return nil
             }
-            return nil
-        case let .extendSelectionToBoundary(towardStart):
-            model.extendSelectionToBoundary(towardStart: towardStart)
-            return nil
+
+            if shouldHandleInspectorTabCommands() && event.keyCode == KeyCode.tab {
+                if modifiers.isEmpty {
+                    NotificationCenter.default.post(
+                        name: .inspectorDidRequestFieldNavigation,
+                        object: nil,
+                        userInfo: ["backward": false]
+                    )
+                    return nil
+                }
+                if modifiers == [.shift] {
+                    NotificationCenter.default.post(
+                        name: .inspectorDidRequestFieldNavigation,
+                        object: nil,
+                        userInfo: ["backward": true]
+                    )
+                    return nil
+                }
+            }
+
+            // Zoom shortcuts should work anywhere in the key window (including inspector
+            // focus) when gallery mode is active and zoom can change.
+            if let window = view.window ?? NSApp.keyWindow,
+               canHandleBrowserShortcuts(in: window) {
+                if event.keyCode == KeyCode.equal || event.keyCode == KeyCode.numpadPlus {
+                    guard modifiers == [.command] || modifiers == [.command, .shift] else { return event }
+                    guard model.browserViewMode == .gallery else { return nil }
+                    guard model.canIncreaseGalleryZoom else { return nil }
+                    model.increaseGalleryZoom()
+                    refreshToolbarState()
+                    return nil
+                }
+
+                if event.keyCode == KeyCode.minus || event.keyCode == KeyCode.numpadMinus {
+                    guard modifiers == [.command] || modifiers == [.command, .shift] else { return event }
+                    guard model.browserViewMode == .gallery else { return nil }
+                    guard model.canDecreaseGalleryZoom else { return nil }
+                    model.decreaseGalleryZoom()
+                    refreshToolbarState()
+                    return nil
+                }
+            }
+
+            guard shouldHandleBrowserKeyCommands() else { return event }
+
+            switch event.keyCode {
+            case KeyCode.escape:
+                guard modifiers.isEmpty else { return event }
+                model.clearSelection()
+                return nil
+            case _ where event.characters == "a":
+                guard modifiers == [.command] else { return event }
+                model.selectAllFilteredFiles()
+                return nil
+            case _ where event.characters == "d":
+                guard modifiers == [.command] else { return event }
+                model.clearSelection()
+                return nil
+            case KeyCode.leftArrow, KeyCode.rightArrow, KeyCode.downArrow, KeyCode.upArrow: // Arrow keys
+                guard let direction = moveDirection(forKeyCode: event.keyCode) else { return event }
+                if modifiers.isEmpty {
+                    if model.browserViewMode == .gallery {
+                        model.moveSelectionInGallery(direction: direction, extendingSelection: false)
+                        return nil
+                    }
+                    if direction == .up || direction == .down {
+                        model.moveSelectionInList(direction: direction, extendingSelection: false)
+                        return nil
+                    }
+                    return event
+                }
+                let isShiftOnly = modifiers == [.shift]
+                let isCommandShift = modifiers == [.command, .shift]
+                guard isShiftOnly || isCommandShift else { return event }
+
+                if isCommandShift {
+                    let towardStart = direction == .left || direction == .up
+                    model.extendSelectionToBoundary(towardStart: towardStart)
+                    return nil
+                }
+
+                if model.browserViewMode == .gallery {
+                    model.moveSelectionInGallery(direction: direction, extendingSelection: true)
+                } else {
+                    model.moveSelectionInList(direction: direction, extendingSelection: true)
+                }
+                return nil
+            default:
+                return event
+            }
         }
     }
 
@@ -1295,13 +1333,16 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         if let textView = window.firstResponder as? NSTextView, textView.isEditable {
             return false
         }
-        return KeyboardShortcutSupport.isResponder(window.firstResponder, inside: browserController.view)
+
+        guard let responderView = window.firstResponder as? NSView else { return false }
+        return responderView === browserController.view || responderView.isDescendant(of: browserController.view)
     }
 
     private func shouldHandleInspectorTabCommands() -> Bool {
         guard let window = view.window else { return false }
         guard canHandleBrowserShortcuts(in: window) else { return false }
-        return KeyboardShortcutSupport.isResponder(window.firstResponder, inside: inspectorController.view)
+        guard let responderView = window.firstResponder as? NSView else { return false }
+        return responderView === inspectorController.view || responderView.isDescendant(of: inspectorController.view)
     }
 
     private func shouldHandlePaneTabSwitchCommands() -> Bool {
@@ -1334,6 +1375,16 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
 
     private func canHandleBrowserShortcuts(in window: NSWindow) -> Bool {
         KeyboardShortcutSupport.canHandleWindowShortcuts(in: window)
+    }
+
+    private func moveDirection(forKeyCode keyCode: UInt16) -> SharedUI.MoveCommandDirection? {
+        switch keyCode {
+        case KeyCode.leftArrow: return .left
+        case KeyCode.rightArrow: return .right
+        case KeyCode.downArrow: return .down
+        case KeyCode.upArrow: return .up
+        default: return nil
+        }
     }
 
     private func toolbarTitleText() -> String {
