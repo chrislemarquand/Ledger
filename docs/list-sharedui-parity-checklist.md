@@ -54,3 +54,7 @@ Purpose: move Ledger list view implementation into SharedUI with zero UI/UX/beha
 - [ ] No behavior changes outside list view (gallery/sidebar/inspector/toolbar).
 - [ ] Manual smoke pass completed after migration wiring.
 
+## Deferred Follow-ups
+
+- [ ] Keyboard activation/focus behavior parity (Return/Tab focus flow) to be restored in a dedicated follow-up.
+- [ ] Gallery `shift` selection should be contiguous-range semantics (not same behavior as `cmd`) in a dedicated follow-up.
