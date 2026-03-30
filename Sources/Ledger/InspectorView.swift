@@ -400,10 +400,6 @@ struct InspectorView: View {
             self.focusedTagID = nil
             NotificationCenter.default.post(name: .inspectorDidRequestBrowserFocus, object: nil)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .inspectorDidRequestFieldNavigation)) { notification in
-            let backward = (notification.userInfo?["backward"] as? Bool) ?? false
-            moveInspectorFieldFocus(backward: backward)
-        }
         .sheet(item: Binding(
             get: { model.activePresetEditor },
             set: { newValue in
@@ -610,35 +606,4 @@ struct InspectorView: View {
         activeEditTagID = tag.id
     }
 
-    private func moveInspectorFieldFocus(backward: Bool) {
-        let focusableTagIDs = focusableInspectorTagIDs()
-
-        guard !focusableTagIDs.isEmpty else { return }
-
-        let current = focusedTagID ?? activeEditTagID
-        let nextID: String
-
-        if let current,
-           let currentIndex = focusableTagIDs.firstIndex(of: current) {
-            let delta = backward ? -1 : 1
-            let nextIndex = (currentIndex + delta + focusableTagIDs.count) % focusableTagIDs.count
-            nextID = focusableTagIDs[nextIndex]
-        } else {
-            nextID = backward ? focusableTagIDs.last! : focusableTagIDs.first!
-        }
-
-        guard focusedTagID != nextID else { return }
-        focusedTagID = nextID
-    }
-
-    private func focusableInspectorTagIDs() -> [String] {
-        model.orderedEditableTagSections
-            .filter { !model.isInspectorSectionCollapsed($0.section) }
-            .flatMap(\.tags)
-            .filter { tag in
-                !model.isDateTimeTag(tag) && model.pickerOptions(for: tag) == nil
-            }
-            .map(\.id)
-    }
 }
-
