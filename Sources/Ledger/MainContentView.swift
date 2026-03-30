@@ -8,8 +8,7 @@ import UniformTypeIdentifiers
 
 extension Notification.Name {
     static let inspectorDidRequestBrowserFocus = Notification.Name("\(AppBrand.identifierPrefix).InspectorDidRequestBrowserFocus")
-    static let sidebarDidRequestFocus = Notification.Name("\(AppBrand.identifierPrefix).SidebarDidRequestFocus")
-    static let browserDidRequestFocus = Notification.Name("\(AppBrand.identifierPrefix).BrowserDidRequestFocus")
+static let browserDidRequestFocus = Notification.Name("\(AppBrand.identifierPrefix).BrowserDidRequestFocus")
     static let browserDidSwitchViewMode = Notification.Name("\(AppBrand.identifierPrefix).BrowserDidSwitchViewMode")
 }
 
