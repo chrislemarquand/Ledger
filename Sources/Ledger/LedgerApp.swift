@@ -172,6 +172,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         true
     }
 
+    // MARK: - Dock Menu
+
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        let menu = NSMenu()
+        var hasItems = false
+
+        if let model = appModel, !model.favoriteItems.isEmpty {
+            for item in model.favoriteItems {
+                let menuItem = NSMenuItem(title: item.title, action: #selector(openSidebarItemFromDock(_:)), keyEquivalent: "")
+                menuItem.representedObject = item.id
+                menuItem.target = self
+                menu.addItem(menuItem)
+            }
+            hasItems = true
+        }
+
+        if let model = appModel {
+            let recents = model.locationItems.prefix(3)
+            if !recents.isEmpty {
+                if hasItems { menu.addItem(.separator()) }
+                for item in recents {
+                    let menuItem = NSMenuItem(title: item.title, action: #selector(openSidebarItemFromDock(_:)), keyEquivalent: "")
+                    menuItem.representedObject = item.id
+                    menuItem.target = self
+                    menu.addItem(menuItem)
+                }
+                hasItems = true
+            }
+        }
+
+        if hasItems { menu.addItem(.separator()) }
+        let openItem = NSMenuItem(title: "Open Folder…", action: #selector(openFolderFromDock(_:)), keyEquivalent: "")
+        openItem.target = self
+        menu.addItem(openItem)
+
+        return menu
+    }
+
+    @objc private func openSidebarItemFromDock(_ sender: NSMenuItem) {
+        guard let sidebarID = sender.representedObject as? String,
+              let model = appModel else { return }
+        mainWindowController?.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        model.handleExplicitSidebarSelectionChange(to: sidebarID)
+    }
+
+    @objc private func openFolderFromDock(_ sender: Any?) {
+        mainWindowController?.showWindow(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        appModel?.openFolder()
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if allowImmediateTermination {
             allowImmediateTermination = false
