@@ -86,40 +86,18 @@ struct InspectorView: View {
                     .containerRelativeFrame(.vertical, alignment: .center)
                 } else {
                     VStack(alignment: .leading, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        if model.selectedFileURLs.count == 1,
-                           let first = model.selectedFileURLs.first {
-                            HStack(spacing: 6) {
-                                if model.pendingRenameByFile[first] != nil {
-                                    Image(systemName: "circle.fill")
-                                        .font(.system(size: 6))
-                                        .foregroundStyle(.orange)
-                                }
-                                Text(inspectorTitle(for: first))
-                                    .font(.title3.weight(.semibold))
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                            }
-                            if let subtitle = singleSelectionSubtitle {
-                                Text(subtitle)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-                            }
-                        } else {
-                            Text("\(model.selectedFileURLs.count) images selected")
-                                .font(.title3.weight(.semibold))
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                            if let subtitle = multiSelectionSubtitle {
-                                Text(subtitle)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-                            }
-                        }
+                    if model.selectedFileURLs.count == 1,
+                       let first = model.selectedFileURLs.first {
+                        InspectorHeaderView(
+                            title: inspectorTitle(for: first),
+                            subtitle: singleSelectionSubtitle,
+                            pendingChange: model.pendingRenameByFile[first] != nil
+                        )
+                    } else {
+                        InspectorHeaderView(
+                            title: "\(model.selectedFileURLs.count) images selected",
+                            subtitle: multiSelectionSubtitle
+                        )
                     }
 
                     if model.selectedFileURLs.count == 1 {
