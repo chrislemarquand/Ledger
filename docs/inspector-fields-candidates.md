@@ -1,17 +1,18 @@
 # Inspector Fields — Candidate Additions
 
-Suggested fields to add to the inspector beyond the current 26. All are writable
-via ExifTool and togglable in Settings. Prioritised by Lightroom roundtrip value.
+Suggested fields to add to the inspector. All are writable via ExifTool and
+togglable in Settings. Prioritised by Lightroom roundtrip value.
 
 Current fields (already implemented): Make, Model, SerialNumber, LensModel,
 FNumber, ExposureTime, ISO, FocalLength, ExposureCompensation, ExposureProgram,
 Flash, MeteringMode, DateTimeOriginal, CreateDate, ModifyDate, GPSLatitude,
 GPSLongitude, GPSAltitude, GPSImgDirection, Title (XMP-dc), Description (XMP-dc),
-Subject (XMP-dc), Artist, Copyright, Creator (XMP-dc).
+Subject (XMP-dc), Artist, Copyright, Creator (XMP-dc), Rating (XMP-xmp),
+Label/Colour Label (XMP-xmp), Pick/Flag (XMP-xmpDM).
 
 ---
 
-## Priority 1 — Lightroom Core
+## Priority 1 — Lightroom Core ✓ Done
 
 | Label | ExifTool Tag | Input Type | Notes |
 |---|---|---|---|
@@ -72,19 +73,49 @@ Extension of the existing Copyright field.
 
 ## Implementation Notes
 
-### IPTC duplication
-For Caption, Keywords, Title, Creator, and Copyright, Lightroom Classic writes
-both IPTC and XMP fields simultaneously when saving metadata to file. Ledger
-currently writes XMP only for these fields. If full Lightroom roundtrip fidelity
-is required, consider dual-writing the IPTC counterparts:
+### IPTC dual-write
 
-| XMP tag (current) | IPTC counterpart |
-|---|---|
-| `XMP-dc:Description` | `IPTC:Caption-Abstract` |
-| `XMP-dc:Subject` | `IPTC:Keywords` |
-| `XMP-dc:Title` | `IPTC:ObjectName` |
-| `XMP-dc:Creator` | `IPTC:By-line` |
-| `EXIF:Copyright` | `IPTC:CopyrightNotice` |
+Lightroom Classic writes XMP and IPTC fields simultaneously when saving metadata
+to file. Ledger currently emits a single ExifTool tag per field (one write
+argument in `ExifToolCommandBuilder.writeArguments`). For full Lightroom roundtrip
+fidelity, fields with an IPTC counterpart should emit both tags in the same
+ExifTool invocation. The mapping belongs as a static dictionary in
+`ExifToolCommandBuilder` — no changes needed elsewhere in the pipeline.
+
+Fields that do **not** need dual-writing: all EXIF camera/capture/date/GPS fields,
+Rating, Pick/Flag, Colour Label, and all Priority 4 rights fields — none have
+standard IPTC equivalents.
+
+#### Current fields — need dual-write
+
+| Field | Currently writes | Also write |
+|---|---|---|
+| Title | `XMP:Title` | `IPTC:ObjectName` |
+| Description | `XMP:Description` | `IPTC:Caption-Abstract` |
+| Keywords | `XMP:Subject` | `IPTC:Keywords` |
+| Copyright | `EXIF:Copyright` | `IPTC:CopyrightNotice` |
+| Creator | `XMP:Creator` | `IPTC:By-line` |
+
+#### Priority 2 (Location Detail) — all need dual-write
+
+| Field | XMP tag | Also write |
+|---|---|---|
+| Sublocation | `XMP-iptcCore:Location` | `IPTC:Sub-location` |
+| City | `XMP-photoshop:City` | `IPTC:City` |
+| State / Province | `XMP-photoshop:State` | `IPTC:Province-State` |
+| Country | `XMP-photoshop:Country` | `IPTC:Country-PrimaryLocationName` |
+| Country Code | `XMP-iptcCore:CountryCode` | `IPTC:Country-PrimaryLocationCode` |
+
+#### Priority 3 (Editorial) — all need dual-write
+
+| Field | XMP tag | Also write |
+|---|---|---|
+| Headline | `XMP-photoshop:Headline` | `IPTC:Headline` |
+| Caption Writer | `XMP-photoshop:CaptionWriter` | `IPTC:Writer-Editor` |
+| Credit | `XMP-photoshop:Credit` | `IPTC:Credit` |
+| Source | `XMP-photoshop:Source` | `IPTC:Source` |
+| Instructions | `XMP-photoshop:Instructions` | `IPTC:SpecialInstructions` |
+| Job ID | `XMP-photoshop:TransmissionReference` | `IPTC:OriginalTransmissionReference` |
 
 ### Colour Label values
 `XMP-xmp:Label` values are case-sensitive English strings. Lightroom will not
