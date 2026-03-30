@@ -463,6 +463,9 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         case .selectAllFiltered:
             model.selectAllFilteredFiles()
             return nil
+        case .activateSelection:
+            focusInspectorEntryAction(self)
+            return nil
         case let .moveSelection(direction, extendingSelection):
             if model.browserViewMode == .gallery {
                 model.moveSelectionInGallery(direction: direction, extendingSelection: extendingSelection)
@@ -1292,16 +1295,13 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         if let textView = window.firstResponder as? NSTextView, textView.isEditable {
             return false
         }
-
-        guard let responderView = window.firstResponder as? NSView else { return false }
-        return responderView === browserController.view || responderView.isDescendant(of: browserController.view)
+        return KeyboardShortcutSupport.isResponder(window.firstResponder, inside: browserController.view)
     }
 
     private func shouldHandleInspectorTabCommands() -> Bool {
         guard let window = view.window else { return false }
         guard canHandleBrowserShortcuts(in: window) else { return false }
-        guard let responderView = window.firstResponder as? NSView else { return false }
-        return responderView === inspectorController.view || responderView.isDescendant(of: inspectorController.view)
+        return KeyboardShortcutSupport.isResponder(window.firstResponder, inside: inspectorController.view)
     }
 
     private func shouldHandlePaneTabSwitchCommands() -> Bool {
