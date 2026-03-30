@@ -60,18 +60,17 @@ Released: **2026-03-10**.
 
 ## v1.2 (Minor) — Editing Productivity
 
-- [ ] Welcome/version screen using `AppWelcomeViewController` from SharedUI (WhatsNewKit-backed). Show on first run; reuse for "What's New" on major version updates.
-- [ ] Batch Rename (first release)
-- [ ] Add more Exif fields to Inspector view (including rating)
-- [ ] Rename hardening:
-  - [ ] Collision handling.
-  - [ ] Preview determinism.
-  - [ ] Undo/recovery safety.
+- [x] Welcome/version screen using `AppWelcomeViewController` from SharedUI (WhatsNewKit-backed). Show on first run; reuse for "What's New" on major version updates.
+- [x] Batch Rename (first release)
+- [x] Add more Exif fields to Inspector view (including rating)
+- [ ] Finder-style breadcrumb bar.
+- [ ] Dock icon badge and right click options
+- [ ] List column customisation (including Exif-backed columns).
+- [ ] Gallery metadata lines/subtitle customisation.
+- [ ] Toolbar customisation.
+- [ ] **Backup retention policy**: keep-last-N model, persistence, prune path wiring, and Settings UI controls. Infrastructure (`BackupManager.pruneOperations`) already exists; this is the Settings surface and wiring.
 - [ ] **Timestamp sync tools**: "Set file date from DateTimeOriginal" and "Set DateTimeOriginal from file date". Preview + confirm dialog, batch-safe with backup support.
 - [ ] **ExifTool-native DateTimeDigitized backfill**: optional post-import/apply pass that fills missing `EXIF:CreateDate` from `FileCreateDate` only (no app-side date parsing, no overwrite of existing values).
-- [ ] Metadata copy/paste:
-  - [ ] Field-level copy/paste.
-  - [ ] Metadata-set copy/paste.
 
 ---
 
@@ -83,12 +82,10 @@ Navigation, drag/drop, and letting users shape the interface.
 - [ ] Drag a folder onto the sidebar to add as a favourite.
 - [ ] Drag to reorder sidebar favourites.
 - [ ] Explicit Home/End/Page Up/Page Down keyboard nav in list/gallery.
-- [ ] Finder-style breadcrumb bar.
-- [ ] Dock icon badge and right click options
-- [ ] List column customisation (including Exif-backed columns).
-- [ ] Gallery metadata lines/subtitle customisation.
-- [ ] Toolbar customisation.
-- [ ] **Backup retention policy**: keep-last-N model, persistence, prune path wiring, and Settings UI controls. Infrastructure (`BackupManager.pruneOperations`) already exists; this is the Settings surface and wiring.
+- [ ] Metadata copy/paste:
+  - [ ] Field-level copy/paste.
+  - [ ] Metadata-set copy/paste.
+
 
 ---
 
