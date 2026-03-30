@@ -745,6 +745,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         titleField.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         titleField.textColor = .secondaryLabelColor
         view.addSubview(titleField)
+        self.textField = titleField
 
         NSLayoutConstraint.activate([
             thumbnailContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
