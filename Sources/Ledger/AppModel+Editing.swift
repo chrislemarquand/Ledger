@@ -941,25 +941,6 @@ extension AppModel {
         selectionChanged()
     }
 
-    func extendSelectionToBoundary(towardStart: Bool) {
-        let items = filteredBrowserItems
-        guard !items.isEmpty else { return }
-
-        let targetURL = towardStart ? items.first!.url : items.last!.url
-        let previousSelection = selectedFileURLs
-
-        if selectedFileURLs.isEmpty {
-            selectedFileURLs = [targetURL]
-            selectionAnchorURL = targetURL
-            selectionFocusURL = targetURL
-        } else {
-            applyRangeSelection(to: targetURL, additive: false, in: items)
-        }
-
-        guard selectedFileURLs != previousSelection else { return }
-        selectionChanged()
-    }
-
     private func moveSingleSelection(in items: [BrowserItem], delta: Int) {
         let currentIndex = currentSelectionIndex(in: items)
         let targetIndex: Int
