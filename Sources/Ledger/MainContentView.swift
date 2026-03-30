@@ -2422,12 +2422,6 @@ final class BrowserContainerViewController: NSViewController {
         guard pathBarVC == nil else { return }
         let vc = PathBarViewController()
         vc.placeholderString = "No Folder Selected"
-        vc.onItemClicked = { [weak self] url in
-            guard let self else { return }
-            let currentURL = model.selectedSidebarItem.flatMap { model.sidebarOpenURL(for: $0.kind) }
-            guard url != currentURL else { return }
-            model.openFolder(at: url)
-        }
         addChild(vc)
         vc.view.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(vc.view)
