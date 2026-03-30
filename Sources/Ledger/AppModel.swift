@@ -541,7 +541,7 @@ final class AppModel: ObservableObject {
     @Published var pendingImageOpsByFile: [URL: [StagedImageOperation]] = [:]
 
     var pendingEditsCount: Int {
-        pendingEditsByFile.keys.union(pendingImageOpsByFile.keys).count
+        Set(pendingEditsByFile.keys).union(pendingImageOpsByFile.keys).count
     }
 
     private var badgeObservers: [AnyCancellable] = []
@@ -762,16 +762,12 @@ final class AppModel: ObservableObject {
             try? BackupManager(baseDirectory: backupDirectory).pruneOperations(keepLast: 20)
         }
 
-        Publishers.Merge(
-            $pendingEditsByFile.map { _ in () },
-            $pendingImageOpsByFile.map { _ in () }
-        )
-        .sink { [weak self] in
-            guard let self else { return }
-            let count = pendingEditsCount
-            NSApp.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
-        }
-        .store(in: &badgeObservers)
+        $pendingEditsByFile.combineLatest($pendingImageOpsByFile)
+            .sink { edits, imageOps in
+                let count = Set(edits.keys).union(imageOps.keys).count
+                NSApp.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
+            }
+            .store(in: &badgeObservers)
     }
 
 
