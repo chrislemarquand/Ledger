@@ -116,7 +116,7 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
         collectionView.frame = NSRect(origin: .zero, size: scrollView.contentView.bounds.size)
         collectionView.autoresizingMask = [.width]
         collectionView.backgroundColors = [.clear]
-        collectionView.collectionViewLayout = layout
+        collectionView.collectionViewLayout = layout.collectionViewLayout
         collectionView.isSelectable = true
         collectionView.allowsMultipleSelection = true
         collectionView.allowsEmptySelection = true
