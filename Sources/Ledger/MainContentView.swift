@@ -8,7 +8,6 @@ import UniformTypeIdentifiers
 
 extension Notification.Name {
     static let inspectorDidRequestBrowserFocus = Notification.Name("\(AppBrand.identifierPrefix).InspectorDidRequestBrowserFocus")
-    static let inspectorDidRequestFieldNavigation = Notification.Name("\(AppBrand.identifierPrefix).InspectorDidRequestFieldNavigation")
     static let sidebarDidRequestFocus = Notification.Name("\(AppBrand.identifierPrefix).SidebarDidRequestFocus")
     static let browserDidRequestFocus = Notification.Name("\(AppBrand.identifierPrefix).BrowserDidRequestFocus")
     static let browserDidSwitchViewMode = Notification.Name("\(AppBrand.identifierPrefix).BrowserDidSwitchViewMode")
@@ -1497,11 +1496,8 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     @objc
     func focusInspectorEntryAction(_: Any?) {
         guard !model.selectedFileURLs.isEmpty else { return }
-        NotificationCenter.default.post(
-            name: .inspectorDidRequestFieldNavigation,
-            object: nil,
-            userInfo: ["backward": false]
-        )
+        guard let window = view.window else { return }
+        _ = window.makeFirstResponder(inspectorController.view)
     }
 
     @objc
