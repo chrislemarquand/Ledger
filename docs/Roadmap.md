@@ -63,9 +63,9 @@ Released: **2026-03-10**.
 - [x] Welcome/version screen using `AppWelcomeViewController` from SharedUI (WhatsNewKit-backed). Show on first run; reuse for "What's New" on major version updates.
 - [x] Batch Rename (first release)
 - [x] Add more Exif fields to Inspector view (including rating)
-- [ ] Finder-style breadcrumb bar.
-- [ ] Dock icon badge and right click options
-- [ ] List column customisation (including Exif-backed columns).
+- [x] Finder-style breadcrumb bar.
+- [x] Dock icon badge and right click options
+- [x] List column customisation (including Exif-backed columns).
 - [ ] Gallery metadata lines/subtitle customisation.
 - [ ] Toolbar customisation.
 - [ ] **Backup retention policy**: keep-last-N model, persistence, prune path wiring, and Settings UI controls. Infrastructure (`BackupManager.pruneOperations`) already exists; this is the Settings surface and wiring.
