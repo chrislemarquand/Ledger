@@ -66,7 +66,7 @@ extension AppModel {
             .init(value: "255", label: "Other"),
         ]
 
-        return EditableTag.common.map { tag in
+        var entries = EditableTag.common.map { tag -> FieldCatalogEntry in
             let inputKind: ImportFieldInputKind
             switch tag.id {
             case "exif-exposure-program":
@@ -94,5 +94,19 @@ extension AppModel {
                 isEnabled: true
             )
         }
+
+        for tag in [EditableTag.rating, EditableTag.pick, EditableTag.label] {
+            entries.append(FieldCatalogEntry(
+                id: tag.id,
+                namespace: tag.namespace,
+                key: tag.key,
+                label: tag.label,
+                section: tag.section,
+                inputKind: .text,
+                isEnabled: true
+            ))
+        }
+
+        return entries
     }
 }
