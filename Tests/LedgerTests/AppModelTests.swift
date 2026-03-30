@@ -407,6 +407,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.applyMetadataCompleted, 1)
         XCTAssertEqual(model.applyMetadataTotal, 1)
         XCTAssertFalse(model.hasPendingEdits(for: fileURL))
+        XCTAssertTrue(model.lastOperationFilesByID.values.contains { $0.contains(fileURL) })
         XCTAssertTrue(model.hasRestorableBackup(for: fileURL))
 
         // Let post-apply metadata refresh settle.

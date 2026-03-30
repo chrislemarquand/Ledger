@@ -3,6 +3,7 @@ import ExifEditCore
 import Foundation
 import OSLog
 import Quartz
+import SharedUI
 import SwiftUI
 
 let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "ExifEdit", category: "AppModel")
@@ -99,27 +100,11 @@ enum AppBrand {
 
 enum AppTheme {
     static var accentNSColor: NSColor {
-        NSColor(named: "BrandAccent") ?? .systemTeal
-    }
-
-    static var accentStrongNSColor: NSColor {
-        NSColor(named: "BrandAccentStrong") ?? accentNSColor
-    }
-
-    static var accentSoftNSColor: NSColor {
-        NSColor(named: "BrandAccentSoft") ?? accentNSColor.withAlphaComponent(0.18)
+        NSColor(named: "AccentColor") ?? .systemTeal
     }
 
     static var accentColor: Color {
         Color(nsColor: accentNSColor)
-    }
-
-    static var accentStrongColor: Color {
-        Color(nsColor: accentStrongNSColor)
-    }
-
-    static var accentSoftColor: Color {
-        Color(nsColor: accentSoftNSColor)
     }
 }
 
@@ -258,13 +243,6 @@ struct RecentLocationsStore: RecentLocationsStoreProtocol {
             $0.appendingPathComponent("recent_locations.json", isDirectory: false)
         }
     }
-}
-
-enum MoveCommandDirection {
-    case up
-    case down
-    case left
-    case right
 }
 
 @MainActor
@@ -713,7 +691,7 @@ final class AppModel: ObservableObject {
                 alert.informativeText = "The exiftool executable could not be found. The app bundle may be corrupted. Please reinstall \(AppBrand.displayName)."
                 alert.alertStyle = .critical
                 alert.addButton(withTitle: "OK")
-                alert.runModal()
+                alert.runSheetOrModal(for: nil) { _ in }
             }
         }
 

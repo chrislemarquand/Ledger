@@ -470,6 +470,25 @@ extension AppModel {
         selectedSidebarID = movingItem.id
     }
 
+    func applyFavoriteOrder(sidebarIDs: [String]) {
+        guard !sidebarIDs.isEmpty else { return }
+
+        let orderedFavorites = sidebarIDs.compactMap { id in
+            favoriteItems.first(where: { $0.id == id })
+        }
+        guard !orderedFavorites.isEmpty else { return }
+
+        let missingFavorites = favoriteItems.filter { item in
+            !orderedFavorites.contains(where: { $0.id == item.id })
+        }
+        let combined = orderedFavorites + missingFavorites
+        guard combined != favoriteItems else { return }
+
+        favoriteItems = combined
+        persistFavorites()
+        refreshSidebarItems(preferredSelectionID: selectedSidebarID)
+    }
+
     private func favoriteNeighborSelectionID(removingFavoriteURL url: URL) -> String? {
         guard let index = favoriteItems.firstIndex(where: { candidate in
             if case let .favorite(candidateURL) = candidate.kind {

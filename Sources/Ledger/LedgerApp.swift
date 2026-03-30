@@ -1,4 +1,5 @@
 import AppKit
+import SharedUI
 
 @MainActor
 @main
@@ -24,49 +25,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var appModel: AppModel? { mainWindowController?.appModel }
 
     func showAboutPanel() {
-        let bundle = Bundle.main
-        let appName = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
-            ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
-            ?? AppBrand.displayName
-        let shortVersion = (bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.0"
         let exifToolVersion = bundledExifToolVersion() ?? "Unknown"
-
-        let purpose = "Edit photo metadata — EXIF, IPTC, and XMP — powered by ExifTool."
-        let nativeFont = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
-        let nativeColor = NSColor.secondaryLabelColor
-        let centred = NSMutableParagraphStyle()
-        centred.alignment = .center
-        let baseAttributes: [NSAttributedString.Key: Any] = [
-            .font: nativeFont,
-            .foregroundColor: nativeColor,
-            .paragraphStyle: centred
-        ]
-        let credits = NSMutableAttributedString(
-            string: "\(purpose)\n\nUses ExifTool \(exifToolVersion) by Phil Harvey\n",
-            attributes: baseAttributes
-        )
-        let linkText = "https://exiftool.org/"
-        let linkRange = NSRange(location: credits.length, length: (linkText as NSString).length)
-        credits.append(NSAttributedString(
-            string: linkText,
-            attributes: baseAttributes
-        ))
-        credits.addAttributes(
-            [
-                .link: linkText,
-                .underlineStyle: NSUnderlineStyle.single.rawValue
+        presentAboutPanel(
+            purpose: "Edit photo metadata — EXIF, IPTC, and XMP — powered by ExifTool.",
+            credits: [
+                .init(text: "Uses ExifTool \(exifToolVersion) by Phil Harvey", linkURL: "https://exiftool.org/"),
             ],
-            range: linkRange
+            copyright: "© 2026 Chris Le Marquand"
         )
-
-        let options: [NSApplication.AboutPanelOptionKey: Any] = [
-            .applicationName: appName,
-            .applicationVersion: shortVersion,
-            .credits: credits,
-            NSApplication.AboutPanelOptionKey(rawValue: "Copyright"): "© 2026 Chris Le Marquand",
-        ]
-        NSApp.orderFrontStandardAboutPanel(options: options)
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc
@@ -94,70 +60,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mainMenu.insertItem(appMenuItem, at: 0)
         }
         appMenuItem.title = appName
-
-        let appMenu = appMenuItem.submenu ?? NSMenu(title: appName)
-        appMenuItem.submenu = appMenu
-        appMenu.removeAllItems()
-
-        let aboutItem = NSMenuItem(
-            title: "About \(appName)",
-            action: #selector(showAboutPanelMenuAction(_:)),
-            keyEquivalent: ""
+        appMenuItem.submenu = makeStandardAppMenu(
+            appName: appName,
+            aboutAction: #selector(showAboutPanelMenuAction(_:)),
+            settingsAction: #selector(showSettingsWindowAction(_:))
         )
-        aboutItem.target = self
-        aboutItem.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: nil)
-        appMenu.addItem(aboutItem)
-        appMenu.addItem(.separator())
-
-        let settingsItem = NSMenuItem(
-            title: "Settings…",
-            action: #selector(showSettingsWindowAction(_:)),
-            keyEquivalent: ","
-        )
-        settingsItem.keyEquivalentModifierMask = .command
-        settingsItem.target = nil
-        settingsItem.image = NSImage(systemSymbolName: "gear", accessibilityDescription: nil)
-        appMenu.addItem(settingsItem)
-        appMenu.addItem(.separator())
-
-        let servicesRoot = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
-        let servicesMenu = NSMenu(title: "Services")
-        servicesRoot.submenu = servicesMenu
-        NSApp.servicesMenu = servicesMenu
-        appMenu.addItem(servicesRoot)
-        appMenu.addItem(.separator())
-
-        let hideItem = NSMenuItem(
-            title: "Hide \(appName)",
-            action: #selector(NSApplication.hide(_:)),
-            keyEquivalent: "h"
-        )
-        hideItem.keyEquivalentModifierMask = .command
-        appMenu.addItem(hideItem)
-
-        let hideOthersItem = NSMenuItem(
-            title: "Hide Others",
-            action: #selector(NSApplication.hideOtherApplications(_:)),
-            keyEquivalent: "h"
-        )
-        hideOthersItem.keyEquivalentModifierMask = [.command, .option]
-        appMenu.addItem(hideOthersItem)
-
-        let showAllItem = NSMenuItem(
-            title: "Show All",
-            action: #selector(NSApplication.unhideAllApplications(_:)),
-            keyEquivalent: ""
-        )
-        appMenu.addItem(showAllItem)
-        appMenu.addItem(.separator())
-
-        let quitItem = NSMenuItem(
-            title: "Quit \(appName)",
-            action: #selector(NSApplication.terminate(_:)),
-            keyEquivalent: "q"
-        )
-        quitItem.keyEquivalentModifierMask = .command
-        appMenu.addItem(quitItem)
     }
 
     private func bundledExifToolVersion() -> String? {
@@ -197,7 +104,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWindow.allowsAutomaticWindowTabbing = false
         configureApplicationMenu()
         let model = AppModel()
-        settingsWindowController = SettingsWindowController(model: model)
+        settingsWindowController = SettingsWindowController(tabs: [
+            SettingsTabDescriptor(symbolName: "gearshape", label: "General",
+                viewController: GeneralSettingsViewController(model: model)),
+            SettingsTabDescriptor(symbolName: "slider.horizontal.3", label: "Inspector",
+                viewController: InspectorSettingsViewController(model: model), preferredHeight: 620),
+        ])
         let windowController = MainWindowController(model: model)
         mainWindowController = windowController
         windowController.showWindow(nil)
@@ -205,6 +117,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
+    }
+
+    func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
         true
     }
 
@@ -240,7 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let keyWindow = NSApp.keyWindow ?? mainWindowController?.window
         if let keyWindow {
-            alert.beginSheetModal(for: keyWindow) { [weak self] response in
+            alert.runSheetOrModal(for: keyWindow) { [weak self] response in
                 guard let self else { return }
                 self.isShowingTerminateConfirmation = false
                 if response == .alertFirstButtonReturn {
@@ -253,13 +169,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                let response = alert.runModal()
-                self.isShowingTerminateConfirmation = false
-                if response == .alertFirstButtonReturn {
-                    self.allowImmediateTermination = true
-                    sender.terminate(nil)
-                } else {
-                    NSApp.activate(ignoringOtherApps: true)
+                alert.runSheetOrModal(for: nil) { response in
+                    self.isShowingTerminateConfirmation = false
+                    if response == .alertFirstButtonReturn {
+                        self.allowImmediateTermination = true
+                        sender.terminate(nil)
+                    } else {
+                        NSApp.activate(ignoringOtherApps: true)
+                    }
                 }
             }
         }
@@ -267,22 +184,84 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+private struct AboutCredit {
+    let text: String
+    let linkURL: String?
+}
+
+@MainActor
+private func presentAboutPanel(
+    purpose: String,
+    credits: [AboutCredit] = [],
+    copyright: String? = nil
+) {
+    let font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+    let color = NSColor.secondaryLabelColor
+    let centered = NSMutableParagraphStyle()
+    centered.alignment = .center
+    let baseAttributes: [NSAttributedString.Key: Any] = [
+        .font: font,
+        .foregroundColor: color,
+        .paragraphStyle: centered,
+    ]
+
+    let body = NSMutableAttributedString(string: purpose, attributes: baseAttributes)
+    for credit in credits {
+        body.append(NSAttributedString(string: "\n\n\(credit.text)", attributes: baseAttributes))
+        if let linkURL = credit.linkURL {
+            body.append(NSAttributedString(string: "\n", attributes: baseAttributes))
+            let range = NSRange(location: body.length, length: (linkURL as NSString).length)
+            body.append(NSAttributedString(string: linkURL, attributes: baseAttributes))
+            body.addAttributes(
+                [
+                    .link: linkURL,
+                    .underlineStyle: NSUnderlineStyle.single.rawValue,
+                ],
+                range: range
+            )
+        }
+    }
+
+    let bundle = Bundle.main
+    let appName = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+        ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
+        ?? ProcessInfo.processInfo.processName
+    let shortVersion = (bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.0"
+
+    var options: [NSApplication.AboutPanelOptionKey: Any] = [
+        .applicationName: appName,
+        .applicationVersion: shortVersion,
+        .credits: body,
+    ]
+    if let copyright {
+        options[NSApplication.AboutPanelOptionKey(rawValue: "Copyright")] = copyright
+    }
+
+    NSApp.orderFrontStandardAboutPanel(options: options)
+    NSApp.activate(ignoringOtherApps: true)
+}
+
 @MainActor
 final class MainWindowController: NSWindowController {
     let appModel: AppModel
+    private var framePersistenceController: WindowFramePersistenceController?
 
     init(model: AppModel) {
         appModel = model
         let contentController = NativeThreePaneSplitViewController(model: model)
         let window = NSWindow(contentViewController: contentController)
-        window.setContentSize(NSSize(width: 1300, height: 800))
-        window.minSize = NSSize(width: 1200, height: 720)
         window.title = AppBrand.displayName
         window.isReleasedWhenClosed = false
         window.isRestorable = true
-        window.setFrameAutosaveName("\(AppBrand.identifierPrefix).MainWindow")
+        configureWindowForToolbar(window)
+        let frameAutosaveName = "\(AppBrand.identifierPrefix).MainWindow"
         super.init(window: window)
-        shouldCascadeWindows = true
+        framePersistenceController = WindowFramePersistenceController(
+            window: window,
+            autosaveName: frameAutosaveName,
+            minSize: ThreePaneSplitViewController.Metrics.windowMinimum,
+            defaultContentSize: ThreePaneSplitViewController.Metrics.windowDefault
+        )
     }
 
     @available(*, unavailable)

@@ -1,4 +1,5 @@
 import AppKit
+import SharedUI
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -8,6 +9,7 @@ import UniformTypeIdentifiers
 final class ImportSession: ObservableObject {
     static let eosFocalTagID = "exif-focal"
     static let eosLensTagID = "exif-lens"
+    private static let isRunningUnitTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
 
     struct EOSLensChoiceDecision {
         let lens: String
@@ -304,12 +306,17 @@ final class ImportSession: ObservableObject {
     }
 
     private func presentBlockingImportAlert(title: String, message: String) {
+        // Unit-test runs have no user interaction path for modal alerts.
+        // Returning early keeps conflict-report tests deterministic.
+        if Self.isRunningUnitTests {
+            return
+        }
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = title
         alert.informativeText = message
         alert.addButton(withTitle: "OK")
-        alert.runModal()
+        alert.runSheetOrModal(for: NSApp.keyWindow) { _ in }
     }
 
     /// Tag IDs that actually appear in the parsed data. Nil until a run is prepared.
@@ -589,7 +596,8 @@ final class ImportSession: ObservableObject {
         alert.addButton(withTitle: "Use Lens")
         alert.addButton(withTitle: "Cancel")
 
-        let response = alert.runModal()
+        var response: NSApplication.ModalResponse = .abort
+        alert.runSheetOrModal(for: nil) { response = $0 }
         guard response == .alertFirstButtonReturn,
               let selectedLens = popup.titleOfSelectedItem,
               !CSVSupport.trim(selectedLens).isEmpty
@@ -827,7 +835,6 @@ struct ImportSheetView: View {
     @State private var showFields = false
     @State private var showAdvanced = false
     @State private var showPreview = false
-    @State private var showInfo = false
     @State private var importProgress: Double?
     @State private var isPostImportReviewMode = false
 
@@ -838,27 +845,7 @@ struct ImportSheetView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Title with inline ⓘ
-            HStack(spacing: 6) {
-                Text("Import from \(sourceKind.title)")
-                    .font(.title3.weight(.semibold))
-                Button {
-                    showInfo.toggle()
-                } label: {
-                    Image(systemName: "info.circle")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .popover(isPresented: $showInfo) {
-                    Text(infoText)
-                        .font(.callout)
-                        .padding()
-                        .frame(minWidth: 260, maxWidth: 340)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
+        WorkflowSheetContainer(title: "Import from \(sourceKind.title)", infoText: infoText) {
             // File picker row
             HStack {
                 TextField("", text: .constant(session.options.sourceURLPath ?? ""))
@@ -872,7 +859,7 @@ struct ImportSheetView: View {
 
             // Options row: Apply to | If no match
             HStack(alignment: .top, spacing: 28) {
-                optionGroup("Apply to:") {
+                WorkflowOptionGroup("Apply to:") {
                     Picker("", selection: $session.options.scope) {
                         Text("Folder").tag(ImportScope.folder)
                         Text(selectionLabel).tag(ImportScope.selection)
@@ -882,7 +869,7 @@ struct ImportSheetView: View {
                     .disabled(isPostImportReviewMode)
                 }
 
-                optionGroup("If no match:") {
+                WorkflowOptionGroup("If no match:") {
                     Picker("", selection: $session.options.emptyValuePolicy) {
                         Text("Clear").tag(ImportEmptyValuePolicy.clear)
                         Text("Skip").tag(ImportEmptyValuePolicy.skip)
@@ -894,7 +881,7 @@ struct ImportSheetView: View {
             }
 
             if let banner = activeBanner {
-                InlineSheetMessageBanner(messages: banner)
+                WorkflowInlineMessageBanner(messages: banner)
             }
 
             ProgressView(value: importProgress ?? 0)
@@ -945,9 +932,6 @@ struct ImportSheetView: View {
                 .disabled(isPostImportReviewMode ? false : (session.options.sourceURL == nil || session.isBusy || importProgress != nil))
             }
         }
-        .fixedSize(horizontal: false, vertical: true)
-        .padding(20)
-        .frame(width: 580)
         .onChange(of: session.options.sourceURLPath) { _, _ in
             isPostImportReviewMode = false
             session.schedulePreviewRefresh(model: model)
@@ -1009,14 +993,6 @@ struct ImportSheetView: View {
     }
 
     // MARK: - View Helpers
-
-    @ViewBuilder
-    private func optionGroup(_ title: String, @ViewBuilder content: () -> some View) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text(title)
-            content()
-        }
-    }
 
     @ViewBuilder
     private var fieldsPopover: some View {
@@ -1266,21 +1242,6 @@ struct ImportSheetView: View {
                 if session.shouldEnterPostImportReview {
                     isPostImportReviewMode = true
                 }
-            }
-        }
-    }
-}
-
-struct InlineSheetMessageBanner: View {
-    let messages: [String]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ForEach(messages, id: \.self) { message in
-                Text(message)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

@@ -10,6 +10,8 @@
     <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
+    <key>CFBundleDisplayName</key>
+    <string>$(APP_DISPLAY_NAME)</string>
     <key>CFBundleName</key>
     <string>$(PRODUCT_NAME)</string>
     <key>CFBundlePackageType</key>
@@ -21,8 +23,8 @@
     <key>LSMinimumSystemVersion</key>
     <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
     <key>NSAccentColorName</key>
-    <string>BrandAccent</string>
+    <string>AccentColor</string>
     <key>NSHumanReadableCopyright</key>
-    <string>Copyright © $(CURRENT_YEAR) $(APP_DISPLAY_NAME)</string>
+    <string>Copyright © $(CURRENT_YEAR) Chris Le Marquand</string>
 </dict>
 </plist>

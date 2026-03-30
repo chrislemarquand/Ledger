@@ -1,8 +1,8 @@
 {
   "fill" : {
     "linear-gradient" : [
-      "display-p3:0.34902,0.67451,0.63922,1.00000",
-      "display-p3:0.27075,0.55273,0.52393,1.00000"
+      "display-p3:0.27075,0.55273,0.52393,1.00000",
+      "display-p3:0.34902,0.67451,0.63922,1.00000"
     ],
     "orientation" : {
       "start" : {
@@ -17,16 +17,17 @@
   },
   "groups" : [
     {
-      "blend-mode" : "screen",
+      "blend-mode" : "plus-lighter",
       "blur-material" : null,
       "hidden" : false,
       "layers" : [
         {
+          "blend-mode" : "lighten",
           "fill" : "automatic",
           "image-name" : "Ledger Icon.svg",
           "name" : "Ledger Icon",
           "position" : {
-            "scale" : 1,
+            "scale" : 0.92,
             "translation-in-points" : [
               -5.754339917767538,
               44.510897767785366

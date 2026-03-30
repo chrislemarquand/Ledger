@@ -1,5 +1,6 @@
 import AppKit
 import MapKit
+import SharedUI
 import SwiftUI
 
 private struct InspectorPreviewActionPressedKey: EnvironmentKey {
@@ -62,9 +63,6 @@ private struct InspectorPreviewActionLabel: View {
 
 struct InspectorView: View {
     @ObservedObject var model: AppModel
-    private let topScrollStartInset: CGFloat = 56
-    private let contentHorizontalInset: CGFloat = 16
-    private let sectionInnerInset: CGFloat = 12
     private static let byteCountFormatter: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
         formatter.allowedUnits = [.useKB, .useMB, .useGB]
@@ -79,10 +77,10 @@ struct InspectorView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 if model.selectedFileURLs.isEmpty {
-                    ContentUnavailableView(
-                        "No Selection",
-                        systemImage: "slider.horizontal.3",
-                        description: Text("Select one or more images to view and edit their metadata.")
+                    PlaceholderView(
+                        symbolName: "slider.horizontal.3",
+                        title: "No Selection",
+                        description: "Select one or more images to view and edit their metadata."
                     )
                     .frame(maxWidth: .infinity)
                     .containerRelativeFrame(.vertical, alignment: .center)
@@ -123,11 +121,10 @@ struct InspectorView: View {
                             }
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, contentHorizontalInset)
 
                     if model.selectedFileURLs.count == 1 {
-                        DisclosureGroup(
+                        InspectorSectionContainer(
+                            "Preview",
                             isExpanded: Binding(
                                 get: { !model.isInspectorSectionCollapsed("Preview") },
                                 set: { _ in
@@ -139,8 +136,20 @@ struct InspectorView: View {
                         ) {
                             if let previewURL = primarySelectedFileURL {
                                 VStack(spacing: 10) {
-                                    InspectorPreviewImageView(model: model, fileURL: previewURL)
-                                        .frame(maxWidth: .infinity)
+                                    InspectorPreviewCard(
+                                        image: model.inspectorPreviewImage(for: previewURL),
+                                        isLoading: model.isInspectorPreviewLoading(for: previewURL)
+                                    ) {
+                                        if model.hasPendingImageEdits(for: previewURL) {
+                                            Image(systemName: "circle.fill")
+                                                .font(.system(size: 9))
+                                                .foregroundStyle(.orange)
+                                                .padding(8)
+                                        }
+                                    }
+                                    .task(id: "\(previewURL.path)::\(model.inspectorRefreshRevision)") {
+                                        model.ensureInspectorPreviewLoaded(for: previewURL)
+                                    }
 
                                     Divider()
 
@@ -179,23 +188,13 @@ struct InspectorView: View {
                                         .buttonStyle(InspectorPreviewActionButtonStyle())
                                     }
                                 }
-                                .padding(sectionInnerInset)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(.quaternary.opacity(0.35))
-                                )
                             }
-                        } label: {
-                            Text(sectionHeaderTitle("Preview"))
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(AppTheme.accentColor)
-                                .tracking(0.4)
                         }
-                        .padding(.horizontal, contentHorizontalInset)
                     }
 
                     ForEach(model.orderedEditableTagSections) { grouped in
-                        DisclosureGroup(
+                        InspectorSectionContainer(
+                            grouped.section,
                             isExpanded: Binding(
                                 get: { !model.isInspectorSectionCollapsed(grouped.section) },
                                 set: { _ in
@@ -207,18 +206,17 @@ struct InspectorView: View {
                         ) {
                             VStack(alignment: .leading, spacing: 10) {
                                     ForEach(grouped.tags) { tag in
-                                        VStack(alignment: .leading, spacing: 4) {
+                                        InspectorFieldRow {
                                             HStack(spacing: 6) {
                                                 if model.hasPendingChange(for: tag) {
                                                     Image(systemName: "circle.fill")
                                                         .font(.system(size: 6))
                                                         .foregroundStyle(.orange)
                                                 }
-                                                Text(tag.label)
-                                                    .font(.caption)
-                                                    .foregroundStyle(.secondary)
+                                                InspectorFieldLabel(tag.label)
                                             }
-                                            if model.isDateTimeTag(tag) {
+                                        } value: {
+                                        if model.isDateTimeTag(tag) {
                                                 if let date = model.dateValueForTag(tag) {
                                                     HStack(spacing: 6) {
                                                         DatePicker(
@@ -341,18 +339,7 @@ struct InspectorView: View {
                                     }
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(sectionInnerInset)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(.quaternary.opacity(0.35))
-                                )
-                        } label: {
-                            Text(sectionHeaderTitle(grouped.section))
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(AppTheme.accentColor)
-                                .tracking(0.4)
                         }
-                        .padding(.horizontal, contentHorizontalInset)
                     }
 
 
@@ -360,8 +347,7 @@ struct InspectorView: View {
                     .padding(.vertical, 12)
                 }
             }
-            .ignoresSafeArea(.container, edges: .top)
-            .contentMargins(.top, topScrollStartInset, for: .scrollContent)
+            .inspectorScrollSetup()
             .animation(appAnimation(), value: model.collapsedInspectorSections)
             .onChange(of: focusedTagID) { oldValue, newValue in
                 if oldValue != nil {
@@ -485,9 +471,6 @@ struct InspectorView: View {
         return fileURL.deletingPathExtension().lastPathComponent
     }
 
-    private func sectionHeaderTitle(_ title: String) -> String {
-        title.uppercased()
-    }
 
     private var singleSelectionSubtitle: String? {
         guard model.selectedFileURLs.count == 1,
@@ -553,7 +536,7 @@ struct InspectorView: View {
 
     @ViewBuilder
     private func locationMapView(for coordinate: CLLocationCoordinate2D) -> some View {
-        InspectorLocationMapView(coordinate: coordinate)
+        SharedUI.InspectorLocationMapView(coordinate: coordinate)
         .frame(height: 150)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
@@ -666,111 +649,3 @@ struct InspectorView: View {
     }
 }
 
-
-private struct InspectorPreviewImageView: View {
-    @ObservedObject var model: AppModel
-    let fileURL: URL
-
-    var body: some View {
-        ZStack {
-            if let image = model.inspectorPreviewImage(for: fileURL) {
-                // Overlay the dot on the Image itself so it anchors to the actual
-                // rendered image bounds (which match the aspect-ratio-scaled size),
-                // not the fixed 220 pt container — keeping it inside for both
-                // portrait and landscape images.
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(alignment: .topLeading) {
-                        if model.hasPendingImageEdits(for: fileURL) {
-                            Image(systemName: "circle.fill")
-                                .font(.system(size: 9))
-                                .foregroundStyle(.orange)
-                                .padding(8)
-                        }
-                    }
-            } else {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(.quaternary.opacity(0.22))
-            }
-        }
-        .frame(height: 220)
-        .overlay {
-            if model.isInspectorPreviewLoading(for: fileURL) {
-                ProgressView()
-                    .controlSize(.small)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-            }
-        }
-        .task(id: previewTaskID) {
-            model.ensureInspectorPreviewLoaded(for: fileURL)
-        }
-    }
-
-    private var previewTaskID: String {
-        "\(fileURL.path)::\(model.inspectorRefreshRevision)"
-    }
-}
-
-
-// Renders a static map snapshot via MKMapSnapshotter — no live MKMapView display link.
-private struct InspectorLocationMapView: View {
-    let coordinate: CLLocationCoordinate2D
-    @State private var snapshotImage: NSImage?
-
-    var body: some View {
-        GeometryReader { geometry in
-            Group {
-                if let image = snapshotImage {
-                    Image(nsImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .clipped()
-                } else {
-                    Color(nsColor: .windowBackgroundColor)
-                }
-            }
-            .task(id: taskKey(geometry.size)) {
-                snapshotImage = await makeSnapshot(size: geometry.size)
-            }
-        }
-    }
-
-    private func taskKey(_ size: CGSize) -> String {
-        "\(coordinate.latitude),\(coordinate.longitude),\(Int(size.width)),\(Int(size.height))"
-    }
-
-    @MainActor
-    private func makeSnapshot(size: CGSize) async -> NSImage? {
-        guard size.width > 0, size.height > 0 else { return nil }
-        let options = MKMapSnapshotter.Options()
-        options.region = MKCoordinateRegion(
-            center: coordinate,
-            span: MKCoordinateSpan(latitudeDelta: 0.004, longitudeDelta: 0.004)
-        )
-        options.size = size
-        guard let snapshot = try? await MKMapSnapshotter(options: options).start() else { return nil }
-
-        // Composite a pin onto the snapshot image.
-        // lockFocusFlipped(true) gives a top-left origin / y-down coordinate space,
-        // which matches the coordinate space of snapshot.point(for:).
-        let baseImage = snapshot.image
-        let result = NSImage(size: baseImage.size)
-        result.lockFocusFlipped(true)
-        baseImage.draw(in: NSRect(origin: .zero, size: baseImage.size))
-        let pinPoint = snapshot.point(for: coordinate)
-        let pinSize: CGFloat = 22
-        if let pin = NSImage(systemSymbolName: "mappin.circle.fill", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(paletteColors: [.white, .systemRed])) {
-            pin.draw(in: NSRect(
-                x: pinPoint.x - pinSize / 2,
-                y: pinPoint.y - pinSize / 2,
-                width: pinSize,
-                height: pinSize
-            ))
-        }
-        result.unlockFocus()
-        return result
-    }
-}

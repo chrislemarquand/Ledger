@@ -60,14 +60,13 @@ Released: **2026-03-10**.
 
 ## v1.2 (Minor) — Editing Productivity
 
-Completing the core "do things to metadata" toolkit.
-
-- [ ] Batch Rename (first release).
+- [ ] Welcome/version screen using `AppWelcomeViewController` from SharedUI (WhatsNewKit-backed). Show on first run; reuse for "What's New" on major version updates.
+- [ ] Batch Rename (first release)
+- [ ] Add more Exif fields to Inspector view (including rating)
 - [ ] Rename hardening:
   - [ ] Collision handling.
   - [ ] Preview determinism.
   - [ ] Undo/recovery safety.
-- [ ] Add more Exif fields to Inspector view (including rating).
 - [ ] **Timestamp sync tools**: "Set file date from DateTimeOriginal" and "Set DateTimeOriginal from file date". Preview + confirm dialog, batch-safe with backup support.
 - [ ] **ExifTool-native DateTimeDigitized backfill**: optional post-import/apply pass that fills missing `EXIF:CreateDate` from `FileCreateDate` only (no app-side date parsing, no overwrite of existing values).
 - [ ] Metadata copy/paste:

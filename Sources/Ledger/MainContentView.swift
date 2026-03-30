@@ -2,6 +2,7 @@
 import Combine
 import ExifEditCore
 import MapKit
+import SharedUI
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -11,27 +12,6 @@ extension Notification.Name {
     static let sidebarDidRequestFocus = Notification.Name("\(AppBrand.identifierPrefix).SidebarDidRequestFocus")
     static let browserDidRequestFocus = Notification.Name("\(AppBrand.identifierPrefix).BrowserDidRequestFocus")
     static let browserDidSwitchViewMode = Notification.Name("\(AppBrand.identifierPrefix).BrowserDidSwitchViewMode")
-}
-
-enum Motion {
-    static let duration: Double = 0.16
-    static var timingFunction: CAMediaTimingFunction { CAMediaTimingFunction(name: .easeInEaseOut) }
-}
-
-enum KeyCode {
-    static let tab: UInt16 = 48
-    static let space: UInt16 = 49
-    static let escape: UInt16 = 53
-    static let `return`: UInt16 = 36
-    static let numpadReturn: UInt16 = 76
-    static let equal: UInt16 = 24
-    static let minus: UInt16 = 27
-    static let numpadPlus: UInt16 = 69
-    static let numpadMinus: UInt16 = 78
-    static let leftArrow: UInt16 = 123
-    static let rightArrow: UInt16 = 124
-    static let downArrow: UInt16 = 125
-    static let upArrow: UInt16 = 126
 }
 
 enum UIMetrics {
@@ -65,13 +45,6 @@ enum UIMetrics {
     }
 }
 
-func appAnimation() -> Animation? {
-    if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-        return nil
-    }
-    return .easeInOut(duration: Motion.duration)
-}
-
 actor SharedThumbnailRequestBroker {
     static let shared = SharedThumbnailRequestBroker()
 
@@ -84,34 +57,16 @@ actor SharedThumbnailRequestBroker {
     }
 }
 
-private func observeEquatable<P: Publisher>(
-    _ publisher: P,
-    storeIn cancellables: inout [AnyCancellable],
-    onChange: @escaping () -> Void
-) where P.Output: Equatable, P.Failure == Never {
-    publisher
-        .removeDuplicates()
-        .sink { _ in
-            onChange()
-        }
-        .store(in: &cancellables)
-}
-
-final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuItemValidation, NSMenuDelegate {
+final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NSMenuItemValidation, NSMenuDelegate {
     private var model: AppModel
 
-    private let sidebarController: NSHostingController<AnyView>
+    private let sidebarController: AppKitSidebarController<LedgerSidebarSection, LedgerSidebarItem>
     private let browserController: BrowserContainerViewController
     private let inspectorController: NSHostingController<AnyView>
-    private let contentSplitController: NSSplitViewController
-
-    private let sidebarItem: NSSplitViewItem
-    private let contentItem: NSSplitViewItem
-    private let browserItem: NSSplitViewItem
-    private let inspectorItem: NSSplitViewItem
 
     private var didConfigureWindow = false
-    private var nativeToolbarDelegate: NativeToolbarDelegate?
+    private var mainToolbarController: MainToolbarController?
+    private var toolbarShellController: ToolbarShellController?
     private weak var fileMenuForInjection: NSMenu?
     private weak var editMenuForInjection: NSMenu?
     private weak var viewMenuForSortInjection: NSMenu?
@@ -121,59 +76,54 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     private var uiRefreshObservers: [AnyCancellable] = []
     private var spacebarMonitor: Any?
     private var browserFocusRequestObserver: NSObjectProtocol?
-    private var splitResizeObserver: NSObjectProtocol?
-    private var windowAppearanceObservation: NSKeyValueObservation?
-    private var lastWindowAppearanceName: NSAppearance.Name?
-    private var didApplyInitialContentSplit = false
-    private var didApplyInitialInspectorVisibility = false
     private var lastWindowTitleText = ""
     private var lastWindowSubtitleText = ""
-    private var isPaneStateSyncScheduled = false
     private var isModelUIRefreshScheduled = false
+    private var isSidebarReloadScheduled = false
+    private var isSidebarSelectionSyncScheduled = false
     init(model: AppModel) {
         self.model = model
 
-        sidebarController = NSHostingController(rootView: AnyView(NavigationSidebarView(model: model).tint(AppTheme.accentColor)))
-        browserController = BrowserContainerViewController(model: model)
-        inspectorController = NSHostingController(rootView: AnyView(InspectorView(model: model).tint(AppTheme.accentColor)))
-        contentSplitController = NSSplitViewController()
+        let sc = AppKitSidebarController(
+            sections: Self.buildSidebarSections(from: model),
+            items: Self.buildSidebarItems(from: model),
+            initialSelectionBehavior: .noInitialSelection
+        )
+        let bc = BrowserContainerViewController(model: model)
+        let ic = NSHostingController(rootView: AnyView(InspectorView(model: model).tint(AppTheme.accentColor)))
+        // Prevent inspector content from forcing pane expansion during SwiftUI view updates.
+        ic.sizingOptions = []
 
-        // Embedded hosting controllers should not drive container sizing from SwiftUI content updates.
-        sidebarController.sizingOptions = []
-        inspectorController.sizingOptions = []
+        self.sidebarController = sc
+        self.browserController = bc
+        self.inspectorController = ic
 
-        sidebarItem = NSSplitViewItem(sidebarWithViewController: sidebarController)
-        contentItem = NSSplitViewItem(viewController: contentSplitController)
-        browserItem = NSSplitViewItem(viewController: browserController)
-        inspectorItem = NSSplitViewItem(viewController: inspectorController)
+        super.init(
+            sidebar: sc,
+            content: bc,
+            inspector: ic,
+            mainSplitAutosaveName: Self.mainSplitAutosaveName,
+            contentSplitAutosaveName: Self.contentSplitAutosaveName
+        )
 
-        super.init(nibName: nil, bundle: nil)
+        sc.onSelectionChange = { [weak self] item in
+            self?.model.handleExplicitSidebarSelectionChange(to: item.id)
+        }
+        sc.menuProvider = { [weak self] item in
+            self?.buildSidebarContextMenu(for: item)
+        }
+        sc.onItemsReordered = { [weak self] reorderedItems in
+            self?.applySidebarReorder(from: reorderedItems)
+        }
 
-        sidebarItem.minimumThickness = 220
-        sidebarItem.maximumThickness = 430
-        sidebarItem.canCollapse = true
-        sidebarItem.allowsFullHeightLayout = true
-        sidebarItem.holdingPriority = .defaultHigh
-
-        browserItem.minimumThickness = 280
-        browserItem.holdingPriority = .defaultLow
-
-        inspectorItem.minimumThickness = 260
-        inspectorItem.maximumThickness = 900
-        inspectorItem.canCollapse = true
-        inspectorItem.holdingPriority = .defaultLow
-
-        // Prevent inspector or sidebar content from forcing pane expansion during view updates.
-        sidebarController.view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        sidebarController.view.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        inspectorController.view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        inspectorController.view.setContentHuggingPriority(.defaultLow, for: .horizontal)
-
-        contentSplitController.addSplitViewItem(browserItem)
-        contentSplitController.addSplitViewItem(inspectorItem)
-
-        addSplitViewItem(sidebarItem)
-        addSplitViewItem(contentItem)
+        onPaneStateChanged = { [weak self] in
+            guard let self else { return }
+            let sc = self.isSidebarCollapsed
+            let ic = self.isInspectorCollapsed
+            if self.model.isSidebarCollapsed != sc { self.model.isSidebarCollapsed = sc }
+            if self.model.isInspectorCollapsed != ic { self.model.isInspectorCollapsed = ic }
+            self.refreshToolbarState()
+        }
 
         installUIRefreshObservers()
     }
@@ -207,16 +157,10 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             NotificationCenter.default.removeObserver(browserFocusRequestObserver)
             self.browserFocusRequestObserver = nil
         }
-        if let splitResizeObserver {
-            NotificationCenter.default.removeObserver(splitResizeObserver)
-            self.splitResizeObserver = nil
-        }
         if let menuTrackingObserver {
             NotificationCenter.default.removeObserver(menuTrackingObserver)
             self.menuTrackingObserver = nil
         }
-        windowAppearanceObservation = nil
-        lastWindowAppearanceName = nil
     }
 
     private func installUIRefreshObservers() {
@@ -244,6 +188,19 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         observe(model.$isInspectorCollapsed)
         observe(model.$inspectorRefreshRevision)
         observe(model.$stagedOpsDisplayToken)
+
+        // Sidebar data — rebuild and reload when the item list or image counts change.
+        observeEquatable(model.$sidebarItems, storeIn: &uiRefreshObservers) { [weak self] in
+            self?.scheduleSidebarReload()
+        }
+        observeEquatable(model.$sidebarImageCounts, storeIn: &uiRefreshObservers) { [weak self] in
+            self?.scheduleSidebarReload()
+        }
+        // Sidebar selection — sync model-driven selection changes back to the controller
+        // (e.g. when an unsaved-edits guard reverts the selection, or programmatic changes).
+        observeEquatable(model.$selectedSidebarID, storeIn: &uiRefreshObservers) { [weak self] in
+            self?.scheduleSidebarSelectionSync()
+        }
     }
 
     private func scheduleModelDrivenUIRefresh() {
@@ -252,22 +209,123 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.isModelUIRefreshScheduled = false
-            self.nativeToolbarDelegate?.refreshFromModel()
+            self.refreshToolbarState()
             self.refreshWindowTitleSubtitleIfNeeded()
         }
+    }
+
+    private func scheduleSidebarReload() {
+        guard !isSidebarReloadScheduled else { return }
+        isSidebarReloadScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isSidebarReloadScheduled = false
+            self.sidebarController.sections = Self.buildSidebarSections(from: self.model)
+            self.sidebarController.items = Self.buildSidebarItems(from: self.model)
+            self.sidebarController.reloadData()
+        }
+    }
+
+    private func scheduleSidebarSelectionSync() {
+        guard !isSidebarSelectionSyncScheduled else { return }
+        isSidebarSelectionSyncScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isSidebarSelectionSyncScheduled = false
+            let id = self.model.selectedSidebarID
+            if let id {
+                self.sidebarController.selectItem(where: { $0.id == id })
+            } else {
+                self.sidebarController.clearSelection()
+            }
+        }
+    }
+
+    private func applySidebarReorder(from reorderedItems: [LedgerSidebarItem]) {
+        let reorderedFavoriteIDs = reorderedItems
+            .filter { $0.section == .pinned && $0.isSidebarReorderable }
+            .map(\.id)
+        model.applyFavoriteOrder(sidebarIDs: reorderedFavoriteIDs)
+    }
+
+    private static func buildSidebarSections(from model: AppModel) -> [LedgerSidebarSection] {
+        LedgerSidebarSection.allCases.filter { section in
+            model.sidebarItems.contains { $0.section == section.rawValue }
+        }
+    }
+
+    private static func buildSidebarItems(from model: AppModel) -> [LedgerSidebarItem] {
+        model.sidebarItems.compactMap { item in
+            guard let section = LedgerSidebarSection(rawValue: item.section) else { return nil }
+            let countText = model.sidebarImageCounts[item.id].map { "\($0)" }
+            return LedgerSidebarItem(from: item, section: section, countText: countText)
+        }
+    }
+
+    private func buildSidebarContextMenu(for ledgerItem: LedgerSidebarItem) -> NSMenu? {
+        guard let appItem = model.sidebarItems.first(where: { $0.id == ledgerItem.id }) else {
+            return nil
+        }
+
+        let canFinder = model.canOpenSidebarItemInFinder(appItem)
+        let canPin    = model.canPinSidebarItem(appItem)
+        let canUnpin  = model.canUnpinSidebarItem(appItem)
+        let canRemove = model.canRemoveRecentSidebarItem(appItem)
+        let canUp     = model.canMoveFavoriteUp(appItem)
+        let canDown   = model.canMoveFavoriteDown(appItem)
+
+        guard canFinder || canPin || canUnpin || canRemove else { return nil }
+
+        let menu = NSMenu()
+
+        if canFinder {
+            menu.addItem(ClosureMenuItem(title: "Open in Finder", image: NSImage(systemSymbolName: "folder", accessibilityDescription: nil)) {
+                [weak self] in self?.model.openSidebarItemInFinder(appItem)
+            })
+        }
+
+        if canPin {
+            if canFinder { menu.addItem(.separator()) }
+            menu.addItem(ClosureMenuItem(title: "Pin", image: NSImage(systemSymbolName: "pin", accessibilityDescription: nil)) {
+                [weak self] in self?.model.pinSidebarItem(appItem)
+            })
+            if canRemove {
+                menu.addItem(ClosureMenuItem(title: "Remove", image: NSImage(systemSymbolName: "minus.circle", accessibilityDescription: nil)) {
+                    [weak self] in self?.model.removeRecentSidebarItem(appItem)
+                })
+            }
+        }
+
+        if canUnpin {
+            menu.addItem(ClosureMenuItem(title: "Unpin", image: NSImage(systemSymbolName: "pin.slash", accessibilityDescription: nil)) {
+                [weak self] in self?.model.unpinSidebarItem(appItem)
+            })
+            if canRemove {
+                menu.addItem(ClosureMenuItem(title: "Remove", image: NSImage(systemSymbolName: "minus.circle", accessibilityDescription: nil)) {
+                    [weak self] in self?.model.removeRecentSidebarItem(appItem)
+                })
+            }
+            if canUp || canDown {
+                menu.addItem(.separator())
+                let upItem = ClosureMenuItem(title: "Move Up", image: NSImage(systemSymbolName: "arrow.up", accessibilityDescription: nil)) {
+                    [weak self] in self?.model.moveFavoriteUp(appItem)
+                }
+                upItem.isEnabled = canUp
+                menu.addItem(upItem)
+                let downItem = ClosureMenuItem(title: "Move Down", image: NSImage(systemSymbolName: "arrow.down", accessibilityDescription: nil)) {
+                    [weak self] in self?.model.moveFavoriteDown(appItem)
+                }
+                downItem.isEnabled = canDown
+                menu.addItem(downItem)
+            }
+        }
+
+        return menu
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
         resetSplitAutosaveStateIfNeeded()
-        splitView.isVertical = true
-        splitView.dividerStyle = .thin
-        splitView.autosaveName = NSSplitView.AutosaveName(Self.mainSplitAutosaveName)
-        contentSplitController.splitView.isVertical = true
-        contentSplitController.splitView.dividerStyle = .thin
-        contentSplitController.splitView.autosaveName = NSSplitView.AutosaveName(Self.contentSplitAutosaveName)
-        schedulePaneStateSync()
-        installSplitResizeObserverIfNeeded()
     }
 
     private func resetSplitAutosaveStateIfNeeded() {
@@ -282,115 +340,44 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         defaults.set(true, forKey: key)
     }
 
-    override func viewDidAppear() {
-        super.viewDidAppear()
-        ensureInitialInspectorVisibilityIfNeeded()
-        installWindowAppearanceObservationIfNeeded()
-    }
-
-    override func viewDidLayout() {
-        super.viewDidLayout()
-        applyInitialContentSplitIfNeeded()
-    }
-
-    private func applyInitialContentSplitIfNeeded() {
-        guard !didApplyInitialContentSplit else { return }
-        if hasPersistedContentSplitLayout() {
-            didApplyInitialContentSplit = true
-            return
-        }
-        let split = contentSplitController.splitView
-        let panes = split.arrangedSubviews
-        guard panes.count == 2 else { return }
-
-        let totalWidth = split.bounds.width
-        guard totalWidth > 0 else { return }
-        // Avoid capturing an early transitional width before the outer split reaches its settled size.
-        let stableWidthThreshold = max(browserItem.minimumThickness + inspectorItem.minimumThickness + 240, 860)
-        guard totalWidth >= stableWidthThreshold else { return }
-
-        let browserMin = browserItem.minimumThickness
-        let inspectorMin = inspectorItem.minimumThickness
-        let browserTarget = min(max(totalWidth * 0.7, browserMin), totalWidth - inspectorMin)
-        guard browserTarget.isFinite, browserTarget > 0 else { return }
-        split.setPosition(browserTarget, ofDividerAt: 0)
-        didApplyInitialContentSplit = true
-    }
-
-    private func ensureInitialInspectorVisibilityIfNeeded() {
-        guard !didApplyInitialInspectorVisibility else { return }
-        didApplyInitialInspectorVisibility = true
-        inspectorItem.isCollapsed = false
-        schedulePaneStateSync()
-    }
-
-    private func hasPersistedContentSplitLayout() -> Bool {
-        let defaults = UserDefaults.standard
-        return defaults.object(forKey: "NSSplitView Subview Frames \(Self.contentSplitAutosaveName)") != nil
-            || defaults.object(forKey: "NSSplitView Divider Positions \(Self.contentSplitAutosaveName)") != nil
-    }
-
-    private func installWindowAppearanceObservationIfNeeded() {
-        guard windowAppearanceObservation == nil, let window = view.window else { return }
-        lastWindowAppearanceName = window.effectiveAppearance.name
-        windowAppearanceObservation = window.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, change in
-            let newName = change.newValue?.name
-            DispatchQueue.main.async {
-                guard let self else { return }
-                guard let newName else { return }
-                guard self.lastWindowAppearanceName != newName else { return }
-                self.lastWindowAppearanceName = newName
-                self.rebuildToolbarForCurrentAppearance()
-            }
-        }
-    }
-
     private func installMainToolbar(on window: NSWindow, resetDelegateState: Bool) {
-        let delegate: NativeToolbarDelegate
-        if let existingDelegate = nativeToolbarDelegate {
-            delegate = existingDelegate
+        let toolbarContent: MainToolbarController
+        if let existing = mainToolbarController {
+            toolbarContent = existing
             if resetDelegateState {
-                delegate.resetCachedToolbarReferences()
+                toolbarContent.resetCachedToolbarReferences()
             }
         } else {
-            delegate = NativeToolbarDelegate(controller: self)
+            toolbarContent = MainToolbarController(controller: self)
         }
-        nativeToolbarDelegate = delegate
+        mainToolbarController = toolbarContent
 
-        // Recreate the toolbar through AppKit so item views are rebuilt for the
-        // current titlebar appearance (light/dark/high-contrast).
-        let toolbar = NSToolbar(identifier: "\(AppBrand.identifierPrefix).MainToolbar.v5")
-        toolbar.delegate = delegate
-        toolbar.displayMode = .iconOnly
-        toolbar.allowsUserCustomization = false
-        toolbar.autosavesConfiguration = false
-        window.toolbar = toolbar
-    }
-
-    private func rebuildToolbarForCurrentAppearance() {
-        guard let window = view.window else { return }
-        installMainToolbar(on: window, resetDelegateState: true)
-        nativeToolbarDelegate?.refreshFromModel()
-        window.toolbar?.validateVisibleItems()
+        let shell = toolbarShellController ?? ToolbarShellController(content: toolbarContent)
+        shell.setContent(toolbarContent)
+        toolbarShellController = shell
+        _ = shell.installToolbar(
+            on: window,
+            identifier: "\(AppBrand.identifierPrefix).MainToolbar.v5",
+            displayMode: .iconOnly,
+            allowsUserCustomization: false,
+            autosavesConfiguration: false
+        )
     }
 
     private func configureWindowIfNeeded() {
         guard !didConfigureWindow, let window = view.window else { return }
         didConfigureWindow = true
 
-        window.styleMask.insert(.fullSizeContentView)
-        window.toolbarStyle = .automatic
-        window.titlebarSeparatorStyle = .automatic
-        window.titleVisibility = .visible
-        window.titlebarAppearsTransparent = false
+        configureWindowForToolbar(window)
 
         installMainToolbar(on: window, resetDelegateState: true)
-        nativeToolbarDelegate?.refreshFromModel()
-        if sidebarItem.isCollapsed {
-            sidebarItem.isCollapsed = false
-        }
+        toolbarShellController?.syncAndValidate(window: window)
+        if isSidebarCollapsed { isSidebarCollapsed = false }
         schedulePaneStateSync()
         refreshWindowTitleSubtitleIfNeeded()
+        installContentKeyboardMonitor(contentView: browserController.view) { [weak self] in
+            self?.model.quickLookSelection()
+        }
         installSpacebarQuickLookMonitorIfNeeded()
         installBrowserFocusRequestObserverIfNeeded()
         DispatchQueue.main.async { [weak self] in
@@ -434,6 +421,10 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         }
     }
 
+    private func refreshToolbarState() {
+        toolbarShellController?.syncAndValidate(window: view.window)
+    }
+
     private func installSpacebarQuickLookMonitorIfNeeded() {
         guard spacebarMonitor == nil else { return }
         spacebarMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -474,7 +465,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                     guard model.browserViewMode == .gallery else { return nil }
                     guard model.canIncreaseGalleryZoom else { return nil }
                     model.increaseGalleryZoom()
-                    nativeToolbarDelegate?.refreshFromModel()
+                    refreshToolbarState()
                     return nil
                 }
 
@@ -483,7 +474,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                     guard model.browserViewMode == .gallery else { return nil }
                     guard model.canDecreaseGalleryZoom else { return nil }
                     model.decreaseGalleryZoom()
-                    nativeToolbarDelegate?.refreshFromModel()
+                    refreshToolbarState()
                     return nil
                 }
             }
@@ -494,10 +485,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             case KeyCode.escape:
                 guard modifiers.isEmpty else { return event }
                 model.clearSelection()
-                return nil
-            case KeyCode.space:
-                guard modifiers.intersection([.command, .control, .option, .function]).isEmpty else { return event }
-                model.quickLookSelection()
                 return nil
             case _ where event.characters == "a":
                 guard modifiers == [.command] else { return event }
@@ -573,67 +560,10 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         }
     }
 
-    private func installSplitResizeObserverIfNeeded() {
-        guard splitResizeObserver == nil else { return }
-        splitResizeObserver = NotificationCenter.default.addObserver(
-            forName: NSSplitView.didResizeSubviewsNotification,
-            object: splitView,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.schedulePaneStateSync()
-            }
-        }
-    }
+    func isSidebarCollapsedForMenu() -> Bool { isSidebarCollapsed }
+    func isInspectorCollapsedForMenu() -> Bool { isInspectorCollapsed }
 
-    func isSidebarCollapsedForMenu() -> Bool {
-        sidebarItem.isCollapsed
-    }
-
-    func isInspectorCollapsedForMenu() -> Bool {
-        inspectorItem.isCollapsed
-    }
-
-    @objc
-    func toggleInspectorAction(_: Any?) {
-        let previousResponder = view.window?.firstResponder
-        inspectorItem.animator().isCollapsed.toggle()
-        schedulePaneStateSync()
-
-        DispatchQueue.main.async { [weak self] in
-            guard let self, let window = self.view.window else { return }
-            if let previousResponder {
-                _ = window.makeFirstResponder(previousResponder)
-            }
-        }
-    }
-
-    private func syncSidebarCollapsedState() {
-        let collapsed = sidebarItem.isCollapsed
-        if model.isSidebarCollapsed != collapsed {
-            model.isSidebarCollapsed = collapsed
-        }
-        nativeToolbarDelegate?.refreshFromModel()
-    }
-
-    private func syncInspectorCollapsedState() {
-        let collapsed = inspectorItem.isCollapsed
-        if model.isInspectorCollapsed != collapsed {
-            model.isInspectorCollapsed = collapsed
-        }
-        nativeToolbarDelegate?.refreshFromModel()
-    }
-
-    private func schedulePaneStateSync() {
-        guard !isPaneStateSyncScheduled else { return }
-        isPaneStateSyncScheduled = true
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.isPaneStateSyncScheduled = false
-            self.syncSidebarCollapsedState()
-            self.syncInspectorCollapsedState()
-        }
-    }
+    @objc func toggleInspectorAction(_ sender: Any?) { toggleInspector(sender) }
 
     private enum MenuTag {
         static let fileOpenFolder = 9_101
@@ -1336,7 +1266,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         } else if menuItem.action == #selector(flipSelectionMenuAction(_:)) {
             return !selection.isEmpty
         } else if menuItem.action == #selector(toggleInspectorAction(_:)) {
-            menuItem.title = inspectorItem.isCollapsed ? "Show Inspector" : "Hide Inspector"
+            menuItem.title = isInspectorCollapsed ? "Show Inspector" : "Hide Inspector"
         } else if menuItem.action == #selector(switchToGalleryAction(_:)) {
             menuItem.state = model.browserViewMode == .gallery ? .on : .off
         } else if menuItem.action == #selector(switchToListAction(_:)) {
@@ -1404,36 +1334,25 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     }
 
     private func shouldHandlePaneTabSwitchCommands() -> Bool {
-        guard let window = view.window else { return false }
-        guard canHandleBrowserShortcuts(in: window) else { return false }
-
-        if let textView = window.firstResponder as? NSTextView, textView.isEditable {
-            return false
-        }
-
-        guard let responderView = window.firstResponder as? NSView else { return false }
-        let inBrowser = responderView === browserController.view || responderView.isDescendant(of: browserController.view)
-        let inSidebar = responderView === sidebarController.view || responderView.isDescendant(of: sidebarController.view)
-        return inBrowser || inSidebar
+        KeyboardShortcutSupport.shouldHandlePaneTabSwitch(
+            in: view.window,
+            sidebarView: sidebarController.view,
+            contentView: browserController.view
+        )
     }
 
     private func togglePaneFocusBetweenSidebarAndBrowser() {
-        guard let window = view.window,
-              let responderView = window.firstResponder as? NSView
-        else {
-            return
-        }
-
-        let inSidebar = responderView === sidebarController.view || responderView.isDescendant(of: sidebarController.view)
-        if inSidebar {
-            focusBrowserPane()
-            return
-        }
-
-        let inBrowser = responderView === browserController.view || responderView.isDescendant(of: browserController.view)
-        if inBrowser {
-            NotificationCenter.default.post(name: .sidebarDidRequestFocus, object: nil)
-        }
+        KeyboardShortcutSupport.togglePaneFocus(
+            in: view.window,
+            sidebarView: sidebarController.view,
+            contentView: browserController.view,
+            focusSidebar: { [weak self] in
+                self?.sidebarController.focusSidebar()
+            },
+            focusContent: { [weak self] in
+                self?.focusBrowserPane()
+            }
+        )
     }
 
     private func focusBrowserPane() {
@@ -1443,22 +1362,10 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     }
 
     private func canHandleBrowserShortcuts(in window: NSWindow) -> Bool {
-        // If any app-modal panel (e.g. NSOpenPanel.runModal) is active, browser shortcuts must be disabled.
-        if NSApp.modalWindow != nil {
-            return false
-        }
-
-        // If our window is presenting a sheet (e.g. preset editor), don't route keyboard shortcuts to the browser.
-        if window.attachedSheet != nil {
-            return false
-        }
-
-        // Only handle browser shortcuts while our main split window is key.
-        guard let keyWindow = NSApp.keyWindow else { return false }
-        return keyWindow === window
+        KeyboardShortcutSupport.canHandleWindowShortcuts(in: window)
     }
 
-    private func moveDirection(forKeyCode keyCode: UInt16) -> MoveCommandDirection? {
+    private func moveDirection(forKeyCode keyCode: UInt16) -> SharedUI.MoveCommandDirection? {
         switch keyCode {
         case KeyCode.leftArrow: return .left
         case KeyCode.rightArrow: return .right
@@ -1533,7 +1440,9 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 alert.informativeText = "Export reads current file metadata from disk. Apply your changes first if you want them included."
                 alert.addButton(withTitle: "Cancel")
                 alert.addButton(withTitle: "Export Anyway")
-                guard alert.runModal() == .alertSecondButtonReturn else { return }
+                var response: NSApplication.ModalResponse = .abort
+                alert.runSheetOrModal(for: nil) { response = $0 }
+                guard response == .alertSecondButtonReturn else { return }
             }
 
             let panel = NSSavePanel()
@@ -1554,7 +1463,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                         alert.messageText = "Export Failed"
                         alert.informativeText = error.localizedDescription
                         alert.addButton(withTitle: "OK")
-                        alert.runModal()
+                        alert.runSheetOrModal(for: self.view.window) { _ in }
                     }
                 }
             }
@@ -1612,13 +1521,8 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 alert.informativeText = "You have unapplied changes that won't be included. Apply them first if you want them exported."
                 alert.addButton(withTitle: "Export Anyway")
                 alert.addButton(withTitle: "Cancel")
-                if let window = view.window {
-                    alert.beginSheetModal(for: window) { response in
-                        guard response == .alertFirstButtonReturn else { return }
-                        completion(.folder, folderURLs)
-                    }
-                } else {
-                    guard alert.runModal() == .alertFirstButtonReturn else { return }
+                alert.runSheetOrModal(for: view.window) { response in
+                    guard response == .alertFirstButtonReturn else { return }
                     completion(.folder, folderURLs)
                 }
             } else {
@@ -1635,18 +1539,12 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         alert.addButton(withTitle: "Folder")
         alert.addButton(withTitle: "Cancel")
 
-        if let window = view.window {
-            alert.beginSheetModal(for: window) { response in
-                switch response {
-                case .alertFirstButtonReturn: completion(.selection, selectionURLs)
-                case .alertSecondButtonReturn: completion(.folder, folderURLs)
-                default: break
-                }
-            }
-        } else {
-            switch alert.runModal() {
-            case .alertFirstButtonReturn: completion(.selection, selectionURLs)
-            case .alertSecondButtonReturn: completion(.folder, folderURLs)
+        alert.runSheetOrModal(for: view.window) { response in
+            switch response {
+            case .alertFirstButtonReturn:
+                completion(.selection, selectionURLs)
+            case .alertSecondButtonReturn:
+                completion(.folder, folderURLs)
             default: break
             }
         }
@@ -1777,13 +1675,9 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         alert.informativeText = "Prepared changes will be written to disk. This can’t be undone."
         alert.addButton(withTitle: "Apply")
         alert.addButton(withTitle: "Cancel")
-        if let window = view.window {
-            alert.beginSheetModal(for: window) { [weak self] response in
-                guard response == .alertFirstButtonReturn else { return }
-                self?.model.applyChanges()
-            }
-        } else if alert.runModal() == .alertFirstButtonReturn {
-            model.applyChanges()
+        alert.runSheetOrModal(for: view.window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            self?.model.applyChanges()
         }
     }
 
@@ -1823,52 +1717,52 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     func zoomOutAction(_: Any?) {
         guard model.browserViewMode == .gallery else { return }
         model.decreaseGalleryZoom()
-        nativeToolbarDelegate?.refreshFromModel()
+        refreshToolbarState()
     }
 
     @objc
     func zoomInAction(_: Any?) {
         guard model.browserViewMode == .gallery else { return }
         model.increaseGalleryZoom()
-        nativeToolbarDelegate?.refreshFromModel()
+        refreshToolbarState()
     }
 
     @objc
     func switchToGalleryAction(_: Any?) {
         model.browserViewMode = .gallery
-        nativeToolbarDelegate?.refreshFromModel()
+        refreshToolbarState()
         NotificationCenter.default.post(name: .browserDidSwitchViewMode, object: nil)
     }
 
     @objc
     func switchToListAction(_: Any?) {
         model.browserViewMode = .list
-        nativeToolbarDelegate?.refreshFromModel()
+        refreshToolbarState()
         NotificationCenter.default.post(name: .browserDidSwitchViewMode, object: nil)
     }
 
     @objc
     func sortByNameAction(_: Any?) {
         model.browserSort = .name
-        nativeToolbarDelegate?.refreshFromModel()
+        refreshToolbarState()
     }
 
     @objc
     func sortByCreatedAction(_: Any?) {
         model.browserSort = .created
-        nativeToolbarDelegate?.refreshFromModel()
+        refreshToolbarState()
     }
 
     @objc
     func sortBySizeAction(_: Any?) {
         model.browserSort = .size
-        nativeToolbarDelegate?.refreshFromModel()
+        refreshToolbarState()
     }
 
     @objc
     func sortByKindAction(_: Any?) {
         model.browserSort = .kind
-        nativeToolbarDelegate?.refreshFromModel()
+        refreshToolbarState()
     }
 
     @objc
@@ -1906,8 +1800,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         confirmAndApplyPreset(preset: preset)
     }
 
-    @objc
-    func batchRenameSelectionAction(_: Any?) {
+    @objc func batchRenameSelectionAction(_: Any?) {
         model.beginBatchRename(scope: .selection)
     }
 
@@ -1917,9 +1810,9 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
     }
 
     @objc
-    private func viewModeChanged(_ sender: NSSegmentedControl) {
-        model.browserViewMode = sender.selectedSegment == 1 ? .list : .gallery
-        nativeToolbarDelegate?.refreshFromModel()
+    private func viewModeChanged(_ sender: NSToolbarItemGroup) {
+        model.browserViewMode = sender.selectedIndex == 1 ? .list : .gallery
+        refreshToolbarState()
         NotificationCenter.default.post(name: .browserDidSwitchViewMode, object: nil)
         DispatchQueue.main.async { [weak self] in
             self?.focusBrowserPane()
@@ -1941,23 +1834,17 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         alert.addButton(withTitle: "Apply")
         alert.addButton(withTitle: "Cancel")
 
-        if let window = view.window {
-            alert.beginSheetModal(for: window) { [weak self] response in
-                guard response == .alertFirstButtonReturn else { return }
-                self?.model.applyPreset(presetID: preset.id)
-            }
-        } else if alert.runModal() == .alertFirstButtonReturn {
-            model.applyPreset(presetID: preset.id)
+        alert.runSheetOrModal(for: view.window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            self?.model.applyPreset(presetID: preset.id)
         }
     }
 
     @MainActor
-    private final class NativeToolbarDelegate: NSObject, NSToolbarDelegate {
+    private final class MainToolbarController: NSObject, ToolbarShellContent {
         private weak var controller: NativeThreePaneSplitViewController?
 
-        private var viewModeControl: NSSegmentedControl?
-        private var loadingItem: NSToolbarItem?
-        private var loadingSpinner: NSProgressIndicator?
+        private var viewModeGroupItem: NSToolbarItemGroup?
         private var zoomOutItem: NSToolbarItem?
         private var zoomInItem: NSToolbarItem?
         private var applyChangesItem: NSToolbarItem?
@@ -1977,9 +1864,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
         }
 
         func resetCachedToolbarReferences() {
-            viewModeControl = nil
-            loadingItem = nil
-            loadingSpinner = nil
+            viewModeGroupItem = nil
             zoomOutItem = nil
             zoomInItem = nil
             applyChangesItem = nil
@@ -2000,7 +1885,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 .openFolder,
                 .toggleSidebar,
                 .sidebarTrackingSeparator,
-                .browserLoading,
                 .viewMode,
                 .sort,
                 .zoomOut,
@@ -2021,7 +1905,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 .openFolder,
                 .toggleSidebar,
                 .sidebarTrackingSeparator,
-                .browserLoading,
                 .viewMode,
                 .sort,
                 .zoomOut,
@@ -2058,61 +1941,33 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 // Bind tracking to the inner browser/inspector divider.
                 return NSTrackingSeparatorToolbarItem(
                     identifier: .inspectorTrackingSeparator,
-                    splitView: controller.contentSplitController.splitView,
+                    splitView: controller.innerSplitView,
                     dividerIndex: 0
                 )
             case .viewMode:
-                let control = NSSegmentedControl(
-                    labels: ["", ""],
-                    trackingMode: .selectOne,
+                let galleryImage = NSImage(systemSymbolName: "square.grid.3x2", accessibilityDescription: "Gallery")
+                    ?? NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: "Gallery")
+                    ?? NSImage()
+                let listImage = NSImage(systemSymbolName: "list.bullet", accessibilityDescription: "List") ?? NSImage()
+                let item = NSToolbarItemGroup(
+                    itemIdentifier: itemIdentifier,
+                    images: [galleryImage, listImage],
+                    selectionMode: .selectOne,
+                    labels: ["Gallery", "List"],
                     target: controller,
                     action: #selector(NativeThreePaneSplitViewController.viewModeChanged(_:))
                 )
-                control.setImage(NSImage(systemSymbolName: "square.grid.3x2", accessibilityDescription: "Gallery"), forSegment: 0)
-                control.setImage(NSImage(systemSymbolName: "list.bullet", accessibilityDescription: "List"), forSegment: 1)
-                control.setWidth(44, forSegment: 0)
-                control.setWidth(44, forSegment: 1)
-
-                let item = NSToolbarItem(itemIdentifier: itemIdentifier)
                 item.label = "View"
                 item.paletteLabel = "View"
-                item.view = control
                 item.toolTip = "Switch browser view"
-                viewModeControl = control
-                return item
-            case .browserLoading:
-                let spinner = NSProgressIndicator(frame: .zero)
-                spinner.style = .spinning
-                spinner.controlSize = .small
-                spinner.translatesAutoresizingMaskIntoConstraints = false
-                spinner.isDisplayedWhenStopped = false
-
-                let container = NSView(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
-                container.translatesAutoresizingMaskIntoConstraints = false
-                container.addSubview(spinner)
-                NSLayoutConstraint.activate([
-                    container.widthAnchor.constraint(equalToConstant: 16),
-                    container.heightAnchor.constraint(equalToConstant: 16),
-                    spinner.centerXAnchor.constraint(equalTo: container.centerXAnchor),
-                    spinner.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-                ])
-
-                let item = NSToolbarItem(itemIdentifier: itemIdentifier)
-                item.label = "Loading"
-                item.paletteLabel = "Loading"
-                item.view = container
-                item.isBordered = false
-                item.visibilityPriority = .low
-                loadingItem = item
-                loadingSpinner = spinner
-                updateLoadingIndicator(with: controller.model)
+                viewModeGroupItem = item
                 return item
             case .zoomOut:
                 let item = NSToolbarItem(itemIdentifier: itemIdentifier)
                 item.label = "Zoom Out"
                 item.paletteLabel = "Zoom Out"
                 item.image = NSImage(systemSymbolName: "minus", accessibilityDescription: "Zoom out")
-                item.autovalidates = false
+                item.isBordered = true
                 item.target = controller
                 item.action = #selector(NativeThreePaneSplitViewController.zoomOutAction(_:))
                 item.toolTip = "Zoom out"
@@ -2123,7 +1978,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 item.label = "Zoom In"
                 item.paletteLabel = "Zoom In"
                 item.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "Zoom in")
-                item.autovalidates = false
+                item.isBordered = true
                 item.target = controller
                 item.action = #selector(NativeThreePaneSplitViewController.zoomInAction(_:))
                 item.toolTip = "Zoom in"
@@ -2134,6 +1989,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 item.label = "Sort"
                 item.paletteLabel = "Sort"
                 item.image = NSImage(systemSymbolName: "arrow.up.arrow.down", accessibilityDescription: "Sort")
+                item.isBordered = true
                 item.toolTip = "Sort images"
                 sortItem = item
                 updateSortMenu(with: controller.model)
@@ -2143,6 +1999,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 item.label = "Import"
                 item.paletteLabel = "Import"
                 item.image = NSImage(systemSymbolName: "checklist.checked", accessibilityDescription: "Import")
+                item.isBordered = true
                 item.toolTip = "Import metadata"
                 importItem = item
                 updateImportMenu(with: controller.model)
@@ -2152,6 +2009,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 item.label = "Export"
                 item.paletteLabel = "Export"
                 item.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: "Export")
+                item.isBordered = true
                 item.toolTip = "Export and handoff"
                 exportItem = item
                 updateExportMenu(with: controller.model)
@@ -2161,6 +2019,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 item.label = "Presets"
                 item.paletteLabel = "Presets"
                 item.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: "Presets")
+                item.isBordered = true
                 item.toolTip = "Presets"
                 presetsItem = item
                 updatePresetsMenu(with: controller.model)
@@ -2170,6 +2029,7 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 item.label = "Open Folder"
                 item.paletteLabel = "Open Folder"
                 item.image = NSImage(systemSymbolName: "folder.badge.plus", accessibilityDescription: "Open Folder")
+                item.isBordered = true
                 item.target = controller
                 item.action = #selector(NativeThreePaneSplitViewController.openFolderAction(_:))
                 item.toolTip = "Open a folder"
@@ -2179,25 +2039,24 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
                 item.label = "Apply Changes"
                 item.paletteLabel = "Apply Changes"
                 item.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "Save and apply")
-                item.autovalidates = false
+                item.isBordered = true
                 item.target = controller
                 item.action = #selector(NativeThreePaneSplitViewController.applyChangesAction(_:))
-                item.toolTip = "Apply prepared changes"
+                item.toolTip = "Apply metadata changes"
                 if #available(macOS 26.0, *) {
                     item.style = controller.model.canApplyMetadataChanges ? .prominent : .plain
                 }
                 applyChangesItem = item
                 return item
             case .toggleInspector:
-                let item = NSToolbarItem(itemIdentifier: itemIdentifier)
-                let collapsed = controller.inspectorItem.isCollapsed
+                let collapsed = controller.isInspectorCollapsed
                 let label = collapsed ? "Show Inspector" : "Hide Inspector"
-                item.label = label
-                item.paletteLabel = "Toggle Inspector"
-                item.image = NSImage(systemSymbolName: "sidebar.trailing", accessibilityDescription: "Show or hide the inspector")
-                item.target = controller
-                item.action = #selector(NativeThreePaneSplitViewController.toggleInspectorAction(_:))
-                item.toolTip = label
+                let item = ToolbarItemFactory.makeInspectorToggleItem(
+                    identifier: itemIdentifier,
+                    label: label,
+                    action: #selector(NativeThreePaneSplitViewController.toggleInspectorAction(_:)),
+                    toolTip: label
+                )
                 inspectorToggleItem = item
                 return item
             default:
@@ -2205,38 +2064,20 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             }
         }
 
-        func refreshFromModel() {
+        func syncToolbarState() {
             guard let controller else { return }
             let model = controller.model
             updateViewMode(with: model)
-            updateLoadingIndicator(with: model)
-            updateZoom(with: model)
             updateSortMenu(with: model)
             updateImportMenu(with: model)
             updateExportMenu(with: model)
             updatePresetsMenu(with: model)
-            updateApplyEnabled(with: model)
-            updateInspectorToggle(with: model)
+            updateApplyStyle(with: model)
+            updateInspectorLabels(with: model)
         }
 
         private func updateViewMode(with model: AppModel) {
-            viewModeControl?.selectedSegment = model.browserViewMode == .gallery ? 0 : 1
-        }
-
-        private func updateLoadingIndicator(with model: AppModel) {
-            let isLoading = model.isFolderContentLoading || model.isFolderMetadataLoading
-            loadingItem?.isEnabled = isLoading
-            loadingItem?.view?.isHidden = !isLoading
-            if isLoading {
-                loadingSpinner?.startAnimation(nil)
-            } else {
-                loadingSpinner?.stopAnimation(nil)
-            }
-        }
-
-        private func updateZoom(with model: AppModel) {
-            zoomOutItem?.isEnabled = model.browserViewMode == .gallery && model.canDecreaseGalleryZoom
-            zoomInItem?.isEnabled = model.browserViewMode == .gallery && model.canIncreaseGalleryZoom
+            viewModeGroupItem?.selectedIndex = model.browserViewMode == .gallery ? 0 : 1
         }
 
         private func updateSortMenu(with model: AppModel) {
@@ -2264,18 +2105,50 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
             exportItem?.menu = menu
         }
 
-        private func updateApplyEnabled(with model: AppModel) {
-            let canApply = model.canApplyMetadataChanges
-            applyChangesItem?.isEnabled = canApply
+        private func updateApplyStyle(with model: AppModel) {
             if #available(macOS 26.0, *) {
-                applyChangesItem?.style = canApply ? .prominent : .plain
+                applyChangesItem?.style = model.canApplyMetadataChanges ? .prominent : .plain
             }
         }
 
-        private func updateInspectorToggle(with model: AppModel) {
+        private func updateInspectorLabels(with model: AppModel) {
             let label = model.isInspectorCollapsed ? "Show Inspector" : "Hide Inspector"
             inspectorToggleItem?.label = label
             inspectorToggleItem?.toolTip = label
+        }
+
+        func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
+            guard let controller else { return false }
+            let model = controller.model
+
+            switch item.itemIdentifier {
+            case .zoomOut:
+                return model.browserViewMode == .gallery && model.canDecreaseGalleryZoom
+            case .zoomIn:
+                return model.browserViewMode == .gallery && model.canIncreaseGalleryZoom
+            case .applyChanges:
+                updateApplyStyle(with: model)
+                return model.canApplyMetadataChanges
+            case .toggleInspector:
+                updateInspectorLabels(with: model)
+                return true
+            case .sort:
+                updateSortMenu(with: model)
+                return !model.browserItems.isEmpty
+            case .importTools:
+                updateImportMenu(with: model)
+                return !model.browserItems.isEmpty
+            case .exportTools:
+                updateExportMenu(with: model)
+                return !model.browserItems.isEmpty
+            case .presetTools:
+                updatePresetsMenu(with: model)
+                return true
+            case .viewMode, .openFolder, .toggleSidebar, .sidebarTrackingSeparator, .inspectorTrackingSeparator:
+                return true
+            default:
+                return true
+            }
         }
 
         private func makeSortMenu(model: AppModel) -> NSMenu {
@@ -2453,7 +2326,6 @@ final class NativeThreePaneSplitViewController: NSSplitViewController, NSMenuIte
 }
 
 private extension NSToolbarItem.Identifier {
-    static let browserLoading = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.BrowserLoading")
     static let viewMode = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.ViewMode")
     static let sort = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.Sort")
     static let importTools = NSToolbarItem.Identifier("\(AppBrand.identifierPrefix).Toolbar.Import")
@@ -2659,6 +2531,25 @@ final class BrowserContainerViewController: NSViewController {
     }
 }
 
+// MARK: - Closure-based NSMenuItem
+
+// Used by buildSidebarContextMenu(for:) to avoid proliferating @objc action methods.
+private final class ClosureMenuItem: NSMenuItem {
+    private let closure: () -> Void
+
+    init(title: String, image: NSImage?, _ closure: @escaping () -> Void) {
+        self.closure = closure
+        super.init(title: title, action: #selector(performClosure), keyEquivalent: "")
+        self.target = self
+        self.image = image
+    }
+
+    @available(*, unavailable)
+    required init(coder: NSCoder) { fatalError() }
+
+    @objc private func performClosure() { closure() }
+}
+
 // MARK: - Browser placeholder (SwiftUI island)
 // Purely presentational. Receives plain values from BrowserContainerViewController —
 // no AppModel observation, no boundary-crossing state. AppKit owns all geometry
@@ -2677,19 +2568,9 @@ private struct BrowserPlaceholderView: View {
             Color(nsColor: .windowBackgroundColor)
             switch content {
             case .loading:
-                VStack(spacing: 10) {
-                    ProgressView()
-                        .controlSize(.regular)
-                    Text("Loading…")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.primary)
-                }
+                PlaceholderView(symbolName: "folder", title: "Loading", isLoading: true)
             case let .unavailable(title, symbolName, message):
-                ContentUnavailableView {
-                    Label(title, systemImage: symbolName)
-                } description: {
-                    Text(message)
-                }
+                PlaceholderView(symbolName: symbolName, title: title, description: message)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
