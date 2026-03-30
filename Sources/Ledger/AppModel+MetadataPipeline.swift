@@ -125,23 +125,19 @@ extension AppModel {
 
         var filesToPreload: [URL] = []
         for fileURL in files {
-            let currentSide = inspectorPreviewRenderedSide[fileURL] ?? 0
-            if currentSide >= Self.inspectorPreviewTargetSide {
+            if ThumbnailService.cachedImage(for: fileURL, minRenderedSide: Self.inspectorPreviewTargetSide) != nil {
+                // Already have an adequate-quality image; ensure it's wired up as a preview.
+                if let cached = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: Self.inspectorPreviewTargetSide) {
+                    storeInspectorPreview(cached, for: fileURL, renderedSide: renderedSide(for: cached))
+                }
                 continue
             }
-            if let cached = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: Self.inspectorPreviewTargetSide) {
-                storeInspectorPreview(
-                    cached,
-                    for: fileURL,
-                    renderedSide: max(Self.inspectorPreviewTargetSide, renderedSide(for: cached))
-                )
-            } else {
-                if currentSide <= 0,
-                   let cachedLowRes = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: 1) {
-                    storeInspectorPreview(cachedLowRes, for: fileURL, renderedSide: renderedSide(for: cachedLowRes))
-                }
-                filesToPreload.append(fileURL)
+            // Show a low-res placeholder immediately if anything is cached.
+            if inspectorPreviewImages[fileURL] == nil,
+               let cachedLowRes = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: 1) {
+                storeInspectorPreview(cachedLowRes, for: fileURL, renderedSide: renderedSide(for: cachedLowRes))
             }
+            filesToPreload.append(fileURL)
         }
 
         guard !filesToPreload.isEmpty else {
@@ -187,7 +183,7 @@ extension AppModel {
         forceRefresh: Bool
     ) async -> NSImage? {
         await Task.detached(priority: priority) {
-            await SharedThumbnailRequestBroker.shared.request(
+            await ThumbnailService.request(
                 url: fileURL,
                 requiredSide: Self.inspectorPreviewFullSide,
                 forceRefresh: forceRefresh
@@ -291,19 +287,19 @@ extension AppModel {
 
     func loadInspectorPreview(for fileURL: URL, force: Bool, priority: TaskPriority? = nil) {
         let requestPriority = priority ?? (selectedFileURLs.contains(fileURL) ? .userInitiated : .utility)
-        if !force, (inspectorPreviewRenderedSide[fileURL] ?? 0) >= Self.inspectorPreviewTargetSide {
+        // Already have a high-quality image — nothing to do.
+        if !force, ThumbnailService.cachedImage(for: fileURL, minRenderedSide: Self.inspectorPreviewTargetSide) != nil,
+           inspectorPreviewImages[fileURL] != nil {
             markInspectorPreviewAsRecentlyUsed(fileURL)
             return
         }
+        // Adequate-quality image is in the cache — wire it up and return.
         if !force,
            let cached = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: Self.inspectorPreviewTargetSide) {
-            storeInspectorPreview(
-                cached,
-                for: fileURL,
-                renderedSide: max(Self.inspectorPreviewTargetSide, renderedSide(for: cached))
-            )
+            storeInspectorPreview(cached, for: fileURL, renderedSide: renderedSide(for: cached))
             return
         }
+        // Show a low-res placeholder immediately while the full-size request runs.
         if !force, inspectorPreviewImages[fileURL] == nil,
            let cachedLowRes = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: 1) {
             storeInspectorPreview(cachedLowRes, for: fileURL, renderedSide: renderedSide(for: cachedLowRes))
@@ -314,7 +310,6 @@ extension AppModel {
             inspectorPreviewTasksByURL[fileURL] = nil
             inspectorPreviewInflight.remove(fileURL)
             inspectorPreviewImages[fileURL] = nil
-            inspectorPreviewRenderedSide[fileURL] = nil
         }
         guard !inspectorPreviewInflight.contains(fileURL) else { return }
         inspectorPreviewInflight.insert(fileURL)
@@ -347,7 +342,6 @@ extension AppModel {
             inspectorPreviewTasksByURL[fileURL] = nil
             inspectorPreviewInflight.remove(fileURL)
             inspectorPreviewImages[fileURL] = nil
-            inspectorPreviewRenderedSide[fileURL] = nil
         }
         inspectorPreviewRecency.removeAll(where: { targets.contains($0) })
     }
@@ -376,9 +370,7 @@ extension AppModel {
 
     private func storeInspectorPreview(_ image: NSImage, for fileURL: URL, renderedSide: CGFloat) {
         inspectorPreviewImages[fileURL] = image
-        let side = max(1, renderedSide)
-        inspectorPreviewRenderedSide[fileURL] = max(side, inspectorPreviewRenderedSide[fileURL] ?? 0)
-        ThumbnailPipeline.storeCachedImage(image, for: fileURL, renderedSide: side)
+        ThumbnailService.storeCachedImage(image, for: fileURL, renderedSide: max(1, renderedSide))
         markInspectorPreviewAsRecentlyUsed(fileURL)
         trimInspectorPreviewCacheIfNeeded()
     }
@@ -442,7 +434,6 @@ extension AppModel {
         let evicted = inspectorPreviewRecency.prefix(excessCount)
         for fileURL in evicted {
             inspectorPreviewImages[fileURL] = nil
-            inspectorPreviewRenderedSide[fileURL] = nil
             inspectorPreviewInflight.remove(fileURL)
         }
         inspectorPreviewRecency.removeFirst(excessCount)
@@ -487,12 +478,14 @@ extension AppModel {
             metadataByFile = map
         }
 
-        let filesNeedingPreview = files.filter { (inspectorPreviewRenderedSide[$0] ?? 0) < Self.inspectorPreviewTargetSide }
+        let filesNeedingPreview = files.filter {
+            ThumbnailService.cachedImage(for: $0, minRenderedSide: Self.inspectorPreviewTargetSide) == nil
+        }
         for fileURL in filesNeedingPreview {
             if Task.isCancelled { return }
             await Task.yield()
 
-            if (inspectorPreviewRenderedSide[fileURL] ?? 0) >= Self.inspectorPreviewTargetSide { continue }
+            if ThumbnailService.cachedImage(for: fileURL, minRenderedSide: Self.inspectorPreviewTargetSide) != nil { continue }
             if let cached = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: Self.inspectorPreviewTargetSide) {
                 storeInspectorPreview(
                     cached,

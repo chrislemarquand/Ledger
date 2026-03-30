@@ -847,7 +847,7 @@ private final class BrowserListIconView: NSImageView {
 
         requestTask = Task { [weak self] in
             guard let self else { return }
-            let image = await SharedThumbnailRequestBroker.shared.request(
+            let image = await ThumbnailService.request(
                 url: url,
                 requiredSide: requiredSide,
                 forceRefresh: forceRefresh
