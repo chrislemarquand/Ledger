@@ -382,6 +382,15 @@ extension AppModel {
                 case (_?, nil): return true   // nil always last
                 }
                 return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            case .modified:
+                switch (lhs.modifiedAt, rhs.modifiedAt) {
+                case let (l?, r?):
+                    if l != r { return cmp(l < r) }
+                case (nil, nil): break
+                case (nil, _?): return false  // nil always last
+                case (_?, nil): return true   // nil always last
+                }
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             case .size:
                 switch (lhs.sizeBytes, rhs.sizeBytes) {
                 case let (l?, r?):
