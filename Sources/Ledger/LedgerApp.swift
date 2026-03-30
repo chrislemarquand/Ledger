@@ -108,7 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             SettingsTabDescriptor(symbolName: "gearshape", label: "General",
                 viewController: GeneralSettingsViewController(model: model)),
             SettingsTabDescriptor(symbolName: "slider.horizontal.3", label: "Inspector",
-                viewController: InspectorSettingsViewController(model: model), preferredHeight: 620),
+                viewController: InspectorSettingsViewController(model: model), preferredHeight: 620, preferredWidth: 490),
         ])
         let windowController = MainWindowController(model: model)
         mainWindowController = windowController
