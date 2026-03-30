@@ -100,6 +100,21 @@ struct InspectorView: View {
                         )
                     }
 
+                    InspectorRatingFlagView(
+                        rating: Int(model.valueForTag(AppModel.EditableTag.rating).trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0,
+                        ratingPending: model.hasPendingChange(for: AppModel.EditableTag.rating),
+                        ratingEnabled: model.isInspectorFieldEnabled(AppModel.EditableTag.rating.id),
+                        onRatingChange: { model.updateValue(String($0), for: AppModel.EditableTag.rating) },
+                        pick: Int(model.valueForTag(AppModel.EditableTag.pick).trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0,
+                        pickPending: model.hasPendingChange(for: AppModel.EditableTag.pick),
+                        pickEnabled: model.isInspectorFieldEnabled(AppModel.EditableTag.pick.id),
+                        onPickChange: { model.updateValue(String($0), for: AppModel.EditableTag.pick) },
+                        label: model.valueForTag(AppModel.EditableTag.label).trimmingCharacters(in: .whitespacesAndNewlines),
+                        labelPending: model.hasPendingChange(for: AppModel.EditableTag.label),
+                        labelEnabled: model.isInspectorFieldEnabled(AppModel.EditableTag.label.id),
+                        onLabelChange: { model.updateValue($0, for: AppModel.EditableTag.label) }
+                    )
+
                     if model.selectedFileURLs.count == 1 {
                         InspectorSectionContainer(
                             "Preview",
@@ -170,7 +185,7 @@ struct InspectorView: View {
                         }
                     }
 
-                    ForEach(model.orderedEditableTagSections) { grouped in
+                    ForEach(model.orderedEditableTagSections.filter { $0.section != "Rating" }) { grouped in
                         InspectorSectionContainer(
                             grouped.section,
                             isExpanded: Binding(

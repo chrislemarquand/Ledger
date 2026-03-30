@@ -345,6 +345,10 @@ final class AppModel: ObservableObject {
             .init(id: "exif-copyright", namespace: .exif, key: "Copyright", label: "Copyright", section: "Rights"),
             .init(id: "xmp-creator", namespace: .xmp, key: "Creator", label: "Creator", section: "Rights"),
         ]
+
+        static let rating = EditableTag(id: "xmp-rating", namespace: .xmp,   key: "Rating", label: "Star Rating",  section: "Rating")
+        static let pick   = EditableTag(id: "xmp-pick",   namespace: .xmpDM, key: "Pick",   label: "Flag",         section: "Rating")
+        static let label  = EditableTag(id: "xmp-label",  namespace: .xmp,   key: "Label",  label: "Colour Label", section: "Rating")
     }
 
     struct FieldCatalogEntry: Hashable, Identifiable {
