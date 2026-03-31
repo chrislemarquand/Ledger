@@ -127,6 +127,23 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         configureWindowIfNeeded()
     }
 
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        setupKeyViewChain()
+    }
+
+    private func setupKeyViewChain() {
+        // Both browser views loop back to the sidebar when Tab is pressed.
+        browserController.galleryKeyView.nextKeyView = sidebarController.primaryKeyView
+        browserController.listKeyView.nextKeyView = sidebarController.primaryKeyView
+        // Sidebar points forward to whichever browser view is currently active.
+        updateSidebarNextKeyView()
+    }
+
+    private func updateSidebarNextKeyView() {
+        sidebarController.primaryKeyView.nextKeyView = browserController.activeKeyView
+    }
+
     override func viewWillDisappear() {
         super.viewWillDisappear()
         teardownObserversAndMonitors()
@@ -181,6 +198,10 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         // (e.g. when an unsaved-edits guard reverts the selection, or programmatic changes).
         observeEquatable(model.$selectedSidebarID, storeIn: &uiRefreshObservers) { [weak self] in
             self?.scheduleSidebarSelectionSync()
+        }
+        // Key view chain — re-point the sidebar's nextKeyView when the active browser view changes.
+        observeEquatable(model.$browserViewMode, storeIn: &uiRefreshObservers) { [weak self] in
+            self?.updateSidebarNextKeyView()
         }
     }
 
@@ -2259,6 +2280,12 @@ final class BrowserContainerViewController: NSViewController {
         applyBrowserModeIfNeeded(force: true)
         installRenderObservers()
         render()
+    }
+
+    var galleryKeyView: NSView { galleryController.primaryKeyView }
+    var listKeyView: NSView { listController.primaryKeyView }
+    var activeKeyView: NSView {
+        model.browserViewMode == .gallery ? galleryController.primaryKeyView : listController.primaryKeyView
     }
 
     func setPathBarVisible(_ visible: Bool) {
