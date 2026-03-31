@@ -595,14 +595,22 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
             model.setQuickLookSourceFrame(for: item.url, rectOnScreen: iconRectOnScreen)
         }
 
-        if let cached = ThumbnailPipeline.cachedImage(for: item.url, minRenderedSide: 1) {
-            iconView.setImageWithTransition(model.displayImageForCurrentStagedState(cached, fileURL: item.url))
-            requestListThumbnail(for: item, in: cell, forceRefresh: pendingThumbnailRefreshURLs.contains(item.url))
-            return
+        let forceRefresh = pendingThumbnailRefreshURLs.contains(item.url)
+        // Skip the image update when reconfiguring a cell that is already showing this URL.
+        // Every selection change triggers reloadData across all visible rows. The inspector
+        // preview (700 px) overwrites the list thumbnail (64 px) in NSCache, so subsequent
+        // calls get a different NSImage object and setImageWithTransition fires a CATransition
+        // fade on every row — the flash. Guarding on configuredURL prevents this; configuredURL
+        // is reset to nil in prepareForReuse so cell reuse always gets a fresh image update.
+        if cell.configuredURL != item.url || forceRefresh {
+            if let cached = ThumbnailPipeline.cachedImage(for: item.url, minRenderedSide: 1) {
+                iconView.setImageWithTransition(model.displayImageForCurrentStagedState(cached, fileURL: item.url))
+            } else {
+                iconView.setImageWithTransition(ThumbnailPipeline.fallbackIcon(for: item.url, side: 16))
+            }
         }
-
-        iconView.setImageWithTransition(ThumbnailPipeline.fallbackIcon(for: item.url, side: 16))
-        requestListThumbnail(for: item, in: cell, forceRefresh: pendingThumbnailRefreshURLs.contains(item.url))
+        cell.configuredURL = item.url
+        requestListThumbnail(for: item, in: cell, forceRefresh: forceRefresh)
     }
 
     private func requestListThumbnail(for item: AppModel.BrowserItem, in cell: BrowserListNameCellView, forceRefresh: Bool) {
@@ -623,6 +631,7 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
 private final class BrowserListNameCellView: NSTableCellView {
     let pendingDot = NSImageView(frame: .zero)
     let iconView = BrowserListIconView(frame: .zero)
+    var configuredURL: URL?
 
     init(reuseIdentifier: NSUserInterfaceItemIdentifier) {
         super.init(frame: .zero)
@@ -638,7 +647,9 @@ private final class BrowserListNameCellView: NSTableCellView {
     override func prepareForReuse() {
         super.prepareForReuse()
         iconView.cancelThumbnailRequest()
+        iconView.image = nil
         iconView.toolTip = nil
+        configuredURL = nil
     }
 
     func applyPending(hasPendingEdits: Bool) {
