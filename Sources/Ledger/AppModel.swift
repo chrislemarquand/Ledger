@@ -482,6 +482,9 @@ final class AppModel: ObservableObject {
     @Published var keepBackups = true {
         didSet { UserDefaults.standard.set(keepBackups, forKey: Self.keepBackupsKey) }
     }
+    @Published var backupRetentionCount: Int = 20 {
+        didSet { UserDefaults.standard.set(backupRetentionCount, forKey: Self.backupRetentionCountKey) }
+    }
     @Published var draftValues: [EditableTag: String] = [:]
     @Published var baselineValues: [EditableTag: String?] = [:]
     @Published var presets: [MetadataPreset] = []
@@ -606,6 +609,7 @@ final class AppModel: ObservableObject {
     private static let confirmBeforeApplyKey = "ui.settings.confirm.before.apply"
     private static let autoRefreshAfterApplyKey = "ui.settings.auto.refresh.after.apply"
     private static let keepBackupsKey = "ui.settings.keep.backups"
+    private static let backupRetentionCountKey = "ui.settings.backup.retention.count"
     static let inspectorFieldVisibilityKey = "ui.settings.inspector.field.visibility"
     static let legacyUserDefaultsPrefixes = ["Logbook"]
     static let selectionMetadataBatchSize = 120
@@ -740,6 +744,11 @@ final class AppModel: ObservableObject {
             defaults: defaults,
             as: Bool.self
         ) ?? true
+        backupRetentionCount = Self.firstUserDefaultsValue(
+            for: Self.backupRetentionCountKey,
+            defaults: defaults,
+            as: Int.self
+        ) ?? 20
         let visibility = Self.firstUserDefaultsValue(
             for: Self.inspectorFieldVisibilityKey,
             defaults: defaults,
@@ -759,8 +768,9 @@ final class AppModel: ObservableObject {
             selectedPresetID = selectedPresetUUID
         }
         loadPresets()
-        Task.detached(priority: .background) { [backupDirectory] in
-            try? BackupManager(baseDirectory: backupDirectory).pruneOperations(keepLast: 20)
+        let retentionCount = backupRetentionCount
+        Task.detached(priority: .background) { [backupDirectory, retentionCount] in
+            try? BackupManager(baseDirectory: backupDirectory).pruneOperations(keepLast: retentionCount)
         }
 
         $pendingEditsByFile.combineLatest($pendingImageOpsByFile)

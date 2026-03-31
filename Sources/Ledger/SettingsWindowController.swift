@@ -17,6 +17,15 @@ final class GeneralSettingsViewController: SettingsGridViewController {
         title: "Keep backups",
         action: #selector(keepBackupsToggled(_:))
     )
+    private static let retentionOptions = [5, 10, 20, 50, 100]
+    private lazy var retentionPopUp: NSPopUpButton = {
+        let p = NSPopUpButton()
+        p.translatesAutoresizingMaskIntoConstraints = false
+        for n in Self.retentionOptions { p.addItem(withTitle: "\(n)") }
+        p.target = self
+        p.action = #selector(retentionPopUpChanged(_:))
+        return p
+    }()
     private lazy var clearBackupsButton = makeActionButton(
         title: "Clear backups...",
         action: #selector(clearBackupsAction(_:))
@@ -40,14 +49,29 @@ final class GeneralSettingsViewController: SettingsGridViewController {
             [makeCategoryLabel(title: "Apply:"),   confirmBeforeApplyButton],
             [makeCategoryLabel(title: ""),          autoRefreshAfterApplyButton],
             [makeCategoryLabel(title: "Backups:"),  keepBackupsButton],
+            [makeCategoryLabel(title: ""),          makeRetentionRow()],
             [makeCategoryLabel(title: ""),          clearBackupsButton],
         ]
+    }
+
+    private func makeRetentionRow() -> NSStackView {
+        let keepLastLabel = NSTextField(labelWithString: "Keep last")
+        keepLastLabel.translatesAutoresizingMaskIntoConstraints = false
+        let backupsLabel = NSTextField(labelWithString: "backups")
+        backupsLabel.translatesAutoresizingMaskIntoConstraints = false
+        let stack = NSStackView(views: [keepLastLabel, retentionPopUp, backupsLabel])
+        stack.orientation = .horizontal
+        stack.spacing = 6
+        return stack
     }
 
     private func refreshFromModel() {
         confirmBeforeApplyButton.state = model.confirmBeforeApply ? .on : .off
         autoRefreshAfterApplyButton.state = model.autoRefreshMetadataAfterApply ? .on : .off
         keepBackupsButton.state = model.keepBackups ? .on : .off
+        let closest = Self.retentionOptions.min(by: { abs($0 - model.backupRetentionCount) < abs($1 - model.backupRetentionCount) }) ?? 20
+        retentionPopUp.selectItem(withTitle: "\(closest)")
+        retentionPopUp.isEnabled = model.keepBackups
     }
 
     @objc private func confirmBeforeApplyToggled(_ sender: NSButton) {
@@ -60,6 +84,15 @@ final class GeneralSettingsViewController: SettingsGridViewController {
 
     @objc private func keepBackupsToggled(_ sender: NSButton) {
         model.keepBackups = (sender.state == .on)
+        retentionPopUp.isEnabled = model.keepBackups
+    }
+
+    @objc private func retentionPopUpChanged(_ sender: NSPopUpButton) {
+        guard let count = Int(sender.titleOfSelectedItem ?? "") else { return }
+        model.backupRetentionCount = count
+        if model.keepBackups {
+            model.pruneBackupsToRetentionLimit()
+        }
     }
 
     @objc private func clearBackupsAction(_: Any?) {
