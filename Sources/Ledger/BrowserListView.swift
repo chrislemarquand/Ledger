@@ -216,6 +216,8 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
         return responderView === tableView || responderView.isDescendant(of: tableView)
     }
 
+    var primaryKeyView: NSView { tableView }
+
     private func focusListForKeyboardNavigation() {
         guard model.browserViewMode == .list else { return }
         guard let window = view.window else { return }

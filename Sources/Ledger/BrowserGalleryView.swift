@@ -142,6 +142,8 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
         ])
     }
 
+    var primaryKeyView: NSView { collectionView }
+
     private func focusGalleryForKeyboardNavigation() {
         guard model.browserViewMode == .gallery else { return }
         guard let window = view.window else { return }
@@ -690,6 +692,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
     private var representedURL: URL?
     private var thumbnailRequestToken = UUID()
     private var thumbnailTask: Task<Void, Never>?
+    private var hasPendingRename = false
 
     override func loadView() {
         view = NSView(frame: .zero)
@@ -700,6 +703,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         super.viewDidLayout()
         let liveSide = max(1, floor(min(thumbnailContainer.bounds.width, thumbnailContainer.bounds.height)))
         updateTileSide(liveSide, animated: false)
+        titleField.layer?.cornerRadius = 4
     }
 
     override func prepareForReuse() {
@@ -744,6 +748,8 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         titleField.lineBreakMode = .byTruncatingMiddle
         titleField.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         titleField.textColor = .secondaryLabelColor
+        titleField.wantsLayer = true
+        titleField.setContentHuggingPriority(.required, for: .horizontal)
         view.addSubview(titleField)
         self.textField = titleField
 
@@ -762,8 +768,9 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
             thumbnailImageView.centerYAnchor.constraint(equalTo: thumbnailContainer.centerYAnchor),
 
             titleField.topAnchor.constraint(equalTo: thumbnailContainer.bottomAnchor, constant: UIMetrics.Gallery.titleGap),
-            titleField.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            titleField.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            titleField.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            titleField.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor),
+            titleField.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor),
             titleField.bottomAnchor.constraint(lessThanOrEqualTo: view.bottomAnchor),
         ])
 
@@ -783,7 +790,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         preferredAspectRatio: CGFloat?
     ) {
         titleField.stringValue = name
-        titleField.textColor = isPendingRename ? .systemOrange : nil
+        self.hasPendingRename = isPendingRename
         self.preferredAspectRatio = preferredAspectRatio
         setImage(image, animated: false)
         applySelection(isSelected: isSelected)
@@ -824,9 +831,14 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
 
     func applySelection(isSelected: Bool) {
         let highlighted = highlightState == .forSelection
-        selectionBackgroundView.layer?.backgroundColor = (isSelected || highlighted)
+        let active = isSelected || highlighted
+        selectionBackgroundView.layer?.backgroundColor = active
             ? AppTheme.accentNSColor.withAlphaComponent(0.22).cgColor
             : NSColor.clear.cgColor
+        titleField.layer?.backgroundColor = active
+            ? AppTheme.accentNSColor.cgColor
+            : NSColor.clear.cgColor
+        titleField.textColor = active ? .white : (hasPendingRename ? .systemOrange : .secondaryLabelColor)
     }
 
     func applyPending(hasPendingEdits: Bool) {
