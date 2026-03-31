@@ -21,7 +21,7 @@ Released: **2026-03-04**.
 
 ---
 
-## v1.1 (Minor) — Import System Completion + Settings
+## v1.1 — Import System Completion + Settings
 
 Released: **2026-03-10**.
 
@@ -58,7 +58,7 @@ Released: **2026-03-10**.
 
 ---
 
-## v1.2 (Minor) — Editing Productivity
+## v1.2
 
 - [x] Welcome/version screen using `AppWelcomeViewController` from SharedUI (WhatsNewKit-backed). Show on first run; reuse for "What's New" on major version updates.
 - [x] Batch Rename (first release)
@@ -66,25 +66,26 @@ Released: **2026-03-10**.
 - [x] Finder-style breadcrumb bar.
 - [x] Dock icon badge and right click options
 - [x] List column customisation (including Exif-backed columns).
+- [x] Drag to reorder sidebar favourites.
+- [x] Click-to-drag rubber-band selection in gallery view
 - [ ] Gallery metadata lines/subtitle customisation.
-- [ ] Toolbar customisation.
-- [ ] **Backup retention policy**: keep-last-N model, persistence, prune path wiring, and Settings UI controls. Infrastructure (`BackupManager.pruneOperations`) already exists; this is the Settings surface and wiring.
-- [ ] **Timestamp sync tools**: "Set file date from DateTimeOriginal" and "Set DateTimeOriginal from file date". Preview + confirm dialog, batch-safe with backup support.
-- [ ] **ExifTool-native DateTimeDigitized backfill**: optional post-import/apply pass that fills missing `EXIF:CreateDate` from `FileCreateDate` only (no app-side date parsing, no overwrite of existing values).
+- [x] **Metadata export CSV/JSON**: select fields, export to CSV or JSON for spreadsheet editing or audit reporting.
+- [x] **Backup retention policy**: keep-last-N model, persistence, prune path wiring, and Settings UI controls. Infrastructure (`BackupManager.pruneOperations`) already exists; this is the Settings surface and wiring.
+- [x] Sidebar rewritten in AppKit.
+- [x] Inspector preview cache size cap (currently trimmed by URL list only; large folders cache all previews with no memory ceiling).
 
 ---
 
-## v1.3 (Minor) — Native Workflow UX + Customisation
-
-Navigation, drag/drop, and letting users shape the interface.
+## v1.3
 
 - [ ] Drag files out to Finder/Mail/Messages etc. (NSItemProvider/NSPasteboardWriter on gallery/list items).
 - [ ] Drag a folder onto the sidebar to add as a favourite.
-- [ ] Drag to reorder sidebar favourites.
 - [ ] Explicit Home/End/Page Up/Page Down keyboard nav in list/gallery.
 - [ ] Metadata copy/paste:
   - [ ] Field-level copy/paste.
   - [ ] Metadata-set copy/paste.
+- [ ] **Timestamp sync tools**: "Set file date from DateTimeOriginal" and "Set DateTimeOriginal from file date". Preview + confirm dialog, batch-safe with backup support.
+- [ ] **ExifTool-native DateTimeDigitized backfill**: optional post-import/apply pass that fills missing `EXIF:CreateDate` from `FileCreateDate` only (no app-side date parsing, no overwrite of existing values).
 
 
 ---
@@ -117,9 +118,7 @@ Hardening the foundation before the v2.0 architecture rewrite.
 - [ ] Large-folder performance pass (1000+ images).
 - [ ] Render/browse pipeline optimisation.
 - [ ] Thumbnail cache TTL / age-based eviction (currently LRU only; cross-folder sessions accumulate stale entries).
-- [ ] Inspector preview cache size cap (currently trimmed by URL list only; large folders cache all previews with no memory ceiling).
 - [ ] **Full native QuickLook rewrite**: replace current preview implementation with a fully native QuickLook integration.
-- [ ] AppKit groundwork (named prerequisite tasks for v2.0 gallery/sidebar rewrite — to be decomposed into specific items before v1.6 planning).
 
 ---
 
@@ -128,12 +127,10 @@ Hardening the foundation before the v2.0 architecture rewrite.
 Major architecture overhaul and its true dependents.
 
 - [ ] Major gallery/browser architecture rewrite (AppKit-shell-first, Mondrian-inspired).
-- [ ] Sidebar rewritten in AppKit.
-- [ ] Click-to-drag rubber-band selection in list and gallery views (depends on gallery rewrite).
 - [ ] **Finder-style gallery view**: filmstrip along bottom, large preview at top — third browser mode alongside list and grid (depends on gallery rewrite).
 - [ ] **Import conflict-resolution UI**: dedicated conflict workspace for unresolved/ambiguous import rows with per-row target choice, side-by-side field diff, and bulk resolve actions.
 - [ ] **EOS-1V lens-tag policy system**: merges resolver enhancements and policy controls into one mature feature. Policy modes (`Do not write lens` / `Single lens for import` / `Focal-length mapping table`), unknown focal length behaviour, named lens profiles, import-sheet override selector. *Explicit prerequisite for v3.0.*
-- [ ] **Metadata export CSV/JSON**: select fields, export to CSV or JSON for spreadsheet editing or audit reporting.
+
 
 ---
 
@@ -147,3 +144,10 @@ Depends on the v2.0 EOS-1V lens-tag policy system being mature.
   - [ ] Prioritise macOS 9 driver analysis.
   - [ ] Use Windows XP driver as validation/fallback.
 - [ ] Ship clean Swift behavioural reimplementation only.
+
+
+---
+
+## Deferred / Cancelled
+
+- [ ] Toolbar customisation.

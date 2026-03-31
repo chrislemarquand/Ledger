@@ -398,6 +398,14 @@ extension AppModel {
         lastOperationFilesByID.values.contains { $0.contains(fileURL) }
     }
 
+    func pruneBackupsToRetentionLimit() {
+        let backupDirectory = AppBrand.currentSupportDirectoryURL().appendingPathComponent("Backups", isDirectory: true)
+        let count = backupRetentionCount
+        Task.detached(priority: .background) { [backupDirectory, count] in
+            try? BackupManager(baseDirectory: backupDirectory).pruneOperations(keepLast: count)
+        }
+    }
+
     func clearAllBackups() throws -> Int {
         let backupDirectory = AppBrand.currentSupportDirectoryURL().appendingPathComponent("Backups", isDirectory: true)
         let trashName = AppBrand.localizedTrashDisplayName

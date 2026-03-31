@@ -49,6 +49,8 @@ SAVED_STATE_DIR="$HOME/Library/Saved Application State/${BUNDLE_ID}.savedState"
 DEFAULTS_KEYS=(
   # Window frame
   "NSWindow Frame ${ID_PREFIX}.MainWindow"
+  # Settings window frame
+  "NSWindow Frame SharedUI.SettingsWindow"
   # Split pane divider positions
   "NSSplitView Subview Frames ${ID_PREFIX}.MainSplit"
   "NSSplitView Subview Frames ${ID_PREFIX}.ContentSplit"

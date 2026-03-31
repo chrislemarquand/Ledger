@@ -69,6 +69,34 @@ Purpose: define exact keyboard behavior expected after SharedUI list/gallery mig
   - model-driven selection movement semantics
   - gallery shift-range parity if native behavior is insufficient
 
+## Behavior Loss If Custom Selection/Keyboard Logic Is Stripped
+
+- Sidebar/browser `Tab` pane toggle would be lost.
+Current implementation: `MainContentView.installSpacebarQuickLookMonitorIfNeeded()` + `KeyboardShortcutSupport.shouldHandlePaneTabSwitch(...)` / `togglePaneFocus(...)`.
+
+- Inspector-specific `Tab` / `Shift+Tab` field navigation policy would be lost.
+Current implementation: `MainContentView` posts `.inspectorDidRequestFieldNavigation`; `InspectorView.moveInspectorFieldFocus(backward:)` applies ordered field focus.
+
+- Browser `Return`/`Enter` -> inspector entry focus behavior would be lost or become inconsistent.
+Current implementation: list path via `SharedBrowserListTableView` `onActivateSelection` -> `BrowserListView.focusInspectorFromBrowser()`;
+gallery path via `SharedGalleryCollectionView.handlesActivateOnReturn` + `onActivateSelection` -> `BrowserGalleryView.focusInspectorFromBrowser()`;
+global path currently also routed in `BrowserKeyboardRouter` consumed by `MainContentView`.
+
+- Browser-wide `Esc`, `Cmd-A`, `Cmd-D` command policy would be lost.
+Current implementation: `SharedUI/Utilities/BrowserKeyboardRouter.swift` + `MainContentView.handleBrowserKeyboardCommand(...)`.
+
+- Cross-view arrow movement policy (including when list ignores left/right) would be lost.
+Current implementation: `BrowserKeyboardRouter` routes movement; execution in `MainContentView` calls model movement APIs.
+
+- `Cmd+Shift+Arrow` extend-to-boundary behavior would be lost.
+Current implementation: `BrowserKeyboardRouter` -> `AppModel.extendSelectionToBoundary(towardStart:)`.
+
+- App-model-driven contiguous range semantics for list/gallery keyboard extension would be lost.
+Current implementation: `AppModel+Editing` (`moveSelectionInList`, `moveSelectionInGallery`, anchor/focus tracking).
+
+- Window-level gallery zoom shortcuts (`Cmd+` / `Cmd-`) active from browser/inspector contexts would be lost.
+Current implementation: `BrowserKeyboardRouter` + `MainContentView.handleBrowserKeyboardCommand(.zoomIn/.zoomOut)` with toolbar sync.
+
 ## Deferred Items (tracked separately)
 
 - Restore deterministic Return/Tab parity after native selection changes.
@@ -82,4 +110,3 @@ Purpose: define exact keyboard behavior expected after SharedUI list/gallery mig
 - [ ] Gallery zoom shortcuts parity.
 - [ ] No shortcut handling while editable text responder is active.
 - [ ] Behavior documented for SharedUI router extraction.
-
