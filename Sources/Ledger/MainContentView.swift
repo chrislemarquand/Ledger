@@ -479,6 +479,14 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                 }
             }
 
+            if event.keyCode == KeyCode.space,
+               modifiers.intersection([.command, .control, .option, .function]).isEmpty,
+               !event.isARepeat {
+                guard shouldHandleBrowserKeyCommands() else { return event }
+                model.quickLookSelection()
+                return nil
+            }
+
             guard shouldHandleBrowserKeyCommands() else { return event }
 
             switch event.keyCode {
