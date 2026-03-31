@@ -216,6 +216,16 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
         return responderView === tableView || responderView.isDescendant(of: tableView)
     }
 
+    private func focusInspectorFromBrowser() {
+        guard model.browserViewMode == .list else { return }
+        guard !model.selectedFileURLs.isEmpty else { return }
+        _ = NSApp.sendAction(
+            #selector(NativeThreePaneSplitViewController.focusInspectorEntryAction(_:)),
+            to: nil,
+            from: self
+        )
+    }
+
     private func focusListForKeyboardNavigation() {
         guard model.browserViewMode == .list else { return }
         guard let window = view.window else { return }
@@ -245,6 +255,9 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
         tableView.doubleAction = #selector(doubleClicked(_:))
         tableView.target = self
 
+        tableView.onActivateSelection = { [weak self] in
+            self?.focusInspectorFromBrowser()
+        }
         sharedListController.contextMenuProvider = { [weak self] row in
             self?.menuForRow(row)
         }
