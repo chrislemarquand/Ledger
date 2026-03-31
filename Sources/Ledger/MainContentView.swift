@@ -61,6 +61,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     private var menuTrackingObserver: NSObjectProtocol?
     private var uiRefreshObservers: [AnyCancellable] = []
     private var browserFocusRequestObserver: NSObjectProtocol?
+    private var keyMonitor: Any?
     private var lastWindowTitleText = ""
     private var lastWindowSubtitleText = ""
     private var isModelUIRefreshScheduled = false
@@ -127,23 +128,6 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         configureWindowIfNeeded()
     }
 
-    override func viewDidAppear() {
-        super.viewDidAppear()
-        setupKeyViewChain()
-    }
-
-    private func setupKeyViewChain() {
-        // Both browser views loop back to the sidebar when Tab is pressed.
-        browserController.galleryKeyView.nextKeyView = sidebarController.primaryKeyView
-        browserController.listKeyView.nextKeyView = sidebarController.primaryKeyView
-        // Sidebar points forward to whichever browser view is currently active.
-        updateSidebarNextKeyView()
-    }
-
-    private func updateSidebarNextKeyView() {
-        sidebarController.primaryKeyView.nextKeyView = browserController.activeKeyView
-    }
-
     override func viewWillDisappear() {
         super.viewWillDisappear()
         teardownObserversAndMonitors()
@@ -151,6 +135,10 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
 
     private func teardownObserversAndMonitors() {
         uiRefreshObservers.removeAll()
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+            self.keyMonitor = nil
+        }
         if let browserFocusRequestObserver {
             NotificationCenter.default.removeObserver(browserFocusRequestObserver)
             self.browserFocusRequestObserver = nil
@@ -198,10 +186,6 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         // (e.g. when an unsaved-edits guard reverts the selection, or programmatic changes).
         observeEquatable(model.$selectedSidebarID, storeIn: &uiRefreshObservers) { [weak self] in
             self?.scheduleSidebarSelectionSync()
-        }
-        // Key view chain — re-point the sidebar's nextKeyView when the active browser view changes.
-        observeEquatable(model.$browserViewMode, storeIn: &uiRefreshObservers) { [weak self] in
-            self?.updateSidebarNextKeyView()
         }
     }
 
@@ -378,6 +362,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         schedulePaneStateSync()
         refreshWindowTitleSubtitleIfNeeded()
         installBrowserFocusRequestObserverIfNeeded()
+        installKeyMonitorIfNeeded()
         DispatchQueue.main.async { [weak self] in
             self?.focusBrowserPane()
             self?.injectFileMenuIfNeeded()
@@ -438,6 +423,40 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             guard defaults.object(forKey: newKey) == nil, let value = defaults.object(forKey: oldKey) else { continue }
             defaults.set(value, forKey: newKey)
         }
+    }
+
+    private func installKeyMonitorIfNeeded() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            let modifiers = event.modifierFlags.intersection([.command, .shift, .control, .option, .function])
+            let isTabWithoutCommand = event.keyCode == KeyCode.tab && (modifiers.isEmpty || modifiers == [.shift])
+
+            if isTabWithoutCommand && shouldHandlePaneTabSwitch() {
+                togglePaneFocus()
+                return nil
+            }
+
+            return event
+        }
+    }
+
+    private func shouldHandlePaneTabSwitch() -> Bool {
+        KeyboardShortcutSupport.shouldHandlePaneTabSwitch(
+            in: view.window,
+            sidebarView: sidebarController.view,
+            contentView: browserController.view
+        )
+    }
+
+    private func togglePaneFocus() {
+        KeyboardShortcutSupport.togglePaneFocus(
+            in: view.window,
+            sidebarView: sidebarController.view,
+            contentView: browserController.view,
+            focusSidebar: { [weak self] in self?.sidebarController.focusSidebar() },
+            focusContent: { [weak self] in self?.focusBrowserPane() }
+        )
     }
 
     private func installBrowserFocusRequestObserverIfNeeded() {
@@ -2280,12 +2299,6 @@ final class BrowserContainerViewController: NSViewController {
         applyBrowserModeIfNeeded(force: true)
         installRenderObservers()
         render()
-    }
-
-    var galleryKeyView: NSView { galleryController.primaryKeyView }
-    var listKeyView: NSView { listController.primaryKeyView }
-    var activeKeyView: NSView {
-        model.browserViewMode == .gallery ? galleryController.primaryKeyView : listController.primaryKeyView
     }
 
     func setPathBarVisible(_ visible: Bool) {

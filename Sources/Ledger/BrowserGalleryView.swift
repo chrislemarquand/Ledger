@@ -142,8 +142,6 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
         ])
     }
 
-    var primaryKeyView: NSView { collectionView }
-
     private func focusGalleryForKeyboardNavigation() {
         guard model.browserViewMode == .gallery else { return }
         guard let window = view.window else { return }
