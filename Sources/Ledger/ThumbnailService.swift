@@ -32,8 +32,9 @@ enum ThumbnailService {
         return diskCacheDirectory.appendingPathComponent(String(hash, radix: 16) + ".jpg")
     }
 
-    private static func readDiskCache(at diskURL: URL) -> NSImage? {
+    private static func readDiskCache(sourceURL: URL, at diskURL: URL) -> NSImage? {
         guard FileManager.default.fileExists(atPath: diskURL.path) else { return nil }
+        guard !ThumbnailGenerator.isDiskCacheStale(sourceURL: sourceURL, cacheURL: diskURL) else { return nil }
         return NSImage(contentsOf: diskURL)
     }
 
@@ -194,7 +195,7 @@ enum ThumbnailService {
 
         // Warm path — disk cache.
         let dURL = diskURL(for: fileURL)
-        if let disk = readDiskCache(at: dURL) {
+        if let disk = readDiskCache(sourceURL: fileURL, at: dURL) {
             let diskSide = max(disk.size.width, disk.size.height)
             if diskSide >= maxPixelSize * 0.9 {
                 memoryCache.setObject(disk, forKey: fileURL as NSURL, cost: costBytes(for: disk))
