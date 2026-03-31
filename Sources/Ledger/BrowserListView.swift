@@ -595,21 +595,14 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
             model.setQuickLookSourceFrame(for: item.url, rectOnScreen: iconRectOnScreen)
         }
 
-        let forceRefresh = pendingThumbnailRefreshURLs.contains(item.url)
-        // Only update the displayed image when the URL has changed (cell reuse) or a forced
-        // refresh is pending. Skipping on same-URL reconfigures prevents a spurious fade when
-        // the inspector preview (700 px) overwrites the list thumbnail (64 px) in NSCache —
-        // the two objects are different so image !== nextImage, which fires a CATransition on
-        // every selection change even though the visible content is identical.
-        if iconView.representedURL != item.url || forceRefresh {
-            if let cached = ThumbnailPipeline.cachedImage(for: item.url, minRenderedSide: 1) {
-                iconView.setImageWithTransition(model.displayImageForCurrentStagedState(cached, fileURL: item.url))
-            } else {
-                iconView.setImageWithTransition(ThumbnailPipeline.fallbackIcon(for: item.url, side: 16))
-            }
+        if let cached = ThumbnailPipeline.cachedImage(for: item.url, minRenderedSide: 1) {
+            iconView.setImageWithTransition(model.displayImageForCurrentStagedState(cached, fileURL: item.url))
+            requestListThumbnail(for: item, in: cell, forceRefresh: pendingThumbnailRefreshURLs.contains(item.url))
+            return
         }
 
-        requestListThumbnail(for: item, in: cell, forceRefresh: forceRefresh)
+        iconView.setImageWithTransition(ThumbnailPipeline.fallbackIcon(for: item.url, side: 16))
+        requestListThumbnail(for: item, in: cell, forceRefresh: pendingThumbnailRefreshURLs.contains(item.url))
     }
 
     private func requestListThumbnail(for item: AppModel.BrowserItem, in cell: BrowserListNameCellView, forceRefresh: Bool) {
@@ -692,7 +685,7 @@ private final class BrowserListNameCellView: NSTableCellView {
 }
 
 private final class BrowserListIconView: NSImageView {
-    private(set) var representedURL: URL?
+    private var representedURL: URL?
     private var requestToken = UUID()
     private var requestTask: Task<Void, Never>?
 
