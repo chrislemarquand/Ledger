@@ -13,7 +13,10 @@ set -euo pipefail
 # Preserves:
 #   - Pinned sidebar items     (sidebar_favorites.json in Application Support)
 #   - Recent sidebar locations (recent_locations.json in Application Support)
-#   - All settings/preferences (sort order, view mode, inspector visibility, etc.)
+#   - Most settings/preferences (sort order, view mode, inspector visibility, etc.)
+#
+# Also clears:
+#   - Welcome / What's New seen-version marker so first-run / release smoke can be repeated
 #
 # Usage:
 #   ./reset_ledger_layout.sh
@@ -64,6 +67,8 @@ DEFAULTS_KEYS=(
   "${ID_PREFIX}.listColumns.initialFitApplied"
   # Split autosave migration sentinel (safe to re-run, no legacy data present)
   "ui.split.autosave.reset.v4"
+  # Welcome / What's New seen-version state
+  "${ID_PREFIX}.welcomeLastSeenVersion"
 )
 
 echo "This will reset Ledger window and list column layout."

@@ -20,7 +20,6 @@ enum LedgerMain {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindowController: MainWindowController?
     private var settingsWindowController: SettingsWindowController?
-    private weak var welcomeViewController: AppWelcomeViewController?
     private var isShowingTerminateConfirmation = false
     private var allowImmediateTermination = false
     var appModel: AppModel? { mainWindowController?.appModel }
@@ -42,21 +41,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func showWelcomeScreen() {
-        guard let window = mainWindowController?.window,
-              let contentVC = window.contentViewController else { return }
-        let vc = AppWelcomeViewController(
+        guard let appModel else { return }
+        appModel.activeWelcomePresentation = AppWelcomePresentation(
             appName: AppBrand.displayName,
             features: Self.welcomeFeatures,
             primaryButtonTitle: "Get Started",
-            onDismiss: { [weak self] in
-                // Use presentingViewController?.dismiss() — nil-safe if the sheet was
-                // already dismissed by SwiftUI's presentationMode bridge before onDismiss fires.
-                if let vc = self?.welcomeViewController { vc.presentingViewController?.dismiss(vc) }
+            onPrimaryAction: {
                 WelcomeCoordinator.markSeen()
             }
         )
-        welcomeViewController = vc
-        contentVC.presentAsSheet(vc)
     }
 
     @objc

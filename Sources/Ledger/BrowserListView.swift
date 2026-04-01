@@ -17,10 +17,26 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
     private var pendingThumbnailRefreshURLs: Set<URL> = []
     private var isRenderingState = false
     private var lastRenderedItemURLs: [URL] = []
+    private var lastRenderedNameSignatures: [RowNameSignature] = []
+    private var lastRenderedDetailSignatures: [RowDetailSignature] = []
     private var lastRenderedViewMode: AppModel.BrowserViewMode?
     private var contextMenuTargetURLs: [URL] = []
     private var browserFocusObserver: NSObjectProtocol?
     private var viewModeObserver: NSObjectProtocol?
+    private var pendingSelectionAdoptionTask: Task<Void, Never>?
+
+    private struct RowNameSignature: Equatable {
+        let url: URL
+        let displayName: String
+        let isPendingRename: Bool
+        let hasPendingEdits: Bool
+        let imageOperations: [AppModel.StagedImageOperation]
+    }
+
+    private struct RowDetailSignature: Equatable {
+        let url: URL
+        let values: [String]
+    }
 
     init(model: AppModel, items: [AppModel.BrowserItem]) {
         self.model = model
@@ -77,6 +93,8 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
 
     override func viewWillDisappear() {
         super.viewWillDisappear()
+        pendingSelectionAdoptionTask?.cancel()
+        pendingSelectionAdoptionTask = nil
         let visibleRows = tableView.rows(in: tableView.visibleRect)
         if visibleRows.length > 0 {
             let nameColumn = tableView.column(withIdentifier: NSUserInterfaceItemIdentifier("name"))
@@ -124,7 +142,12 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
             }
         }
 
-        if hasListChanged() {
+        let currentURLs = items.map(\.url)
+        let detailColumnIDs = visibleDetailColumnIDs()
+        let currentNameSignatures = items.map { makeNameSignature(for: $0) }
+        let currentDetailSignatures = items.map { makeDetailSignature(for: $0, detailColumnIDs: detailColumnIDs) }
+
+        if hasListChanged(currentURLs) {
             // Clear stale row selection before reloading. NSTableView preserves
             // selection by row index across reloadData(), so a prior row 0 selection
             // survives into the new folder's data. Combined with selectedFileURLs
@@ -136,51 +159,64 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
             isApplyingProgrammaticSelection = false
             sharedListController.reloadData()
         } else {
-            if pendingInvalidatedThumbnailURLs.isEmpty {
-                tableView.reloadData(forRowIndexes: IndexSet(integersIn: 0 ..< items.count), columnIndexes: IndexSet(integersIn: 0 ..< tableView.numberOfColumns))
-            } else {
-                let rowsToReload = IndexSet(items.enumerated().compactMap { index, item in
-                    pendingInvalidatedThumbnailURLs.contains(item.url) ? index : nil
-                })
-                if rowsToReload.isEmpty {
-                    tableView.reloadData(forRowIndexes: IndexSet(integersIn: 0 ..< items.count), columnIndexes: IndexSet(integersIn: 0 ..< tableView.numberOfColumns))
+            let rowsNeedingNameReload = IndexSet(items.enumerated().compactMap { index, item in
+                if pendingInvalidatedThumbnailURLs.contains(item.url) || pendingThumbnailRefreshURLs.contains(item.url) {
+                    return index
+                }
+                guard index < lastRenderedNameSignatures.count else { return index }
+                return currentNameSignatures[index] != lastRenderedNameSignatures[index] ? index : nil
+            })
+            let rowsNeedingDetailReload = IndexSet(items.indices.compactMap { index in
+                guard index < lastRenderedDetailSignatures.count else { return index }
+                return currentDetailSignatures[index] != lastRenderedDetailSignatures[index] ? index : nil
+            })
+
+            if !rowsNeedingNameReload.isEmpty {
+                let nameColumn = tableView.column(withIdentifier: NSUserInterfaceItemIdentifier("name"))
+                if nameColumn >= 0 {
+                    tableView.reloadData(forRowIndexes: rowsNeedingNameReload, columnIndexes: IndexSet(integer: nameColumn))
                 } else {
-                    let nameColumn = tableView.column(withIdentifier: NSUserInterfaceItemIdentifier("name"))
-                    if nameColumn >= 0 {
-                        tableView.reloadData(forRowIndexes: rowsToReload, columnIndexes: IndexSet(integer: nameColumn))
-                    } else {
-                        tableView.reloadData()
-                    }
+                    tableView.reloadData()
+                }
+            }
+            if !rowsNeedingDetailReload.isEmpty && !detailColumnIDs.isEmpty {
+                let detailColumnIndexes = IndexSet(detailColumnIDs.compactMap { columnID in
+                    let index = tableView.column(withIdentifier: NSUserInterfaceItemIdentifier(columnID))
+                    return index >= 0 ? index : nil
+                })
+                if !detailColumnIndexes.isEmpty {
+                    tableView.reloadData(forRowIndexes: rowsNeedingDetailReload, columnIndexes: detailColumnIndexes)
                 }
             }
         }
         pendingInvalidatedThumbnailURLs = []
+        lastRenderedNameSignatures = currentNameSignatures
+        lastRenderedDetailSignatures = currentDetailSignatures
 
         if shouldAdoptTableSelectionIntoModel() {
-            let urls = Set(
-                tableView.selectedRowIndexes.compactMap { row -> URL? in
-                    guard row >= 0, row < items.count else { return nil }
-                    return items[row].url
-                }
-            )
+            let urls = currentTableSelectionURLs()
             if !urls.isEmpty {
-                let focusedURL: URL?
-                if tableView.selectedRow >= 0, tableView.selectedRow < items.count {
-                    focusedURL = items[tableView.selectedRow].url
-                } else {
-                    focusedURL = nil
-                }
+                let focusedURL = currentFocusedTableSelectionURL()
+                pendingSelectionAdoptionTask?.cancel()
                 // Defer out of the SwiftUI update cycle. setSelectionFromList mutates
                 // @Published selectedFileURLs which causes B14 when called synchronously
                 // from updateNSViewController (inside SwiftUI's render pass).
-                Task { @MainActor [weak self] in
+                pendingSelectionAdoptionTask = Task { @MainActor [weak self] in
                     guard let self else { return }
+                    defer { self.pendingSelectionAdoptionTask = nil }
+                    guard !Task.isCancelled else { return }
+                    guard self.model.selectedFileURLs.isEmpty else { return }
+                    guard self.currentTableSelectionURLs() == urls else { return }
+                    guard self.currentFocusedTableSelectionURL() == focusedURL else { return }
                     self.model.setSelectionFromList(urls, focusedURL: focusedURL)
                     self.updateQuickLookSourceFrameFromCurrentSelection()
                 }
             }
             return
         }
+
+        pendingSelectionAdoptionTask?.cancel()
+        pendingSelectionAdoptionTask = nil
 
         let selectedIndexes = IndexSet(
             items.enumerated().compactMap { index, item in
@@ -216,6 +252,20 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
         return responderView === tableView || responderView.isDescendant(of: tableView)
     }
 
+    private func currentTableSelectionURLs() -> Set<URL> {
+        Set(
+            tableView.selectedRowIndexes.compactMap { row -> URL? in
+                guard row >= 0, row < items.count else { return nil }
+                return items[row].url
+            }
+        )
+    }
+
+    private func currentFocusedTableSelectionURL() -> URL? {
+        guard tableView.selectedRow >= 0, tableView.selectedRow < items.count else { return nil }
+        return items[tableView.selectedRow].url
+    }
+
     private func focusInspectorFromBrowser() {
         guard model.browserViewMode == .list else { return }
         guard !model.selectedFileURLs.isEmpty else { return }
@@ -230,6 +280,14 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
         guard model.browserViewMode == .list else { return }
         guard let window = view.window else { return }
         window.makeFirstResponder(tableView)
+    }
+
+    func clearVisualSelection() {
+        pendingSelectionAdoptionTask?.cancel()
+        pendingSelectionAdoptionTask = nil
+        isApplyingProgrammaticSelection = true
+        tableView.selectRowIndexes([], byExtendingSelection: false)
+        isApplyingProgrammaticSelection = false
     }
 
     private func scrollSelectionIntoView() {
@@ -331,6 +389,8 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
         focusedRow: Int?
     ) {
         _ = controller
+        pendingSelectionAdoptionTask?.cancel()
+        pendingSelectionAdoptionTask = nil
         guard !isApplyingProgrammaticSelection else {
             return
         }
@@ -547,11 +607,38 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
         model.performFileAction(.restoreFromLastBackup, targetURLs: contextMenuTargetURLs)
     }
 
-    private func hasListChanged() -> Bool {
-        let currentURLs = items.map(\.url)
+    private func hasListChanged(_ currentURLs: [URL]) -> Bool {
         guard currentURLs != lastRenderedItemURLs else { return false }
         lastRenderedItemURLs = currentURLs
         return true
+    }
+
+    private func visibleDetailColumnIDs() -> [String] {
+        tableView.tableColumns
+            .map(\.identifier.rawValue)
+            .filter { $0 != ListColumnDefinition.idName }
+    }
+
+    private func makeNameSignature(for item: AppModel.BrowserItem) -> RowNameSignature {
+        RowNameSignature(
+            url: item.url,
+            displayName: model.listColumnValue(for: item.url, columnID: ListColumnDefinition.idName, fallbackItem: item),
+            isPendingRename: model.pendingRenameByFile[item.url] != nil,
+            hasPendingEdits: model.hasPendingEdits(for: item.url),
+            imageOperations: model.effectiveImageOperations(for: item.url)
+        )
+    }
+
+    private func makeDetailSignature(
+        for item: AppModel.BrowserItem,
+        detailColumnIDs: [String]
+    ) -> RowDetailSignature {
+        RowDetailSignature(
+            url: item.url,
+            values: detailColumnIDs.map { columnID in
+                model.listColumnValue(for: item.url, columnID: columnID, fallbackItem: item)
+            }
+        )
     }
 
     private func updateQuickLookSourceFrameFromCurrentSelection() {
@@ -744,15 +831,6 @@ private final class BrowserListIconView: NSImageView {
 
     func setImageWithTransition(_ nextImage: NSImage?) {
         guard image !== nextImage else { return }
-        if image != nil,
-           nextImage != nil,
-           !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            let transition = CATransition()
-            transition.type = .fade
-            transition.duration = Motion.duration
-            transition.timingFunction = Motion.timingFunction
-            layer?.add(transition, forKey: "listThumbnailSwapFade")
-        }
         alphaValue = 1
         image = nextImage
     }

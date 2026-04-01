@@ -322,15 +322,18 @@ private struct TokenRow: View {
             }
 
         case .sequenceLetter(let uppercase):
-            Picker("", selection: Binding(
-                get: { uppercase },
-                set: { onUpdate(.sequenceLetter(uppercase: $0)) }
-            )) {
-                Text("UPPERCASE").tag(true)
-                Text("lowercase").tag(false)
+            HStack(spacing: 0) {
+                Picker("", selection: Binding(
+                    get: { uppercase },
+                    set: { onUpdate(.sequenceLetter(uppercase: $0)) }
+                )) {
+                    Text("UPPERCASE").tag(true)
+                    Text("lowercase").tag(false)
+                }
+                .labelsHidden()
+                .frame(width: 240, alignment: .leading)
+                Spacer(minLength: 0)
             }
-            .labelsHidden()
-            .frame(maxWidth: .infinity)
 
         case .date(let source, let format):
             HStack(spacing: 8) {

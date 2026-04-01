@@ -192,6 +192,12 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
         window.makeFirstResponder(collectionView)
     }
 
+    func clearVisualSelection() {
+        isApplyingProgrammaticSelection = true
+        collectionView.selectionIndexPaths = []
+        isApplyingProgrammaticSelection = false
+    }
+
     private func scrollSelectionIntoView() {
         guard model.browserViewMode == .gallery else { return }
         guard let primary = model.primarySelectionURL,
@@ -877,10 +883,19 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         selectionBackgroundView.layer?.backgroundColor = active
             ? AppTheme.accentNSColor.withAlphaComponent(0.22).cgColor
             : NSColor.clear.cgColor
-        titleField.layer?.backgroundColor = active
-            ? AppTheme.accentNSColor.cgColor
-            : NSColor.clear.cgColor
-        titleField.textColor = active ? .white : (hasPendingRename ? .systemOrange : .secondaryLabelColor)
+        if active && hasPendingRename {
+            titleField.layer?.backgroundColor = NSColor.systemOrange.cgColor
+            titleField.textColor = .white
+        } else if active {
+            titleField.layer?.backgroundColor = AppTheme.accentNSColor.cgColor
+            titleField.textColor = .white
+        } else if hasPendingRename {
+            titleField.layer?.backgroundColor = NSColor.clear.cgColor
+            titleField.textColor = .systemOrange
+        } else {
+            titleField.layer?.backgroundColor = NSColor.clear.cgColor
+            titleField.textColor = .secondaryLabelColor
+        }
     }
 
     func applyPending(hasPendingEdits: Bool) {

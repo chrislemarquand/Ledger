@@ -419,7 +419,14 @@ extension AppModel {
     }
 
     func hasRestorableBackup(for fileURL: URL) -> Bool {
-        lastOperationFilesByID.values.contains { $0.contains(fileURL) }
+        return lastOperationFilesByID.values.contains { $0.contains(fileURL) }
+    }
+
+    func hasAnyRestorableBackup(for fileURLs: [URL]) -> Bool {
+        guard keepBackups else { return false }
+        let requested = Set(fileURLs)
+        guard !requested.isEmpty else { return false }
+        return lastOperationFilesByID.values.contains { !$0.intersection(requested).isEmpty }
     }
 
     func pruneBackupsToRetentionLimit() {
@@ -510,7 +517,7 @@ extension AppModel {
         let operationIDsToRestore = lastOperationIDs.filter { operationID in
             guard let files = lastOperationFilesByID[operationID] else { return false }
             return !files.intersection(requestedSet).isEmpty
-        }
+        }.reversed()
 
         let restorableFiles = Set(operationIDsToRestore.flatMap { lastOperationFilesByID[$0] ?? [] })
         let skippedCount = requestedSet.subtracting(restorableFiles).count

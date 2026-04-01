@@ -107,9 +107,13 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             guard let self else { return }
             let sc = self.isSidebarCollapsed
             let ic = self.isInspectorCollapsed
-            if self.model.isSidebarCollapsed != sc { self.model.isSidebarCollapsed = sc }
-            if self.model.isInspectorCollapsed != ic { self.model.isInspectorCollapsed = ic }
-            self.refreshToolbarState()
+            let sidebarChanged = self.model.isSidebarCollapsed != sc
+            let inspectorChanged = self.model.isInspectorCollapsed != ic
+            if sidebarChanged { self.model.isSidebarCollapsed = sc }
+            if inspectorChanged { self.model.isInspectorCollapsed = ic }
+            if sidebarChanged || inspectorChanged {
+                self.refreshToolbarState()
+            }
         }
 
         installUIRefreshObservers()
@@ -490,8 +494,14 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             guard shouldHandleBrowserKeyCommands() else { return event }
 
             switch event.keyCode {
+            case 36, 76:
+                guard modifiers.isEmpty else { return event }
+                guard !model.selectedFileURLs.isEmpty else { return nil }
+                self.focusInspectorEntryAction(nil)
+                return nil
             case KeyCode.escape:
                 guard modifiers.isEmpty else { return event }
+                self.browserController.clearActiveBrowserSelectionUI()
                 model.clearSelection()
                 return nil
             case _ where event.characters == "a":
@@ -1335,7 +1345,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         } else if menuItem.action == #selector(clearAllChangesAction(_:)) {
             return model.canApplyMetadataChanges
         } else if menuItem.action == #selector(restoreAllFromBackupAction(_:)) {
-            return !model.browserItems.isEmpty
+            return model.hasAnyRestorableBackup(for: model.browserItems.map(\.url))
         } else if menuItem.action == #selector(saveCurrentAsPresetAction(_:)) {
             return !selection.isEmpty
         } else if menuItem.action == #selector(applyPresetFromMenuAction(_:)) {
@@ -2478,10 +2488,13 @@ final class BrowserContainerViewController: NSViewController {
         observe(model.$isFolderMetadataLoading)
         observe(model.$browserThumbnailInvalidationToken)
         observe(model.$stagedOpsDisplayToken)
+        observe(model.$metadataByFile)
+        observe(model.$pendingRenameByFile)
+        observe(model.$pendingEditsByFile)
+        observe(model.$pendingImageOpsByFile)
         observe(model.$browserSort)
         observe(model.$browserSortAscending)
         observe(model.$galleryGridLevel)
-        observe(model.$inspectorRefreshRevision)
     }
 
     private func scheduleRender() {
@@ -2546,6 +2559,15 @@ final class BrowserContainerViewController: NSViewController {
         }
         lastOverlayState = nextOverlayState
         applyOverlay(nextOverlayState)
+    }
+
+    func clearActiveBrowserSelectionUI() {
+        switch model.browserViewMode {
+        case .gallery:
+            galleryController.clearVisualSelection()
+        case .list:
+            listController.clearVisualSelection()
+        }
     }
 
     private func applyBrowserModeIfNeeded(force: Bool) {

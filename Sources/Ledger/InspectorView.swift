@@ -405,6 +405,16 @@ struct InspectorView: View {
             moveInspectorFieldFocus(backward: backward)
         }
         .sheet(item: Binding(
+            get: { model.activeWelcomePresentation },
+            set: { newValue in
+                Task { @MainActor in
+                    model.activeWelcomePresentation = newValue
+                }
+            }
+        )) { presentation in
+            AppWelcomeSheetView(presentation: presentation)
+        }
+        .sheet(item: Binding(
             get: { model.activePresetEditor },
             set: { newValue in
                 Task { @MainActor in
@@ -594,7 +604,7 @@ struct InspectorView: View {
 
     private func focusableInspectorTagIDs() -> [String] {
         model.orderedEditableTagSections
-            .filter { !model.isInspectorSectionCollapsed($0.section) }
+            .filter { $0.section != "Rating" && !model.isInspectorSectionCollapsed($0.section) }
             .flatMap(\.tags)
             .filter { tag in
                 !model.isDateTimeTag(tag) && model.pickerOptions(for: tag) == nil
