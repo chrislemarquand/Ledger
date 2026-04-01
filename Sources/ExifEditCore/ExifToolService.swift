@@ -174,6 +174,15 @@ public struct ExifToolService: ExifToolServiceProtocol {
         if normalized.hasPrefix("XMP-XMPDM") {
             return .xmpDM
         }
+        if normalized.hasPrefix("XMP-PHOTOSHOP") {
+            return .xmpPhotoshop
+        }
+        if normalized.hasPrefix("XMP-IPTCCORE") {
+            return .xmpIptcCore
+        }
+        if normalized.hasPrefix("XMP-XMPRIGHTS") {
+            return .xmpRights
+        }
         if normalized.hasPrefix("XMP") {
             return .xmp
         }

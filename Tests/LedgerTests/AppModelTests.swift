@@ -44,6 +44,54 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(byID["exif-make"]?.isEnabled, true)
     }
 
+    func testAppliedRatingCanBeEditedAgain() {
+        let model = makeModel()
+        let fileURL = URL(fileURLWithPath: "/tmp/rating-test.jpg")
+        model.selectedFileURLs = [fileURL]
+        model.metadataByFile = [
+            fileURL: FileMetadataSnapshot(
+                fileURL: fileURL,
+                fields: [
+                    .init(key: "Rating", namespace: .xmp, value: "3")
+                ]
+            )
+        ]
+        model.recalculateInspectorState(forceNotify: true)
+
+        XCTAssertEqual(model.valueForTag(AppModel.EditableTag.rating), "3")
+        XCTAssertFalse(model.hasPendingChange(for: AppModel.EditableTag.rating))
+
+        model.updateValue("4", for: AppModel.EditableTag.rating)
+
+        XCTAssertEqual(model.valueForTag(AppModel.EditableTag.rating), "4")
+        XCTAssertEqual(model.pendingEditsByFile[fileURL]?[AppModel.EditableTag.rating]?.value, "4")
+        XCTAssertTrue(model.hasPendingChange(for: AppModel.EditableTag.rating))
+    }
+
+    func testAppliedPickCanBeEditedAgain() {
+        let model = makeModel()
+        let fileURL = URL(fileURLWithPath: "/tmp/pick-test.jpg")
+        model.selectedFileURLs = [fileURL]
+        model.metadataByFile = [
+            fileURL: FileMetadataSnapshot(
+                fileURL: fileURL,
+                fields: [
+                    .init(key: "Pick", namespace: .xmpDM, value: "1")
+                ]
+            )
+        ]
+        model.recalculateInspectorState(forceNotify: true)
+
+        XCTAssertEqual(model.valueForTag(AppModel.EditableTag.pick), "1")
+        XCTAssertFalse(model.hasPendingChange(for: AppModel.EditableTag.pick))
+
+        model.updateValue("-1", for: AppModel.EditableTag.pick)
+
+        XCTAssertEqual(model.valueForTag(AppModel.EditableTag.pick), "-1")
+        XCTAssertEqual(model.pendingEditsByFile[fileURL]?[AppModel.EditableTag.pick]?.value, "-1")
+        XCTAssertTrue(model.hasPendingChange(for: AppModel.EditableTag.pick))
+    }
+
     func testOrderedEditableTagSectionsFollowFieldCatalogSectionOrder() {
         let model = makeModel()
 
@@ -684,15 +732,19 @@ final class AppModelTests: XCTestCase {
     }
 
     private func makeModel(
+        exifToolService: ExifToolServiceProtocol = StubExifToolService(),
         favoritesStore: InMemoryFavoritesStore = InMemoryFavoritesStore(),
         recentLocationsStore: InMemoryRecentLocationsStore = InMemoryRecentLocationsStore()
     ) -> AppModel {
-        AppModel(
-            exifToolService: StubExifToolService(),
+        let model = AppModel(
+            exifToolService: exifToolService,
             presetStore: InMemoryPresetStore(),
             favoritesStore: favoritesStore,
             recentLocationsStore: recentLocationsStore
         )
+        model.keepBackups = true
+        model.activeInspectorFieldCatalog = AppModel.defaultFieldCatalogEntries()
+        return model
     }
 
     private func makeTempDirectory() -> URL {
@@ -942,6 +994,79 @@ final class AppModelTests: XCTestCase {
 
         XCTAssertFalse(model.fileActionState(for: .restoreFromLastBackup, targetURLs: [original]).isEnabled)
     }
+
+    func testRestoreAllActionDisablesWhenBackupsAreOff() async throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let fileURL = temp.appendingPathComponent("photo.jpg")
+        try Data("original".utf8).write(to: fileURL)
+
+        let model = makeModel()
+        guard let sidebarItem = model.noteRecentLocation(temp) else {
+            XCTFail("Expected temp folder to register as a sidebar location")
+            return
+        }
+        await model.loadFiles(for: sidebarItem.kind)
+
+        model.selectedFileURLs = [fileURL]
+        model.pendingRenameByFile[fileURL] = "renamed.jpg"
+        model.applyChanges(for: [fileURL])
+
+        try await waitUntil("rename apply completion") {
+            !model.isApplyingMetadata
+        }
+
+        model.keepBackups = false
+
+        XCTAssertTrue(model.hasRestorableBackup(for: temp.appendingPathComponent("renamed.jpg")))
+        XCTAssertFalse(model.hasAnyRestorableBackup(for: model.browserItems.map(\.url)))
+        XCTAssertFalse(model.fileActionState(for: .restoreFromLastBackup, targetURLs: model.browserItems.map(\.url)).isEnabled)
+    }
+
+    func testMixedMetadataAndRenameRestoreRevertsMetadataAndFilename() async throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let original = temp.appendingPathComponent("original.jpg")
+        let renamed = temp.appendingPathComponent("renamed.jpg")
+        try Data("original".utf8).write(to: original)
+
+        let exifService = WritingExifToolService()
+        let model = makeModel(exifToolService: exifService)
+        guard let sidebarItem = model.noteRecentLocation(temp) else {
+            XCTFail("Expected temp folder to register as a sidebar location")
+            return
+        }
+        await model.loadFiles(for: sidebarItem.kind)
+
+        model.setInspectorFieldEnabled(fieldID: "xmp-credit", isEnabled: true)
+        guard let tag = model.activeEditableTagsByID["xmp-credit"] else {
+            XCTFail("Expected xmp-credit to be available")
+            return
+        }
+
+        model.selectedFileURLs = [original]
+        model.metadataByFile = [original: FileMetadataSnapshot(fileURL: original, fields: [])]
+        model.updateValue("Testing", for: tag)
+        model.pendingRenameByFile[original] = renamed.lastPathComponent
+        model.applyChanges(for: [original])
+
+        try await waitUntil("mixed apply completion") {
+            !model.isApplyingMetadata && FileManager.default.fileExists(atPath: renamed.path)
+        }
+
+        XCTAssertEqual(String(decoding: try Data(contentsOf: renamed), as: UTF8.self), "edited")
+
+        model.restoreLastOperation(for: [renamed])
+
+        try await waitUntil("mixed restore completion") {
+            FileManager.default.fileExists(atPath: original.path)
+                && !FileManager.default.fileExists(atPath: renamed.path)
+        }
+
+        XCTAssertEqual(String(decoding: try Data(contentsOf: original), as: UTF8.self), "original")
+    }
 }
 
 private func make1x1PNG() throws -> Data {
@@ -965,6 +1090,19 @@ private struct StubExifToolService: ExifToolServiceProtocol {
 
     func writeMetadata(operation: EditOperation) async -> OperationResult {
         OperationResult(operationID: operation.id, succeeded: operation.targetFiles, failed: [], backupLocation: nil, duration: 0)
+    }
+}
+
+private actor WritingExifToolService: ExifToolServiceProtocol {
+    func readMetadata(files _: [URL]) async throws -> [FileMetadataSnapshot] {
+        []
+    }
+
+    func writeMetadata(operation: EditOperation) async -> OperationResult {
+        for fileURL in operation.targetFiles {
+            try? Data("edited".utf8).write(to: fileURL)
+        }
+        return OperationResult(operationID: operation.id, succeeded: operation.targetFiles, failed: [], backupLocation: nil, duration: 0)
     }
 }
 
