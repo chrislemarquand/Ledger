@@ -13,6 +13,56 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(groupedIDs, catalogIDs)
     }
 
+    func testDefaultFieldCatalogStartsWithRatingPickAndLabel() {
+        let entries = AppModel.defaultFieldCatalogEntries()
+
+        XCTAssertEqual(entries.prefix(3).map(\.id), ["xmp-rating", "xmp-pick", "xmp-label"])
+        XCTAssertTrue(entries.prefix(3).allSatisfy(\.isEnabled))
+        XCTAssertEqual(entries.prefix(3).map(\.section), ["Rating", "Rating", "Rating"])
+    }
+
+    func testDefaultFieldCatalogAssignsExpectedInputKindsAndVisibility() {
+        let byID = Dictionary(uniqueKeysWithValues: AppModel.defaultFieldCatalogEntries().map { ($0.id, $0) })
+
+        XCTAssertEqual(byID["datetime-created"]?.inputKind, .dateTime)
+        XCTAssertEqual(byID["exif-aperture"]?.inputKind, .decimal)
+        XCTAssertEqual(byID["exif-gps-lat"]?.inputKind, .gpsCoordinate)
+        XCTAssertEqual(byID["xmp-copyright-status"]?.inputKind, .boolean)
+        XCTAssertEqual(byID["xmp-title"]?.inputKind, .text)
+
+        if case let .enumChoice(choices)? = byID["exif-exposure-program"]?.inputKind {
+            XCTAssertTrue(choices.contains(.init(value: "1", label: "Manual")))
+            XCTAssertTrue(choices.contains(.init(value: "4", label: "Shutter Priority")))
+        } else {
+            XCTFail("Expected exif-exposure-program to use enumChoice input kind")
+        }
+
+        XCTAssertEqual(byID["iptc-city"]?.isEnabled, false)
+        XCTAssertEqual(byID["xmp-headline"]?.isEnabled, false)
+        XCTAssertEqual(byID["xmp-copyright-url"]?.isEnabled, false)
+        XCTAssertEqual(byID["xmp-title"]?.isEnabled, true)
+        XCTAssertEqual(byID["exif-make"]?.isEnabled, true)
+    }
+
+    func testOrderedEditableTagSectionsFollowFieldCatalogSectionOrder() {
+        let model = makeModel()
+
+        XCTAssertEqual(
+            model.orderedEditableTagSections.map(\.section),
+            ["Rating", "Camera", "Capture", "Date and Time", "Location", "Descriptive", "Rights"]
+        )
+
+        model.setInspectorFieldEnabled(fieldID: "xmp-credit", isEnabled: true)
+        XCTAssertEqual(
+            model.orderedEditableTagSections.map(\.section),
+            ["Rating", "Camera", "Capture", "Date and Time", "Location", "Descriptive", "Editorial", "Rights"]
+        )
+
+        model.setInspectorSectionEnabled(section: "Editorial", isEnabled: false)
+
+        XCTAssertFalse(model.orderedEditableTagSections.contains(where: { $0.section == "Editorial" }))
+    }
+
     func testSidebarSectionOrderMatchesV1Sidebar() {
         let model = makeModel()
         XCTAssertEqual(model.sidebarSectionOrder, ["Sources", "Pinned", "Recents"])
@@ -648,7 +698,24 @@ final class AppModelTests: XCTestCase {
     private func makeTempDirectory() -> URL {
         let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString, isDirectory: true)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        return url
+        return url.standardizedFileURL.resolvingSymlinksInPath()
+    }
+
+    private func waitUntil(
+        _ description: String = "condition",
+        timeoutNanoseconds: UInt64 = 3_000_000_000,
+        pollIntervalNanoseconds: UInt64 = 20_000_000,
+        _ condition: () -> Bool
+    ) async throws {
+        let timeoutSeconds = Double(timeoutNanoseconds) / 1_000_000_000
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while Date() < deadline {
+            if condition() {
+                return
+            }
+            try await Task.sleep(nanoseconds: pollIntervalNanoseconds)
+        }
+        XCTFail("Timed out waiting for \(description)")
     }
 
     // MARK: - Batch Rename action-state tests
@@ -728,6 +795,152 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(plan[0].finalTargetURL.lastPathComponent, "01.jpg")
         XCTAssertEqual(plan[1].sourceURL.lastPathComponent, "b.jpg")
         XCTAssertEqual(plan[1].finalTargetURL.lastPathComponent, "02.jpg")
+    }
+
+    func testStageBatchRenameStoresPendingRenamePlan() async {
+        let model = makeModel()
+        let files = [
+            URL(fileURLWithPath: "/tmp/b.jpg"),
+            URL(fileURLWithPath: "/tmp/a.jpg"),
+        ]
+        model.selectedFileURLs = Set(files)
+        model.pendingBatchRenameScope = .selection
+
+        await model.stageBatchRename(
+            operation: RenameOperation(
+                files: files,
+                pattern: RenamePattern(tokens: [.sequence(start: 1, padding: .two)])
+            )
+        )
+
+        XCTAssertEqual(model.pendingRenameByFile[URL(fileURLWithPath: "/tmp/a.jpg")], "01.jpg")
+        XCTAssertEqual(model.pendingRenameByFile[URL(fileURLWithPath: "/tmp/b.jpg")], "02.jpg")
+        XCTAssertNil(model.pendingBatchRenameScope)
+        XCTAssertEqual(model.statusMessage, "Prepared name changes for 2 files. Ready to apply.")
+    }
+
+    func testListColumnValueUsesPendingRenameForNameColumn() {
+        let model = makeModel()
+        let item = makeBrowserItem(name: "original.jpg")
+        model.pendingRenameByFile[item.url] = "renamed.jpg"
+
+        let value = model.listColumnValue(
+            for: item.url,
+            columnID: ListColumnDefinition.idName,
+            fallbackItem: item
+        )
+
+        XCTAssertEqual(value, "renamed.jpg")
+    }
+
+    func testListColumnDefinitionsExposeExpectedMetadataColumns() {
+        let metadataIDs = Set(ListColumnDefinition.metadata.map(\.id))
+
+        XCTAssertEqual(
+            metadataIDs,
+            Set([
+                ListColumnDefinition.idRating,
+                ListColumnDefinition.idMake,
+                ListColumnDefinition.idModel,
+                ListColumnDefinition.idLens,
+                ListColumnDefinition.idAperture,
+                ListColumnDefinition.idShutter,
+                ListColumnDefinition.idISO,
+                ListColumnDefinition.idFocal,
+                ListColumnDefinition.idDateTaken,
+                ListColumnDefinition.idDimensions,
+                ListColumnDefinition.idTitle,
+                ListColumnDefinition.idDescription,
+                ListColumnDefinition.idKeywords,
+                ListColumnDefinition.idCopyright,
+                ListColumnDefinition.idCreator,
+            ])
+        )
+        XCTAssertFalse(ListColumnDefinition.toggleable.contains(where: { $0.id == ListColumnDefinition.idName }))
+        XCTAssertTrue(ListColumnDefinition.toggleable.contains(where: { $0.id == ListColumnDefinition.idRating }))
+        XCTAssertTrue(ListColumnDefinition.metadata.allSatisfy { !$0.isSortable })
+        XCTAssertTrue(ListColumnDefinition.metadata.allSatisfy { !$0.defaultIsVisible })
+    }
+
+    func testListColumnValueFormatsRepresentativeMetadataColumns() {
+        let model = makeModel()
+        let fileURL = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.metadataByFile = [
+            fileURL: FileMetadataSnapshot(
+                fileURL: fileURL,
+                fields: [
+                    MetadataField(key: "Rating", namespace: .xmp, value: "5"),
+                    MetadataField(key: "Make", namespace: .exif, value: "Canon"),
+                    MetadataField(key: "LensModel", namespace: .exif, value: "EF 50mm f/1.8 STM"),
+                    MetadataField(key: "FNumber", namespace: .exif, value: "2.8"),
+                    MetadataField(key: "ExposureTime", namespace: .exif, value: "1/250"),
+                    MetadataField(key: "ISO", namespace: .exif, value: "400.0"),
+                    MetadataField(key: "FocalLength", namespace: .exif, value: "50"),
+                    MetadataField(key: "DateTimeOriginal", namespace: .exif, value: "2024:12:31 23:59:58"),
+                    MetadataField(key: "Title", namespace: .xmp, value: "Sunset"),
+                    MetadataField(key: "Copyright", namespace: .exif, value: "Chris"),
+                    MetadataField(key: "Creator", namespace: .xmp, value: "Chris Lem")
+                ]
+            )
+        ]
+
+        XCTAssertEqual(model.listColumnValue(for: fileURL, columnID: ListColumnDefinition.idRating, fallbackItem: nil), "5")
+        XCTAssertEqual(model.listColumnValue(for: fileURL, columnID: ListColumnDefinition.idMake, fallbackItem: nil), "Canon")
+        XCTAssertEqual(model.listColumnValue(for: fileURL, columnID: ListColumnDefinition.idLens, fallbackItem: nil), "EF 50mm f/1.8 STM")
+        XCTAssertEqual(model.listColumnValue(for: fileURL, columnID: ListColumnDefinition.idAperture, fallbackItem: nil), "f/2.8")
+        XCTAssertEqual(model.listColumnValue(for: fileURL, columnID: ListColumnDefinition.idShutter, fallbackItem: nil), "1/250 s")
+        XCTAssertEqual(model.listColumnValue(for: fileURL, columnID: ListColumnDefinition.idISO, fallbackItem: nil), "400")
+        XCTAssertEqual(model.listColumnValue(for: fileURL, columnID: ListColumnDefinition.idFocal, fallbackItem: nil), "50 mm")
+        XCTAssertEqual(model.listColumnValue(for: fileURL, columnID: ListColumnDefinition.idTitle, fallbackItem: nil), "Sunset")
+        XCTAssertEqual(model.listColumnValue(for: fileURL, columnID: ListColumnDefinition.idCopyright, fallbackItem: nil), "Chris")
+        XCTAssertEqual(model.listColumnValue(for: fileURL, columnID: ListColumnDefinition.idCreator, fallbackItem: nil), "Chris Lem")
+
+        let expectedDate = AppModel.exifDateFormatter.date(from: "2024:12:31 23:59:58").map(AppModel.listDateFormatter.string(from:))
+        XCTAssertEqual(model.listColumnValue(for: fileURL, columnID: ListColumnDefinition.idDateTaken, fallbackItem: nil), expectedDate)
+    }
+
+    func testRenameOnlyApplyAndRestoreTrackCurrentFileURLs() async throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let original = temp.appendingPathComponent("original.jpg")
+        let renamed = temp.appendingPathComponent("renamed.jpg")
+        try Data("original".utf8).write(to: original)
+
+        let model = makeModel()
+        guard let sidebarItem = model.noteRecentLocation(temp) else {
+            XCTFail("Expected temp folder to register as a sidebar location")
+            return
+        }
+        await model.loadFiles(for: sidebarItem.kind)
+        XCTAssertTrue(model.browserItems.contains(where: { $0.url.standardizedFileURL == original.standardizedFileURL }))
+
+        model.selectedFileURLs = [original]
+        model.pendingRenameByFile[original] = renamed.lastPathComponent
+        model.applyChanges(for: [original])
+
+        try await waitUntil("rename apply completion") {
+            !model.isApplyingMetadata && FileManager.default.fileExists(atPath: renamed.path)
+        }
+        try await waitUntil("browser reload after rename") {
+            model.browserItems.contains(where: { $0.url.standardizedFileURL == renamed.standardizedFileURL })
+        }
+
+        XCTAssertTrue(model.hasRestorableBackup(for: renamed))
+        XCTAssertTrue(model.fileActionState(for: .restoreFromLastBackup, targetURLs: [renamed]).isEnabled)
+
+        model.restoreLastOperation(for: [renamed])
+
+        try await waitUntil("rename restore completion") {
+            FileManager.default.fileExists(atPath: original.path)
+                && !FileManager.default.fileExists(atPath: renamed.path)
+        }
+        try await waitUntil("browser reload after restore") {
+            model.browserItems.contains(where: { $0.url.standardizedFileURL == original.standardizedFileURL })
+                && !model.browserItems.contains(where: { $0.url.standardizedFileURL == renamed.standardizedFileURL })
+        }
+
+        XCTAssertFalse(model.fileActionState(for: .restoreFromLastBackup, targetURLs: [original]).isEnabled)
     }
 }
 

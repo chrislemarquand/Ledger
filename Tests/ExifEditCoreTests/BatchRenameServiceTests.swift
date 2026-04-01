@@ -96,6 +96,28 @@ final class BatchRenameServiceTests: XCTestCase {
                        plan2[0].finalTargetURL.lastPathComponent)
     }
 
+    func testDateTokenUsesProvidedMetadataSnapshot() async {
+        let service = BatchRenameService()
+        let fileURL = URL(fileURLWithPath: "/tmp/a.jpg")
+        let snapshot = FileMetadataSnapshot(
+            fileURL: fileURL,
+            fields: [
+                MetadataField(
+                    key: "DateTimeOriginal",
+                    namespace: .exif,
+                    value: "2024:12:31 23:59:58"
+                )
+            ]
+        )
+        let plan = await service.buildPlan(
+            files: [fileURL],
+            pattern: RenamePattern(tokens: [.date(source: .dateTimeOriginal, format: .yyyymmdd)]),
+            metadata: [fileURL: snapshot]
+        )
+
+        XCTAssertEqual(plan[0].finalTargetURL.lastPathComponent, "20241231.jpg")
+    }
+
     func testExtensionTokenOverridesExtension() async {
         let service = BatchRenameService()
         let files = makeFiles(names: ["photo.jpg"])
@@ -331,6 +353,31 @@ final class BatchRenameServiceTests: XCTestCase {
         } catch {
             XCTAssertTrue(FileManager.default.fileExists(atPath: existing.path), "Existing file should be restored after rollback")
             XCTAssertFalse(FileManager.default.fileExists(atPath: temp.appendingPathComponent("renamed.jpg").path))
+        }
+    }
+
+    func testExecuteStagedMappingsRollsBackWhenFinalMoveFails() async throws {
+        let temp = makeTempDir()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let alpha = temp.appendingPathComponent("a.jpg")
+        let beta = temp.appendingPathComponent("b.jpg")
+        try Data("a".utf8).write(to: alpha)
+        try Data("b".utf8).write(to: beta)
+
+        let service = BatchRenameService()
+
+        do {
+            _ = try await service.executeStagedMappings(targetsBySource: [
+                alpha: "renamed-a.jpg",
+                beta: "nested/renamed-b.jpg",
+            ])
+            XCTFail("Expected executeStagedMappings to fail when a final target directory is missing")
+        } catch {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: alpha.path))
+            XCTAssertTrue(FileManager.default.fileExists(atPath: beta.path))
+            XCTAssertFalse(FileManager.default.fileExists(atPath: temp.appendingPathComponent("renamed-a.jpg").path))
+            XCTAssertFalse(FileManager.default.fileExists(atPath: temp.appendingPathComponent("nested/renamed-b.jpg").path))
         }
     }
 

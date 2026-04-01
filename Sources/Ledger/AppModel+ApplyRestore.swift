@@ -133,6 +133,20 @@ extension AppModel {
             var firstBackupLocation: URL?
             var operationIDs: [UUID] = []
             var operationFilesByID: [UUID: Set<URL>] = [:]
+            var appliedRenameTargets: [URL: String] = [:]
+
+            func rekeyTrackedOperationFiles(
+                _ filesByOperationID: [UUID: Set<URL>],
+                renamedTargets: [URL: String]
+            ) -> [UUID: Set<URL>] {
+                guard !renamedTargets.isEmpty else { return filesByOperationID }
+                let renamedURLs = Dictionary(uniqueKeysWithValues: renamedTargets.map { sourceURL, filename in
+                    (sourceURL, sourceURL.deletingLastPathComponent().appendingPathComponent(filename))
+                })
+                return filesByOperationID.mapValues { files in
+                    Set(files.map { renamedURLs[$0] ?? $0 })
+                }
+            }
 
             for (index, fileURL) in writableFiles.enumerated() {
                 let patches = buildPatches(for: fileURL)
@@ -226,8 +240,6 @@ extension AppModel {
                 backupLocation: firstBackupLocation,
                 duration: Date().timeIntervalSince(startedAt)
             )
-            lastOperationIDs = operationIDs
-            lastOperationFilesByID = operationFilesByID
 
             if !result.succeeded.isEmpty {
                 // Applied image operations mutate file pixels on disk, so any pre-apply
@@ -279,6 +291,7 @@ extension AppModel {
                                 firstBackupLocation = renameResult.backupLocation
                             }
                         }
+                        appliedRenameTargets = renameTargets
                     } catch {
                         renameFailedCount = renameTargets.count
                         renameFailureMessage = error.localizedDescription
@@ -332,6 +345,17 @@ extension AppModel {
                     }
                 }
             }
+
+            if !appliedRenameTargets.isEmpty {
+                // Restore actions target the browser's current post-rename URLs, so
+                // remap tracked backup entries from source paths to renamed paths.
+                operationFilesByID = rekeyTrackedOperationFiles(
+                    operationFilesByID,
+                    renamedTargets: appliedRenameTargets
+                )
+            }
+            lastOperationIDs = operationIDs
+            lastOperationFilesByID = operationFilesByID
 
             // Status message
             let metadataApplied = result.succeeded.count
@@ -502,6 +526,8 @@ extension AppModel {
             var failed: [FileError] = []
             var backupLocation: URL?
             let startedAt = Date()
+            var fullyRestoredOperationIDs: Set<UUID> = []
+            var restoredFilesByOperationID: [UUID: Set<URL>] = [:]
 
             for operationID in operationIDsToRestore {
                 do {
@@ -511,6 +537,10 @@ extension AppModel {
                     }
                     succeeded.append(contentsOf: result.succeeded)
                     failed.append(contentsOf: result.failed)
+                    restoredFilesByOperationID[operationID] = Set(result.succeeded)
+                    if result.failed.isEmpty {
+                        fullyRestoredOperationIDs.insert(operationID)
+                    }
                 } catch {
                     guard let files = operationFilesByID[operationID], let fileURL = files.first else { continue }
                     failed.append(FileError(fileURL: fileURL, message: error.localizedDescription))
@@ -534,12 +564,28 @@ extension AppModel {
                     // the inspector continues to show the pre-restore metadata.
                     staleMetadataFiles.insert(fileURL)
                 }
-                // Remove restored operation IDs so "Restore from Backup" disables once
-                // no backup remains for the selection.
                 let succeededSet = Set(summary.succeeded)
-                for opID in operationIDsToRestore {
-                    guard let files = operationFilesByID[opID],
-                          files.isSubset(of: succeededSet) else { continue }
+                let didRestorePathChangingOperation = fullyRestoredOperationIDs.contains { operationID in
+                    guard let tracked = operationFilesByID[operationID],
+                          let restored = restoredFilesByOperationID[operationID]
+                    else {
+                        return false
+                    }
+                    return tracked != restored
+                }
+                if didRestorePathChangingOperation, let item = selectedSidebarItem {
+                    await loadFiles(for: item.kind)
+                    let restoredOriginalURLs = Set(fullyRestoredOperationIDs.flatMap { restoredFilesByOperationID[$0] ?? [] })
+                    let availableURLs = Set(browserItems.map(\.url))
+                    let restoredSelection = restoredOriginalURLs.intersection(availableURLs)
+                    if !restoredSelection.isEmpty {
+                        let focusedURL = restoredSelection.sorted { $0.path < $1.path }.first
+                        setSelectionFromList(restoredSelection, focusedURL: focusedURL)
+                    }
+                }
+                // Remove fully restored operation IDs so "Restore from Backup"
+                // disables once no backup remains for the current files.
+                for opID in fullyRestoredOperationIDs {
                     lastOperationIDs.removeAll { $0 == opID }
                     lastOperationFilesByID.removeValue(forKey: opID)
                 }

@@ -776,7 +776,7 @@ final class AppModel: ObservableObject {
         $pendingEditsByFile.combineLatest($pendingImageOpsByFile)
             .sink { edits, imageOps in
                 let count = Set(edits.keys).union(imageOps.keys).count
-                NSApp.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
+                NSApp?.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
             }
             .store(in: &badgeObservers)
     }
