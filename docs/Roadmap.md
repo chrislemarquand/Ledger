@@ -61,17 +61,19 @@ Released: **2026-03-10**.
 ## v1.2
 
 - [x] Welcome/version screen using `AppWelcomeViewController` from SharedUI (WhatsNewKit-backed). Show on first run; reuse for "What's New" on major version updates.
-- [x] Batch Rename (first release)
-- [x] Add more Exif fields to Inspector view (including rating)
+- [x] Batch Rename first release: preview, token rendering, selection/folder scope, deterministic ordering, collision disambiguation, backup-aware execution, and rename restore support.
+- [x] Expanded inspector metadata coverage across EXIF / IPTC / XMP, including rating, pick flag, colour label, and field visibility controls.
 - [x] Finder-style breadcrumb bar.
-- [x] Dock icon badge and right click options
+- [x] Dock icon badge and Dock menu shortcuts for favourites, recents, and Open Folder.
 - [x] List column customisation (including Exif-backed columns).
 - [x] Drag to reorder sidebar favourites.
-- [x] Click-to-drag rubber-band selection in gallery view
-- [ ] Gallery metadata lines/subtitle customisation.
+- [x] Click-to-drag rubber-band selection in gallery view.
 - [x] **Metadata export CSV/JSON**: select fields, export to CSV or JSON for spreadsheet editing or audit reporting.
 - [x] **Backup retention policy**: keep-last-N model, persistence, prune path wiring, and Settings UI controls. Infrastructure (`BackupManager.pruneOperations`) already exists; this is the Settings surface and wiring.
 - [x] Sidebar rewritten in AppKit.
+- [x] SharedUI/AppKit browser parity hardening for focus, keyboard, and selection behaviour in list/gallery/inspector flows.
+- [x] Browser context-menu handoff to Photos, Lightroom, and Lightroom Classic.
+- [x] Thumbnail pipeline rewrite with shared cache / broker hardening.
 - [x] Inspector preview cache size cap (currently trimmed by URL list only; large folders cache all previews with no memory ceiling).
 
 ---
@@ -81,6 +83,7 @@ Released: **2026-03-10**.
 - [ ] Drag files out to Finder/Mail/Messages etc. (NSItemProvider/NSPasteboardWriter on gallery/list items).
 - [ ] Drag a folder onto the sidebar to add as a favourite.
 - [ ] Explicit Home/End/Page Up/Page Down keyboard nav in list/gallery.
+- [ ] Gallery metadata lines/subtitle customisation.
 - [ ] Metadata copy/paste:
   - [ ] Field-level copy/paste.
   - [ ] Metadata-set copy/paste.

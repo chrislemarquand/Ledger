@@ -4,6 +4,33 @@ All notable changes to Ledger are documented here.
 
 ---
 
+## [1.2] — Unreleased
+
+### Added
+
+- **Welcome / What's New** screen using the SharedUI `AppWelcomeViewController` and WhatsNewKit-backed version gating.
+- **Batch Rename** first release: token-based preview/build pipeline, selection/folder scope, deterministic ordering, collision disambiguation, extension overrides, backup-aware execution, and restore support for renamed outputs.
+- **Expanded inspector metadata coverage** across EXIF / IPTC / XMP, including star rating, pick flag, colour label, and field visibility controls.
+- **Finder-style breadcrumb bar** for the current browser location.
+- **Dock integrations**: pending-edits badge plus Dock-menu shortcuts for favourites, recents, and Open Folder.
+- **List column customisation** with metadata-backed columns such as rating, camera, lens, date taken, title, rights, and dimensions.
+- **Gallery rubber-band selection** and drag-to-reorder sidebar favourites.
+- **Metadata export to CSV / JSON** for reporting or spreadsheet workflows.
+- **Backup retention controls** with keep-last-N persistence and clear-backups actions in Settings.
+
+### Changed
+
+- Browser shell, sidebar, and selection/focus handling moved further into the SharedUI/AppKit path for better list/gallery parity.
+- Browser context menus now include direct handoff to Photos, Lightroom, and Lightroom Classic.
+- Thumbnail and preview loading now run through a hardened shared cache / broker pipeline with disk-cache support and stale-image fixes.
+
+### Fixed
+
+- Restore from Backup now stays correctly associated with files after rename-backed operations by tracking the post-rename URLs through apply/restore flows.
+- Full package automation now covers the v1.2 release candidate surface, including batch rename rollback/manifests, rename-backed restore, field-catalog defaults, metadata list columns, and GPX camera-offset matching.
+
+---
+
 ## [1.1] — 2026-03-10
 
 ### Added

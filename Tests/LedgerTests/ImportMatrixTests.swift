@@ -316,10 +316,12 @@ final class ImportMatrixTests: XCTestCase {
         let temp = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: temp) }
 
-        // EXIF "2026:01:01 00:00:00" is parsed as local midnight = UTC midnight - tzOffset.
+        // EXIF "2026:01:01 00:00:00" is parsed in the configured camera timezone,
+        // so the needed offset must be computed for that capture date, not "now".
         // GPX is 2026-01-01T00:00:00Z (UTC midnight).
-        // With gpxCameraOffsetSeconds = tzOffset, shifted time = UTC midnight → delta = 0 → match.
-        let tzOffset = TimeZone.current.secondsFromGMT()
+        // With gpxCameraOffsetSeconds = capture-date tzOffset, shifted time = UTC midnight → delta = 0 → match.
+        let captureDate = AppModel.exifDateFormatter.date(from: "2026:01:01 00:00:00")
+        let tzOffset = captureDate.map(TimeZone.current.secondsFromGMT(for:)) ?? TimeZone.current.secondsFromGMT()
         let gpx = makeGPXFile(in: temp, name: "g4.gpx", timestamp: "2026-01-01T00:00:00Z", lat: 48.85, lon: 2.35)
         let file = URL(fileURLWithPath: "/tmp/g4.jpg")
         var options = ImportRunOptions.defaults(for: .gpx)
