@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import ImageIO
 import SharedUI
 
 enum ThumbnailService {
@@ -186,6 +187,18 @@ enum ThumbnailService {
         ThumbnailGenerator.isLikelyImageFile(fileURL)
     }
 
+    private static func generateDownsampledFallback(fileURL: URL, maxPixelSize: CGFloat) -> NSImage? {
+        guard let source = CGImageSourceCreateWithURL(fileURL as CFURL, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceShouldCache: false,
+            kCGImageSourceShouldCacheImmediately: false,
+            kCGImageSourceThumbnailMaxPixelSize: max(1, Int(maxPixelSize.rounded(.up)))
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+    }
+
     private static func generate(fileURL: URL, maxPixelSize: CGFloat) async -> NSImage? {
         // Hot path — another task may have populated the cache while we waited for a broker permit.
         if let cached = memoryCache.object(forKey: fileURL as NSURL) {
@@ -211,7 +224,7 @@ enum ThumbnailService {
             } else if let ql = await ThumbnailGenerator.generateQuickLookThumbnail(fileURL: fileURL, maxPixelSize: maxPixelSize) {
                 image = ql
             } else {
-                image = NSImage(contentsOf: fileURL)
+                image = generateDownsampledFallback(fileURL: fileURL, maxPixelSize: maxPixelSize)
             }
         } else {
             if let ql = await ThumbnailGenerator.generateQuickLookThumbnail(fileURL: fileURL, maxPixelSize: maxPixelSize) {
@@ -219,7 +232,7 @@ enum ThumbnailService {
             } else if let oriented = ThumbnailGenerator.generateOrientedThumbnail(fileURL: fileURL, maxPixelSize: maxPixelSize) {
                 image = oriented
             } else {
-                image = NSImage(contentsOf: fileURL)
+                image = generateDownsampledFallback(fileURL: fileURL, maxPixelSize: maxPixelSize)
             }
         }
 

@@ -597,19 +597,29 @@ extension AppModel {
     func previewBatchRename(pattern: RenamePattern, scope: BatchRenameScope) async -> [RenamePlanEntry] {
         let files = renameFilesForBatchRename(scope)
         let service = BatchRenameService()
-        return await service.buildPlan(files: files, pattern: pattern)
+        return await service.buildPlan(files: files, pattern: pattern, assumeSorted: true)
     }
 
     func previewBatchRenameAssessment(pattern: RenamePattern, scope: BatchRenameScope) async -> RenamePlanAssessment {
         let files = renameFilesForBatchRename(scope)
         let service = BatchRenameService()
-        return await service.assessPlan(files: files, pattern: pattern, metadata: metadataByFile)
+        return await service.assessPlan(files: files, pattern: pattern, metadata: metadataByFile, assumeSorted: true)
     }
 
     func stageBatchRename(operation: RenameOperation) async {
         guard !operation.files.isEmpty else { return }
+        let files = operation.files.sorted {
+            let cmp = $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent)
+            if cmp != .orderedSame { return cmp == .orderedAscending }
+            return $0.path < $1.path
+        }
         let service = BatchRenameService()
-        let assessment = await service.assessPlan(files: operation.files, pattern: operation.pattern, metadata: metadataByFile)
+        let assessment = await service.assessPlan(
+            files: files,
+            pattern: operation.pattern,
+            metadata: metadataByFile,
+            assumeSorted: true
+        )
         guard assessment.issues.isEmpty else {
             let firstMessage = assessment.issues.first?.message ?? "Rename pattern is invalid."
             statusMessage = "Couldn’t prepare name changes. \(firstMessage)"
@@ -630,8 +640,8 @@ extension AppModel {
             stagedOpsDisplayToken &+= 1
         }
         let n = plan.count
-        let files = n == 1 ? "1 file" : "\(n) files"
-        setStatusMessage("Prepared name changes for \(files). Ready to apply.", autoClearAfterSuccess: true)
+        let filesLabel = n == 1 ? "1 file" : "\(n) files"
+        setStatusMessage("Prepared name changes for \(filesLabel). Ready to apply.", autoClearAfterSuccess: true)
         pendingBatchRenameScope = nil
     }
 

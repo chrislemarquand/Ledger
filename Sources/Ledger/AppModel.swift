@@ -625,7 +625,9 @@ final class AppModel: ObservableObject {
     static let initialThumbnailWarmupSide: CGFloat = 180
     static let inspectorPreviewTargetSide: CGFloat = 700
     static let inspectorPreviewFullSide: CGFloat = 1400
-    static let maxInspectorPreviewCacheEntries = 600
+    static let maxInspectorPreviewCacheEntries = 48
+    static let previewPreloadNeighborRadius = 10
+    static let maxPreviewPreloadCandidates = 64
     static let maxRecentLocations = 20
     nonisolated static let supportedImageExtensions: Set<String> = [
         "jpg", "jpeg", "tif", "tiff", "png", "heic", "heif", "dng", "arw", "cr2", "cr3", "nef", "orf", "rw2", "raf"

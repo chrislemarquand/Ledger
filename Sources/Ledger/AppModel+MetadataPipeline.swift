@@ -122,9 +122,10 @@ extension AppModel {
         deferredPreviewPreloadTask = nil
         let preloadID = UUID()
         previewPreloadID = preloadID
+        let preloadCandidates = previewPreloadCandidates(from: files)
 
         var filesToPreload: [URL] = []
-        for fileURL in files {
+        for fileURL in preloadCandidates {
             if ThumbnailService.cachedImage(for: fileURL, minRenderedSide: Self.inspectorPreviewTargetSide) != nil {
                 // Already have an adequate-quality image; ensure it's wired up as a preview.
                 if let cached = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: Self.inspectorPreviewTargetSide) {
@@ -456,8 +457,10 @@ extension AppModel {
         guard !isFolderMetadataLoading, !isPreviewPreloading else { return }
         do { try await Task.sleep(nanoseconds: Self.previewBulkStartDelayNanoseconds) } catch { return }
         guard !isFolderMetadataLoading, !isPreviewPreloading else { return }
+        let warmCandidates = previewPreloadCandidates(from: files)
+        guard !warmCandidates.isEmpty else { return }
 
-        let filesNeedingMetadata = files.filter { fileURL in
+        let filesNeedingMetadata = warmCandidates.filter { fileURL in
             staleMetadataFiles.contains(fileURL) || metadataByFile[fileURL] == nil
         }
         if !filesNeedingMetadata.isEmpty {
@@ -478,7 +481,7 @@ extension AppModel {
             metadataByFile = map
         }
 
-        let filesNeedingPreview = files.filter {
+        let filesNeedingPreview = warmCandidates.filter {
             ThumbnailService.cachedImage(for: $0, minRenderedSide: Self.inspectorPreviewTargetSide) == nil
         }
         for fileURL in filesNeedingPreview {
@@ -508,6 +511,46 @@ extension AppModel {
             }
             inspectorPreviewInflight.remove(fileURL)
         }
+    }
+
+    private func previewPreloadCandidates(from files: [URL]) -> [URL] {
+        guard !files.isEmpty else { return [] }
+        guard !selectedFileURLs.isEmpty else { return [] }
+
+        let browserOrder = browserItems.map(\.url)
+        let orderedUniverse = browserOrder.isEmpty ? files : browserOrder
+        guard !orderedUniverse.isEmpty else { return [] }
+
+        let indexByURL = Dictionary(uniqueKeysWithValues: orderedUniverse.enumerated().map { ($1, $0) })
+        var candidateIndices: Set<Int> = []
+        let radius = Self.previewPreloadNeighborRadius
+
+        for selectedURL in selectedFileURLs {
+            guard let center = indexByURL[selectedURL] else { continue }
+            let lower = max(0, center - radius)
+            let upper = min(orderedUniverse.count - 1, center + radius)
+            for i in lower...upper {
+                candidateIndices.insert(i)
+            }
+        }
+
+        guard !candidateIndices.isEmpty else { return [] }
+
+        let selectedCountCap = max(Self.maxPreviewPreloadCandidates, selectedFileURLs.count)
+        let orderedByDistance: [Int]
+        if let primary = primarySelectionURL, let primaryIndex = indexByURL[primary] {
+            orderedByDistance = candidateIndices.sorted { lhs, rhs in
+                let leftDistance = abs(lhs - primaryIndex)
+                let rightDistance = abs(rhs - primaryIndex)
+                if leftDistance != rightDistance { return leftDistance < rightDistance }
+                return lhs < rhs
+            }
+        } else {
+            orderedByDistance = candidateIndices.sorted()
+        }
+
+        let capped = Array(orderedByDistance.prefix(selectedCountCap)).sorted()
+        return capped.map { orderedUniverse[$0] }
     }
 
     private func cancelStaleInspectorPreviewTasks(keeping keepURLs: Set<URL>) {

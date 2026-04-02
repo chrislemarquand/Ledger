@@ -23,6 +23,46 @@ For SharedUI updates, use:
 ./scripts/deps/bump_sharedui.sh <version>
 ```
 
+## 2.1 v1.2 Streamlining Gate
+
+- Review and execute applicable items from `docs/v1.2-performance-streamlining-plan.md` before final RC/tag.
+- Minimum recommended pre-ship set:
+  - ExifTool payload pruning validation
+  - Release stripping enabled and verified
+  - Inspector preview cache cap/warmup policy verification
+
+Current status (2026-04-03):
+- ExifTool Brotli test payload prune: implemented.
+- Release strip settings: implemented and verified (smaller Release binary).
+- Inspector preview cache/warmup policy: implemented.
+- Thumbnail fallback downsample path: implemented.
+- Batch rename CPU/latency pass (sort dedupe, formatter caching, debounce): implemented.
+- Remaining streamlining gate item: run explicit smoke/perf sanity pass after these runtime changes.
+
+### 2.2 Required Smoke for Streamlining Changes (Phases 1-3)
+
+Run this on the exact RC commit before tag:
+
+- Build/package sanity:
+  - [ ] Build local Release app (signed or unsigned path).
+  - [ ] Record sizes:
+    - [ ] `du -sh <Ledger.app>`
+    - [ ] `ls -lh <Ledger.app>/Contents/MacOS/Ledger`
+    - [ ] `du -sh <Ledger.app>/Contents/Resources/exiftool`
+  - [ ] Confirm stripped Release binary + dSYM coexist.
+- ExifTool payload sanity:
+  - [ ] Verify pruned path is absent:
+    - [ ] `<Ledger.app>/Contents/Resources/exiftool/bin/lib/darwin-thread-multi-2level/IO/Compress/Brotli/tests`
+- Runtime functional sanity:
+  - [ ] Metadata read on sample folder.
+  - [ ] Metadata write/apply and restore.
+  - [ ] Import flow and ExifTool CSV export.
+- Runtime performance sanity:
+  - [ ] Large-folder selection sweep (list + gallery) with inspector visible.
+  - [ ] Confirm inspector preview responsiveness under rapid navigation.
+  - [ ] Batch Rename fast typing test (preview remains responsive).
+  - [ ] Batch Rename edge pass: collision, no-op, extension override, restore.
+
 ## 3. Git and Tag
 
 - Commit release metadata updates.

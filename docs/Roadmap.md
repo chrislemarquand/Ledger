@@ -78,6 +78,7 @@ Released: **2026-03-10**.
 - [x] Date/Time adjust workflow in Inspector + Image menu: AppKit-backed date controls, `Set…` launch flow, Shift/Time Zone/Specific/File modes, Apply-to (`Original` / `Digitised` / `Modified`) targeting, and effective-change preview/apply gating.
 - [x] Workflow sheet parity pass across Import / Batch Rename / Date-Time: shared `WorkflowSheetContainer` rhythm, `WorkflowFormRow` adoption, and aligned section/footer spacing.
 - [ ] Location adjust workflow (MapKit): workflow sheet + Inspector/Image-menu entry points, search + map interaction, latitude/longitude preview line, preview popover, and staged GPS lat/lon writes.
+- [ ] Performance streamlining pass (no feature cuts): implement phased payload/runtime/CPU reductions tracked in `docs/v1.2-performance-streamlining-plan.md`.
 
 ---
 
