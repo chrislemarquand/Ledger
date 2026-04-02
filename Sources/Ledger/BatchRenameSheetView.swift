@@ -255,31 +255,37 @@ private struct TokenRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
+        WorkflowFormRow(
+            labelWidth: 152,
+            labelAlignment: .leading,
+            rowMinHeight: 28
+        ) {
             Picker("", selection: kindBinding) {
                 ForEach(TokenKind.allCases) { kind in
                     Text(kind.displayName).tag(kind)
                 }
             }
             .labelsHidden()
-            .frame(width: 152)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } content: {
+            HStack(spacing: 8) {
+                tokenContent
 
-            tokenContent
+                Button(action: onDelete) {
+                    Text("−")
+                        .frame(width: 16, height: 16)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(isOnlyRow)
 
-            Button(action: onDelete) {
-                Text("−")
-                    .frame(width: 16, height: 16)
+                Button(action: onInsertAfter) {
+                    Text("+")
+                        .frame(width: 16, height: 16)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .disabled(isOnlyRow)
-
-            Button(action: onInsertAfter) {
-                Text("+")
-                    .frame(width: 16, height: 16)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
         }
         .padding(.vertical, 5)
     }
