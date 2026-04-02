@@ -136,7 +136,8 @@ struct InspectorView: View {
                                         if model.hasPendingImageEdits(for: previewURL) {
                                             Image(systemName: "circle.fill")
                                                 .font(.system(size: 9))
-                                                .foregroundStyle(.orange)
+                                                .symbolRenderingMode(.monochrome)
+                                                .foregroundStyle(Color(nsColor: .systemOrange))
                                                 .padding(8)
                                         }
                                     }
@@ -217,14 +218,10 @@ struct InspectorView: View {
                                                                     }
                                                                 }
                                                             ),
+                                                            datePickerStyle: .textField,
                                                             accessibilityLabel: tag.label
                                                         )
                                                         .frame(maxWidth: .infinity, alignment: .leading)
-
-                                                        Button("Set") {
-                                                            openDateTimeAdjustSheet(for: tag)
-                                                        }
-                                                        .controlSize(.small)
 
                                                         Button {
                                                             beginEditSessionIfNeeded(for: tag)
@@ -237,6 +234,11 @@ struct InspectorView: View {
                                                         }
                                                         .buttonStyle(.plain)
                                                         .help("Clear date and time")
+
+                                                        Button("Set") {
+                                                            openDateTimeAdjustSheet(for: tag)
+                                                        }
+                                                        .controlSize(.small)
                                                     }
                                                 } else {
                                                     HStack(spacing: 6) {
