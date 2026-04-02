@@ -9,6 +9,7 @@ struct DateTimeAdjustSheetView: View {
     @State private var previewRows: [DateTimeAdjustPreviewRow] = []
     @State private var previewBlockingIssues: [String] = []
     @State private var previewWarnings: [String] = []
+    @State private var hasEffectivePreviewChanges = false
     @State private var isLoadingPreview = false
 
     private static let sheetWidth: CGFloat = 620
@@ -38,6 +39,14 @@ struct DateTimeAdjustSheetView: View {
 
     private var hasBlockingIssues: Bool {
         !previewBlockingIssues.isEmpty || session.applyTo.isEmpty
+    }
+
+    private var isPreviewActionEnabled: Bool {
+        !isLoadingPreview && hasEffectivePreviewChanges
+    }
+
+    private var isAdjustActionEnabled: Bool {
+        !isLoadingPreview && hasEffectivePreviewChanges && !hasBlockingIssues
     }
 
     // MARK: - Preview Key
@@ -137,6 +146,7 @@ struct DateTimeAdjustSheetView: View {
                         }
                         showPreview = true
                     }
+                    .disabled(!isPreviewActionEnabled)
                     .popover(isPresented: $showPreview) {
                         previewPopover
                     }
@@ -152,7 +162,7 @@ struct DateTimeAdjustSheetView: View {
                         model.stageDateTimeAdjustments(session: session)
                     }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(hasBlockingIssues)
+                    .disabled(!isAdjustActionEnabled)
                 }
             }
         }
@@ -339,6 +349,7 @@ struct DateTimeAdjustSheetView: View {
         previewRows = assessment.rows
         previewBlockingIssues = assessment.blockingIssues
         previewWarnings = assessment.warnings
+        hasEffectivePreviewChanges = assessment.effectiveChangeFileCount > 0
         isLoadingPreview = false
     }
 }
