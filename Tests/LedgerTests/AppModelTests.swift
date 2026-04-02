@@ -830,6 +830,65 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(model.pendingBatchRenameScope)
     }
 
+    // MARK: - Date/Time and Location workflow tests
+
+    func testBeginDateTimeAdjustInitializesSessionFromLaunchTag() {
+        let model = makeModel()
+        let a = URL(fileURLWithPath: "/tmp/B.jpg")
+        let b = URL(fileURLWithPath: "/tmp/A.jpg")
+        model.selectedFileURLs = [a, b]
+
+        model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeDigitized)
+
+        guard let session = model.pendingDateTimeAdjustSession else {
+            XCTFail("Expected pending date/time session")
+            return
+        }
+        XCTAssertEqual(session.scope, .selection)
+        XCTAssertEqual(session.launchTag, .dateTimeDigitized)
+        XCTAssertEqual(session.fileURLs.map(\.lastPathComponent), ["A.jpg", "B.jpg"])
+        XCTAssertEqual(session.applyTo, [.dateTimeDigitized])
+        XCTAssertFalse(session.sourceTimeZoneID.isEmpty)
+    }
+
+    func testSetInspectorFieldEnabledKeepsLatitudeAndLongitudePaired() {
+        let model = makeModel()
+        model.setInspectorFieldEnabled(fieldID: "exif-gps-lat", isEnabled: false)
+        XCTAssertFalse(model.isInspectorFieldEnabled("exif-gps-lat"))
+        XCTAssertFalse(model.isInspectorFieldEnabled("exif-gps-lon"))
+
+        model.setInspectorFieldEnabled(fieldID: "exif-gps-lon", isEnabled: true)
+        XCTAssertTrue(model.isInspectorFieldEnabled("exif-gps-lat"))
+        XCTAssertTrue(model.isInspectorFieldEnabled("exif-gps-lon"))
+    }
+
+    func testCanOpenLocationAdjustSheetRequiresSelectionAndCoordinateFields() {
+        let model = makeModel()
+        XCTAssertFalse(model.canOpenLocationAdjustSheet())
+
+        let fileURL = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.selectedFileURLs = [fileURL]
+        XCTAssertTrue(model.canOpenLocationAdjustSheet())
+
+        model.setInspectorFieldEnabled(fieldID: "exif-gps-lat", isEnabled: false)
+        XCTAssertFalse(model.canOpenLocationAdjustSheet())
+    }
+
+    func testBeginLocationAdjustNoopsWhenCoordinateFieldsDisabled() {
+        let model = makeModel()
+        let fileURL = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.selectedFileURLs = [fileURL]
+        model.setInspectorFieldEnabled(fieldID: "exif-gps-lat", isEnabled: false)
+
+        model.beginLocationAdjust()
+
+        XCTAssertNil(model.pendingLocationAdjustSession)
+        XCTAssertEqual(
+            model.statusMessage,
+            "Enable Latitude and Longitude in Inspector Settings to use Set Location."
+        )
+    }
+
     func testPreviewBatchRenameReturnsDeterministicPlan() async {
         let model = makeModel()
         let files = [
