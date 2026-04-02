@@ -1,4 +1,5 @@
 import ExifEditCore
+import SharedUI
 import SwiftUI
 
 // MARK: - Sheet
@@ -22,15 +23,10 @@ struct BatchRenameSheetView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Header
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Batch Rename")
-                    .font(.title3.weight(.semibold))
-                Text(scopeSummary)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
+        WorkflowSheetContainer(
+            title: "Batch Rename",
+            subtitle: scopeSummary
+        ) {
 
             // Token rows
             VStack(spacing: 0) {
@@ -78,8 +74,6 @@ struct BatchRenameSheetView: View {
                 .disabled(tokens.isEmpty || !previewIssues.isEmpty)
             }
         }
-        .padding(20)
-        .frame(width: 580)
         .task(id: pattern) {
             await refreshPreview()
         }
