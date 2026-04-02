@@ -9,6 +9,7 @@ struct BatchRenameSheetView: View {
     let scope: BatchRenameScope
 
     private static let sectionSpacing = WorkflowSheetSectionSpacing.uniform(20)
+    private static let previewDebounceNanoseconds: UInt64 = 120_000_000
 
     @State private var tokens: [RenameToken] = [.text("")]
     @State private var showPreview = false
@@ -82,6 +83,7 @@ struct BatchRenameSheetView: View {
             }
         }
         .task(id: pattern) {
+            do { try await Task.sleep(nanoseconds: Self.previewDebounceNanoseconds) } catch { return }
             await refreshPreview()
         }
     }

@@ -1,6 +1,9 @@
 import Foundation
 
 public actor BatchRenameService {
+    private var outputDateFormatters: [DateFormat: DateFormatter] = [:]
+    private var exifDateParsers: [String: DateFormatter] = [:]
+
     public init() {}
 
     // MARK: - Plan
@@ -8,13 +11,10 @@ public actor BatchRenameService {
     public func buildPlan(
         files: [URL],
         pattern: RenamePattern,
-        metadata: [URL: FileMetadataSnapshot] = [:]
+        metadata: [URL: FileMetadataSnapshot] = [:],
+        assumeSorted: Bool = false
     ) -> [RenamePlanEntry] {
-        let sorted = files.sorted { a, b in
-            let cmp = a.lastPathComponent.localizedStandardCompare(b.lastPathComponent)
-            if cmp != .orderedSame { return cmp == .orderedAscending }
-            return a.path < b.path
-        }
+        let sorted = assumeSorted ? files : Self.sortedFiles(files)
 
         let sourceLower = Set(sorted.map { $0.lastPathComponent.lowercased() })
         let fallbackDate = Date()
@@ -57,9 +57,10 @@ public actor BatchRenameService {
     public func assessPlan(
         files: [URL],
         pattern: RenamePattern,
-        metadata: [URL: FileMetadataSnapshot] = [:]
+        metadata: [URL: FileMetadataSnapshot] = [:],
+        assumeSorted: Bool = false
     ) -> RenamePlanAssessment {
-        let entries = buildPlan(files: files, pattern: pattern, metadata: metadata)
+        let entries = buildPlan(files: files, pattern: pattern, metadata: metadata, assumeSorted: assumeSorted)
         let issues = validatePlannedEntries(entries, pattern: pattern)
         return RenamePlanAssessment(entries: entries, issues: issues)
     }
@@ -234,10 +235,7 @@ public actor BatchRenameService {
     }
 
     private func formatDate(_ date: Date, format: DateFormat) -> String {
-        let df = DateFormatter()
-        df.locale = Locale(identifier: "en_US_POSIX")
-        df.dateFormat = format.dateFormatString
-        return df.string(from: date)
+        formatter(for: format).string(from: date)
     }
 
     private func resolveDate(
@@ -265,12 +263,35 @@ public actor BatchRenameService {
     private func parseExifDate(_ string: String) -> Date? {
         let formats = ["yyyy:MM:dd HH:mm:ssXXXXX", "yyyy:MM:dd HH:mm:ss", "yyyy:MM:dd"]
         for format in formats {
-            let df = DateFormatter()
-            df.locale = Locale(identifier: "en_US_POSIX")
-            df.dateFormat = format
-            if let date = df.date(from: string) { return date }
+            if let date = parser(for: format).date(from: string) { return date }
         }
         return nil
+    }
+
+    private static func sortedFiles(_ files: [URL]) -> [URL] {
+        files.sorted { a, b in
+            let cmp = a.lastPathComponent.localizedStandardCompare(b.lastPathComponent)
+            if cmp != .orderedSame { return cmp == .orderedAscending }
+            return a.path < b.path
+        }
+    }
+
+    private func formatter(for format: DateFormat) -> DateFormatter {
+        if let cached = outputDateFormatters[format] { return cached }
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.dateFormat = format.dateFormatString
+        outputDateFormatters[format] = df
+        return df
+    }
+
+    private func parser(for format: String) -> DateFormatter {
+        if let cached = exifDateParsers[format] { return cached }
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.dateFormat = format
+        exifDateParsers[format] = df
+        return df
     }
 
     private func resolvedExtension(pattern: RenamePattern, originalURL: URL) -> String {

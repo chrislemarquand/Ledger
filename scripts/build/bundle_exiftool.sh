@@ -61,4 +61,17 @@ chmod 755 "${DEST_FILE}"
 rm -rf "${DEST_DIR}/lib"
 cp -R "${LIB_SRC}" "${DEST_DIR}/lib"
 
+# Trim known non-runtime test fixtures from bundled Perl libs to reduce app size.
+# Keep this list intentionally narrow and explicit to avoid pruning runtime modules.
+PRUNE_PATHS="
+${DEST_DIR}/lib/darwin-thread-multi-2level/IO/Compress/Brotli/tests
+"
+
+for PRUNE_PATH in ${PRUNE_PATHS}; do
+  if [ -d "${PRUNE_PATH}" ]; then
+    rm -rf "${PRUNE_PATH}"
+    echo "Pruned bundled test payload: ${PRUNE_PATH}"
+  fi
+done
+
 echo "Bundled exiftool ${SRC_VERSION} from ${SRC_REAL}"
