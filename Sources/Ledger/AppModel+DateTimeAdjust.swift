@@ -18,6 +18,7 @@ extension AppModel {
             launchTag: launchTag,
             fileURLs: files
         )
+        session.sourceTimeZoneID = TimeZone.current.identifier
         session.applyTo = [launchTag]
         pendingDateTimeAdjustSession = session
     }
@@ -87,7 +88,7 @@ extension AppModel {
     }
 
     private func computeShiftAdjusted(for fileURL: URL, session: DateTimeAdjustSession) -> Date? {
-        guard let original = originalDate(for: fileURL, tag: .dateTimeOriginal) else { return nil }
+        guard let original = originalDate(for: fileURL, tag: session.launchTag) else { return nil }
         var components = DateComponents()
         components.day = session.shiftDays
         components.hour = session.shiftHours
@@ -97,28 +98,11 @@ extension AppModel {
     }
 
     private func computeTimeZoneAdjusted(for fileURL: URL, session: DateTimeAdjustSession) -> Date? {
-        guard let original = originalDate(for: fileURL, tag: .dateTimeOriginal) else { return nil }
-
-        let sourceIdentifier: String
-        switch session.sourceBasis {
-        case .fixedUTC:
-            sourceIdentifier = "UTC"
-        case .ianaTimeZone(let id):
-            sourceIdentifier = id
-        case .useEmbeddedOffsetWhenAvailable(let fallback):
-            if let offset = embeddedOffsetString(for: fileURL),
-               let tz = timeZone(fromOffsetString: offset) {
-                sourceIdentifier = tz.identifier
-            } else {
-                sourceIdentifier = fallback
-            }
+        guard let original = originalDate(for: fileURL, tag: session.launchTag) else { return nil }
+        guard let sourceTZ = resolvedSourceTimeZone(for: session),
+              let targetTZ = resolvedTargetTimeZone(for: session) else {
+            return nil
         }
-
-        guard let targetIdentifier = TimeZoneCityData.identifier(forCity: session.closestCity) ?? Optional(session.targetTimezone),
-              !targetIdentifier.isEmpty else { return original }
-
-        guard let sourceTZ = TimeZone(identifier: sourceIdentifier),
-              let targetTZ = TimeZone(identifier: targetIdentifier) else { return original }
 
         let sourceOffset = sourceTZ.secondsFromGMT(for: original)
         let targetOffset = targetTZ.secondsFromGMT(for: original)
@@ -150,11 +134,30 @@ extension AppModel {
     // MARK: - Resolved Timezone Name
 
     func resolvedTimeZoneName(for session: DateTimeAdjustSession) -> String {
-        guard let identifier = TimeZoneCityData.identifier(forCity: session.closestCity),
+        guard let identifier = resolvedTargetTimeZoneIdentifier(for: session),
               let tz = TimeZone(identifier: identifier) else {
             return ""
         }
         return tz.localizedName(for: .standard, locale: .current) ?? identifier
+    }
+
+    private func resolvedSourceTimeZone(for session: DateTimeAdjustSession) -> TimeZone? {
+        let identifier = session.sourceTimeZoneID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !identifier.isEmpty else { return nil }
+        return TimeZone(identifier: identifier)
+    }
+
+    private func resolvedTargetTimeZoneIdentifier(for session: DateTimeAdjustSession) -> String? {
+        if let identifier = TimeZoneCityData.identifier(forCity: session.closestCity), !identifier.isEmpty {
+            return identifier
+        }
+        let fallback = session.targetTimezone.trimmingCharacters(in: .whitespacesAndNewlines)
+        return fallback.isEmpty ? nil : fallback
+    }
+
+    private func resolvedTargetTimeZone(for session: DateTimeAdjustSession) -> TimeZone? {
+        guard let identifier = resolvedTargetTimeZoneIdentifier(for: session) else { return nil }
+        return TimeZone(identifier: identifier)
     }
 
     // MARK: - Preview
@@ -163,11 +166,20 @@ extension AppModel {
         var rows: [DateTimeAdjustPreviewRow] = []
         var blockingIssues: [String] = []
         var warnings: [String] = []
-        var filesWithNoOriginal = 0
+        var skippedCount = 0
+
+        if session.mode == .timeZone {
+            if resolvedSourceTimeZone(for: session) == nil {
+                blockingIssues.append("Source time zone is invalid.")
+            }
+            if resolvedTargetTimeZone(for: session) == nil {
+                blockingIssues.append("Target time zone is required.")
+            }
+        }
 
         for fileURL in session.fileURLs {
             let fileName = fileURL.lastPathComponent
-            let original = originalDate(for: fileURL, tag: .dateTimeOriginal)
+            let original = originalDate(for: fileURL, tag: session.launchTag)
             let adjusted = computeAdjustedDate(for: fileURL, session: session)
 
             let originalDisplay: String
@@ -179,8 +191,9 @@ extension AppModel {
                 originalDisplay = Self.exifDateFormatter.string(from: original)
             } else {
                 originalDisplay = "—"
-                filesWithNoOriginal += 1
-                rowWarnings.append("No original date")
+                if session.mode != .file {
+                    rowWarnings.append("No \(session.launchTag.displayName) date")
+                }
             }
 
             if let adjusted {
@@ -196,6 +209,18 @@ extension AppModel {
                 deltaText = ""
             }
 
+            if adjusted == nil {
+                skippedCount += 1
+                switch session.mode {
+                case .file:
+                    rowWarnings.append("No file creation date")
+                case .timeZone, .shift:
+                    rowWarnings.append("No computable source date")
+                case .specific:
+                    break
+                }
+            }
+
             rows.append(DateTimeAdjustPreviewRow(
                 id: fileURL,
                 fileName: fileName,
@@ -206,10 +231,24 @@ extension AppModel {
             ))
         }
 
-        if filesWithNoOriginal == session.fileURLs.count {
-            blockingIssues.append("No files have a DateTimeOriginal value to adjust.")
-        } else if filesWithNoOriginal > 0 {
-            warnings.append("\(filesWithNoOriginal) file(s) have no DateTimeOriginal and will be skipped.")
+        if skippedCount == session.fileURLs.count {
+            switch session.mode {
+            case .file:
+                blockingIssues.append("No files have a file creation date to use.")
+            case .timeZone, .shift:
+                blockingIssues.append("No files have a \(session.launchTag.displayName) date to adjust.")
+            case .specific:
+                break
+            }
+        } else if skippedCount > 0 {
+            switch session.mode {
+            case .file:
+                warnings.append("\(skippedCount) file(s) have no file creation date and will be skipped.")
+            case .timeZone, .shift:
+                warnings.append("\(skippedCount) file(s) have no \(session.launchTag.displayName) date and will be skipped.")
+            case .specific:
+                break
+            }
         }
 
         if session.applyTo.isEmpty {
@@ -246,12 +285,16 @@ extension AppModel {
         for fileURL in session.fileURLs {
             guard let adjusted = computeAdjustedDate(for: fileURL, session: session) else { continue }
             let formatted = Self.exifDateFormatter.string(from: adjusted)
+            var stagedForFile = false
 
             for targetTag in session.applyTo {
                 guard let tag = editableTag(forID: targetTag.editableTagID) else { continue }
                 stageEdit(formatted, for: tag, fileURLs: [fileURL], source: .manual)
+                stagedForFile = true
             }
-            stagedCount += 1
+            if stagedForFile {
+                stagedCount += 1
+            }
         }
 
         guard stagedCount > 0 else {
@@ -269,4 +312,3 @@ extension AppModel {
         pendingDateTimeAdjustSession = nil
     }
 }
-

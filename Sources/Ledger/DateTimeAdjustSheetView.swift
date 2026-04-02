@@ -7,8 +7,13 @@ struct DateTimeAdjustSheetView: View {
 
     @State private var showPreview = false
     @State private var previewRows: [DateTimeAdjustPreviewRow] = []
-    @State private var previewIssues: [String] = []
+    @State private var previewBlockingIssues: [String] = []
+    @State private var previewWarnings: [String] = []
     @State private var isLoadingPreview = false
+
+    private static let modeOrder: [DateTimeAdjustMode] = [.shift, .timeZone, .specific, .file]
+    private static let knownTimeZones: [String] = TimeZone.knownTimeZoneIdentifiers
+        .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
 
     init(model: AppModel, initialSession: DateTimeAdjustSession) {
         self.model = model
@@ -19,7 +24,7 @@ struct DateTimeAdjustSheetView: View {
 
     private var representativeOriginalDate: Date? {
         guard let first = session.fileURLs.first else { return nil }
-        return model.originalDate(for: first, tag: .dateTimeOriginal)
+        return model.originalDate(for: first, tag: session.launchTag)
     }
 
     private var computedAdjustedDate: Date? {
@@ -28,7 +33,7 @@ struct DateTimeAdjustSheetView: View {
     }
 
     private var hasBlockingIssues: Bool {
-        !previewIssues.isEmpty || session.applyTo.isEmpty
+        !previewBlockingIssues.isEmpty || session.applyTo.isEmpty
     }
 
     // MARK: - Preview Key
@@ -36,6 +41,7 @@ struct DateTimeAdjustSheetView: View {
     private var previewKey: String {
         let parts: [String] = [
             session.mode.rawValue,
+            session.sourceTimeZoneID,
             session.closestCity,
             session.targetTimezone,
             "\(session.shiftDays)",
@@ -57,7 +63,7 @@ struct DateTimeAdjustSheetView: View {
         ) {
             // Mode segmented control
             Picker("Mode", selection: $session.mode) {
-                ForEach(DateTimeAdjustMode.allCases) { mode in
+                ForEach(Self.modeOrder) { mode in
                     Text(mode.displayName).tag(mode)
                 }
             }
@@ -83,6 +89,12 @@ struct DateTimeAdjustSheetView: View {
                         datePickerElements: [.yearMonthDay, .hourMinuteSecond],
                         accessibilityLabel: "Adjusted date and time"
                     )
+                } else if session.mode == .shift {
+                    InspectorDatePickerField(
+                        selection: shiftAdjustedBinding,
+                        datePickerElements: [.yearMonthDay, .hourMinuteSecond],
+                        accessibilityLabel: "Adjusted date and time"
+                    )
                 } else {
                     InspectorDatePickerField(
                         selection: .constant(computedAdjustedDate ?? Date()),
@@ -105,9 +117,6 @@ struct DateTimeAdjustSheetView: View {
                     }
                 }
             }
-
-            // Inline preview
-            inlinePreview
 
             // Footer
             HStack {
@@ -146,6 +155,13 @@ struct DateTimeAdjustSheetView: View {
     private var modeSpecificControls: some View {
         switch session.mode {
         case .timeZone:
+            labeledRow("Source Time Zone:") {
+                WorkflowCityComboField(
+                    value: $session.sourceTimeZoneID,
+                    items: Self.knownTimeZones,
+                    placeholder: "Europe/London"
+                )
+            }
             labeledRow("Closest City:") {
                 WorkflowCityComboField(
                     value: $session.closestCity,
@@ -172,6 +188,36 @@ struct DateTimeAdjustSheetView: View {
         }
     }
 
+    private var shiftAdjustedBinding: Binding<Date> {
+        Binding(
+            get: { computedAdjustedDate ?? Date() },
+            set: { newAdjustedDate in
+                applyShiftFromEditedAdjustedDate(newAdjustedDate)
+            }
+        )
+    }
+
+    private func applyShiftFromEditedAdjustedDate(_ adjustedDate: Date) {
+        guard let first = session.fileURLs.first,
+              let original = model.originalDate(for: first, tag: session.launchTag) else {
+            return
+        }
+        setShiftComponents(fromSeconds: Int(adjustedDate.timeIntervalSince(original).rounded()))
+    }
+
+    private func setShiftComponents(fromSeconds totalSeconds: Int) {
+        let sign = totalSeconds < 0 ? -1 : 1
+        let absoluteSeconds = abs(totalSeconds)
+        let days = absoluteSeconds / 86_400
+        let hours = (absoluteSeconds % 86_400) / 3_600
+        let minutes = (absoluteSeconds % 3_600) / 60
+        let seconds = absoluteSeconds % 60
+        session.shiftDays = days * sign
+        session.shiftHours = hours * sign
+        session.shiftMinutes = minutes * sign
+        session.shiftSeconds = seconds * sign
+    }
+
     // MARK: - Offset Field
 
     private func offsetField(value: Binding<Int>, label: String) -> some View {
@@ -188,38 +234,6 @@ struct DateTimeAdjustSheetView: View {
         }
     }
 
-    // MARK: - Inline Preview
-
-    private var inlinePreview: some View {
-        let originalText: String
-        let adjustedText: String
-
-        if let issue = previewIssues.first {
-            originalText = issue
-            adjustedText = ""
-        } else if let first = previewRows.first {
-            originalText = "Original: \(first.originalDisplay)"
-            adjustedText = "Adjusted: \(first.adjustedDisplay) (\(first.deltaText))"
-        } else {
-            originalText = "—"
-            adjustedText = "—"
-        }
-
-        return VStack(alignment: .leading, spacing: 4) {
-            Text(originalText)
-                .font(.callout)
-                .foregroundStyle(previewIssues.isEmpty ? Color.secondary : Color.red)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Text(adjustedText)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
     // MARK: - Preview Popover
 
     @ViewBuilder
@@ -229,11 +243,16 @@ struct DateTimeAdjustSheetView: View {
                 ProgressView()
                     .frame(maxWidth: .infinity, minHeight: 80)
                     .padding()
-            } else if !previewIssues.isEmpty {
+            } else if !previewBlockingIssues.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(Array(previewIssues.prefix(4).enumerated()), id: \.offset) { _, issue in
+                    ForEach(Array(previewBlockingIssues.prefix(4).enumerated()), id: \.offset) { _, issue in
                         Text(issue)
                             .foregroundStyle(.red)
+                            .font(.caption)
+                    }
+                    ForEach(Array(previewWarnings.prefix(4).enumerated()), id: \.offset) { _, warning in
+                        Text(warning)
+                            .foregroundStyle(.secondary)
                             .font(.caption)
                     }
                 }
@@ -245,30 +264,42 @@ struct DateTimeAdjustSheetView: View {
                     .padding()
             } else {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(previewRows) { row in
-                            HStack(spacing: 6) {
-                                Text(row.fileName)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 160, alignment: .leading)
-                                Text(row.originalDisplay)
-                                    .foregroundStyle(.secondary)
-                                Image(systemName: "arrow.right")
-                                    .font(.caption)
-                                    .foregroundStyle(.tertiary)
-                                Text(row.adjustedDisplay)
-                                Text(row.deltaText)
-                                    .foregroundStyle(.tertiary)
-                                if !row.warnings.isEmpty {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .foregroundStyle(.yellow)
-                                        .help(row.warnings.joined(separator: "\n"))
+                    VStack(alignment: .leading, spacing: 8) {
+                        if !previewWarnings.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                ForEach(Array(previewWarnings.prefix(4).enumerated()), id: \.offset) { _, warning in
+                                    Text(warning)
+                                        .foregroundStyle(.secondary)
+                                        .font(.caption)
                                 }
                             }
-                            .font(.system(.caption, design: .monospaced))
-                            .padding(.vertical, 2)
+                        }
+
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(previewRows) { row in
+                                HStack(spacing: 6) {
+                                    Text(row.fileName)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                        .foregroundStyle(.secondary)
+                                        .frame(width: 160, alignment: .leading)
+                                    Text(row.originalDisplay)
+                                        .foregroundStyle(.secondary)
+                                    Image(systemName: "arrow.right")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                    Text(row.adjustedDisplay)
+                                    Text(row.deltaText)
+                                        .foregroundStyle(.tertiary)
+                                    if !row.warnings.isEmpty {
+                                        Image(systemName: "exclamationmark.triangle.fill")
+                                            .foregroundStyle(.yellow)
+                                            .help(row.warnings.joined(separator: "\n"))
+                                    }
+                                }
+                                .font(.system(.caption, design: .monospaced))
+                                .padding(.vertical, 2)
+                            }
                         }
                     }
                     .padding()
@@ -305,7 +336,8 @@ struct DateTimeAdjustSheetView: View {
         isLoadingPreview = true
         let assessment = model.previewDateTimeAdjust(session: session)
         previewRows = assessment.rows
-        previewIssues = assessment.blockingIssues + assessment.warnings
+        previewBlockingIssues = assessment.blockingIssues
+        previewWarnings = assessment.warnings
         isLoadingPreview = false
     }
 }
