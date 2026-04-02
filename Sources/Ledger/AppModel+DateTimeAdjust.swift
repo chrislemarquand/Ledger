@@ -167,6 +167,7 @@ extension AppModel {
         var blockingIssues: [String] = []
         var warnings: [String] = []
         var skippedCount = 0
+        var effectiveChangeFileCount = 0
 
         if session.mode == .timeZone {
             if resolvedSourceTimeZone(for: session) == nil {
@@ -205,6 +206,13 @@ extension AppModel {
             if let original, let adjusted {
                 let interval = adjusted.timeIntervalSince(original)
                 deltaText = formattedDelta(interval)
+                if abs(interval) >= 1 {
+                    effectiveChangeFileCount += 1
+                }
+            } else if original == nil, adjusted != nil {
+                // Filling a missing date is still an effective change.
+                deltaText = ""
+                effectiveChangeFileCount += 1
             } else {
                 deltaText = ""
             }
@@ -255,7 +263,12 @@ extension AppModel {
             blockingIssues.append("No target tags selected in \"Apply to\".")
         }
 
-        return DateTimeAdjustAssessment(rows: rows, blockingIssues: blockingIssues, warnings: warnings)
+        return DateTimeAdjustAssessment(
+            rows: rows,
+            blockingIssues: blockingIssues,
+            warnings: warnings,
+            effectiveChangeFileCount: effectiveChangeFileCount
+        )
     }
 
     private func formattedDelta(_ interval: TimeInterval) -> String {

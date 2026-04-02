@@ -109,6 +109,12 @@ struct DateTimeAdjustAssessment {
     let rows: [DateTimeAdjustPreviewRow]
     let blockingIssues: [String]
     let warnings: [String]
+    let effectiveChangeFileCount: Int
 
-    static let empty = DateTimeAdjustAssessment(rows: [], blockingIssues: [], warnings: [])
+    static let empty = DateTimeAdjustAssessment(
+        rows: [],
+        blockingIssues: [],
+        warnings: [],
+        effectiveChangeFileCount: 0
+    )
 }
