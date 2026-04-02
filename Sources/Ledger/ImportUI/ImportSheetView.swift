@@ -853,41 +853,45 @@ struct ImportSheetView: View {
             sectionSpacing: Self.sectionSpacing
         ) {
             VStack(alignment: .leading, spacing: 0) {
+                // Source section
+                HStack {
+                    TextField("", text: .constant(session.options.sourceURLPath ?? ""))
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(true)
+                    Button("Choose…") {
+                        chooseSource()
+                    }
+                    .disabled(isPostImportReviewMode || session.isBusy || importProgress != nil)
+                }
+                .padding(.bottom, Self.sectionSpacing.topToMain)
+
+                // Options section
+                HStack(alignment: .top, spacing: 28) {
+                    WorkflowOptionGroup("Apply to:") {
+                        Picker("", selection: $session.options.scope) {
+                            Text("Folder").tag(ImportScope.folder)
+                            Text(selectionLabel).tag(ImportScope.selection)
+                        }
+                        .pickerStyle(.radioGroup)
+                        .labelsHidden()
+                        .disabled(isPostImportReviewMode)
+                    }
+
+                    WorkflowOptionGroup("If no match:") {
+                        Picker("", selection: $session.options.emptyValuePolicy) {
+                            Text("Clear").tag(ImportEmptyValuePolicy.clear)
+                            Text("Skip").tag(ImportEmptyValuePolicy.skip)
+                        }
+                        .pickerStyle(.radioGroup)
+                        .labelsHidden()
+                        .disabled(isPostImportReviewMode)
+                    }
+                }
+                .padding(.bottom, Self.sectionSpacing.topToMain)
+
+                // Status section
                 VStack(alignment: .leading, spacing: 12) {
                     // File picker row
-                    HStack {
-                        TextField("", text: .constant(session.options.sourceURLPath ?? ""))
-                            .textFieldStyle(.roundedBorder)
-                            .disabled(true)
-                        Button("Choose…") {
-                            chooseSource()
-                        }
-                        .disabled(isPostImportReviewMode || session.isBusy || importProgress != nil)
-                    }
-
-                    // Options row: Apply to | If no match
-                    HStack(alignment: .top, spacing: 28) {
-                        WorkflowOptionGroup("Apply to:") {
-                            Picker("", selection: $session.options.scope) {
-                                Text("Folder").tag(ImportScope.folder)
-                                Text(selectionLabel).tag(ImportScope.selection)
-                            }
-                            .pickerStyle(.radioGroup)
-                            .labelsHidden()
-                            .disabled(isPostImportReviewMode)
-                        }
-
-                        WorkflowOptionGroup("If no match:") {
-                            Picker("", selection: $session.options.emptyValuePolicy) {
-                                Text("Clear").tag(ImportEmptyValuePolicy.clear)
-                                Text("Skip").tag(ImportEmptyValuePolicy.skip)
-                            }
-                            .pickerStyle(.radioGroup)
-                            .labelsHidden()
-                            .disabled(isPostImportReviewMode)
-                        }
-                    }
-
                     if let banner = activeBanner {
                         WorkflowInlineMessageBanner(messages: banner)
                     }
