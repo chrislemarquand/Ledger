@@ -1,4 +1,5 @@
 import Foundation
+import CoreLocation
 import SharedUI
 
 @MainActor
@@ -323,5 +324,293 @@ extension AppModel {
             autoClearAfterSuccess: true
         )
         pendingDateTimeAdjustSession = nil
+    }
+}
+
+@MainActor
+extension AppModel {
+
+    // MARK: - Location Sheet Lifecycle
+
+    func locationCoordinateFieldsEnabled() -> Bool {
+        isInspectorFieldEnabled("exif-gps-lat") && isInspectorFieldEnabled("exif-gps-lon")
+    }
+
+    func enabledLocationAdvancedFields() -> [LocationAdvancedField] {
+        LocationAdvancedField.allCases.filter { isInspectorFieldEnabled($0.tagID) }
+    }
+
+    func canOpenLocationAdjustSheet() -> Bool {
+        !selectedFileURLs.isEmpty && locationCoordinateFieldsEnabled()
+    }
+
+    func beginLocationAdjust() {
+        guard locationCoordinateFieldsEnabled() else {
+            statusMessage = "Enable Latitude and Longitude in Inspector Settings to use Set Location."
+            return
+        }
+
+        let files = Array(selectedFileURLs).sorted {
+            let cmp = $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent)
+            if cmp != .orderedSame { return cmp == .orderedAscending }
+            return $0.path < $1.path
+        }
+        guard !files.isEmpty else {
+            statusMessage = "No selected files for location adjustment."
+            return
+        }
+
+        var session = LocationAdjustSession(fileURLs: files)
+        if let coordinate = representativeLocationCoordinate(for: files) {
+            session.latitude = coordinate.latitude
+            session.longitude = coordinate.longitude
+        }
+        pendingLocationAdjustSession = session
+    }
+
+    func dismissLocationAdjustSheet() {
+        pendingLocationAdjustSession = nil
+    }
+
+    // MARK: - Location Preview + Stage
+
+    func previewLocationAdjust(session: LocationAdjustSession) -> LocationAdjustAssessment {
+        guard locationCoordinateFieldsEnabled() else {
+            return LocationAdjustAssessment(
+                rows: [],
+                blockingIssues: ["Enable Latitude and Longitude in Inspector Settings to use Set Location."],
+                warnings: [],
+                effectiveChangeFileCount: 0
+            )
+        }
+
+        guard let target = coordinate(from: session) else {
+            return LocationAdjustAssessment(
+                rows: [],
+                blockingIssues: ["Set a location before previewing or applying."],
+                warnings: [],
+                effectiveChangeFileCount: 0
+            )
+        }
+
+        var rows: [LocationAdjustPreviewRow] = []
+        var warnings: [String] = []
+        var effectiveChangeFileCount = 0
+
+        let disabledSelections = session.selectedAdvancedFields
+            .filter { !isInspectorFieldEnabled($0.tagID) }
+            .sorted { $0.label < $1.label }
+        if !disabledSelections.isEmpty {
+            let labels = disabledSelections.map(\.label).joined(separator: ", ")
+            warnings.append("Ignoring disabled fields: \(labels).")
+        }
+
+        let emptySelections = session.selectedAdvancedFields
+            .filter { isInspectorFieldEnabled($0.tagID) }
+            .filter { session.resolvedValue(for: $0).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .sorted { $0.label < $1.label }
+        if !emptySelections.isEmpty {
+            let labels = emptySelections.map(\.label).joined(separator: ", ")
+            warnings.append("No resolved value for: \(labels).")
+        }
+
+        let advancedTargets = resolvedAdvancedTargets(for: session, respectingSettings: true)
+
+        for fileURL in session.fileURLs {
+            let existing = locationCoordinate(for: fileURL)
+            var deltaText: String
+            var coordinateChanged = false
+
+            if let existing {
+                let distance = CLLocation(latitude: existing.latitude, longitude: existing.longitude)
+                    .distance(from: CLLocation(latitude: target.latitude, longitude: target.longitude))
+                if distance >= 1 {
+                    coordinateChanged = true
+                    deltaText = formattedDistance(distance)
+                } else {
+                    deltaText = "no change"
+                }
+            } else {
+                coordinateChanged = true
+                deltaText = ""
+            }
+
+            var advancedChanged = false
+            for target in advancedTargets {
+                let existingValue = existingLocationFieldValue(for: fileURL, field: target.field)
+                if existingValue != target.value {
+                    advancedChanged = true
+                    break
+                }
+            }
+
+            if !coordinateChanged, advancedChanged {
+                deltaText = "metadata"
+            }
+
+            if coordinateChanged || advancedChanged {
+                effectiveChangeFileCount += 1
+            }
+
+            rows.append(
+                LocationAdjustPreviewRow(
+                    id: fileURL,
+                    fileName: fileURL.lastPathComponent,
+                    originalDisplay: formattedCoordinate(existing),
+                    adjustedDisplay: formattedCoordinate(target),
+                    deltaText: deltaText
+                )
+            )
+        }
+
+        return LocationAdjustAssessment(
+            rows: rows,
+            blockingIssues: [],
+            warnings: warnings,
+            effectiveChangeFileCount: effectiveChangeFileCount
+        )
+    }
+
+    func stageLocationAdjustments(session: LocationAdjustSession) {
+        guard locationCoordinateFieldsEnabled() else {
+            statusMessage = "Enable Latitude and Longitude in Inspector Settings to use Set Location."
+            return
+        }
+
+        guard let target = coordinate(from: session) else {
+            statusMessage = "Set a location before applying."
+            return
+        }
+
+        let assessment = previewLocationAdjust(session: session)
+        guard assessment.blockingIssues.isEmpty else {
+            statusMessage = assessment.blockingIssues.first ?? "Location adjustment is blocked."
+            return
+        }
+        guard assessment.effectiveChangeFileCount > 0 else {
+            statusMessage = "No location changes to stage."
+            return
+        }
+
+        guard let latitudeTag = editableTag(forID: "exif-gps-lat"),
+              let longitudeTag = editableTag(forID: "exif-gps-lon")
+        else {
+            statusMessage = "Location tags are unavailable."
+            return
+        }
+
+        let previousState = currentPendingEditState()
+        let latitudeValue = Self.compactDecimalString(target.latitude)
+        let longitudeValue = Self.compactDecimalString(target.longitude)
+        let advancedTargets = resolvedAdvancedTargets(for: session, respectingSettings: true)
+
+        for fileURL in session.fileURLs {
+            stageEdit(latitudeValue, for: latitudeTag, fileURLs: [fileURL], source: .manual)
+            stageEdit(longitudeValue, for: longitudeTag, fileURLs: [fileURL], source: .manual)
+            for target in advancedTargets {
+                let existingValue = existingLocationFieldValue(for: fileURL, field: target.field)
+                guard existingValue != target.value else { continue }
+                stageEdit(target.value, for: target.tag, fileURLs: [fileURL], source: .manual)
+            }
+        }
+
+        registerMetadataUndoIfNeeded(previous: previousState)
+        recalculateInspectorState(forceNotify: true)
+        let noun = assessment.effectiveChangeFileCount == 1
+            ? "1 file"
+            : "\(assessment.effectiveChangeFileCount) files"
+        setStatusMessage(
+            "Prepared location changes for \(noun). Ready to apply.",
+            autoClearAfterSuccess: true
+        )
+        pendingLocationAdjustSession = nil
+    }
+
+    // MARK: - Location Helpers
+
+    func representativeLocationCoordinate(for fileURLs: [URL]) -> CLLocationCoordinate2D? {
+        for fileURL in fileURLs {
+            if let coordinate = locationCoordinate(for: fileURL) {
+                return coordinate
+            }
+        }
+        return nil
+    }
+
+    func locationCoordinate(for fileURL: URL) -> CLLocationCoordinate2D? {
+        guard let latitudeTag = editableTag(forID: "exif-gps-lat"),
+              let longitudeTag = editableTag(forID: "exif-gps-lon"),
+              let snapshot = availableSnapshot(for: fileURL)
+        else {
+            return nil
+        }
+
+        let rawLatitude = normalizedDisplayValue(snapshot, for: latitudeTag)
+        let rawLongitude = normalizedDisplayValue(snapshot, for: longitudeTag)
+        guard let latitude = parseCoordinateNumber(rawLatitude),
+              let longitude = parseCoordinateNumber(rawLongitude),
+              (-90 ... 90).contains(latitude),
+              (-180 ... 180).contains(longitude)
+        else {
+            return nil
+        }
+
+        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+
+    func formattedCoordinate(_ coordinate: CLLocationCoordinate2D?) -> String {
+        guard let coordinate else { return "—" }
+        let latitude = Self.compactDecimalString(coordinate.latitude)
+        let longitude = Self.compactDecimalString(coordinate.longitude)
+        return "\(latitude), \(longitude)"
+    }
+
+    private func coordinate(from session: LocationAdjustSession) -> CLLocationCoordinate2D? {
+        guard let latitude = session.latitude,
+              let longitude = session.longitude,
+              (-90 ... 90).contains(latitude),
+              (-180 ... 180).contains(longitude)
+        else {
+            return nil
+        }
+        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+
+    private func formattedDistance(_ meters: Double) -> String {
+        if meters >= 1_000 {
+            return String(format: "%.1f km", meters / 1_000)
+        }
+        return String(format: "%.0f m", meters)
+    }
+
+    private struct LocationAdvancedTarget {
+        let field: LocationAdvancedField
+        let tag: EditableTag
+        let value: String
+    }
+
+    private func resolvedAdvancedTargets(
+        for session: LocationAdjustSession,
+        respectingSettings: Bool
+    ) -> [LocationAdvancedTarget] {
+        var targets: [LocationAdvancedTarget] = []
+        for field in LocationAdvancedField.allCases where session.selectedAdvancedFields.contains(field) {
+            if respectingSettings, !isInspectorFieldEnabled(field.tagID) {
+                continue
+            }
+            guard let tag = editableTag(forID: field.tagID) else { continue }
+            let value = session.resolvedValue(for: field).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty else { continue }
+            targets.append(LocationAdvancedTarget(field: field, tag: tag, value: value))
+        }
+        return targets
+    }
+
+    private func existingLocationFieldValue(for fileURL: URL, field: LocationAdvancedField) -> String {
+        guard let tag = editableTag(forID: field.tagID),
+              let snapshot = availableSnapshot(for: fileURL) else {
+            return ""
+        }
+        return normalizedDisplayValue(snapshot, for: tag).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

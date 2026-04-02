@@ -3,6 +3,79 @@ import ExifEditCore
 import SharedUI
 
 @MainActor
+enum BrowserContextMenuBuilder {
+    struct Actions {
+        let open: Selector
+        let revealInFinder: Selector
+        let apply: Selector
+        let refresh: Selector
+        let clear: Selector
+        let restore: Selector
+    }
+
+    static func makeMenu(
+        target: AnyObject,
+        model: AppModel,
+        targetURLs: [URL],
+        actions: Actions
+    ) -> NSMenu {
+        let openState = model.fileActionState(for: .openInDefaultApp, targetURLs: targetURLs)
+        let refreshState = model.fileActionState(for: .refreshMetadata, targetURLs: targetURLs)
+        let applyState = model.fileActionState(for: .applyMetadataChanges, targetURLs: targetURLs)
+        let clearState = model.fileActionState(for: .clearMetadataChanges, targetURLs: targetURLs)
+        let restoreState = model.fileActionState(for: .restoreFromLastBackup, targetURLs: targetURLs)
+        let applyTitle = model.applyMetadataSelectionTitle(for: targetURLs)
+
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        menu.addItem(ContextMenuSupport.makeMenuItem(
+            title: openState.title,
+            action: actions.open,
+            target: target,
+            symbolName: openState.symbolName,
+            isEnabled: openState.isEnabled
+        ))
+        menu.addItem(ContextMenuSupport.makeMenuItem(
+            title: "Reveal in Finder",
+            action: actions.revealInFinder,
+            target: target,
+            symbolName: "folder",
+            isEnabled: !targetURLs.isEmpty
+        ))
+        menu.addItem(.separator())
+        menu.addItem(ContextMenuSupport.makeMenuItem(
+            title: applyTitle,
+            action: actions.apply,
+            target: target,
+            symbolName: applyState.symbolName,
+            isEnabled: applyState.isEnabled
+        ))
+        menu.addItem(ContextMenuSupport.makeMenuItem(
+            title: refreshState.title,
+            action: actions.refresh,
+            target: target,
+            symbolName: refreshState.symbolName,
+            isEnabled: refreshState.isEnabled
+        ))
+        menu.addItem(ContextMenuSupport.makeMenuItem(
+            title: clearState.title,
+            action: actions.clear,
+            target: target,
+            symbolName: clearState.symbolName,
+            isEnabled: clearState.isEnabled
+        ))
+        menu.addItem(ContextMenuSupport.makeMenuItem(
+            title: restoreState.title,
+            action: actions.restore,
+            target: target,
+            symbolName: restoreState.symbolName,
+            isEnabled: restoreState.isEnabled
+        ))
+        return menu
+    }
+}
+
+@MainActor
 final class BrowserListViewController: NSViewController, SharedBrowserListHosting {
     private var model: AppModel
     private var items: [AppModel.BrowserItem]
@@ -456,101 +529,19 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
             orderedItems: orderedURLs
         )
         contextMenuTargetURLs = targetURLs
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        let openState = model.fileActionState(for: .openInDefaultApp, targetURLs: targetURLs)
-        let photosState = model.fileActionState(for: .sendToPhotos, targetURLs: targetURLs)
-        let lightroomState = model.fileActionState(for: .sendToLightroom, targetURLs: targetURLs)
-        let lightroomClassicState = model.fileActionState(for: .sendToLightroomClassic, targetURLs: targetURLs)
-        let refreshState = model.fileActionState(for: .refreshMetadata, targetURLs: targetURLs)
-        let applyState = model.fileActionState(for: .applyMetadataChanges, targetURLs: targetURLs)
-        let clearState = model.fileActionState(for: .clearMetadataChanges, targetURLs: targetURLs)
-        let restoreState = model.fileActionState(for: .restoreFromLastBackup, targetURLs: targetURLs)
-        let applyTitle = model.applyMetadataSelectionTitle(for: targetURLs)
-
-        let openItem = ContextMenuSupport.makeMenuItem(
-            title: openState.title,
-            action: #selector(openFromContextMenu(_:)),
+        return BrowserContextMenuBuilder.makeMenu(
             target: self,
-            symbolName: openState.symbolName,
-            isEnabled: openState.isEnabled
+            model: model,
+            targetURLs: targetURLs,
+            actions: .init(
+                open: #selector(openFromContextMenu(_:)),
+                revealInFinder: #selector(revealInFinderFromContextMenu(_:)),
+                apply: #selector(applyFromContextMenu(_:)),
+                refresh: #selector(refreshFromContextMenu(_:)),
+                clear: #selector(clearFromContextMenu(_:)),
+                restore: #selector(restoreFromContextMenu(_:))
+            )
         )
-        menu.addItem(openItem)
-
-        let photosItem = ContextMenuSupport.makeMenuItem(
-            title: photosState.title,
-            action: #selector(sendToPhotosFromContextMenu(_:)),
-            target: self,
-            symbolName: photosState.symbolName,
-            isEnabled: photosState.isEnabled
-        )
-        menu.addItem(photosItem)
-
-        let lightroomItem = ContextMenuSupport.makeMenuItem(
-            title: lightroomState.title,
-            action: #selector(sendToLightroomFromContextMenu(_:)),
-            target: self,
-            symbolName: lightroomState.symbolName,
-            isEnabled: lightroomState.isEnabled
-        )
-        menu.addItem(lightroomItem)
-
-        let lightroomClassicItem = ContextMenuSupport.makeMenuItem(
-            title: lightroomClassicState.title,
-            action: #selector(sendToLightroomClassicFromContextMenu(_:)),
-            target: self,
-            symbolName: lightroomClassicState.symbolName,
-            isEnabled: lightroomClassicState.isEnabled
-        )
-        menu.addItem(lightroomClassicItem)
-
-        let revealItem = ContextMenuSupport.makeMenuItem(
-            title: "Reveal in Finder",
-            action: #selector(revealInFinderFromContextMenu(_:)),
-            target: self,
-            symbolName: "folder",
-            isEnabled: !targetURLs.isEmpty
-        )
-        menu.addItem(revealItem)
-
-        menu.addItem(.separator())
-
-        let applyItem = ContextMenuSupport.makeMenuItem(
-            title: applyTitle,
-            action: #selector(applyFromContextMenu(_:)),
-            target: self,
-            symbolName: applyState.symbolName,
-            isEnabled: applyState.isEnabled
-        )
-        menu.addItem(applyItem)
-
-        let refreshItem = ContextMenuSupport.makeMenuItem(
-            title: refreshState.title,
-            action: #selector(refreshFromContextMenu(_:)),
-            target: self,
-            symbolName: refreshState.symbolName,
-            isEnabled: refreshState.isEnabled
-        )
-        menu.addItem(refreshItem)
-
-        let clearItem = ContextMenuSupport.makeMenuItem(
-            title: clearState.title,
-            action: #selector(clearFromContextMenu(_:)),
-            target: self,
-            symbolName: clearState.symbolName,
-            isEnabled: clearState.isEnabled
-        )
-        menu.addItem(clearItem)
-
-        let restoreItem = ContextMenuSupport.makeMenuItem(
-            title: restoreState.title,
-            action: #selector(restoreFromContextMenu(_:)),
-            target: self,
-            symbolName: restoreState.symbolName,
-            isEnabled: restoreState.isEnabled
-        )
-        menu.addItem(restoreItem)
-        return menu
     }
 
     @objc
@@ -563,24 +554,6 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
     private func revealInFinderFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty else { return }
         model.revealInFinder(contextMenuTargetURLs)
-    }
-
-    @objc
-    private func sendToPhotosFromContextMenu(_: Any?) {
-        guard !contextMenuTargetURLs.isEmpty else { return }
-        model.performFileAction(.sendToPhotos, targetURLs: contextMenuTargetURLs)
-    }
-
-    @objc
-    private func sendToLightroomFromContextMenu(_: Any?) {
-        guard !contextMenuTargetURLs.isEmpty else { return }
-        model.performFileAction(.sendToLightroom, targetURLs: contextMenuTargetURLs)
-    }
-
-    @objc
-    private func sendToLightroomClassicFromContextMenu(_: Any?) {
-        guard !contextMenuTargetURLs.isEmpty else { return }
-        model.performFileAction(.sendToLightroomClassic, targetURLs: contextMenuTargetURLs)
     }
 
     @objc

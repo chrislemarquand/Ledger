@@ -28,10 +28,7 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
     private let pinchZoomAccumulator = PinchZoomAccumulator()
     private var browserFocusObserver: NSObjectProtocol?
     private var viewModeObserver: NSObjectProtocol?
-    private var windowDidBecomeKeyObserver: NSObjectProtocol?
-    private var windowDidResignKeyObserver: NSObjectProtocol?
-    private var appDidBecomeActiveObserver: NSObjectProtocol?
-    private var appDidResignActiveObserver: NSObjectProtocol?
+    private var selectionAppearanceObserver: GallerySelectionAppearanceObserver?
     private var lastRenderedViewMode: AppModel.BrowserViewMode?
 
     init(model: AppModel, items: [AppModel.BrowserItem]) {
@@ -75,7 +72,12 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
 
     override func viewDidAppear() {
         super.viewDidAppear()
-        installSelectionAppearanceObserversIfNeeded()
+        if selectionAppearanceObserver == nil {
+            selectionAppearanceObserver = GallerySelectionAppearanceObserver(hostView: view) { [weak self] in
+                self?.refreshSelectionAppearanceForVisibleCells()
+            }
+        }
+        selectionAppearanceObserver?.start()
         refreshSelectionAppearanceForVisibleCells()
     }
 
@@ -92,7 +94,7 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
             NotificationCenter.default.removeObserver(viewModeObserver)
             self.viewModeObserver = nil
         }
-        removeSelectionAppearanceObservers()
+        selectionAppearanceObserver?.stop()
     }
 
     func update(model: AppModel, items: [AppModel.BrowserItem]) {
@@ -113,73 +115,6 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
             return
         }
         renderState()
-    }
-
-    private func installSelectionAppearanceObserversIfNeeded() {
-        guard windowDidBecomeKeyObserver == nil,
-              windowDidResignKeyObserver == nil,
-              appDidBecomeActiveObserver == nil,
-              appDidResignActiveObserver == nil else {
-            return
-        }
-        guard let window = view.window else { return }
-        let center = NotificationCenter.default
-        windowDidBecomeKeyObserver = center.addObserver(
-            forName: NSWindow.didBecomeKeyNotification,
-            object: window,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.refreshSelectionAppearanceForVisibleCells()
-            }
-        }
-        windowDidResignKeyObserver = center.addObserver(
-            forName: NSWindow.didResignKeyNotification,
-            object: window,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.refreshSelectionAppearanceForVisibleCells()
-            }
-        }
-        appDidBecomeActiveObserver = center.addObserver(
-            forName: NSApplication.didBecomeActiveNotification,
-            object: NSApp,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.refreshSelectionAppearanceForVisibleCells()
-            }
-        }
-        appDidResignActiveObserver = center.addObserver(
-            forName: NSApplication.didResignActiveNotification,
-            object: NSApp,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.refreshSelectionAppearanceForVisibleCells()
-            }
-        }
-    }
-
-    private func removeSelectionAppearanceObservers() {
-        let center = NotificationCenter.default
-        if let windowDidBecomeKeyObserver {
-            center.removeObserver(windowDidBecomeKeyObserver)
-            self.windowDidBecomeKeyObserver = nil
-        }
-        if let windowDidResignKeyObserver {
-            center.removeObserver(windowDidResignKeyObserver)
-            self.windowDidResignKeyObserver = nil
-        }
-        if let appDidBecomeActiveObserver {
-            center.removeObserver(appDidBecomeActiveObserver)
-            self.appDidBecomeActiveObserver = nil
-        }
-        if let appDidResignActiveObserver {
-            center.removeObserver(appDidResignActiveObserver)
-            self.appDidResignActiveObserver = nil
-        }
     }
 
     private func refreshSelectionAppearanceForVisibleCells() {
@@ -516,84 +451,19 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
             selected: selectedURLs,
             orderedItems: orderedURLs
         )
-
-        let openState = model.fileActionState(for: .openInDefaultApp, targetURLs: contextMenuTargetURLs)
-        let photosState = model.fileActionState(for: .sendToPhotos, targetURLs: contextMenuTargetURLs)
-        let lightroomState = model.fileActionState(for: .sendToLightroom, targetURLs: contextMenuTargetURLs)
-        let lightroomClassicState = model.fileActionState(for: .sendToLightroomClassic, targetURLs: contextMenuTargetURLs)
-        let refreshState = model.fileActionState(for: .refreshMetadata, targetURLs: contextMenuTargetURLs)
-        let applyState = model.fileActionState(for: .applyMetadataChanges, targetURLs: contextMenuTargetURLs)
-        let clearState = model.fileActionState(for: .clearMetadataChanges, targetURLs: contextMenuTargetURLs)
-        let restoreState = model.fileActionState(for: .restoreFromLastBackup, targetURLs: contextMenuTargetURLs)
-        let applyTitle = model.applyMetadataSelectionTitle(for: contextMenuTargetURLs)
-
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        menu.addItem(ContextMenuSupport.makeMenuItem(
-            title: openState.title,
-            action: #selector(openFromContextMenu(_:)),
+        return BrowserContextMenuBuilder.makeMenu(
             target: self,
-            symbolName: openState.symbolName,
-            isEnabled: openState.isEnabled
-        ))
-        menu.addItem(ContextMenuSupport.makeMenuItem(
-            title: photosState.title,
-            action: #selector(sendToPhotosFromContextMenu(_:)),
-            target: self,
-            symbolName: photosState.symbolName,
-            isEnabled: photosState.isEnabled
-        ))
-        menu.addItem(ContextMenuSupport.makeMenuItem(
-            title: lightroomState.title,
-            action: #selector(sendToLightroomFromContextMenu(_:)),
-            target: self,
-            symbolName: lightroomState.symbolName,
-            isEnabled: lightroomState.isEnabled
-        ))
-        menu.addItem(ContextMenuSupport.makeMenuItem(
-            title: lightroomClassicState.title,
-            action: #selector(sendToLightroomClassicFromContextMenu(_:)),
-            target: self,
-            symbolName: lightroomClassicState.symbolName,
-            isEnabled: lightroomClassicState.isEnabled
-        ))
-        menu.addItem(ContextMenuSupport.makeMenuItem(
-            title: "Reveal in Finder",
-            action: #selector(revealInFinderFromContextMenu(_:)),
-            target: self,
-            symbolName: "folder",
-            isEnabled: !contextMenuTargetURLs.isEmpty
-        ))
-        menu.addItem(.separator())
-        menu.addItem(ContextMenuSupport.makeMenuItem(
-            title: applyTitle,
-            action: #selector(applyFromContextMenu(_:)),
-            target: self,
-            symbolName: applyState.symbolName,
-            isEnabled: applyState.isEnabled
-        ))
-        menu.addItem(ContextMenuSupport.makeMenuItem(
-            title: refreshState.title,
-            action: #selector(refreshFromContextMenu(_:)),
-            target: self,
-            symbolName: refreshState.symbolName,
-            isEnabled: refreshState.isEnabled
-        ))
-        menu.addItem(ContextMenuSupport.makeMenuItem(
-            title: clearState.title,
-            action: #selector(clearFromContextMenu(_:)),
-            target: self,
-            symbolName: clearState.symbolName,
-            isEnabled: clearState.isEnabled
-        ))
-        menu.addItem(ContextMenuSupport.makeMenuItem(
-            title: restoreState.title,
-            action: #selector(restoreFromContextMenu(_:)),
-            target: self,
-            symbolName: restoreState.symbolName,
-            isEnabled: restoreState.isEnabled
-        ))
-        return menu
+            model: model,
+            targetURLs: contextMenuTargetURLs,
+            actions: .init(
+                open: #selector(openFromContextMenu(_:)),
+                revealInFinder: #selector(revealInFinderFromContextMenu(_:)),
+                apply: #selector(applyFromContextMenu(_:)),
+                refresh: #selector(refreshFromContextMenu(_:)),
+                clear: #selector(clearFromContextMenu(_:)),
+                restore: #selector(restoreFromContextMenu(_:))
+            )
+        )
     }
 
     @objc
@@ -606,24 +476,6 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
     private func revealInFinderFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty else { return }
         model.revealInFinder(contextMenuTargetURLs)
-    }
-
-    @objc
-    private func sendToPhotosFromContextMenu(_: Any?) {
-        guard !contextMenuTargetURLs.isEmpty else { return }
-        model.performFileAction(.sendToPhotos, targetURLs: contextMenuTargetURLs)
-    }
-
-    @objc
-    private func sendToLightroomFromContextMenu(_: Any?) {
-        guard !contextMenuTargetURLs.isEmpty else { return }
-        model.performFileAction(.sendToLightroom, targetURLs: contextMenuTargetURLs)
-    }
-
-    @objc
-    private func sendToLightroomClassicFromContextMenu(_: Any?) {
-        guard !contextMenuTargetURLs.isEmpty else { return }
-        model.performFileAction(.sendToLightroomClassic, targetURLs: contextMenuTargetURLs)
     }
 
     @objc
@@ -832,7 +684,12 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
     private var hasPendingRename = false
 
     override func loadView() {
-        view = NSView(frame: .zero)
+        let rootView = AppearanceAwareView(frame: .zero)
+        rootView.onEffectiveAppearanceChange = { [weak self] in
+            guard let self else { return }
+            self.applySelection(isSelected: self.isSelected)
+        }
+        view = rootView
         configureViewHierarchy()
     }
 
@@ -884,7 +741,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         titleField.alignment = .center
         titleField.lineBreakMode = .byTruncatingMiddle
         titleField.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        titleField.textColor = .secondaryLabelColor
+        titleField.textColor = .labelColor
         titleField.wantsLayer = true
         titleField.setContentHuggingPriority(.required, for: .horizontal)
         view.addSubview(titleField)
@@ -967,23 +824,24 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
     }
 
     func applySelection(isSelected: Bool) {
-        let finderSelectionColor = NSColor.unemphasizedSelectedContentBackgroundColor
-        let isWindowKey = NSApp.isActive && (view.window?.isKeyWindow == true)
+        let finderSelectionCGColor = GallerySelectionStyling.resolvedTileSelectionBackgroundCGColor(for: view)
+        let finderSelectionColor = GallerySelectionStyling.tileSelectionBackgroundColor
+        let isWindowKey = GallerySelectionStyling.isSelectionEmphasized(in: view)
         let highlighted = highlightState == .forSelection
         let active = isSelected || highlighted
         selectionBackgroundView.layer?.backgroundColor = active
-            ? finderSelectionColor.cgColor
+            ? finderSelectionCGColor
             : NSColor.clear.cgColor
         if active && hasPendingRename {
             titleField.layer?.backgroundColor = isWindowKey
                 ? NSColor.systemOrange.cgColor
-                : finderSelectionColor.cgColor
-            titleField.textColor = .white
+                : finderSelectionCGColor
+            titleField.textColor = isWindowKey ? .white : .labelColor
         } else if active {
             titleField.layer?.backgroundColor = isWindowKey
                 ? AppTheme.accentNSColor.cgColor
-                : finderSelectionColor.cgColor
-            titleField.textColor = .white
+                : finderSelectionCGColor
+            titleField.textColor = isWindowKey ? .white : .labelColor
         } else if hasPendingRename {
             titleField.layer?.backgroundColor = NSColor.clear.cgColor
             titleField.textColor = isWindowKey
@@ -991,7 +849,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
                 : finderSelectionColor
         } else {
             titleField.layer?.backgroundColor = NSColor.clear.cgColor
-            titleField.textColor = .secondaryLabelColor
+            titleField.textColor = .labelColor
         }
     }
 

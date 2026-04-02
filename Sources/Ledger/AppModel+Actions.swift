@@ -474,8 +474,20 @@ extension AppModel {
         stageImageOperation(.rotateLeft90, for: fileURL)
     }
 
+    func rotateRight(fileURL: URL) {
+        stageImageOperation(.rotateLeft90, for: fileURL)
+        stageImageOperation(.rotateLeft90, for: fileURL)
+        stageImageOperation(.rotateLeft90, for: fileURL)
+    }
+
     func flipHorizontal(fileURL: URL) {
         stageImageOperation(.flipHorizontal, for: fileURL)
+    }
+
+    func flipVertical(fileURL: URL) {
+        stageImageOperation(.flipHorizontal, for: fileURL)
+        stageImageOperation(.rotateLeft90, for: fileURL)
+        stageImageOperation(.rotateLeft90, for: fileURL)
     }
 
     func quickLookSelection() {

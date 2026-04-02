@@ -141,6 +141,9 @@ extension AppModel {
 
     private func normalizedWriteValue(_ value: String, for tag: EditableTag) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if tag.id == "exif-exposure-program" || tag.id == "exif-flash" || tag.id == "exif-metering-mode" {
+            return normalizeEnumForWrite(trimmed, for: tag) ?? trimmed
+        }
         guard tag.id == "exif-shutter" else { return trimmed }
         guard !trimmed.isEmpty else { return trimmed }
 
@@ -561,7 +564,7 @@ extension AppModel {
             return formatExposureTime(trimmed)
         }
         if tag.id == "exif-exposure-program" || tag.id == "exif-flash" || tag.id == "exif-metering-mode" {
-            return normalizeEnumRawValue(trimmed)
+            return normalizeEnumRawValue(trimmed, for: tag)
         }
         if tag.id == "xmp-copyright-status" {
             return normalizeBooleanRawValue(trimmed)
@@ -573,14 +576,65 @@ extension AppModel {
         return trimmed
     }
 
-    private func normalizeEnumRawValue(_ raw: String) -> String {
+    private func normalizeEnumRawValue(_ raw: String, for tag: EditableTag) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let number = Double(trimmed), number.isFinite else { return trimmed }
-        let rounded = number.rounded()
-        if abs(number - rounded) < 0.000_001 {
-            return String(Int(rounded))
+        guard !trimmed.isEmpty else { return "" }
+        if let number = Double(trimmed), number.isFinite {
+            let rounded = number.rounded()
+            if abs(number - rounded) < 0.000_001 {
+                return String(Int(rounded))
+            }
+        }
+        if let normalized = normalizeEnumForWrite(trimmed, for: tag), normalized != trimmed {
+            return normalized
         }
         return trimmed
+    }
+
+    private func normalizeEnumForWrite(_ raw: String, for tag: EditableTag) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+
+        if let number = Double(trimmed), number.isFinite {
+            let rounded = number.rounded()
+            if abs(number - rounded) < 0.000_001 {
+                return String(Int(rounded))
+            }
+        }
+
+        guard let options = pickerOptions(for: tag) else { return nil }
+        let normalizedRaw = canonicalEnumToken(trimmed)
+        guard !normalizedRaw.isEmpty else { return nil }
+
+        if let matched = options.first(where: { canonicalEnumToken($0.label) == normalizedRaw }) {
+            return matched.value
+        }
+        if let matched = options.first(where: { canonicalEnumToken($0.value) == normalizedRaw }) {
+            return matched.value
+        }
+        return nil
+    }
+
+    private func canonicalEnumToken(_ raw: String) -> String {
+        var token = raw.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { return "" }
+
+        token = token.replacingOccurrences(of: "&", with: " and ")
+        token = token.replacingOccurrences(of: "return not detected", with: "no return")
+        token = token.replacingOccurrences(of: "flash fired", with: "fired")
+        token = token.replacingOccurrences(of: "flash did not fire", with: "did not fire")
+
+        token = token.replacingOccurrences(
+            of: "[^a-z0-9]+",
+            with: " ",
+            options: .regularExpression
+        )
+        token = token.replacingOccurrences(
+            of: "\\s+",
+            with: " ",
+            options: .regularExpression
+        )
+        return token.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func normalizeBooleanRawValue(_ raw: String) -> String {
