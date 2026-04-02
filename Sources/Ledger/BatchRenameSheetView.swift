@@ -8,6 +8,8 @@ struct BatchRenameSheetView: View {
     @ObservedObject var model: AppModel
     let scope: BatchRenameScope
 
+    private static let sectionSpacing = WorkflowSheetSectionSpacing.uniform(20)
+
     @State private var tokens: [RenameToken] = [.text("")]
     @State private var showPreview = false
     @State private var preview: [RenamePlanEntry] = []
@@ -25,53 +27,58 @@ struct BatchRenameSheetView: View {
     var body: some View {
         WorkflowSheetContainer(
             title: "Batch Rename",
-            subtitle: scopeSummary
+            subtitle: scopeSummary,
+            sectionSpacing: Self.sectionSpacing
         ) {
-
-            // Token rows
-            VStack(spacing: 0) {
-                ForEach(Array(tokens.enumerated()), id: \.offset) { index, token in
-                    TokenRow(
-                        token: token,
-                        isOnlyRow: tokens.count == 1,
-                        onUpdate: { tokens[index] = $0 },
-                        onDelete: { tokens.remove(at: index) },
-                        onInsertAfter: { tokens.insert(.text(""), at: index + 1) }
-                    )
-                }
-            }
-
-            // Inline preview — always same two-line structure to prevent height toggling
-            inlinePreview
-
-            // Footer
-            HStack {
-                Button("Preview…") {
-                    if preview.isEmpty && !isLoadingPreview {
-                        Task { await refreshPreview() }
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 12) {
+                    // Token rows
+                    VStack(spacing: 0) {
+                        ForEach(Array(tokens.enumerated()), id: \.offset) { index, token in
+                            TokenRow(
+                                token: token,
+                                isOnlyRow: tokens.count == 1,
+                                onUpdate: { tokens[index] = $0 },
+                                onDelete: { tokens.remove(at: index) },
+                                onInsertAfter: { tokens.insert(.text(""), at: index + 1) }
+                            )
+                        }
                     }
-                    showPreview = true
-                }
-                .popover(isPresented: $showPreview) {
-                    previewPopover
-                }
 
-                Spacer()
-
-                Button("Cancel") {
-                    model.dismissBatchRenameSheet()
+                    // Inline preview — always same two-line structure to prevent height toggling
+                    inlinePreview
                 }
-                .keyboardShortcut(.cancelAction)
+                .padding(.bottom, Self.sectionSpacing.mainToFooter)
 
-                Button("Rename") {
-                    let files = model.renameFilesForBatchRename(scope)
-                    let operation = RenameOperation(files: files, pattern: pattern)
-                    Task { @MainActor in
-                        await model.stageBatchRename(operation: operation)
+                // Footer
+                HStack {
+                    Button("Preview…") {
+                        if preview.isEmpty && !isLoadingPreview {
+                            Task { await refreshPreview() }
+                        }
+                        showPreview = true
                     }
+                    .popover(isPresented: $showPreview) {
+                        previewPopover
+                    }
+
+                    Spacer()
+
+                    Button("Cancel") {
+                        model.dismissBatchRenameSheet()
+                    }
+                    .keyboardShortcut(.cancelAction)
+
+                    Button("Rename") {
+                        let files = model.renameFilesForBatchRename(scope)
+                        let operation = RenameOperation(files: files, pattern: pattern)
+                        Task { @MainActor in
+                            await model.stageBatchRename(operation: operation)
+                        }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(tokens.isEmpty || !previewIssues.isEmpty)
                 }
-                .keyboardShortcut(.defaultAction)
-                .disabled(tokens.isEmpty || !previewIssues.isEmpty)
             }
         }
         .task(id: pattern) {

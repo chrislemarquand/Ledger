@@ -838,6 +838,8 @@ struct ImportSheetView: View {
     @State private var importProgress: Double?
     @State private var isPostImportReviewMode = false
 
+    private static let sectionSpacing = WorkflowSheetSectionSpacing.uniform(20)
+
     init(model: AppModel, sourceKind: ImportSourceKind) {
         self.model = model
         self.sourceKind = sourceKind
@@ -845,91 +847,100 @@ struct ImportSheetView: View {
     }
 
     var body: some View {
-        WorkflowSheetContainer(title: "Import from \(sourceKind.title)", infoText: infoText) {
-            // File picker row
-            HStack {
-                TextField("", text: .constant(session.options.sourceURLPath ?? ""))
-                    .textFieldStyle(.roundedBorder)
-                    .disabled(true)
-                Button("Choose…") {
-                    chooseSource()
-                }
-                .disabled(isPostImportReviewMode || session.isBusy || importProgress != nil)
-            }
+        WorkflowSheetContainer(
+            title: "Import from \(sourceKind.title)",
+            infoText: infoText,
+            sectionSpacing: Self.sectionSpacing
+        ) {
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 12) {
+                    // File picker row
+                    HStack {
+                        TextField("", text: .constant(session.options.sourceURLPath ?? ""))
+                            .textFieldStyle(.roundedBorder)
+                            .disabled(true)
+                        Button("Choose…") {
+                            chooseSource()
+                        }
+                        .disabled(isPostImportReviewMode || session.isBusy || importProgress != nil)
+                    }
 
-            // Options row: Apply to | If no match
-            HStack(alignment: .top, spacing: 28) {
-                WorkflowOptionGroup("Apply to:") {
-                    Picker("", selection: $session.options.scope) {
-                        Text("Folder").tag(ImportScope.folder)
-                        Text(selectionLabel).tag(ImportScope.selection)
-                    }
-                    .pickerStyle(.radioGroup)
-                    .labelsHidden()
-                    .disabled(isPostImportReviewMode)
-                }
+                    // Options row: Apply to | If no match
+                    HStack(alignment: .top, spacing: 28) {
+                        WorkflowOptionGroup("Apply to:") {
+                            Picker("", selection: $session.options.scope) {
+                                Text("Folder").tag(ImportScope.folder)
+                                Text(selectionLabel).tag(ImportScope.selection)
+                            }
+                            .pickerStyle(.radioGroup)
+                            .labelsHidden()
+                            .disabled(isPostImportReviewMode)
+                        }
 
-                WorkflowOptionGroup("If no match:") {
-                    Picker("", selection: $session.options.emptyValuePolicy) {
-                        Text("Clear").tag(ImportEmptyValuePolicy.clear)
-                        Text("Skip").tag(ImportEmptyValuePolicy.skip)
+                        WorkflowOptionGroup("If no match:") {
+                            Picker("", selection: $session.options.emptyValuePolicy) {
+                                Text("Clear").tag(ImportEmptyValuePolicy.clear)
+                                Text("Skip").tag(ImportEmptyValuePolicy.skip)
+                            }
+                            .pickerStyle(.radioGroup)
+                            .labelsHidden()
+                            .disabled(isPostImportReviewMode)
+                        }
                     }
-                    .pickerStyle(.radioGroup)
-                    .labelsHidden()
-                    .disabled(isPostImportReviewMode)
-                }
-            }
 
-            if let banner = activeBanner {
-                WorkflowInlineMessageBanner(messages: banner)
-            }
+                    if let banner = activeBanner {
+                        WorkflowInlineMessageBanner(messages: banner)
+                    }
 
-            ProgressView(value: importProgress ?? 0)
-                .opacity(importProgress == nil ? 0 : 1)
+                    ProgressView(value: importProgress ?? 0)
+                        .opacity(importProgress == nil ? 0 : 1)
+                }
+                .padding(.bottom, Self.sectionSpacing.mainToFooter)
 
-            // Footer: Fields… | [Advanced…] | [Details…]   Cancel  Import
-            HStack {
-                Button("Fields…") {
-                    showFields = true
-                }
-                .disabled(session.foundTagIDs == nil || isPostImportReviewMode)
-                .popover(isPresented: $showFields) {
-                    fieldsPopover
-                }
-                if hasAdvancedOptions {
-                    Button("Advanced…") {
-                        showAdvanced = true
+                // Footer: Fields… | [Advanced…] | [Details…]   Cancel  Import
+                HStack {
+                    Button("Fields…") {
+                        showFields = true
                     }
-                    .disabled(isPostImportReviewMode)
-                    .popover(isPresented: $showAdvanced) {
-                        advancedPopover
+                    .disabled(session.foundTagIDs == nil || isPostImportReviewMode)
+                    .popover(isPresented: $showFields) {
+                        fieldsPopover
                     }
+                    if hasAdvancedOptions {
+                        Button("Advanced…") {
+                            showAdvanced = true
+                        }
+                        .disabled(isPostImportReviewMode)
+                        .popover(isPresented: $showAdvanced) {
+                            advancedPopover
+                        }
+                    }
+                    if hasPreview {
+                        Button("Details…") {
+                            showPreview = true
+                        }
+                        .disabled(session.options.sourceURL == nil)
+                        .popover(isPresented: $showPreview) {
+                            previewPopover
+                        }
+                    }
+                    Spacer()
+                    if !isPostImportReviewMode {
+                        Button("Cancel") {
+                            model.dismissImportSheet()
+                        }
+                        .keyboardShortcut(.cancelAction)
+                    }
+                    Button(isPostImportReviewMode ? "Close" : "Import") {
+                        if isPostImportReviewMode {
+                            model.dismissImportSheet()
+                        } else {
+                            performImport()
+                        }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(isPostImportReviewMode ? false : (session.options.sourceURL == nil || session.isBusy || importProgress != nil))
                 }
-                if hasPreview {
-                    Button("Details…") {
-                        showPreview = true
-                    }
-                    .disabled(session.options.sourceURL == nil)
-                    .popover(isPresented: $showPreview) {
-                        previewPopover
-                    }
-                }
-                Spacer()
-                if !isPostImportReviewMode {
-                    Button("Cancel") {
-                        model.dismissImportSheet()
-                    }
-                    .keyboardShortcut(.cancelAction)
-                }
-                Button(isPostImportReviewMode ? "Close" : "Import") {
-                    if isPostImportReviewMode {
-                        model.dismissImportSheet()
-                    } else {
-                        performImport()
-                    }
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(isPostImportReviewMode ? false : (session.options.sourceURL == nil || session.isBusy || importProgress != nil))
             }
         }
         .onChange(of: session.options.sourceURLPath) { _, _ in

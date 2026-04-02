@@ -11,8 +11,11 @@ struct DateTimeAdjustSheetView: View {
     @State private var previewWarnings: [String] = []
     @State private var isLoadingPreview = false
 
+    private static let sheetWidth: CGFloat = 620
+    private static let sectionSpacing = WorkflowSheetSectionSpacing.uniform(20)
     private static let modeOrder: [DateTimeAdjustMode] = [.shift, .timeZone, .specific, .file]
     private static let labelColumnWidth: CGFloat = 132
+    private static let formRowSpacing: CGFloat = 10
     private static let knownTimeZones: [String] = TimeZone.knownTimeZoneIdentifiers
         .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
 
@@ -60,89 +63,97 @@ struct DateTimeAdjustSheetView: View {
     var body: some View {
         WorkflowSheetContainer(
             title: "Adjust Date and Time",
-            subtitle: session.mode.subtitle(fileCount: fileCount)
+            subtitle: session.mode.subtitle(fileCount: fileCount),
+            width: Self.sheetWidth,
+            sectionSpacing: Self.sectionSpacing
         ) {
-            // Mode segmented control
-            Picker("Mode", selection: $session.mode) {
-                ForEach(Self.modeOrder) { mode in
-                    Text(mode.displayName).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: .infinity, alignment: .center)
-
-            // Original row
-            labeledRow("Original:") {
-                InspectorDatePickerField(
-                    selection: .constant(representativeOriginalDate ?? Date()),
-                    isEnabled: false,
-                    datePickerElements: [.yearMonthDay, .hourMinuteSecond],
-                    accessibilityLabel: "Original date and time"
-                )
-            }
-
-            // Adjusted row
-            labeledRow("Adjusted:") {
-                if session.mode == .specific {
-                    InspectorDatePickerField(
-                        selection: $session.specificDate,
-                        datePickerElements: [.yearMonthDay, .hourMinuteSecond],
-                        accessibilityLabel: "Adjusted date and time"
-                    )
-                } else if session.mode == .shift {
-                    InspectorDatePickerField(
-                        selection: shiftAdjustedBinding,
-                        datePickerElements: [.yearMonthDay, .hourMinuteSecond],
-                        accessibilityLabel: "Adjusted date and time"
-                    )
-                } else {
-                    InspectorDatePickerField(
-                        selection: .constant(computedAdjustedDate ?? Date()),
-                        isEnabled: false,
-                        datePickerElements: [.yearMonthDay, .hourMinuteSecond],
-                        accessibilityLabel: "Adjusted date and time"
-                    )
-                }
-            }
-
-            // Mode-specific controls
-            modeSpecificControls
-
-            // Apply to
-            labeledRow("Apply to:") {
-                HStack(spacing: 16) {
-                    ForEach(DateTimeTargetTag.allCases) { tag in
-                        Toggle(tag.displayName, isOn: applyToBinding(for: tag))
-                            .toggleStyle(.checkbox)
+            VStack(alignment: .leading, spacing: 0) {
+                // Mode segmented control
+                Picker("Mode", selection: $session.mode) {
+                    ForEach(Self.modeOrder) { mode in
+                        Text(mode.displayName).tag(mode)
                     }
                 }
-            }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.bottom, Self.sectionSpacing.topToMain)
 
-            // Footer
-            HStack {
-                Button("Preview\u{2026}") {
-                    if previewRows.isEmpty && !isLoadingPreview {
-                        Task { await refreshPreview() }
+                VStack(alignment: .leading, spacing: Self.formRowSpacing) {
+                    // Original row
+                    WorkflowFormRow("Original:", labelWidth: Self.labelColumnWidth) {
+                        InspectorDatePickerField(
+                            selection: .constant(representativeOriginalDate ?? Date()),
+                            isEnabled: false,
+                            datePickerElements: [.yearMonthDay, .hourMinuteSecond],
+                            accessibilityLabel: "Original date and time"
+                        )
                     }
-                    showPreview = true
-                }
-                .popover(isPresented: $showPreview) {
-                    previewPopover
-                }
 
-                Spacer()
+                    // Adjusted row
+                    WorkflowFormRow("Adjusted:", labelWidth: Self.labelColumnWidth) {
+                        if session.mode == .specific {
+                            InspectorDatePickerField(
+                                selection: $session.specificDate,
+                                datePickerElements: [.yearMonthDay, .hourMinuteSecond],
+                                accessibilityLabel: "Adjusted date and time"
+                            )
+                        } else if session.mode == .shift {
+                            InspectorDatePickerField(
+                                selection: shiftAdjustedBinding,
+                                datePickerElements: [.yearMonthDay, .hourMinuteSecond],
+                                accessibilityLabel: "Adjusted date and time"
+                            )
+                        } else {
+                            InspectorDatePickerField(
+                                selection: .constant(computedAdjustedDate ?? Date()),
+                                isEnabled: false,
+                                datePickerElements: [.yearMonthDay, .hourMinuteSecond],
+                                accessibilityLabel: "Adjusted date and time"
+                            )
+                        }
+                    }
 
-                Button("Cancel") {
-                    model.dismissDateTimeAdjustSheet()
-                }
-                .keyboardShortcut(.cancelAction)
+                    // Mode-specific controls
+                    modeSpecificControls
 
-                Button("Adjust") {
-                    model.stageDateTimeAdjustments(session: session)
+                    // Apply to
+                    WorkflowFormRow("Apply to:", labelWidth: Self.labelColumnWidth) {
+                        HStack(spacing: 16) {
+                            ForEach(DateTimeTargetTag.allCases) { tag in
+                                Toggle(tag.displayName, isOn: applyToBinding(for: tag))
+                                    .toggleStyle(.checkbox)
+                            }
+                        }
+                    }
                 }
-                .keyboardShortcut(.defaultAction)
-                .disabled(hasBlockingIssues)
+                .padding(.bottom, Self.sectionSpacing.mainToFooter)
+
+                // Footer
+                HStack {
+                    Button("Preview\u{2026}") {
+                        if previewRows.isEmpty && !isLoadingPreview {
+                            Task { await refreshPreview() }
+                        }
+                        showPreview = true
+                    }
+                    .popover(isPresented: $showPreview) {
+                        previewPopover
+                    }
+
+                    Spacer()
+
+                    Button("Cancel") {
+                        model.dismissDateTimeAdjustSheet()
+                    }
+                    .keyboardShortcut(.cancelAction)
+
+                    Button("Adjust") {
+                        model.stageDateTimeAdjustments(session: session)
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(hasBlockingIssues)
+                }
             }
         }
         .task(id: previewKey) {
@@ -156,27 +167,26 @@ struct DateTimeAdjustSheetView: View {
     private var modeSpecificControls: some View {
         switch session.mode {
         case .timeZone:
-            labeledRow("Original Time Zone:") {
+            WorkflowFormRow("Original Time Zone:", labelWidth: Self.labelColumnWidth) {
                 WorkflowCityComboField(
                     value: $session.sourceTimeZoneID,
                     items: Self.knownTimeZones,
                     placeholder: "Europe/London"
                 )
             }
-            labeledRow("Closest City:") {
+            WorkflowFormRow("Closest City:", labelWidth: Self.labelColumnWidth) {
                 WorkflowCityComboField(
                     value: $session.closestCity,
                     items: TimeZoneCityData.cities.map(\.city),
                     placeholder: "Type a city name"
                 )
             }
-            labeledRow("New Time Zone:") {
+            WorkflowFormRow("New Time Zone:", labelWidth: Self.labelColumnWidth) {
                 Text(model.resolvedTimeZoneName(for: session))
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         case .shift:
-            labeledRow("Offset:") {
+            WorkflowFormRow("Offset:", labelWidth: Self.labelColumnWidth) {
                 HStack(spacing: 8) {
                     offsetField(value: $session.shiftDays, label: "Days")
                     offsetField(value: $session.shiftHours, label: "Hours")
@@ -307,17 +317,6 @@ struct DateTimeAdjustSheetView: View {
                 }
                 .frame(width: 540, height: 320)
             }
-        }
-    }
-
-    // MARK: - Helpers
-
-    private func labeledRow<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
-        HStack(alignment: .center, spacing: 8) {
-            Text(label)
-                .lineLimit(1)
-                .frame(width: Self.labelColumnWidth, alignment: .trailing)
-            content()
         }
     }
 
