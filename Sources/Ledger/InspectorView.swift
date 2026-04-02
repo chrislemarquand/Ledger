@@ -53,7 +53,7 @@ private struct InspectorPreviewActionLabel: View {
         VStack(spacing: 4) {
             Image(systemName: symbolName)
                 .font(.body)
-                .foregroundStyle(isPressed ? Color.white : (isHovered ? Color.primary : Color.secondary))
+                .foregroundStyle(isPressed ? Color.primary.opacity(0.7) : (isHovered ? Color.primary : Color.secondary))
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -156,9 +156,6 @@ struct InspectorView: View {
                                         }
                                         .buttonStyle(InspectorPreviewActionButtonStyle())
 
-                                        Divider()
-                                            .frame(height: 28)
-
                                         Button {
                                             model.flipHorizontal(fileURL: previewURL)
                                         } label: {
@@ -167,9 +164,6 @@ struct InspectorView: View {
                                             .contentShape(Rectangle())
                                         }
                                         .buttonStyle(InspectorPreviewActionButtonStyle())
-
-                                        Divider()
-                                            .frame(height: 28)
 
                                         Button {
                                             model.openInDefaultApp(previewURL)
@@ -212,8 +206,7 @@ struct InspectorView: View {
                                         if model.isDateTimeTag(tag) {
                                                 if let date = model.dateValueForTag(tag) {
                                                     HStack(spacing: 6) {
-                                                        DatePicker(
-                                                            "",
+                                                        InspectorDatePickerField(
                                                             selection: Binding(
                                                                 get: { model.dateValueForTag(tag) ?? date },
                                                                 set: {
@@ -224,12 +217,14 @@ struct InspectorView: View {
                                                                     }
                                                                 }
                                                             ),
-                                                            displayedComponents: [.date, .hourAndMinute]
+                                                            accessibilityLabel: tag.label
                                                         )
-                                                        .labelsHidden()
-                                                        .datePickerStyle(.stepperField)
+                                                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                                                        Spacer()
+                                                        Button("Set") {
+                                                            openDateTimeAdjustSheet(for: tag)
+                                                        }
+                                                        .controlSize(.small)
 
                                                         Button {
                                                             beginEditSessionIfNeeded(for: tag)
@@ -267,41 +262,28 @@ struct InspectorView: View {
                                                         }
 
                                                         Button("Set") {
-                                                            beginEditSessionIfNeeded(for: tag)
-                                                            let now = Date()
-                                                            DispatchQueue.main.async {
-                                                                model.updateDateValue(now, for: tag)
-                                                            }
+                                                            openDateTimeAdjustSheet(for: tag)
                                                         }
                                                         .controlSize(.small)
                                                     }
                                                 }
                                             } else if let options = model.pickerOptions(for: tag) {
-                                                Picker("", selection: Binding(
-                                                    get: { model.valueForTag(tag) },
-                                                    set: {
-                                                        guard $0 != model.valueForTag(tag) else { return }
-                                                        beginEditSessionIfNeeded(for: tag)
-                                                        let newValue = $0
-                                                        DispatchQueue.main.async {
-                                                            model.updateValue(newValue, for: tag)
+                                                let popupOptions = inspectorPopupOptions(for: tag, options: options)
+                                                InspectorPopupField(
+                                                    selection: Binding(
+                                                        get: { model.valueForTag(tag) },
+                                                        set: {
+                                                            guard $0 != model.valueForTag(tag) else { return }
+                                                            beginEditSessionIfNeeded(for: tag)
+                                                            let newValue = $0
+                                                            DispatchQueue.main.async {
+                                                                model.updateValue(newValue, for: tag)
+                                                            }
                                                         }
-                                                    }
-                                                )) {
-                                                    // Always include tag("") so SwiftUI never sees an
-                                                    // untagged selection when the field has no value.
-                                                    Text(model.isMixedValue(for: tag) ? "Multiple values" : "—")
-                                                        .tag("")
-                                                    let currentValue = model.valueForTag(tag)
-                                                    if !currentValue.isEmpty && !options.contains(where: { $0.value == currentValue }) {
-                                                        Text(currentValue).tag(currentValue)
-                                                    }
-                                                    ForEach(options, id: \.value) { option in
-                                                        Text(option.label).tag(option.value)
-                                                    }
-                                                }
-                                                .labelsHidden()
-                                                .pickerStyle(.menu)
+                                                    ),
+                                                    options: popupOptions,
+                                                    accessibilityLabel: tag.label
+                                                )
                                                 .frame(maxWidth: .infinity, alignment: .leading)
                                             } else {
                                                 TextField(
@@ -449,6 +431,7 @@ struct InspectorView: View {
             ImportSheetView(model: model, sourceKind: sourceKind)
         }
         .batchRenameSheet(model: model)
+        .dateTimeAdjustSheet(model: model)
     }
 
     private var photoCoordinate: CLLocationCoordinate2D? {
@@ -602,6 +585,20 @@ struct InspectorView: View {
         focusedTagID = nextID
     }
 
+    private func inspectorPopupOptions(for tag: AppModel.EditableTag, options: [AppModel.PickerOption]) -> [InspectorPopupOption] {
+        let currentValue = model.valueForTag(tag)
+        var popupOptions: [InspectorPopupOption] = [
+            .init(value: "", label: model.isMixedValue(for: tag) ? "Multiple values" : "—"),
+        ]
+
+        if !currentValue.isEmpty && !options.contains(where: { $0.value == currentValue }) {
+            popupOptions.append(.init(value: currentValue, label: currentValue))
+        }
+
+        popupOptions.append(contentsOf: options.map { .init(value: $0.value, label: $0.label) })
+        return popupOptions
+    }
+
     private func focusableInspectorTagIDs() -> [String] {
         model.orderedEditableTagSections
             .filter { $0.section != "Rating" && !model.isInspectorSectionCollapsed($0.section) }
@@ -644,6 +641,12 @@ struct InspectorView: View {
     private func beginEditSessionIfNeeded(for tag: AppModel.EditableTag) {
         model.beginEditSessionSnapshotIfNeeded(for: tag)
         activeEditTagID = tag.id
+    }
+
+    private func openDateTimeAdjustSheet(for tag: AppModel.EditableTag) {
+        let targetTag = DateTimeTargetTag.from(editableTagID: tag.id) ?? .dateTimeOriginal
+        let scope: DateTimeAdjustScope = model.selectedFileURLs.count > 1 ? .selection : .single
+        model.beginDateTimeAdjust(scope: scope, launchTag: targetTag)
     }
 
 }

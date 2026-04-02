@@ -68,6 +68,9 @@
 		C200020D0000000000000001 /* ReferenceImportSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010D0000000000000001 /* ReferenceImportSupport.swift */; };
 		C200020E0000000000000001 /* ImportSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010E0000000000000001 /* ImportSheetView.swift */; };
 		C200020F0000000000000001 /* ExifToolCSVExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010F0000000000000001 /* ExifToolCSVExportService.swift */; };
+		E10001010000000000000001 /* DateTimeAdjustModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10001000000000000000001 /* DateTimeAdjustModels.swift */; };
+		E10001030000000000000001 /* AppModel+DateTimeAdjust.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10001020000000000000001 /* AppModel+DateTimeAdjust.swift */; };
+		E10001050000000000000001 /* DateTimeAdjustSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10001040000000000000001 /* DateTimeAdjustSheetView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -157,6 +160,9 @@
 		C200010D0000000000000001 /* ReferenceImportSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ReferenceImportSupport.swift"; sourceTree = "<group>"; };
 		C200010E0000000000000001 /* ImportSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ImportSheetView.swift"; sourceTree = "<group>"; };
 		C200010F0000000000000001 /* ExifToolCSVExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ExifToolCSVExportService.swift"; sourceTree = "<group>"; };
+		E10001000000000000000001 /* DateTimeAdjustModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DateTimeAdjustModels.swift"; sourceTree = "<group>"; };
+		E10001020000000000000001 /* AppModel+DateTimeAdjust.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+DateTimeAdjust.swift"; sourceTree = "<group>"; };
+		E10001040000000000000001 /* DateTimeAdjustSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DateTimeAdjustSheetView.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -270,6 +276,9 @@
 					C20000F10000000000000001 /* ImportUI */,
 					A100000B0000000000000001 /* AppModel.swift */,
 					D100000400000000000000001 /* BatchRenameSheetView.swift */,
+					E10001000000000000000001 /* DateTimeAdjustModels.swift */,
+					E10001020000000000000001 /* AppModel+DateTimeAdjust.swift */,
+					E10001040000000000000001 /* DateTimeAdjustSheetView.swift */,
 					A10001530000000000000001 /* AppModel+Sidebar.swift */,
 					A10001540000000000000001 /* AppModel+Preview.swift */,
 					A10001550000000000000001 /* AppModel+Actions.swift */,
@@ -493,6 +502,9 @@
 				files = (
 					A100001B0000000000000001 /* AppModel.swift in Sources */,
 					D100000300000000000000001 /* BatchRenameSheetView.swift in Sources */,
+					E10001010000000000000001 /* DateTimeAdjustModels.swift in Sources */,
+					E10001030000000000000001 /* AppModel+DateTimeAdjust.swift in Sources */,
+					E10001050000000000000001 /* DateTimeAdjustSheetView.swift in Sources */,
 					A10001510000000000000001 /* AppModel+Sidebar.swift in Sources */,
 					A10001520000000000000001 /* AppModel+Preview.swift in Sources */,
 					A10001620000000000000001 /* AppModel+Actions.swift in Sources */,

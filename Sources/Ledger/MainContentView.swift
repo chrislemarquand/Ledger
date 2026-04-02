@@ -639,6 +639,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         static let imageApplyPreset = 9_311
         static let imageBatchRenameSelection = 9_312
         static let imageBatchRenameFolder = 9_313
+        static let imageAdjustDateTime = 9_314
 
         static let helpWhatsNew = 9_400
         static let helpExifToolDocs = 9_401
@@ -1111,6 +1112,17 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     private func rebuildImageMenu(_ menu: NSMenu) {
         menu.removeAllItems()
 
+        let adjustDateTimeItem = NSMenuItem(
+            title: "Adjust Date and Time\u{2026}",
+            action: #selector(adjustDateTimeAction(_:)),
+            keyEquivalent: ""
+        )
+        adjustDateTimeItem.image = NSImage(systemSymbolName: "calendar.badge.clock", accessibilityDescription: nil)
+        adjustDateTimeItem.tag = MenuTag.imageAdjustDateTime
+        adjustDateTimeItem.target = self
+        menu.addItem(adjustDateTimeItem)
+        menu.addItem(.separator())
+
         let applySelectionItem = NSMenuItem(title: "Apply Changes to Selection", action: #selector(applySelectionAction(_:)), keyEquivalent: "s")
         applySelectionItem.keyEquivalentModifierMask = .command
         applySelectionItem.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
@@ -1349,6 +1361,8 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         } else if menuItem.action == #selector(saveCurrentAsPresetAction(_:)) {
             return !selection.isEmpty
         } else if menuItem.action == #selector(applyPresetFromMenuAction(_:)) {
+            return !selection.isEmpty
+        } else if menuItem.action == #selector(adjustDateTimeAction(_:)) {
             return !selection.isEmpty
         } else if menuItem.action == #selector(batchRenameSelectionAction(_:)) {
             return model.fileActionState(for: .batchRenameSelection, targetURLs: Array(model.selectedFileURLs)).isEnabled
@@ -1807,6 +1821,11 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         }
         model.selectedPresetID = presetID
         confirmAndApplyPreset(preset: preset)
+    }
+
+    @objc func adjustDateTimeAction(_: Any?) {
+        let scope: DateTimeAdjustScope = model.selectedFileURLs.count > 1 ? .selection : .single
+        model.beginDateTimeAdjust(scope: scope, launchTag: .dateTimeOriginal)
     }
 
     @objc func batchRenameSelectionAction(_: Any?) {
