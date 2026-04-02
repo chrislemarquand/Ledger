@@ -12,6 +12,7 @@ struct DateTimeAdjustSheetView: View {
     @State private var isLoadingPreview = false
 
     private static let modeOrder: [DateTimeAdjustMode] = [.shift, .timeZone, .specific, .file]
+    private static let labelColumnWidth: CGFloat = 132
     private static let knownTimeZones: [String] = TimeZone.knownTimeZoneIdentifiers
         .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
 
@@ -155,7 +156,7 @@ struct DateTimeAdjustSheetView: View {
     private var modeSpecificControls: some View {
         switch session.mode {
         case .timeZone:
-            labeledRow("Source Time Zone:") {
+            labeledRow("Original Time Zone:") {
                 WorkflowCityComboField(
                     value: $session.sourceTimeZoneID,
                     items: Self.knownTimeZones,
@@ -169,7 +170,7 @@ struct DateTimeAdjustSheetView: View {
                     placeholder: "Type a city name"
                 )
             }
-            labeledRow("Time Zone:") {
+            labeledRow("New Time Zone:") {
                 Text(model.resolvedTimeZoneName(for: session))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -314,7 +315,8 @@ struct DateTimeAdjustSheetView: View {
     private func labeledRow<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
         HStack(alignment: .center, spacing: 8) {
             Text(label)
-                .frame(width: 90, alignment: .trailing)
+                .lineLimit(1)
+                .frame(width: Self.labelColumnWidth, alignment: .trailing)
             content()
         }
     }
