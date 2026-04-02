@@ -440,6 +440,11 @@ extension AppModel {
                 .init(value: "6", label: "Partial"),
                 .init(value: "255", label: "Other")
             ]
+        case "xmp-copyright-status":
+            base = [
+                .init(value: "True", label: "Copyrighted"),
+                .init(value: "False", label: "Public Domain / No Copyright")
+            ]
         default:
             return nil
         }

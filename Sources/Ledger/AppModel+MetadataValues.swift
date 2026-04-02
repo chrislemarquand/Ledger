@@ -563,6 +563,9 @@ extension AppModel {
         if tag.id == "exif-exposure-program" || tag.id == "exif-flash" || tag.id == "exif-metering-mode" {
             return normalizeEnumRawValue(trimmed)
         }
+        if tag.id == "xmp-copyright-status" {
+            return normalizeBooleanRawValue(trimmed)
+        }
         if tag.id == "exif-aperture" || tag.id == "exif-focal" || tag.id == "exif-iso" || tag.id == "exif-exposure-comp" || tag.id == "xmp-exposure-bias" {
             return normalizeNumericRawValue(trimmed)
         }
@@ -576,6 +579,18 @@ extension AppModel {
         let rounded = number.rounded()
         if abs(number - rounded) < 0.000_001 {
             return String(Int(rounded))
+        }
+        return trimmed
+    }
+
+    private func normalizeBooleanRawValue(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowered = trimmed.lowercased()
+        if ["1", "true", "t", "yes", "y"].contains(lowered) {
+            return "True"
+        }
+        if ["0", "false", "f", "no", "n"].contains(lowered) {
+            return "False"
         }
         return trimmed
     }

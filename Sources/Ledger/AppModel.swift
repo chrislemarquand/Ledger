@@ -508,6 +508,7 @@ final class AppModel: ObservableObject {
         didSet { notifyInspectorDidChange() }
     }
     @Published var pendingBatchRenameScope: BatchRenameScope?
+    @Published var pendingDateTimeAdjustSession: DateTimeAdjustSession?
     @Published var isRenaming = false
     @Published var renameProgress: (completed: Int, total: Int) = (0, 0)
     /// Maps current on-disk URL → proposed final filename (basename + ext).
