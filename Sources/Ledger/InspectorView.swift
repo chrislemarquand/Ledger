@@ -235,7 +235,7 @@ struct InspectorView: View {
                                                         .buttonStyle(.plain)
                                                         .help("Clear date and time")
 
-                                                        Button("Set") {
+                                                        Button("Set\u{2026}") {
                                                             openDateTimeAdjustSheet(for: tag)
                                                         }
                                                         .controlSize(.small)
@@ -263,7 +263,7 @@ struct InspectorView: View {
                                                                 .frame(maxWidth: .infinity, alignment: .leading)
                                                         }
 
-                                                        Button("Set") {
+                                                        Button("Set\u{2026}") {
                                                             openDateTimeAdjustSheet(for: tag)
                                                         }
                                                         .controlSize(.small)
@@ -288,24 +288,33 @@ struct InspectorView: View {
                                                 )
                                                 .frame(maxWidth: .infinity, alignment: .leading)
                                             } else {
-                                                TextField(
-                                                    "",
-                                                    text: Binding(
-                                                        get: { model.valueForTag(tag) },
-                                                        set: {
-                                                            beginEditSessionIfNeeded(for: tag)
-                                                            let newValue = $0
-                                                            DispatchQueue.main.async {
-                                                                model.updateValue(newValue, for: tag)
+                                                HStack(spacing: 6) {
+                                                    TextField(
+                                                        "",
+                                                        text: Binding(
+                                                            get: { model.valueForTag(tag) },
+                                                            set: {
+                                                                beginEditSessionIfNeeded(for: tag)
+                                                                let newValue = $0
+                                                                DispatchQueue.main.async {
+                                                                    model.updateValue(newValue, for: tag)
+                                                                }
                                                             }
+                                                        ),
+                                                        prompt: Text(model.isMixedValue(for: tag) ? "Multiple values" : model.placeholderForTag(tag))
+                                                            .foregroundStyle(.secondary)
+                                                    )
+                                                    .textFieldStyle(.roundedBorder)
+                                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                                    .focused($focusedTagID, equals: tag.id)
+
+                                                    if isLocationCoordinateTag(tag) {
+                                                        Button("Set\u{2026}") {
+                                                            openLocationAdjustSheet()
                                                         }
-                                                    ),
-                                                    prompt: Text(model.isMixedValue(for: tag) ? "Multiple values" : model.placeholderForTag(tag))
-                                                        .foregroundStyle(.secondary)
-                                                )
-                                                .textFieldStyle(.roundedBorder)
-                                                .frame(maxWidth: .infinity, alignment: .leading)
-                                                .focused($focusedTagID, equals: tag.id)
+                                                        .controlSize(.small)
+                                                    }
+                                                }
                                             }
                                         }
                                         .id(tag.id)
@@ -314,6 +323,7 @@ struct InspectorView: View {
                                     if grouped.section == "Location", let coordinate = photoCoordinate {
                                         locationMapView(for: coordinate)
                                     }
+
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -434,6 +444,7 @@ struct InspectorView: View {
         }
         .batchRenameSheet(model: model)
         .dateTimeAdjustSheet(model: model)
+        .locationAdjustSheet(model: model)
     }
 
     private var photoCoordinate: CLLocationCoordinate2D? {
@@ -649,6 +660,14 @@ struct InspectorView: View {
         let targetTag = DateTimeTargetTag.from(editableTagID: tag.id) ?? .dateTimeOriginal
         let scope: DateTimeAdjustScope = model.selectedFileURLs.count > 1 ? .selection : .single
         model.beginDateTimeAdjust(scope: scope, launchTag: targetTag)
+    }
+
+    private func openLocationAdjustSheet() {
+        model.beginLocationAdjust()
+    }
+
+    private func isLocationCoordinateTag(_ tag: AppModel.EditableTag) -> Bool {
+        tag.id == "exif-gps-lat" || tag.id == "exif-gps-lon"
     }
 
 }

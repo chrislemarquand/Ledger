@@ -118,3 +118,111 @@ struct DateTimeAdjustAssessment {
         effectiveChangeFileCount: 0
     )
 }
+
+// MARK: - Location Adjust
+
+struct LocationAdjustSession: Identifiable {
+    let id = UUID()
+    let fileURLs: [URL]
+    var searchQuery: String = ""
+    var latitude: Double?
+    var longitude: Double?
+    var selectedAdvancedFields: Set<LocationAdvancedField> = []
+    var resolvedSublocation: String = ""
+    var resolvedCity: String = ""
+    var resolvedStateProvince: String = ""
+    var resolvedCountry: String = ""
+    var resolvedCountryCode: String = ""
+
+    func resolvedValue(for field: LocationAdvancedField) -> String {
+        switch field {
+        case .sublocation:
+            return resolvedSublocation
+        case .city:
+            return resolvedCity
+        case .stateProvince:
+            return resolvedStateProvince
+        case .country:
+            return resolvedCountry
+        case .countryCode:
+            return resolvedCountryCode
+        }
+    }
+
+    mutating func setResolvedValue(_ value: String, for field: LocationAdvancedField) {
+        switch field {
+        case .sublocation:
+            resolvedSublocation = value
+        case .city:
+            resolvedCity = value
+        case .stateProvince:
+            resolvedStateProvince = value
+        case .country:
+            resolvedCountry = value
+        case .countryCode:
+            resolvedCountryCode = value
+        }
+    }
+}
+
+enum LocationAdvancedField: String, CaseIterable, Identifiable, Hashable {
+    case sublocation
+    case city
+    case stateProvince
+    case country
+    case countryCode
+
+    var id: String { rawValue }
+
+    var tagID: String {
+        switch self {
+        case .sublocation:
+            return "iptc-sublocation"
+        case .city:
+            return "iptc-city"
+        case .stateProvince:
+            return "iptc-state"
+        case .country:
+            return "iptc-country"
+        case .countryCode:
+            return "iptc-country-code"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .sublocation:
+            return "Sublocation"
+        case .city:
+            return "City"
+        case .stateProvince:
+            return "State / Province"
+        case .country:
+            return "Country"
+        case .countryCode:
+            return "Country Code"
+        }
+    }
+}
+
+struct LocationAdjustPreviewRow: Identifiable {
+    let id: URL
+    let fileName: String
+    let originalDisplay: String
+    let adjustedDisplay: String
+    let deltaText: String
+}
+
+struct LocationAdjustAssessment {
+    let rows: [LocationAdjustPreviewRow]
+    let blockingIssues: [String]
+    let warnings: [String]
+    let effectiveChangeFileCount: Int
+
+    static let empty = LocationAdjustAssessment(
+        rows: [],
+        blockingIssues: [],
+        warnings: [],
+        effectiveChangeFileCount: 0
+    )
+}

@@ -58,6 +58,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     private weak var editMenuForInjection: NSMenu?
     private weak var viewMenuForSortInjection: NSMenu?
     private weak var imageMenuForInjection: NSMenu?
+    private weak var folderMenuForInjection: NSMenu?
     private weak var helpMenuForInjection: NSMenu?
     private var menuTrackingObserver: NSObjectProtocol?
     private var uiRefreshObservers: [AnyCancellable] = []
@@ -374,6 +375,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             self?.injectEditMenuIfNeeded()
             self?.injectSortMenuIfNeeded()
             self?.injectImageMenuIfNeeded()
+            self?.injectFolderMenuIfNeeded()
             self?.injectHelpMenuIfNeeded()
         }
         // Re-register menu delegates every time the user clicks the menu bar.
@@ -390,6 +392,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                 self?.injectFileMenuIfNeeded()
                 self?.injectEditMenuIfNeeded()
                 self?.injectImageMenuIfNeeded()
+                self?.injectFolderMenuIfNeeded()
                 self?.injectHelpMenuIfNeeded()
             }
         }
@@ -623,23 +626,25 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         static let fileExportSendToLightroom = 9_119
         static let fileExportSendToLightroomClassic = 9_120
 
-        static let editRotate = 9_201
-        static let editFlip = 9_202
-
         static let imageApplySelection = 9_301
         static let imageRefreshSelection = 9_302
         static let imageClearSelection = 9_303
         static let imageRestoreSelection = 9_304
-        static let imageApplyAll = 9_305
-        static let imageRefreshAll = 9_306
-        static let imageClearAll = 9_307
-        static let imageRestoreAll = 9_308
+        static let folderApply = 9_305
+        static let folderRefresh = 9_306
+        static let folderClear = 9_307
+        static let folderRestore = 9_308
         static let imageSavePreset = 9_309
         static let imageManagePresets = 9_310
         static let imageApplyPreset = 9_311
         static let imageBatchRenameSelection = 9_312
-        static let imageBatchRenameFolder = 9_313
         static let imageAdjustDateTime = 9_314
+        static let imageSetLocation = 9_315
+        static let imageRotateAnticlockwise = 9_316
+        static let imageRotateClockwise = 9_317
+        static let imageFlipHorizontal = 9_318
+        static let imageFlipVertical = 9_319
+        static let folderBatchRename = 9_320
 
         static let helpWhatsNew = 9_400
         static let helpExifToolDocs = 9_401
@@ -714,6 +719,13 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         rebuildImageMenu(submenu)
     }
 
+    private func injectFolderMenuIfNeeded() {
+        guard let submenu = ensureTopLevelMenu(title: "Folder", insertAfterTitle: "Image") else { return }
+        folderMenuForInjection = submenu
+        submenu.delegate = self
+        rebuildFolderMenu(submenu)
+    }
+
     private func injectHelpMenuIfNeeded() {
         if NSApp.mainMenu?.items.contains(where: { $0.title == "Window" }) == true {
             guard let submenu = ensureTopLevelMenu(title: "Help", insertAfterTitle: "Window") else { return }
@@ -722,7 +734,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             rebuildHelpMenu(submenu)
             return
         }
-        guard let submenu = ensureTopLevelMenu(title: "Help", insertAfterTitle: "Image") else { return }
+        guard let submenu = ensureTopLevelMenu(title: "Help", insertAfterTitle: "Folder") else { return }
         helpMenuForInjection = submenu
         submenu.delegate = self
         rebuildHelpMenu(submenu)
@@ -968,18 +980,39 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     }
 
     private func makeExportSubmenu() -> NSMenu {
-        let submenu = NSMenu(title: "Export")
-        submenu.autoenablesItems = false
+        Self.buildExportMenu(controller: self, model: model)
+    }
 
-        let item = NSMenuItem(title: "Create CSV…", action: #selector(exportExifToolCSVAction(_:)), keyEquivalent: "")
-        item.target = self
-        item.image = NSImage(systemSymbolName: "tablecells.badge.ellipsis", accessibilityDescription: nil)
-        item.tag = MenuTag.fileExportExifToolCSV
-        item.isEnabled = !model.browserItems.isEmpty
-        submenu.addItem(item)
+    private static func buildExportMenu(
+        controller: NativeThreePaneSplitViewController,
+        model: AppModel
+    ) -> NSMenu {
+        let menu = NSMenu(title: "Export")
+        menu.autoenablesItems = false
 
-        let sendToPhotosItem = NSMenuItem(title: "Send to Photos…", action: #selector(sendToPhotosAction(_:)), keyEquivalent: "")
-        sendToPhotosItem.target = self
+        let hasBrowserItems = !model.browserItems.isEmpty
+        let targetURLs = model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)
+
+        let createCSVItem = NSMenuItem(
+            title: "Create CSV…",
+            action: #selector(NativeThreePaneSplitViewController.exportExifToolCSVAction(_:)),
+            keyEquivalent: ""
+        )
+        createCSVItem.target = controller
+        createCSVItem.tag = MenuTag.fileExportExifToolCSV
+        createCSVItem.isEnabled = hasBrowserItems
+        createCSVItem.image = NSImage(systemSymbolName: "tablecells.badge.ellipsis", accessibilityDescription: nil)
+        menu.addItem(createCSVItem)
+
+        let photosState = model.fileActionState(for: .sendToPhotos, targetURLs: targetURLs)
+        let sendToPhotosItem = NSMenuItem(
+            title: "Send to Photos…",
+            action: #selector(NativeThreePaneSplitViewController.sendToPhotosAction(_:)),
+            keyEquivalent: ""
+        )
+        sendToPhotosItem.target = controller
+        sendToPhotosItem.tag = MenuTag.fileExportSendToPhotos
+        sendToPhotosItem.isEnabled = photosState.isEnabled
         if let photosAppURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Photos") {
             let appIcon = NSWorkspace.shared.icon(forFile: photosAppURL.path)
             appIcon.size = NSSize(width: 16, height: 16)
@@ -987,37 +1020,45 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         } else {
             sendToPhotosItem.image = NSImage(systemSymbolName: "photo.on.rectangle", accessibilityDescription: nil)
         }
-        sendToPhotosItem.tag = MenuTag.fileExportSendToPhotos
-        sendToPhotosItem.isEnabled = !model.browserItems.isEmpty
-        submenu.addItem(sendToPhotosItem)
+        menu.addItem(sendToPhotosItem)
 
-        let sendToLightroomItem = NSMenuItem(title: "Send to Lightroom…", action: #selector(sendToLightroomAction(_:)), keyEquivalent: "")
-        sendToLightroomItem.target = self
-        let lightroomTargets = model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)
-        if let lightroomAppURL = model.lightroomApplicationURL(for: lightroomTargets) {
+        let lightroomState = model.fileActionState(for: .sendToLightroom, targetURLs: targetURLs)
+        let sendToLightroomItem = NSMenuItem(
+            title: "Send to Lightroom…",
+            action: #selector(NativeThreePaneSplitViewController.sendToLightroomAction(_:)),
+            keyEquivalent: ""
+        )
+        sendToLightroomItem.target = controller
+        sendToLightroomItem.tag = MenuTag.fileExportSendToLightroom
+        sendToLightroomItem.isEnabled = lightroomState.isEnabled
+        if let lightroomAppURL = model.lightroomApplicationURL(for: targetURLs) {
             let appIcon = NSWorkspace.shared.icon(forFile: lightroomAppURL.path)
             appIcon.size = NSSize(width: 16, height: 16)
             sendToLightroomItem.image = appIcon
         } else {
             sendToLightroomItem.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
         }
-        sendToLightroomItem.tag = MenuTag.fileExportSendToLightroom
-        sendToLightroomItem.isEnabled = model.fileActionState(for: .sendToLightroom, targetURLs: lightroomTargets).isEnabled
-        submenu.addItem(sendToLightroomItem)
+        menu.addItem(sendToLightroomItem)
 
-        let sendToLightroomClassicItem = NSMenuItem(title: "Send to Lightroom Classic…", action: #selector(sendToLightroomClassicAction(_:)), keyEquivalent: "")
-        sendToLightroomClassicItem.target = self
-        if let lightroomAppURL = model.lightroomClassicApplicationURL(for: lightroomTargets) {
+        let lightroomClassicState = model.fileActionState(for: .sendToLightroomClassic, targetURLs: targetURLs)
+        let sendToLightroomClassicItem = NSMenuItem(
+            title: "Send to Lightroom Classic…",
+            action: #selector(NativeThreePaneSplitViewController.sendToLightroomClassicAction(_:)),
+            keyEquivalent: ""
+        )
+        sendToLightroomClassicItem.target = controller
+        sendToLightroomClassicItem.tag = MenuTag.fileExportSendToLightroomClassic
+        sendToLightroomClassicItem.isEnabled = lightroomClassicState.isEnabled
+        if let lightroomAppURL = model.lightroomClassicApplicationURL(for: targetURLs) {
             let appIcon = NSWorkspace.shared.icon(forFile: lightroomAppURL.path)
             appIcon.size = NSSize(width: 16, height: 16)
             sendToLightroomClassicItem.image = appIcon
         } else {
             sendToLightroomClassicItem.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
         }
-        sendToLightroomClassicItem.tag = MenuTag.fileExportSendToLightroomClassic
-        sendToLightroomClassicItem.isEnabled = model.fileActionState(for: .sendToLightroomClassic, targetURLs: lightroomTargets).isEnabled
-        submenu.addItem(sendToLightroomClassicItem)
-        return submenu
+        menu.addItem(sendToLightroomClassicItem)
+
+        return menu
     }
 
     private func rebuildEditMenu(_ menu: NSMenu) {
@@ -1027,46 +1068,6 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             NSImage(systemSymbolName: "arrow.uturn.backward", accessibilityDescription: nil)
         menu.items.first(where: { $0.action == #selector(redoMetadataMenuAction(_:)) })?.image =
             NSImage(systemSymbolName: "arrow.uturn.forward", accessibilityDescription: nil)
-
-        for item in menu.items where item.tag == MenuTag.editRotate || item.tag == MenuTag.editFlip {
-            menu.removeItem(item)
-        }
-        // Keep separator structure stable across repeated menuWillOpen rebuilds.
-        for index in stride(from: menu.items.count - 1, through: 1, by: -1) {
-            if menu.items[index].isSeparatorItem && menu.items[index - 1].isSeparatorItem {
-                menu.removeItem(at: index)
-            }
-        }
-        while let first = menu.items.first, first.isSeparatorItem {
-            menu.removeItem(at: 0)
-        }
-        while let last = menu.items.last, last.isSeparatorItem {
-            menu.removeItem(at: menu.items.count - 1)
-        }
-
-        let rotateItem = NSMenuItem(title: "Rotate", action: #selector(rotateSelectionMenuAction(_:)), keyEquivalent: "r")
-        rotateItem.keyEquivalentModifierMask = .command
-        rotateItem.image = NSImage(systemSymbolName: "rotate.left", accessibilityDescription: nil)
-        rotateItem.tag = MenuTag.editRotate
-
-        let flipItem = NSMenuItem(title: "Flip", action: #selector(flipSelectionMenuAction(_:)), keyEquivalent: "F")
-        flipItem.keyEquivalentModifierMask = [.command, .shift]
-        flipItem.image = NSImage(systemSymbolName: "flip.horizontal", accessibilityDescription: nil)
-        flipItem.tag = MenuTag.editFlip
-
-        var insertIndex = menu.items.firstIndex(where: { $0.title == "Select All" }).map { $0 + 1 } ?? menu.items.count
-        if insertIndex == 0 || !menu.items[insertIndex - 1].isSeparatorItem {
-            menu.insertItem(.separator(), at: insertIndex)
-            insertIndex += 1
-        }
-        menu.insertItem(rotateItem, at: insertIndex)
-        insertIndex += 1
-        menu.insertItem(flipItem, at: insertIndex)
-
-        // Ensure no accidental trailing divider remains at the bottom.
-        while let last = menu.items.last, last.isSeparatorItem {
-            menu.removeItem(at: menu.items.count - 1)
-        }
     }
 
     private func ensureEditMenuBaseline(in menu: NSMenu) {
@@ -1121,21 +1122,68 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         adjustDateTimeItem.tag = MenuTag.imageAdjustDateTime
         adjustDateTimeItem.target = self
         menu.addItem(adjustDateTimeItem)
+
+        let setLocationItem = NSMenuItem(
+            title: "Set Location\u{2026}",
+            action: #selector(setLocationAction(_:)),
+            keyEquivalent: ""
+        )
+        setLocationItem.image = NSImage(systemSymbolName: "mappin.and.ellipse", accessibilityDescription: nil)
+        setLocationItem.tag = MenuTag.imageSetLocation
+        setLocationItem.target = self
+        menu.addItem(setLocationItem)
         menu.addItem(.separator())
 
-        let applySelectionItem = NSMenuItem(title: "Apply Changes to Selection", action: #selector(applySelectionAction(_:)), keyEquivalent: "s")
+        let rotateAnticlockwiseItem = NSMenuItem(
+            title: "Rotate Anticlockwise",
+            action: #selector(rotateSelectionAnticlockwiseAction(_:)),
+            keyEquivalent: ""
+        )
+        rotateAnticlockwiseItem.image = NSImage(systemSymbolName: "rotate.left", accessibilityDescription: nil)
+        rotateAnticlockwiseItem.tag = MenuTag.imageRotateAnticlockwise
+        rotateAnticlockwiseItem.target = self
+        menu.addItem(rotateAnticlockwiseItem)
+
+        let rotateClockwiseItem = NSMenuItem(
+            title: "Rotate Clockwise",
+            action: #selector(rotateSelectionClockwiseAction(_:)),
+            keyEquivalent: ""
+        )
+        rotateClockwiseItem.image = NSImage(systemSymbolName: "rotate.right", accessibilityDescription: nil)
+        rotateClockwiseItem.tag = MenuTag.imageRotateClockwise
+        rotateClockwiseItem.target = self
+        menu.addItem(rotateClockwiseItem)
+
+        let flipHorizontalItem = NSMenuItem(
+            title: "Flip Horizontal",
+            action: #selector(flipSelectionHorizontalAction(_:)),
+            keyEquivalent: ""
+        )
+        flipHorizontalItem.image = NSImage(systemSymbolName: "flip.horizontal", accessibilityDescription: nil)
+        flipHorizontalItem.tag = MenuTag.imageFlipHorizontal
+        flipHorizontalItem.target = self
+        menu.addItem(flipHorizontalItem)
+
+        let flipVerticalItem = NSMenuItem(
+            title: "Flip Vertical",
+            action: #selector(flipSelectionVerticalAction(_:)),
+            keyEquivalent: ""
+        )
+        flipVerticalItem.image = NSImage(
+            systemSymbolName: "arrow.trianglehead.up.and.down.righttriangle.up.righttriangle.down",
+            accessibilityDescription: nil
+        )
+        flipVerticalItem.tag = MenuTag.imageFlipVertical
+        flipVerticalItem.target = self
+        menu.addItem(flipVerticalItem)
+        menu.addItem(.separator())
+
+        let applySelectionItem = NSMenuItem(title: "Apply Changes", action: #selector(applySelectionAction(_:)), keyEquivalent: "s")
         applySelectionItem.keyEquivalentModifierMask = .command
         applySelectionItem.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
         applySelectionItem.tag = MenuTag.imageApplySelection
         applySelectionItem.target = self
         menu.addItem(applySelectionItem)
-
-        let refreshSelectionItem = NSMenuItem(title: "Refresh Metadata for Selection", action: #selector(refreshSelectionMetadataAction(_:)), keyEquivalent: "R")
-        refreshSelectionItem.keyEquivalentModifierMask = [.command, .shift]
-        refreshSelectionItem.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
-        refreshSelectionItem.tag = MenuTag.imageRefreshSelection
-        refreshSelectionItem.target = self
-        menu.addItem(refreshSelectionItem)
 
         let clearSelectionItem = NSMenuItem(title: "Clear Changes", action: #selector(clearChangesAction(_:)), keyEquivalent: "k")
         clearSelectionItem.keyEquivalentModifierMask = .command
@@ -1144,42 +1192,19 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         clearSelectionItem.target = self
         menu.addItem(clearSelectionItem)
 
+        let refreshSelectionItem = NSMenuItem(title: "Refresh Metadata", action: #selector(refreshSelectionMetadataAction(_:)), keyEquivalent: "R")
+        refreshSelectionItem.keyEquivalentModifierMask = [.command, .shift]
+        refreshSelectionItem.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
+        refreshSelectionItem.tag = MenuTag.imageRefreshSelection
+        refreshSelectionItem.target = self
+        menu.addItem(refreshSelectionItem)
+
         let restoreSelectionItem = NSMenuItem(title: "Restore from Backup", action: #selector(restoreFromBackupAction(_:)), keyEquivalent: "b")
         restoreSelectionItem.keyEquivalentModifierMask = .command
         restoreSelectionItem.image = NSImage(systemSymbolName: "arrow.uturn.backward.circle", accessibilityDescription: nil)
         restoreSelectionItem.tag = MenuTag.imageRestoreSelection
         restoreSelectionItem.target = self
         menu.addItem(restoreSelectionItem)
-
-        menu.addItem(.separator())
-
-        let applyAllItem = NSMenuItem(title: "Apply Changes to All Images", action: #selector(applyFolderAction(_:)), keyEquivalent: "S")
-        applyAllItem.keyEquivalentModifierMask = [.command, .option, .shift]
-        applyAllItem.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
-        applyAllItem.tag = MenuTag.imageApplyAll
-        applyAllItem.target = self
-        menu.addItem(applyAllItem)
-
-        let refreshAllItem = NSMenuItem(title: "Refresh Metadata for All Images", action: #selector(refreshAllMetadataAction(_:)), keyEquivalent: "r")
-        refreshAllItem.keyEquivalentModifierMask = [.command, .option]
-        refreshAllItem.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
-        refreshAllItem.tag = MenuTag.imageRefreshAll
-        refreshAllItem.target = self
-        menu.addItem(refreshAllItem)
-
-        let clearAllItem = NSMenuItem(title: "Clear Changes from All Images", action: #selector(clearAllChangesAction(_:)), keyEquivalent: "k")
-        clearAllItem.keyEquivalentModifierMask = [.command, .option]
-        clearAllItem.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
-        clearAllItem.tag = MenuTag.imageClearAll
-        clearAllItem.target = self
-        menu.addItem(clearAllItem)
-
-        let restoreAllItem = NSMenuItem(title: "Restore Metadata from Backup for All Images", action: #selector(restoreAllFromBackupAction(_:)), keyEquivalent: "b")
-        restoreAllItem.keyEquivalentModifierMask = [.command, .option]
-        restoreAllItem.image = NSImage(systemSymbolName: "arrow.uturn.backward.circle", accessibilityDescription: nil)
-        restoreAllItem.tag = MenuTag.imageRestoreAll
-        restoreAllItem.target = self
-        menu.addItem(restoreAllItem)
 
         menu.addItem(.separator())
 
@@ -1191,7 +1216,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         menu.addItem(.separator())
 
         let batchRenameSelectionItem = NSMenuItem(
-            title: "Batch Rename Selection\u{2026}",
+            title: "Batch Rename\u{2026}",
             action: #selector(batchRenameSelectionAction(_:)),
             keyEquivalent: ""
         )
@@ -1199,6 +1224,56 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         batchRenameSelectionItem.tag = MenuTag.imageBatchRenameSelection
         batchRenameSelectionItem.target = self
         menu.addItem(batchRenameSelectionItem)
+    }
+
+    private func rebuildFolderMenu(_ menu: NSMenu) {
+        menu.removeAllItems()
+
+        let applyFolderItem = NSMenuItem(
+            title: "Apply Changes to Folder",
+            action: #selector(applyFolderAction(_:)),
+            keyEquivalent: "S"
+        )
+        applyFolderItem.keyEquivalentModifierMask = [.command, .option, .shift]
+        applyFolderItem.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
+        applyFolderItem.tag = MenuTag.folderApply
+        applyFolderItem.target = self
+        menu.addItem(applyFolderItem)
+
+        let clearFolderItem = NSMenuItem(
+            title: "Clear Changes from Folder",
+            action: #selector(clearAllChangesAction(_:)),
+            keyEquivalent: "k"
+        )
+        clearFolderItem.keyEquivalentModifierMask = [.command, .option]
+        clearFolderItem.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
+        clearFolderItem.tag = MenuTag.folderClear
+        clearFolderItem.target = self
+        menu.addItem(clearFolderItem)
+
+        let refreshFolderItem = NSMenuItem(
+            title: "Refresh Metadata for Folder",
+            action: #selector(refreshAllMetadataAction(_:)),
+            keyEquivalent: "r"
+        )
+        refreshFolderItem.keyEquivalentModifierMask = [.command, .option]
+        refreshFolderItem.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
+        refreshFolderItem.tag = MenuTag.folderRefresh
+        refreshFolderItem.target = self
+        menu.addItem(refreshFolderItem)
+
+        let restoreFolderItem = NSMenuItem(
+            title: "Restore from Backup for Folder",
+            action: #selector(restoreAllFromBackupAction(_:)),
+            keyEquivalent: "b"
+        )
+        restoreFolderItem.keyEquivalentModifierMask = [.command, .option]
+        restoreFolderItem.image = NSImage(systemSymbolName: "arrow.uturn.backward.circle", accessibilityDescription: nil)
+        restoreFolderItem.tag = MenuTag.folderRestore
+        restoreFolderItem.target = self
+        menu.addItem(restoreFolderItem)
+
+        menu.addItem(.separator())
 
         let batchRenameFolderItem = NSMenuItem(
             title: "Batch Rename Folder\u{2026}",
@@ -1206,7 +1281,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             keyEquivalent: ""
         )
         batchRenameFolderItem.image = NSImage(systemSymbolName: "pencil.and.list.clipboard", accessibilityDescription: nil)
-        batchRenameFolderItem.tag = MenuTag.imageBatchRenameFolder
+        batchRenameFolderItem.tag = MenuTag.folderBatchRename
         batchRenameFolderItem.target = self
         menu.addItem(batchRenameFolderItem)
     }
@@ -1276,6 +1351,8 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             rebuildViewMenu(menu)
         } else if menu === imageMenuForInjection {
             rebuildImageMenu(menu)
+        } else if menu === folderMenuForInjection {
+            rebuildFolderMenu(menu)
         } else if menu === helpMenuForInjection {
             rebuildHelpMenu(menu)
         }
@@ -1328,9 +1405,13 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             return model.canMoveSelectedFavoriteUp
         } else if menuItem.action == #selector(moveFolderDownInSidebarAction(_:)) {
             return model.canMoveSelectedFavoriteDown
-        } else if menuItem.action == #selector(rotateSelectionMenuAction(_:)) {
+        } else if menuItem.action == #selector(rotateSelectionAnticlockwiseAction(_:)) {
             return !selection.isEmpty
-        } else if menuItem.action == #selector(flipSelectionMenuAction(_:)) {
+        } else if menuItem.action == #selector(rotateSelectionClockwiseAction(_:)) {
+            return !selection.isEmpty
+        } else if menuItem.action == #selector(flipSelectionHorizontalAction(_:)) {
+            return !selection.isEmpty
+        } else if menuItem.action == #selector(flipSelectionVerticalAction(_:)) {
             return !selection.isEmpty
         } else if menuItem.action == #selector(toggleInspectorAction(_:)) {
             menuItem.title = isInspectorCollapsed ? "Show Inspector" : "Hide Inspector"
@@ -1341,10 +1422,9 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         } else if menuItem.action == #selector(switchToListAction(_:)) {
             menuItem.state = model.browserViewMode == .list ? .on : .off
         } else if menuItem.action == #selector(applySelectionAction(_:)) {
-            menuItem.title = model.applyMetadataSelectionTitle(for: selection)
             return model.fileActionState(for: .applyMetadataChanges, targetURLs: selection).isEnabled
         } else if menuItem.action == #selector(applyFolderAction(_:)) {
-            menuItem.title = "Apply Metadata Changes to Folder"
+            menuItem.title = "Apply Changes to Folder"
             return model.canApplyMetadataChanges
         } else if menuItem.action == #selector(clearChangesAction(_:)) {
             return model.fileActionState(for: .clearMetadataChanges, targetURLs: selection).isEnabled
@@ -1364,6 +1444,8 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             return !selection.isEmpty
         } else if menuItem.action == #selector(adjustDateTimeAction(_:)) {
             return !selection.isEmpty
+        } else if menuItem.action == #selector(setLocationAction(_:)) {
+            return model.canOpenLocationAdjustSheet()
         } else if menuItem.action == #selector(batchRenameSelectionAction(_:)) {
             return model.fileActionState(for: .batchRenameSelection, targetURLs: Array(model.selectedFileURLs)).isEnabled
         } else if menuItem.action == #selector(batchRenameFolderAction(_:)) {
@@ -1629,7 +1711,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     }
 
     @objc
-    func rotateSelectionMenuAction(_: Any?) {
+    func rotateSelectionAnticlockwiseAction(_: Any?) {
         let files = Array(model.selectedFileURLs).sorted { $0.path < $1.path }
         guard !files.isEmpty else { return }
         for fileURL in files {
@@ -1638,11 +1720,29 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     }
 
     @objc
-    func flipSelectionMenuAction(_: Any?) {
+    func rotateSelectionClockwiseAction(_: Any?) {
+        let files = Array(model.selectedFileURLs).sorted { $0.path < $1.path }
+        guard !files.isEmpty else { return }
+        for fileURL in files {
+            model.rotateRight(fileURL: fileURL)
+        }
+    }
+
+    @objc
+    func flipSelectionHorizontalAction(_: Any?) {
         let files = Array(model.selectedFileURLs).sorted { $0.path < $1.path }
         guard !files.isEmpty else { return }
         for fileURL in files {
             model.flipHorizontal(fileURL: fileURL)
+        }
+    }
+
+    @objc
+    func flipSelectionVerticalAction(_: Any?) {
+        let files = Array(model.selectedFileURLs).sorted { $0.path < $1.path }
+        guard !files.isEmpty else { return }
+        for fileURL in files {
+            model.flipVertical(fileURL: fileURL)
         }
     }
 
@@ -1826,6 +1926,12 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     @objc func adjustDateTimeAction(_: Any?) {
         let scope: DateTimeAdjustScope = model.selectedFileURLs.count > 1 ? .selection : .single
         model.beginDateTimeAdjust(scope: scope, launchTag: .dateTimeOriginal)
+    }
+
+    @objc
+    func setLocationAction(_: Any?) {
+        guard model.canOpenLocationAdjustSheet() else { return }
+        model.beginLocationAdjust()
     }
 
     @objc func batchRenameSelectionAction(_: Any?) {
@@ -2246,73 +2352,10 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
 
         private func makeExportMenu(model: AppModel) -> NSMenu {
             guard let controller else { return NSMenu(title: "Export") }
-            let menu = NSMenu(title: "Export")
-            menu.autoenablesItems = false
-            let hasBrowserItems = !model.browserItems.isEmpty
-            let targetURLs = model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)
-
-            let createCSVItem = NSMenuItem(
-                title: "Create CSV…",
-                action: #selector(NativeThreePaneSplitViewController.exportExifToolCSVAction(_:)),
-                keyEquivalent: ""
+            return NativeThreePaneSplitViewController.buildExportMenu(
+                controller: controller,
+                model: model
             )
-            createCSVItem.target = controller
-            createCSVItem.isEnabled = hasBrowserItems
-            createCSVItem.image = NSImage(systemSymbolName: "tablecells.badge.ellipsis", accessibilityDescription: nil)
-            menu.addItem(createCSVItem)
-
-            let photosState = model.fileActionState(for: .sendToPhotos, targetURLs: targetURLs)
-            let sendToPhotosItem = NSMenuItem(
-                title: "Send to Photos…",
-                action: #selector(NativeThreePaneSplitViewController.sendToPhotosAction(_:)),
-                keyEquivalent: ""
-            )
-            sendToPhotosItem.target = controller
-            sendToPhotosItem.isEnabled = photosState.isEnabled
-            if let photosAppURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Photos") {
-                let appIcon = NSWorkspace.shared.icon(forFile: photosAppURL.path)
-                appIcon.size = NSSize(width: 16, height: 16)
-                sendToPhotosItem.image = appIcon
-            } else {
-                sendToPhotosItem.image = NSImage(systemSymbolName: "photo.on.rectangle", accessibilityDescription: nil)
-            }
-            menu.addItem(sendToPhotosItem)
-
-            let lightroomState = model.fileActionState(for: .sendToLightroom, targetURLs: targetURLs)
-            let sendToLightroomItem = NSMenuItem(
-                title: "Send to Lightroom…",
-                action: #selector(NativeThreePaneSplitViewController.sendToLightroomAction(_:)),
-                keyEquivalent: ""
-            )
-            sendToLightroomItem.target = controller
-            sendToLightroomItem.isEnabled = lightroomState.isEnabled
-            if let lightroomAppURL = model.lightroomApplicationURL(for: targetURLs) {
-                let appIcon = NSWorkspace.shared.icon(forFile: lightroomAppURL.path)
-                appIcon.size = NSSize(width: 16, height: 16)
-                sendToLightroomItem.image = appIcon
-            } else {
-                sendToLightroomItem.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
-            }
-            menu.addItem(sendToLightroomItem)
-
-            let lightroomClassicState = model.fileActionState(for: .sendToLightroomClassic, targetURLs: targetURLs)
-            let sendToLightroomClassicItem = NSMenuItem(
-                title: "Send to Lightroom Classic…",
-                action: #selector(NativeThreePaneSplitViewController.sendToLightroomClassicAction(_:)),
-                keyEquivalent: ""
-            )
-            sendToLightroomClassicItem.target = controller
-            sendToLightroomClassicItem.isEnabled = lightroomClassicState.isEnabled
-            if let lightroomAppURL = model.lightroomClassicApplicationURL(for: targetURLs) {
-                let appIcon = NSWorkspace.shared.icon(forFile: lightroomAppURL.path)
-                appIcon.size = NSSize(width: 16, height: 16)
-                sendToLightroomClassicItem.image = appIcon
-            } else {
-                sendToLightroomClassicItem.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
-            }
-            menu.addItem(sendToLightroomClassicItem)
-
-            return menu
         }
 
         private func makePresetsMenu(model: AppModel) -> NSMenu {

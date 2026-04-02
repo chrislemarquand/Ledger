@@ -406,7 +406,7 @@ extension AppModel {
             ]
         case "exif-flash":
             base = [
-                .init(value: "0", label: "No Flash"),
+                .init(value: "0", label: "No Flash (Did Not Fire)"),
                 .init(value: "1", label: "Fired"),
                 .init(value: "5", label: "Fired, No Return"),
                 .init(value: "7", label: "Fired, Return Detected"),
@@ -418,7 +418,7 @@ extension AppModel {
                 .init(value: "25", label: "Auto, Fired"),
                 .init(value: "29", label: "Auto, Fired, No Return"),
                 .init(value: "31", label: "Auto, Fired, Return Detected"),
-                .init(value: "32", label: "No Flash"),
+                .init(value: "32", label: "No Flash Function"),
                 .init(value: "65", label: "Fired, Red-Eye Reduction"),
                 .init(value: "69", label: "Fired, Red-Eye, No Return"),
                 .init(value: "71", label: "Fired, Red-Eye, Return Detected"),
