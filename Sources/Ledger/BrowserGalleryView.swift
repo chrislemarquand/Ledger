@@ -28,6 +28,10 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
     private let pinchZoomAccumulator = PinchZoomAccumulator()
     private var browserFocusObserver: NSObjectProtocol?
     private var viewModeObserver: NSObjectProtocol?
+    private var windowDidBecomeKeyObserver: NSObjectProtocol?
+    private var windowDidResignKeyObserver: NSObjectProtocol?
+    private var appDidBecomeActiveObserver: NSObjectProtocol?
+    private var appDidResignActiveObserver: NSObjectProtocol?
     private var lastRenderedViewMode: AppModel.BrowserViewMode?
 
     init(model: AppModel, items: [AppModel.BrowserItem]) {
@@ -69,6 +73,12 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
         }
     }
 
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        installSelectionAppearanceObserversIfNeeded()
+        refreshSelectionAppearanceForVisibleCells()
+    }
+
     override func viewWillDisappear() {
         super.viewWillDisappear()
         for indexPath in collectionView.indexPathsForVisibleItems() {
@@ -82,6 +92,7 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
             NotificationCenter.default.removeObserver(viewModeObserver)
             self.viewModeObserver = nil
         }
+        removeSelectionAppearanceObservers()
     }
 
     func update(model: AppModel, items: [AppModel.BrowserItem]) {
@@ -102,6 +113,84 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
             return
         }
         renderState()
+    }
+
+    private func installSelectionAppearanceObserversIfNeeded() {
+        guard windowDidBecomeKeyObserver == nil,
+              windowDidResignKeyObserver == nil,
+              appDidBecomeActiveObserver == nil,
+              appDidResignActiveObserver == nil else {
+            return
+        }
+        guard let window = view.window else { return }
+        let center = NotificationCenter.default
+        windowDidBecomeKeyObserver = center.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshSelectionAppearanceForVisibleCells()
+            }
+        }
+        windowDidResignKeyObserver = center.addObserver(
+            forName: NSWindow.didResignKeyNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshSelectionAppearanceForVisibleCells()
+            }
+        }
+        appDidBecomeActiveObserver = center.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: NSApp,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshSelectionAppearanceForVisibleCells()
+            }
+        }
+        appDidResignActiveObserver = center.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: NSApp,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshSelectionAppearanceForVisibleCells()
+            }
+        }
+    }
+
+    private func removeSelectionAppearanceObservers() {
+        let center = NotificationCenter.default
+        if let windowDidBecomeKeyObserver {
+            center.removeObserver(windowDidBecomeKeyObserver)
+            self.windowDidBecomeKeyObserver = nil
+        }
+        if let windowDidResignKeyObserver {
+            center.removeObserver(windowDidResignKeyObserver)
+            self.windowDidResignKeyObserver = nil
+        }
+        if let appDidBecomeActiveObserver {
+            center.removeObserver(appDidBecomeActiveObserver)
+            self.appDidBecomeActiveObserver = nil
+        }
+        if let appDidResignActiveObserver {
+            center.removeObserver(appDidResignActiveObserver)
+            self.appDidResignActiveObserver = nil
+        }
+    }
+
+    private func refreshSelectionAppearanceForVisibleCells() {
+        let visibleURLs = Set(items.map(\.url))
+        let selectedURLs = model.selectedFileURLs.intersection(visibleURLs)
+        for indexPath in collectionView.indexPathsForVisibleItems() {
+            guard indexPath.item >= 0, indexPath.item < items.count else { continue }
+            guard let cell = collectionView.item(at: indexPath) as? AppKitGalleryItem else { continue }
+            let item = items[indexPath.item]
+            cell.applySelection(isSelected: selectedURLs.contains(item.url))
+        }
     }
 
     private func configureGallery() {
@@ -878,20 +967,28 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
     }
 
     func applySelection(isSelected: Bool) {
+        let finderSelectionColor = NSColor.unemphasizedSelectedContentBackgroundColor
+        let isWindowKey = NSApp.isActive && (view.window?.isKeyWindow == true)
         let highlighted = highlightState == .forSelection
         let active = isSelected || highlighted
         selectionBackgroundView.layer?.backgroundColor = active
-            ? AppTheme.accentNSColor.withAlphaComponent(0.22).cgColor
+            ? finderSelectionColor.cgColor
             : NSColor.clear.cgColor
         if active && hasPendingRename {
-            titleField.layer?.backgroundColor = NSColor.systemOrange.cgColor
+            titleField.layer?.backgroundColor = isWindowKey
+                ? NSColor.systemOrange.cgColor
+                : finderSelectionColor.cgColor
             titleField.textColor = .white
         } else if active {
-            titleField.layer?.backgroundColor = AppTheme.accentNSColor.cgColor
+            titleField.layer?.backgroundColor = isWindowKey
+                ? AppTheme.accentNSColor.cgColor
+                : finderSelectionColor.cgColor
             titleField.textColor = .white
         } else if hasPendingRename {
             titleField.layer?.backgroundColor = NSColor.clear.cgColor
-            titleField.textColor = .systemOrange
+            titleField.textColor = isWindowKey
+                ? .systemOrange
+                : finderSelectionColor
         } else {
             titleField.layer?.backgroundColor = NSColor.clear.cgColor
             titleField.textColor = .secondaryLabelColor
@@ -1012,4 +1109,5 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
             return CGSize(width: width, height: height)
         }
     }
+
 }
