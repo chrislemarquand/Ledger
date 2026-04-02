@@ -3,8 +3,8 @@ import Foundation
 // MARK: - Mode
 
 enum DateTimeAdjustMode: String, CaseIterable, Identifiable {
-    case timeZone
     case shift
+    case timeZone
     case specific
     case file
 
@@ -75,14 +75,6 @@ enum DateTimeTargetTag: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
-// MARK: - Source Time Basis
-
-enum SourceTimeBasis: Hashable {
-    case fixedUTC
-    case ianaTimeZone(String)
-    case useEmbeddedOffsetWhenAvailable(fallback: String)
-}
-
 // MARK: - Session
 
 struct DateTimeAdjustSession: Identifiable {
@@ -91,7 +83,7 @@ struct DateTimeAdjustSession: Identifiable {
     let scope: DateTimeAdjustScope
     let launchTag: DateTimeTargetTag
     let fileURLs: [URL]
-    var sourceBasis: SourceTimeBasis = .fixedUTC
+    var sourceTimeZoneID: String = TimeZone.current.identifier
     var closestCity: String = ""
     var targetTimezone: String = ""
     var shiftDays: Int = 0
