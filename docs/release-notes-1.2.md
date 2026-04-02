@@ -10,13 +10,17 @@ Ledger 1.2 adds a full first release of Batch Rename. You can preview filename c
 
 The inspector now covers a much broader set of metadata. Rating, flag, and colour label are available alongside expanded EXIF, IPTC, and XMP sections for camera, capture, date and time, location, descriptive, editorial, and rights fields. Field visibility remains configurable in Settings.
 
+Ledger 1.2 also introduces dedicated metadata workflow sheets:
+- **Adjust Date and Time…** with Shift, Time Zone, Specific Date/Time, and File Date modes, plus preview and apply-to target tags (Original, Digitised, Modified).
+- **Set Location…** with map/search placement, preview, and optional advanced location field staging (gated by Inspector Settings visibility).
+
 ### Browser Productivity
 
 This release also adds a Welcome / What's New screen, a Finder-style breadcrumb bar, a pending-edits Dock badge, Dock-menu shortcuts for favourites and recent folders, drag-to-reorder favourites, and configurable list columns with metadata-backed values.
 
 ### Browser Interaction and Handoff
 
-Gallery view now supports rubber-band selection, and list/gallery browser surfaces now expose direct handoff to Photos, Lightroom, and Lightroom Classic from their context menus.
+Gallery view now supports rubber-band selection, and handoff to Photos, Lightroom, and Lightroom Classic is available from Ledger’s export surfaces.
 
 ### Backups and Export
 
