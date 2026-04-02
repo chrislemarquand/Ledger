@@ -118,14 +118,7 @@ struct InspectorView: View {
                     if model.selectedFileURLs.count == 1 {
                         InspectorSectionContainer(
                             "Preview",
-                            isExpanded: Binding(
-                                get: { !model.isInspectorSectionCollapsed("Preview") },
-                                set: { _ in
-                                    DispatchQueue.main.async {
-                                        model.toggleInspectorSection("Preview")
-                                    }
-                                }
-                            )
+                            isExpanded: sectionExpandedBinding(for: "Preview")
                         ) {
                             if let previewURL = primarySelectedFileURL {
                                 VStack(spacing: 10) {
@@ -183,16 +176,9 @@ struct InspectorView: View {
                     ForEach(model.orderedEditableTagSections.filter { $0.section != "Rating" }) { grouped in
                         InspectorSectionContainer(
                             grouped.section,
-                            isExpanded: Binding(
-                                get: { !model.isInspectorSectionCollapsed(grouped.section) },
-                                set: { _ in
-                                    DispatchQueue.main.async {
-                                        model.toggleInspectorSection(grouped.section)
-                                    }
-                                }
-                            )
+                            isExpanded: sectionExpandedBinding(for: grouped.section)
                         ) {
-                            VStack(alignment: .leading, spacing: 10) {
+                            LazyVStack(alignment: .leading, spacing: 10) {
                                     ForEach(grouped.tags) { tag in
                                         InspectorFieldRow {
                                             HStack(spacing: 6) {
@@ -208,16 +194,7 @@ struct InspectorView: View {
                                                 if let date = model.dateValueForTag(tag) {
                                                     HStack(spacing: 6) {
                                                         InspectorDatePickerField(
-                                                            selection: Binding(
-                                                                get: { model.dateValueForTag(tag) ?? date },
-                                                                set: {
-                                                                    beginEditSessionIfNeeded(for: tag)
-                                                                    let newDate = $0
-                                                                    DispatchQueue.main.async {
-                                                                        model.updateDateValue(newDate, for: tag)
-                                                                    }
-                                                                }
-                                                            ),
+                                                            selection: dateBinding(for: tag, fallback: date),
                                                             datePickerStyle: .textField,
                                                             accessibilityLabel: tag.label
                                                         )
@@ -225,14 +202,13 @@ struct InspectorView: View {
 
                                                         Button {
                                                             beginEditSessionIfNeeded(for: tag)
-                                                            DispatchQueue.main.async {
-                                                                model.clearDateValue(for: tag)
-                                                            }
+                                                            model.clearDateValue(for: tag)
                                                         } label: {
                                                             Image(systemName: "xmark.circle.fill")
                                                                 .foregroundStyle(.secondary)
                                                         }
                                                         .buttonStyle(.plain)
+                                                        .accessibilityLabel("Clear \(tag.label)")
                                                         .help("Clear date and time")
 
                                                         Button("Set\u{2026}") {
@@ -272,17 +248,7 @@ struct InspectorView: View {
                                             } else if let options = model.pickerOptions(for: tag) {
                                                 let popupOptions = inspectorPopupOptions(for: tag, options: options)
                                                 InspectorPopupField(
-                                                    selection: Binding(
-                                                        get: { model.valueForTag(tag) },
-                                                        set: {
-                                                            guard $0 != model.valueForTag(tag) else { return }
-                                                            beginEditSessionIfNeeded(for: tag)
-                                                            let newValue = $0
-                                                            DispatchQueue.main.async {
-                                                                model.updateValue(newValue, for: tag)
-                                                            }
-                                                        }
-                                                    ),
+                                                    selection: popupBinding(for: tag),
                                                     options: popupOptions,
                                                     accessibilityLabel: tag.label
                                                 )
@@ -291,16 +257,7 @@ struct InspectorView: View {
                                                 HStack(spacing: 6) {
                                                     TextField(
                                                         "",
-                                                        text: Binding(
-                                                            get: { model.valueForTag(tag) },
-                                                            set: {
-                                                                beginEditSessionIfNeeded(for: tag)
-                                                                let newValue = $0
-                                                                DispatchQueue.main.async {
-                                                                    model.updateValue(newValue, for: tag)
-                                                                }
-                                                            }
-                                                        ),
+                                                        text: textBinding(for: tag),
                                                         prompt: Text(model.isMixedValue(for: tag) ? "Multiple values" : model.placeholderForTag(tag))
                                                             .foregroundStyle(.secondary)
                                                     )
@@ -531,6 +488,46 @@ struct InspectorView: View {
         let raw = model.valueForTag(tag).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !raw.isEmpty else { return nil }
         return parseCoordinate(raw)
+    }
+
+    private func sectionExpandedBinding(for section: String) -> Binding<Bool> {
+        Binding(
+            get: { !model.isInspectorSectionCollapsed(section) },
+            set: { _ in
+                model.toggleInspectorSection(section)
+            }
+        )
+    }
+
+    private func dateBinding(for tag: AppModel.EditableTag, fallback: Date) -> Binding<Date> {
+        Binding(
+            get: { model.dateValueForTag(tag) ?? fallback },
+            set: { newDate in
+                beginEditSessionIfNeeded(for: tag)
+                model.updateDateValue(newDate, for: tag)
+            }
+        )
+    }
+
+    private func popupBinding(for tag: AppModel.EditableTag) -> Binding<String> {
+        Binding(
+            get: { model.valueForTag(tag) },
+            set: { newValue in
+                guard newValue != model.valueForTag(tag) else { return }
+                beginEditSessionIfNeeded(for: tag)
+                model.updateValue(newValue, for: tag)
+            }
+        )
+    }
+
+    private func textBinding(for tag: AppModel.EditableTag) -> Binding<String> {
+        Binding(
+            get: { model.valueForTag(tag) },
+            set: { newValue in
+                beginEditSessionIfNeeded(for: tag)
+                model.updateValue(newValue, for: tag)
+            }
+        )
     }
 
     @ViewBuilder
