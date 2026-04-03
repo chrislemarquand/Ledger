@@ -222,9 +222,9 @@ private enum TokenKind: String, CaseIterable, Identifiable, Equatable {
         switch self {
         case .text:           return "Text"
         case .originalName:   return "Current Filename"
-        case .newExtension:   return "New extension"
-        case .sequenceNumber: return "Sequence number"
-        case .sequenceLetter: return "Sequence letter"
+        case .newExtension:   return "New Extension"
+        case .sequenceNumber: return "Sequence Number"
+        case .sequenceLetter: return "Sequence Letter"
         case .dateTime:       return "Date and Time"
         }
     }
