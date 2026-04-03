@@ -253,6 +253,13 @@ struct InspectorView: View {
                                                     accessibilityLabel: tag.label
                                                 )
                                                 .frame(maxWidth: .infinity, alignment: .leading)
+                                            } else if isKeywordTag(tag) {
+                                                InspectorTokenField(
+                                                    text: textBinding(for: tag),
+                                                    placeholder: model.placeholderForTag(tag),
+                                                    suggestions: model.knownKeywords()
+                                                )
+                                                .frame(maxWidth: .infinity, minHeight: 26, alignment: .leading)
                                             } else {
                                                 HStack(spacing: 6) {
                                                     TextField(
@@ -665,6 +672,10 @@ struct InspectorView: View {
 
     private func isLocationCoordinateTag(_ tag: AppModel.EditableTag) -> Bool {
         tag.id == "exif-gps-lat" || tag.id == "exif-gps-lon"
+    }
+
+    private func isKeywordTag(_ tag: AppModel.EditableTag) -> Bool {
+        tag.id == "xmp-subject" || tag.id == "iptc-keywords"
     }
 
 }

@@ -285,6 +285,19 @@ extension AppModel {
         }
     }
 
+    func knownKeywords() -> [String] {
+        var seen = Set<String>()
+        for snapshot in metadataByFile.values {
+            for field in snapshot.fields where field.key == "Subject" || field.key == "Keywords" {
+                for keyword in field.value.components(separatedBy: ", ") {
+                    let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty { seen.insert(trimmed) }
+                }
+            }
+        }
+        return seen.sorted()
+    }
+
     private func metadataStringValue(for fileURL: URL, keys: [String]) -> String {
         guard let snapshot = metadataByFile[fileURL] else { return "—" }
         for key in keys {
