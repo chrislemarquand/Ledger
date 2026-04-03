@@ -446,6 +446,14 @@ struct LocationAdjustSheetView: View {
         return "Changing \(noun) to a new location"
     }
 
+    private var visibleAdvancedItems: [(label: String, value: String)] {
+        LocationAdvancedField.allCases.compactMap { field in
+            guard session.selectedAdvancedFields.contains(field) else { return nil }
+            let value = session.resolvedValue(for: field)
+            return value.isEmpty ? nil : (field.label, value)
+        }
+    }
+
     private var selectedCoordinate: CLLocationCoordinate2D? {
         guard let latitude = session.latitude,
               let longitude = session.longitude,
@@ -557,25 +565,13 @@ struct LocationAdjustSheetView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .padding(.bottom, Self.mapToCoordinatesSpacing)
 
-                // Block 4: Latitude / Longitude
-                HStack(spacing: 28) {
-                    HStack(spacing: 4) {
-                        Text("Latitude:")
-                            .font(.callout)
-                        Text(selectedCoordinate.map { AppModel.compactDecimalString($0.latitude) } ?? "—")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
+                // Block 4: Coordinates + selected advanced fields
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 8) {
+                    infoCell(label: "Latitude", value: selectedCoordinate.map { AppModel.compactDecimalString($0.latitude) } ?? "—")
+                    infoCell(label: "Longitude", value: selectedCoordinate.map { AppModel.compactDecimalString($0.longitude) } ?? "—")
+                    ForEach(Array(visibleAdvancedItems.enumerated()), id: \.offset) { _, item in
+                        infoCell(label: item.label, value: item.value)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    HStack(spacing: 4) {
-                        Text("Longitude:")
-                            .font(.callout)
-                        Text(selectedCoordinate.map { AppModel.compactDecimalString($0.longitude) } ?? "—")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(.bottom, Self.coordinatesToFooterSpacing)
 
@@ -617,7 +613,9 @@ struct LocationAdjustSheetView: View {
         }
         .task {
             sanitizeAdvancedSelection()
-            if selectedCoordinate == nil {
+            if let coordinate = selectedCoordinate {
+                scheduleReverseGeocode(for: coordinate)
+            } else {
                 userLocationProvider.requestLocationIfNeeded()
             }
         }
@@ -626,6 +624,10 @@ struct LocationAdjustSheetView: View {
         }
         .onChange(of: advancedAvailabilityKey) { _, _ in
             sanitizeAdvancedSelection()
+        }
+        .onChange(of: session.selectedAdvancedFields) { _, newFields in
+            guard !newFields.isEmpty, let coordinate = selectedCoordinate else { return }
+            scheduleReverseGeocode(for: coordinate)
         }
         .onReceive(userLocationProvider.$coordinate) { coordinate in
             guard selectedCoordinate == nil, let coordinate else { return }
@@ -637,6 +639,18 @@ struct LocationAdjustSheetView: View {
         .onDisappear {
             reverseGeocodeTask?.cancel()
         }
+    }
+
+    @ViewBuilder
+    private func infoCell(label: String, value: String) -> some View {
+        HStack(spacing: 4) {
+            Text("\(label):")
+                .font(.callout)
+            Text(value)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
