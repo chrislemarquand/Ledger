@@ -1169,10 +1169,36 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
 
         menu.addItem(.separator())
 
-        let presetsItem = NSMenuItem(title: "Presets", action: nil, keyEquivalent: "")
-        presetsItem.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: nil)
-        presetsItem.submenu = makePresetsSubmenu()
-        menu.addItem(presetsItem)
+        let applyPresetItem = NSMenuItem(title: "Apply Preset", action: nil, keyEquivalent: "")
+        applyPresetItem.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: nil)
+        let applySubmenu = NSMenu(title: "Apply Preset")
+        if model.presets.isEmpty {
+            let noPresetsItem = NSMenuItem(title: "No Presets", action: nil, keyEquivalent: "")
+            noPresetsItem.isEnabled = false
+            applySubmenu.addItem(noPresetsItem)
+        } else {
+            for preset in model.presets {
+                let item = NSMenuItem(title: preset.name, action: #selector(applyPresetFromMenuAction(_:)), keyEquivalent: "")
+                item.representedObject = preset.id.uuidString
+                item.tag = MenuTag.imageApplyPreset
+                item.target = self
+                applySubmenu.addItem(item)
+            }
+        }
+        applyPresetItem.submenu = applySubmenu
+        menu.addItem(applyPresetItem)
+
+        let savePresetItem = NSMenuItem(title: "Save Metadata as Preset…", action: #selector(saveCurrentAsPresetAction(_:)), keyEquivalent: "")
+        savePresetItem.tag = MenuTag.imageSavePreset
+        savePresetItem.image = NSImage(systemSymbolName: "square.and.arrow.down.badge.checkmark", accessibilityDescription: nil)
+        savePresetItem.target = self
+        menu.addItem(savePresetItem)
+
+        let managePresetsItem = NSMenuItem(title: "Manage Presets…", action: #selector(managePresetsAction(_:)), keyEquivalent: "")
+        managePresetsItem.tag = MenuTag.imageManagePresets
+        managePresetsItem.image = NSImage(systemSymbolName: "slider.horizontal.below.square.filled.and.square", accessibilityDescription: nil)
+        managePresetsItem.target = self
+        menu.addItem(managePresetsItem)
 
         menu.addItem(.separator())
 
@@ -1245,10 +1271,6 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         batchRenameFolderItem.tag = MenuTag.folderBatchRename
         batchRenameFolderItem.target = self
         menu.addItem(batchRenameFolderItem)
-    }
-
-    private func makePresetsSubmenu() -> NSMenu {
-        makeSharedPresetsMenu(model: model)
     }
 
     fileprivate func makeSharedPresetsMenu(model: AppModel) -> NSMenu {
