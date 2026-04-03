@@ -32,24 +32,23 @@ struct BatchRenameSheetView: View {
             sectionSpacing: Self.sectionSpacing
         ) {
             VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: 12) {
-                    // Token rows
-                    VStack(spacing: 0) {
-                        ForEach(Array(tokens.enumerated()), id: \.offset) { index, token in
-                            TokenRow(
-                                token: token,
-                                isOnlyRow: tokens.count == 1,
-                                onUpdate: { tokens[index] = $0 },
-                                onDelete: { tokens.remove(at: index) },
-                                onInsertAfter: { tokens.insert(.text(""), at: index + 1) }
-                            )
-                        }
+                // Token rows
+                VStack(spacing: 0) {
+                    ForEach(Array(tokens.enumerated()), id: \.offset) { index, token in
+                        TokenRow(
+                            token: token,
+                            isOnlyRow: tokens.count == 1,
+                            onUpdate: { tokens[index] = $0 },
+                            onDelete: { tokens.remove(at: index) },
+                            onInsertAfter: { tokens.insert(.text(""), at: index + 1) }
+                        )
                     }
-
-                    // Inline preview — always same two-line structure to prevent height toggling
-                    inlinePreview
                 }
-                .padding(.bottom, Self.sectionSpacing.mainToFooter)
+                .padding(.bottom, Self.sectionSpacing.topToMain)
+
+                // Inline preview — always same two-line structure to prevent height toggling
+                inlinePreview
+                    .padding(.bottom, Self.sectionSpacing.mainToFooter)
 
                 // Footer
                 HStack {
