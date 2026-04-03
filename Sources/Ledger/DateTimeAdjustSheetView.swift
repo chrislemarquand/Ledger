@@ -399,6 +399,7 @@ struct LocationAdjustSheetView: View {
     @State private var session: LocationAdjustSession
 
     @State private var mapRegion: MKCoordinateRegion
+    @State private var hasExplicitCoordinate: Bool
     @StateObject private var userLocationProvider = WorkflowUserLocationProvider()
 
     @State private var showAdvanced = false
@@ -436,6 +437,9 @@ struct LocationAdjustSheetView: View {
                 center: center,
                 span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
             )
+        )
+        _hasExplicitCoordinate = State(
+            initialValue: initialSession.latitude != nil && initialSession.longitude != nil
         )
     }
 
@@ -558,6 +562,7 @@ struct LocationAdjustSheetView: View {
                     region: $mapRegion,
                     coordinate: coordinateBinding,
                     onCoordinateCommit: { coordinate in
+                        hasExplicitCoordinate = true
                         scheduleReverseGeocode(for: coordinate)
                     }
                 )
@@ -613,7 +618,7 @@ struct LocationAdjustSheetView: View {
         }
         .task {
             sanitizeAdvancedSelection()
-            if let coordinate = selectedCoordinate {
+            if hasExplicitCoordinate, let coordinate = selectedCoordinate {
                 scheduleReverseGeocode(for: coordinate)
             } else {
                 userLocationProvider.requestLocationIfNeeded()
@@ -626,7 +631,7 @@ struct LocationAdjustSheetView: View {
             sanitizeAdvancedSelection()
         }
         .onChange(of: session.selectedAdvancedFields) { _, newFields in
-            guard !newFields.isEmpty, let coordinate = selectedCoordinate else { return }
+            guard !newFields.isEmpty, hasExplicitCoordinate, let coordinate = selectedCoordinate else { return }
             scheduleReverseGeocode(for: coordinate)
         }
         .onReceive(userLocationProvider.$coordinate) { coordinate in
@@ -757,6 +762,7 @@ struct LocationAdjustSheetView: View {
                 return
             }
             let coordinate = first.location.coordinate
+            hasExplicitCoordinate = true
             session.latitude = coordinate.latitude
             session.longitude = coordinate.longitude
             mapRegion = MKCoordinateRegion(
