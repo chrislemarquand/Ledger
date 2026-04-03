@@ -10,6 +10,8 @@ All notable changes to Ledger are documented here.
 
 - **Welcome / What's New** screen using the SharedUI `AppWelcomeViewController` and WhatsNewKit-backed version gating.
 - **Batch Rename** first release: token-based preview/build pipeline, selection/folder scope, deterministic ordering, collision disambiguation, extension overrides, backup-aware execution, and restore support for renamed outputs.
+- **Adjust Date and Time** sheet with four modes — Shift by duration, Set Time Zone, Set Specific Date/Time, and Copy from File — preview gating on effective changes, and apply-to target selection (Original, Digitised, Modified).
+- **Set Location** sheet with interactive map, address search, and advanced coordinate fields; availability gated by Inspector Settings.
 - **Expanded inspector metadata coverage** across EXIF / IPTC / XMP, including star rating, pick flag, colour label, and field visibility controls.
 - **Finder-style breadcrumb bar** for the current browser location.
 - **Dock integrations**: pending-edits badge plus Dock-menu shortcuts for favourites, recents, and Open Folder.
