@@ -233,9 +233,41 @@ public enum SequencePadding: Int, Sendable, Equatable, CaseIterable, Identifiabl
     }
 }
 
+public enum OriginalNameComponent: String, Sendable, Equatable, CaseIterable, Identifiable {
+    public var id: String { rawValue }
+    case nameAndExtension
+    case name
+    case fileExtension
+    case numberSuffix
+
+    public var displayName: String {
+        switch self {
+        case .nameAndExtension: return "Name + Extension"
+        case .name:             return "Name"
+        case .fileExtension:    return "Extension"
+        case .numberSuffix:     return "Number Suffix"
+        }
+    }
+}
+
+public enum OriginalNameCasing: String, Sendable, Equatable, CaseIterable, Identifiable {
+    public var id: String { rawValue }
+    case original
+    case uppercase
+    case lowercase
+
+    public var displayName: String {
+        switch self {
+        case .original:  return "Original Case"
+        case .uppercase: return "UPPERCASE"
+        case .lowercase: return "lowercase"
+        }
+    }
+}
+
 public enum RenameToken: Sendable, Equatable {
     case text(String)
-    case originalName
+    case originalName(component: OriginalNameComponent, casing: OriginalNameCasing)
     case sequence(start: Int, padding: SequencePadding)
     case sequenceLetter(uppercase: Bool)
     case date(source: DateSource, format: DateFormat)

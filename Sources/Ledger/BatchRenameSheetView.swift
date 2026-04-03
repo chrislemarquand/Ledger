@@ -202,13 +202,14 @@ struct BatchRenameSheetView: View {
 // MARK: - Token Row
 
 private enum TokenKind: CaseIterable, Identifiable, Equatable {
-    case text, newExtension, sequenceNumber, sequenceLetter, dateTime
+    case text, originalName, newExtension, sequenceNumber, sequenceLetter, dateTime
 
     var id: Self { self }
 
     var displayName: String {
         switch self {
         case .text:           return "Text"
+        case .originalName:   return "Current Filename"
         case .newExtension:   return "New extension"
         case .sequenceNumber: return "Sequence number"
         case .sequenceLetter: return "Sequence letter"
@@ -219,17 +220,18 @@ private enum TokenKind: CaseIterable, Identifiable, Equatable {
     init(token: RenameToken) {
         switch token {
         case .text:           self = .text
+        case .originalName:   self = .originalName
         case .extension:      self = .newExtension
         case .sequence:       self = .sequenceNumber
         case .sequenceLetter: self = .sequenceLetter
         case .date:           self = .dateTime
-        case .originalName:   self = .text
         }
     }
 
     var defaultToken: RenameToken {
         switch self {
         case .text:           return .text("")
+        case .originalName:   return .originalName(component: .name, casing: .original)
         case .newExtension:   return .extension("")
         case .sequenceNumber: return .sequence(start: 1, padding: .three)
         case .sequenceLetter: return .sequenceLetter(uppercase: true)
@@ -369,10 +371,30 @@ private struct TokenRow: View {
                 .frame(maxWidth: .infinity)
             }
 
-        case .originalName:
-            Text("Current filename")
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        case .originalName(let component, let casing):
+            HStack(spacing: 8) {
+                Picker("", selection: Binding(
+                    get: { component },
+                    set: { onUpdate(.originalName(component: $0, casing: casing)) }
+                )) {
+                    ForEach(OriginalNameComponent.allCases) { c in
+                        Text(c.displayName).tag(c)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
+
+                Picker("", selection: Binding(
+                    get: { casing },
+                    set: { onUpdate(.originalName(component: component, casing: $0)) }
+                )) {
+                    ForEach(OriginalNameCasing.allCases) { c in
+                        Text(c.displayName).tag(c)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
+            }
         }
     }
 }
