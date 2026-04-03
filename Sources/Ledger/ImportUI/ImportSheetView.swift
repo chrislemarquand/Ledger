@@ -9,7 +9,12 @@ import UniformTypeIdentifiers
 final class ImportSession: ObservableObject {
     static let eosFocalTagID = "exif-focal"
     static let eosLensTagID = "exif-lens"
-    private static let isRunningUnitTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    private static let isRunningUnitTests: Bool = {
+        // XCTestConfigurationFilePath is set by xcodebuild test but not by swift test --parallel.
+        // NSClassFromString covers both runners.
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil ||
+            NSClassFromString("XCTestCase") != nil
+    }()
 
     struct EOSLensChoiceDecision {
         let lens: String
