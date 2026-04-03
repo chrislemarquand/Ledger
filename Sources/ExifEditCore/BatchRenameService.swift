@@ -207,8 +207,19 @@ public actor BatchRenameService {
             switch token {
             case .text(let s):
                 return s
-            case .originalName:
-                return originalURL.deletingPathExtension().lastPathComponent
+            case .originalName(let component, let casing):
+                let raw: String
+                switch component {
+                case .nameAndExtension: raw = originalURL.lastPathComponent
+                case .name:             raw = originalURL.deletingPathExtension().lastPathComponent
+                case .fileExtension:    raw = originalURL.pathExtension
+                case .numberSuffix:     raw = extractNumberSuffix(from: originalURL.deletingPathExtension().lastPathComponent)
+                }
+                switch casing {
+                case .original:  return raw
+                case .uppercase: return raw.uppercased()
+                case .lowercase: return raw.lowercased()
+                }
             case .sequence(let start, let padding):
                 let value = start + sequenceIndex
                 return String(format: "%0\(padding.rawValue)d", value)
@@ -300,8 +311,18 @@ public actor BatchRenameService {
                 let normalized = ext.hasPrefix(".") ? String(ext.dropFirst()) : ext
                 return normalized
             }
+            if case .originalName(let component, _) = token, component == .nameAndExtension {
+                return ""  // basename already contains the extension
+            }
         }
         return originalURL.pathExtension
+    }
+
+    private func extractNumberSuffix(from basename: String) -> String {
+        guard let range = basename.range(of: #"[0-9]+$"#, options: .regularExpression) else {
+            return ""
+        }
+        return String(basename[range])
     }
 
     private func resolveCollision(

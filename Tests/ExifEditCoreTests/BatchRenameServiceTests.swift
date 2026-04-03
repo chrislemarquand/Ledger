@@ -20,9 +20,69 @@ final class BatchRenameServiceTests: XCTestCase {
         let files = makeFiles(names: ["IMG_001.jpg"])
         let plan = await service.buildPlan(
             files: files,
-            pattern: RenamePattern(tokens: [.originalName])
+            pattern: RenamePattern(tokens: [.originalName(component: .name, casing: .original)])
         )
         XCTAssertEqual(plan[0].finalTargetURL.lastPathComponent, "IMG_001.jpg")
+    }
+
+    func testOriginalNameComponentNameAndExtension() async {
+        let service = BatchRenameService()
+        let files = makeFiles(names: ["IMG_001.jpg"])
+        let plan = await service.buildPlan(
+            files: files,
+            pattern: RenamePattern(tokens: [.originalName(component: .nameAndExtension, casing: .original)])
+        )
+        XCTAssertEqual(plan[0].finalTargetURL.lastPathComponent, "IMG_001.jpg")
+    }
+
+    func testOriginalNameComponentExtension() async {
+        let service = BatchRenameService()
+        let files = makeFiles(names: ["IMG_001.jpg"])
+        let plan = await service.buildPlan(
+            files: files,
+            pattern: RenamePattern(tokens: [.text("type_"), .originalName(component: .fileExtension, casing: .original)])
+        )
+        XCTAssertEqual(plan[0].finalTargetURL.lastPathComponent, "type_jpg.jpg")
+    }
+
+    func testOriginalNameComponentNumberSuffix() async {
+        let service = BatchRenameService()
+        let files = makeFiles(names: ["DSC00042.jpg"])
+        let plan = await service.buildPlan(
+            files: files,
+            pattern: RenamePattern(tokens: [.originalName(component: .numberSuffix, casing: .original)])
+        )
+        XCTAssertEqual(plan[0].finalTargetURL.lastPathComponent, "00042.jpg")
+    }
+
+    func testOriginalNameComponentNumberSuffixStripsLeadingSeparator() async {
+        let service = BatchRenameService()
+        let files = makeFiles(names: ["IMG_1234.jpg"])
+        let plan = await service.buildPlan(
+            files: files,
+            pattern: RenamePattern(tokens: [.originalName(component: .numberSuffix, casing: .original)])
+        )
+        XCTAssertEqual(plan[0].finalTargetURL.lastPathComponent, "1234.jpg")
+    }
+
+    func testOriginalNameCasingUppercase() async {
+        let service = BatchRenameService()
+        let files = makeFiles(names: ["img_001.jpg"])
+        let plan = await service.buildPlan(
+            files: files,
+            pattern: RenamePattern(tokens: [.originalName(component: .name, casing: .uppercase)])
+        )
+        XCTAssertEqual(plan[0].finalTargetURL.lastPathComponent, "IMG_001.jpg")
+    }
+
+    func testOriginalNameCasingLowercase() async {
+        let service = BatchRenameService()
+        let files = makeFiles(names: ["IMG_001.JPG"])
+        let plan = await service.buildPlan(
+            files: files,
+            pattern: RenamePattern(tokens: [.originalName(component: .name, casing: .lowercase)])
+        )
+        XCTAssertEqual(plan[0].finalTargetURL.lastPathComponent, "img_001.JPG")
     }
 
     func testSequenceToken() async {
@@ -123,7 +183,7 @@ final class BatchRenameServiceTests: XCTestCase {
         let files = makeFiles(names: ["photo.jpg"])
         let plan = await service.buildPlan(
             files: files,
-            pattern: RenamePattern(tokens: [.originalName, .extension("jpeg")])
+            pattern: RenamePattern(tokens: [.originalName(component: .name, casing: .original), .extension("jpeg")])
         )
         XCTAssertEqual(plan[0].finalTargetURL.pathExtension, "jpeg")
     }
@@ -133,7 +193,7 @@ final class BatchRenameServiceTests: XCTestCase {
         let files = makeFiles(names: ["photo.jpg"])
         let plan = await service.buildPlan(
             files: files,
-            pattern: RenamePattern(tokens: [.originalName, .extension(".jpeg")])
+            pattern: RenamePattern(tokens: [.originalName(component: .name, casing: .original), .extension(".jpeg")])
         )
         XCTAssertEqual(plan[0].finalTargetURL.pathExtension, "jpeg")
     }
@@ -279,7 +339,7 @@ final class BatchRenameServiceTests: XCTestCase {
         let service = BatchRenameService()
         let operation = RenameOperation(
             files: [fileA, fileB],
-            pattern: RenamePattern(tokens: [.originalName])
+            pattern: RenamePattern(tokens: [.originalName(component: .name, casing: .original)])
         )
         let manager = BackupManager(baseDirectory: temp.appendingPathComponent("backups"))
         let result = try await service.execute(operation: operation, backupManager: manager)
