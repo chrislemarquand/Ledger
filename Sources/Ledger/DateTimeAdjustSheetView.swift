@@ -636,8 +636,6 @@ struct LocationAdjustSheetView: View {
         }
         .onReceive(userLocationProvider.$coordinate) { coordinate in
             guard selectedCoordinate == nil, let coordinate else { return }
-            session.latitude = coordinate.latitude
-            session.longitude = coordinate.longitude
             mapRegion.center = coordinate
         }
         .onDisappear {
