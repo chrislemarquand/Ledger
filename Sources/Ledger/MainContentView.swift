@@ -910,8 +910,16 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     }
 
     private func makeImportSubmenu() -> NSMenu {
-        let submenu = NSMenu(title: "Import")
-        submenu.autoenablesItems = false
+        Self.buildImportMenu(controller: self, model: model)
+    }
+
+    fileprivate static func buildImportMenu(
+        controller: NativeThreePaneSplitViewController,
+        model: AppModel
+    ) -> NSMenu {
+        let menu = NSMenu(title: "Import")
+        menu.autoenablesItems = false
+        let isEnabled = !model.browserItems.isEmpty
 
         let items: [(title: String, action: Selector, symbol: String, tag: Int)] = [
             ("CSV…", #selector(importCSVAction(_:)), "tablecells", MenuTag.fileImportCSV),
@@ -923,13 +931,13 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
 
         for descriptor in items {
             let item = NSMenuItem(title: descriptor.title, action: descriptor.action, keyEquivalent: "")
-            item.target = self
+            item.target = controller
             item.image = NSImage(systemSymbolName: descriptor.symbol, accessibilityDescription: nil)
             item.tag = descriptor.tag
-            item.isEnabled = !model.browserItems.isEmpty
-            submenu.addItem(item)
+            item.isEnabled = isEnabled
+            menu.addItem(item)
         }
-        return submenu
+        return menu
     }
 
     private func makeExportSubmenu() -> NSMenu {
@@ -2285,24 +2293,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
 
         private func makeImportMenu(model: AppModel) -> NSMenu {
             guard let controller else { return NSMenu(title: "Import") }
-            let menu = NSMenu(title: "Import")
-            menu.autoenablesItems = false
-            let isEnabled = !model.browserItems.isEmpty
-
-            func addItem(title: String, action: Selector, imageName: String) {
-                let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-                item.target = controller
-                item.isEnabled = isEnabled
-                item.image = NSImage(systemSymbolName: imageName, accessibilityDescription: nil)
-                menu.addItem(item)
-            }
-
-            addItem(title: "CSV…", action: #selector(NativeThreePaneSplitViewController.importCSVAction(_:)), imageName: "tablecells")
-            addItem(title: "GPX…", action: #selector(NativeThreePaneSplitViewController.importGPXAction(_:)), imageName: "location")
-            addItem(title: "Reference Folder…", action: #selector(NativeThreePaneSplitViewController.importReferenceFolderAction(_:)), imageName: "folder.badge.questionmark")
-            addItem(title: "Reference Image…", action: #selector(NativeThreePaneSplitViewController.importReferenceImageAction(_:)), imageName: "photo.badge.plus")
-            addItem(title: "EOS-1V…", action: #selector(NativeThreePaneSplitViewController.importEOS1VAction(_:)), imageName: "camera")
-            return menu
+            return NativeThreePaneSplitViewController.buildImportMenu(controller: controller, model: model)
         }
 
         private func makeExportMenu(model: AppModel) -> NSMenu {
