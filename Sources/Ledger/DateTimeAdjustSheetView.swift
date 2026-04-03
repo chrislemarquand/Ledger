@@ -634,7 +634,6 @@ struct LocationAdjustSheetView: View {
             session.latitude = coordinate.latitude
             session.longitude = coordinate.longitude
             mapRegion.center = coordinate
-            scheduleReverseGeocode(for: coordinate)
         }
         .onDisappear {
             reverseGeocodeTask?.cancel()
