@@ -111,12 +111,12 @@ struct BatchRenameSheetView: View {
             newName = "—"
         }
         return VStack(alignment: .leading, spacing: 4) {
-            Text("Current filename: \(currentName)")
+            Text("Current name: \(currentName)")
                 .font(.callout)
                 .foregroundStyle(previewIssues.isEmpty ? Color.secondary : Color.red)
                 .lineLimit(1)
                 .truncationMode(.middle)
-            Text("New filename: \(newName)")
+            Text("New name: \(newName)")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -144,7 +144,7 @@ struct BatchRenameSheetView: View {
                 }
                 .padding()
             } else if preview.isEmpty {
-                Text("No files match the current scope.")
+                Text("No files to rename.")
                     .foregroundStyle(.secondary)
                     .font(.caption)
                     .padding()
@@ -166,7 +166,7 @@ struct BatchRenameSheetView: View {
                                 if hasConflict(entry) {
                                     Image(systemName: "exclamationmark.triangle.fill")
                                         .foregroundStyle(.yellow)
-                                        .help("Disambiguated to avoid collision")
+                                        .help("Renamed to avoid a duplicate")
                                 }
                             }
                             .font(.system(.caption, design: .monospaced))
