@@ -9,6 +9,7 @@ struct BatchRenameSheetView: View {
     let scope: BatchRenameScope
 
     private static let sectionSpacing = WorkflowSheetSectionSpacing.uniform(20)
+    private static let formRowSpacing: CGFloat = 10
     private static let previewDebounceNanoseconds: UInt64 = 120_000_000
 
     @State private var tokens: [RenameToken] = [.text("")]
@@ -33,7 +34,7 @@ struct BatchRenameSheetView: View {
         ) {
             VStack(alignment: .leading, spacing: 0) {
                 // Token rows
-                VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: Self.formRowSpacing) {
                     ForEach(Array(tokens.enumerated()), id: \.offset) { index, token in
                         TokenRow(
                             token: token,
@@ -290,7 +291,6 @@ private struct TokenRow: View {
                 .controlSize(.small)
             }
         }
-        .padding(.vertical, 5)
     }
 
     @ViewBuilder
