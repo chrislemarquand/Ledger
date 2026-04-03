@@ -365,11 +365,19 @@ extension AppModel {
             session.latitude = coordinate.latitude
             session.longitude = coordinate.longitude
         }
+        session.includeCoordinates = locationPersistedCoordinates
+        session.selectedAdvancedFields = locationPersistedAdvancedFields
+            .filter { isInspectorFieldEnabled($0.tagID) }
         pendingLocationAdjustSession = session
     }
 
     func dismissLocationAdjustSheet() {
         pendingLocationAdjustSession = nil
+    }
+
+    func saveLocationFieldSelection(from session: LocationAdjustSession) {
+        locationPersistedCoordinates = session.includeCoordinates
+        locationPersistedAdvancedFields = session.selectedAdvancedFields
     }
 
     // MARK: - Location Preview + Stage
@@ -384,7 +392,8 @@ extension AppModel {
             )
         }
 
-        guard let target = coordinate(from: session) else {
+        let target = coordinate(from: session)
+        if session.includeCoordinates && target == nil {
             return LocationAdjustAssessment(
                 rows: [],
                 blockingIssues: ["Set a location before previewing or applying."],
@@ -418,21 +427,21 @@ extension AppModel {
 
         for fileURL in session.fileURLs {
             let existing = locationCoordinate(for: fileURL)
-            var deltaText: String
+            var deltaText: String = "no change"
             var coordinateChanged = false
 
-            if let existing {
-                let distance = CLLocation(latitude: existing.latitude, longitude: existing.longitude)
-                    .distance(from: CLLocation(latitude: target.latitude, longitude: target.longitude))
-                if distance >= 1 {
-                    coordinateChanged = true
-                    deltaText = formattedDistance(distance)
+            if session.includeCoordinates, let target {
+                if let existing {
+                    let distance = CLLocation(latitude: existing.latitude, longitude: existing.longitude)
+                        .distance(from: CLLocation(latitude: target.latitude, longitude: target.longitude))
+                    if distance >= 1 {
+                        coordinateChanged = true
+                        deltaText = formattedDistance(distance)
+                    }
                 } else {
-                    deltaText = "no change"
+                    coordinateChanged = true
+                    deltaText = ""
                 }
-            } else {
-                coordinateChanged = true
-                deltaText = ""
             }
 
             var advancedChanged = false
@@ -457,7 +466,7 @@ extension AppModel {
                     id: fileURL,
                     fileName: fileURL.lastPathComponent,
                     originalDisplay: formattedCoordinate(existing),
-                    adjustedDisplay: formattedCoordinate(target),
+                    adjustedDisplay: session.includeCoordinates ? formattedCoordinate(target) : formattedCoordinate(existing),
                     deltaText: deltaText
                 )
             )
@@ -477,7 +486,7 @@ extension AppModel {
             return
         }
 
-        guard let target = coordinate(from: session) else {
+        if session.includeCoordinates && coordinate(from: session) == nil {
             statusMessage = "Set a location before applying."
             return
         }
@@ -492,21 +501,21 @@ extension AppModel {
             return
         }
 
-        guard let latitudeTag = editableTag(forID: "exif-gps-lat"),
-              let longitudeTag = editableTag(forID: "exif-gps-lon")
-        else {
-            statusMessage = "Location tags are unavailable."
-            return
-        }
-
         let previousState = currentPendingEditState()
-        let latitudeValue = Self.compactDecimalString(target.latitude)
-        let longitudeValue = Self.compactDecimalString(target.longitude)
         let advancedTargets = resolvedAdvancedTargets(for: session, respectingSettings: true)
 
+        if session.includeCoordinates, let target = coordinate(from: session),
+           let latitudeTag = editableTag(forID: "exif-gps-lat"),
+           let longitudeTag = editableTag(forID: "exif-gps-lon") {
+            let latitudeValue = Self.compactDecimalString(target.latitude)
+            let longitudeValue = Self.compactDecimalString(target.longitude)
+            for fileURL in session.fileURLs {
+                stageEdit(latitudeValue, for: latitudeTag, fileURLs: [fileURL], source: .manual)
+                stageEdit(longitudeValue, for: longitudeTag, fileURLs: [fileURL], source: .manual)
+            }
+        }
+
         for fileURL in session.fileURLs {
-            stageEdit(latitudeValue, for: latitudeTag, fileURLs: [fileURL], source: .manual)
-            stageEdit(longitudeValue, for: longitudeTag, fileURLs: [fileURL], source: .manual)
             for target in advancedTargets {
                 let existingValue = existingLocationFieldValue(for: fileURL, field: target.field)
                 guard existingValue != target.value else { continue }
