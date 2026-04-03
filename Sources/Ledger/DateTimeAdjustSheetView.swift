@@ -402,7 +402,7 @@ struct LocationAdjustSheetView: View {
     @State private var hasExplicitCoordinate: Bool
     @StateObject private var userLocationProvider = WorkflowUserLocationProvider()
 
-    @State private var showAdvanced = false
+    @State private var showFields = false
     @State private var showPreview = false
     @State private var previewRows: [LocationAdjustPreviewRow] = []
     @State private var previewBlockingIssues: [String] = []
@@ -582,12 +582,12 @@ struct LocationAdjustSheetView: View {
 
                 // Block 5: Footer buttons
                 HStack {
-                    Button("Advanced\u{2026}") {
-                        showAdvanced = true
+                    Button("Fields\u{2026}") {
+                        showFields = true
                     }
                     .disabled(!isAdvancedActionEnabled)
-                    .popover(isPresented: $showAdvanced) {
-                        advancedPopover
+                    .popover(isPresented: $showFields) {
+                        fieldsPopover
                     }
 
                     Button("Preview\u{2026}") {
@@ -656,21 +656,36 @@ struct LocationAdjustSheetView: View {
     }
 
     @ViewBuilder
-    private var advancedPopover: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if availableAdvancedFields.isEmpty {
-                Text("Enable location text fields in Inspector Settings to use Advanced options.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(availableAdvancedFields) { field in
-                    Toggle(field.label, isOn: bindingForAdvancedField(field))
-                        .toggleStyle(.checkbox)
+    private var fieldsPopover: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Choose Fields")
+                .font(.headline)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    if availableAdvancedFields.isEmpty {
+                        Text("Enable location text fields in Inspector Settings to use this option.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(availableAdvancedFields) { field in
+                            Toggle(field.label, isOn: bindingForAdvancedField(field))
+                                .toggleStyle(.checkbox)
+                        }
+                    }
                 }
+                .padding(.vertical, 2)
+            }
+            .frame(maxHeight: 300)
+            HStack {
+                Spacer()
+                Button("Apply") {
+                    showFields = false
+                }
+                .keyboardShortcut(.defaultAction)
             }
         }
         .padding()
-        .frame(minWidth: 220)
+        .frame(minWidth: 240)
     }
 
     @ViewBuilder
@@ -790,7 +805,7 @@ struct LocationAdjustSheetView: View {
         let allowed = Set(availableAdvancedFields)
         session.selectedAdvancedFields.formIntersection(allowed)
         if !isAdvancedActionEnabled {
-            showAdvanced = false
+            showFields = false
         }
     }
 
