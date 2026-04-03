@@ -373,9 +373,9 @@ public actor BatchRenameService {
             if case .extension(let ext) = token {
                 let normalized = ext.hasPrefix(".") ? String(ext.dropFirst()) : ext
                 if normalized.isEmpty {
-                    issues.append(RenameValidationIssue(message: "Enter an extension or remove the New Extension token."))
+                    issues.append(RenameValidationIssue(message: "Enter an extension, or remove the New Extension field."))
                 } else if normalized.rangeOfCharacter(from: invalidCharacters) != nil {
-                    issues.append(RenameValidationIssue(message: "Extension contains invalid characters."))
+                    issues.append(RenameValidationIssue(message: "The extension contains invalid characters."))
                 }
             }
         }
@@ -387,21 +387,21 @@ public actor BatchRenameService {
             if basename.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 issues.append(RenameValidationIssue(
                     sourceURL: entry.sourceURL,
-                    message: "Filename can't be empty."
+                    message: "The new name can't be empty."
                 ))
                 continue
             }
             if targetName == "." || targetName == ".." {
                 issues.append(RenameValidationIssue(
                     sourceURL: entry.sourceURL,
-                    message: "Filename is invalid."
+                    message: "The new name is invalid."
                 ))
                 continue
             }
             if targetName.rangeOfCharacter(from: invalidCharacters) != nil {
                 issues.append(RenameValidationIssue(
                     sourceURL: entry.sourceURL,
-                    message: "Filename contains invalid characters."
+                    message: "The new name contains invalid characters."
                 ))
                 continue
             }
@@ -410,7 +410,7 @@ public actor BatchRenameService {
             if targetLower.contains(lowerTargetPath) {
                 issues.append(RenameValidationIssue(
                     sourceURL: entry.sourceURL,
-                    message: "Two files would end up with the same name."
+                    message: "Two files would have the same name."
                 ))
                 continue
             }
@@ -419,7 +419,7 @@ public actor BatchRenameService {
             if fm.fileExists(atPath: entry.finalTargetURL.path), !sourceSet.contains(lowerTargetPath) {
                 issues.append(RenameValidationIssue(
                     sourceURL: entry.sourceURL,
-                    message: "A file with that name already exists."
+                    message: "A file with this name already exists."
                 ))
             }
         }
