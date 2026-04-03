@@ -213,7 +213,7 @@ private enum TokenKind: CaseIterable, Identifiable, Equatable {
         case .newExtension:   return "New extension"
         case .sequenceNumber: return "Sequence number"
         case .sequenceLetter: return "Sequence letter"
-        case .dateTime:       return "Date Time"
+        case .dateTime:       return "Date and Time"
         }
     }
 

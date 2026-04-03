@@ -156,9 +156,9 @@ public enum DateSource: String, Sendable, Equatable, CaseIterable, Identifiable 
 
     public var displayName: String {
         switch self {
-        case .dateTimeOriginal: return "Date Time Original"
-        case .createDate: return "Date Created"
-        case .modifyDate: return "Date File Modified"
+        case .dateTimeOriginal: return "Original"
+        case .createDate: return "Digitised"
+        case .modifyDate: return "Modified"
         }
     }
 }
