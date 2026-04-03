@@ -450,12 +450,19 @@ struct LocationAdjustSheetView: View {
         return "Changing \(noun) to a new location"
     }
 
-    private var visibleAdvancedItems: [(label: String, value: String)] {
-        LocationAdvancedField.allCases.compactMap { field in
-            guard session.selectedAdvancedFields.contains(field) else { return nil }
-            let value = session.resolvedValue(for: field)
-            return value.isEmpty ? nil : (field.label, value)
+    private var visiblePreviewItems: [(label: String, value: String)] {
+        var items: [(String, String)] = []
+        if session.includeCoordinates, let coord = selectedCoordinate {
+            items.append(("Latitude", AppModel.compactDecimalString(coord.latitude)))
+            items.append(("Longitude", AppModel.compactDecimalString(coord.longitude)))
         }
+        for field in LocationAdvancedField.allCases {
+            guard session.selectedAdvancedFields.contains(field) else { continue }
+            let value = session.resolvedValue(for: field)
+            guard !value.isEmpty else { continue }
+            items.append((field.label, value))
+        }
+        return items
     }
 
     private var selectedCoordinate: CLLocationCoordinate2D? {
@@ -478,7 +485,7 @@ struct LocationAdjustSheetView: View {
     }
 
     private var isAdvancedActionEnabled: Bool {
-        !availableAdvancedFields.isEmpty
+        true  // coordinates always available; advanced fields gated by settings
     }
 
     private var isPreviewActionEnabled: Bool {
@@ -493,6 +500,7 @@ struct LocationAdjustSheetView: View {
         [
             "\(session.latitude ?? 0)",
             "\(session.longitude ?? 0)",
+            "\(session.includeCoordinates)",
             "\(session.fileURLs.count)",
             session.selectedAdvancedFields
                 .map(\.rawValue)
@@ -570,15 +578,15 @@ struct LocationAdjustSheetView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .padding(.bottom, Self.mapToCoordinatesSpacing)
 
-                // Block 4: Coordinates + selected advanced fields
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 8) {
-                    infoCell(label: "Latitude", value: selectedCoordinate.map { AppModel.compactDecimalString($0.latitude) } ?? "—")
-                    infoCell(label: "Longitude", value: selectedCoordinate.map { AppModel.compactDecimalString($0.longitude) } ?? "—")
-                    ForEach(Array(visibleAdvancedItems.enumerated()), id: \.offset) { _, item in
-                        infoCell(label: item.label, value: item.value)
+                // Block 4: Selected fields preview
+                if !visiblePreviewItems.isEmpty {
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 8) {
+                        ForEach(Array(visiblePreviewItems.enumerated()), id: \.offset) { _, item in
+                            infoCell(label: item.label, value: item.value)
+                        }
                     }
+                    .padding(.bottom, Self.coordinatesToFooterSpacing)
                 }
-                .padding(.bottom, Self.coordinatesToFooterSpacing)
 
                 // Block 5: Footer buttons
                 HStack {
@@ -657,20 +665,21 @@ struct LocationAdjustSheetView: View {
 
     @ViewBuilder
     private var fieldsPopover: some View {
+        let coordinatesEnabled = selectedCoordinate != nil
         VStack(alignment: .leading, spacing: 12) {
             Text("Choose Fields")
                 .font(.headline)
             ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
-                    if availableAdvancedFields.isEmpty {
-                        Text("Enable location text fields in Inspector Settings to use this option.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(availableAdvancedFields) { field in
-                            Toggle(field.label, isOn: bindingForAdvancedField(field))
-                                .toggleStyle(.checkbox)
-                        }
+                    Toggle("Latitude", isOn: $session.includeCoordinates)
+                        .toggleStyle(.checkbox)
+                        .disabled(!coordinatesEnabled)
+                    Toggle("Longitude", isOn: $session.includeCoordinates)
+                        .toggleStyle(.checkbox)
+                        .disabled(!coordinatesEnabled)
+                    ForEach(availableAdvancedFields) { field in
+                        Toggle(field.label, isOn: bindingForAdvancedField(field))
+                            .toggleStyle(.checkbox)
                     }
                 }
                 .padding(.vertical, 2)
@@ -679,9 +688,11 @@ struct LocationAdjustSheetView: View {
             HStack {
                 Spacer()
                 Button("Apply") {
+                    model.saveLocationFieldSelection(from: session)
                     showFields = false
                 }
                 .keyboardShortcut(.defaultAction)
+                .disabled(session.includeCoordinates == false && session.selectedAdvancedFields.isEmpty)
             }
         }
         .padding()
@@ -804,9 +815,6 @@ struct LocationAdjustSheetView: View {
     private func sanitizeAdvancedSelection() {
         let allowed = Set(availableAdvancedFields)
         session.selectedAdvancedFields.formIntersection(allowed)
-        if !isAdvancedActionEnabled {
-            showFields = false
-        }
     }
 
     private func scheduleReverseGeocode(for coordinate: CLLocationCoordinate2D) {

@@ -127,6 +127,7 @@ struct LocationAdjustSession: Identifiable {
     var searchQuery: String = ""
     var latitude: Double?
     var longitude: Double?
+    var includeCoordinates: Bool = true
     var selectedAdvancedFields: Set<LocationAdvancedField> = []
     var resolvedSublocation: String = ""
     var resolvedCity: String = ""

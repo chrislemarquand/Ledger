@@ -510,6 +510,8 @@ final class AppModel: ObservableObject {
     @Published var pendingBatchRenameScope: BatchRenameScope?
     @Published var pendingDateTimeAdjustSession: DateTimeAdjustSession?
     @Published var pendingLocationAdjustSession: LocationAdjustSession?
+    var locationPersistedCoordinates: Bool = true
+    var locationPersistedAdvancedFields: Set<LocationAdvancedField> = []
     @Published var isRenaming = false
     @Published var renameProgress: (completed: Int, total: Int) = (0, 0)
     /// Maps current on-disk URL → proposed final filename (basename + ext).
