@@ -252,7 +252,8 @@ extension AppModel {
             }
             return "—"
         case ListColumnDefinition.idRating:
-            return metadataStringValue(for: fileURL, keys: ["Rating"])
+            let raw = metadataStringValue(for: fileURL, keys: ["Rating"])
+            return raw == "0" ? "—" : raw
         case ListColumnDefinition.idMake:
             return metadataStringValue(for: fileURL, keys: ["Make"])
         case ListColumnDefinition.idModel:
