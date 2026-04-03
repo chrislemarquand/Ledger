@@ -12,6 +12,13 @@ struct BatchRenameSheetView: View {
     private static let formRowSpacing: CGFloat = 10
     private static let previewDebounceNanoseconds: UInt64 = 120_000_000
 
+    // Column grid (content width = 540pt, +/- buttons = 80pt)
+    fileprivate static let col1Width: CGFloat = 152   // type picker
+    fileprivate static let col2Width: CGFloat = 142   // first content column
+    fileprivate static let col3Width: CGFloat = 142   // second content column
+    fileprivate static let colSpacing: CGFloat = 8
+    fileprivate static let contentSpan: CGFloat = col2Width + colSpacing + col3Width  // 292
+
     @State private var tokens: [RenameToken] = [.text("")]
     @State private var showPreview = false
     @State private var preview: [RenamePlanEntry] = []
@@ -201,10 +208,15 @@ struct BatchRenameSheetView: View {
 
 // MARK: - Token Row
 
-private enum TokenKind: CaseIterable, Identifiable, Equatable {
-    case text, originalName, newExtension, sequenceNumber, sequenceLetter, dateTime
+private enum TokenKind: String, CaseIterable, Identifiable, Equatable {
+    case text
+    case originalName
+    case newExtension
+    case sequenceNumber
+    case sequenceLetter
+    case dateTime
 
-    var id: Self { self }
+    var id: String { rawValue }
 
     var displayName: String {
         switch self {
@@ -247,61 +259,73 @@ private struct TokenRow: View {
     let onDelete: () -> Void
     let onInsertAfter: () -> Void
 
-    private var kindBinding: Binding<TokenKind> {
+    // Layout constants (mirrors BatchRenameSheetView grid)
+    private static let col1Width    = BatchRenameSheetView.col1Width
+    private static let col2Width    = BatchRenameSheetView.col2Width
+    private static let col3Width    = BatchRenameSheetView.col3Width
+    private static let colSpacing   = BatchRenameSheetView.colSpacing
+    private static let contentSpan  = BatchRenameSheetView.contentSpan
+
+    // Static option arrays — built once, shared across all rows
+    private static let tokenKindOptions    = TokenKind.allCases.map            { InspectorPopupOption(value: $0.rawValue,        label: $0.displayName) }
+    private static let componentOptions    = OriginalNameComponent.allCases.map { InspectorPopupOption(value: $0.rawValue,        label: $0.displayName) }
+    private static let casingOptions       = OriginalNameCasing.allCases.map    { InspectorPopupOption(value: $0.rawValue,        label: $0.displayName) }
+    private static let dateSourceOptions   = DateSource.allCases.map            { InspectorPopupOption(value: $0.rawValue,        label: $0.displayName) }
+    private static let dateFormatOptions   = DateFormat.allCases.map            { InspectorPopupOption(value: $0.rawValue,        label: $0.displayName) }
+    private static let paddingOptions      = SequencePadding.allCases.map       { InspectorPopupOption(value: String($0.rawValue), label: $0.displayName) }
+    private static let uppercaseOptions    = [
+        InspectorPopupOption(value: "true",  label: "UPPERCASE"),
+        InspectorPopupOption(value: "false", label: "lowercase"),
+    ]
+
+    private var kindStringBinding: Binding<String> {
         Binding(
-            get: { TokenKind(token: token) },
-            set: { newKind in
-                if TokenKind(token: token) != newKind {
-                    onUpdate(newKind.defaultToken)
-                }
+            get: { TokenKind(token: token).rawValue },
+            set: { newRawValue in
+                guard let newKind = TokenKind(rawValue: newRawValue),
+                      newKind != TokenKind(token: token) else { return }
+                onUpdate(newKind.defaultToken)
             }
         )
     }
 
     var body: some View {
-        WorkflowFormRow(
-            labelWidth: 152,
-            labelAlignment: .leading,
-            rowMinHeight: 28
-        ) {
-            Picker("", selection: kindBinding) {
-                ForEach(TokenKind.allCases) { kind in
-                    Text(kind.displayName).tag(kind)
-                }
-            }
-            .labelsHidden()
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } content: {
-            HStack(spacing: 8) {
-                tokenContent
+        HStack(spacing: Self.colSpacing) {
+            // Col 1: type picker
+            InspectorPopupField(selection: kindStringBinding, options: Self.tokenKindOptions)
+                .frame(width: Self.col1Width)
 
-                Button(action: onDelete) {
-                    Text("−")
-                        .frame(width: 16, height: 16)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(isOnlyRow)
+            // Cols 2+3: token-specific content
+            tokenContent
 
-                Button(action: onInsertAfter) {
-                    Text("+")
-                        .frame(width: 16, height: 16)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+            // +/- buttons
+            Button(action: onDelete) {
+                Text("−").frame(width: 16, height: 16)
             }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(isOnlyRow)
+
+            Button(action: onInsertAfter) {
+                Text("+").frame(width: 16, height: 16)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
+        .frame(minHeight: 28)
     }
 
     @ViewBuilder
     private var tokenContent: some View {
         switch token {
+
         case .text(let value):
             TextField("Type text", text: Binding(
                 get: { value },
                 set: { onUpdate(.text($0)) }
             ))
             .textFieldStyle(.roundedBorder)
+            .frame(width: Self.contentSpan)
 
         case .extension(let value):
             TextField("Type extension", text: Binding(
@@ -309,90 +333,80 @@ private struct TokenRow: View {
                 set: { onUpdate(.extension($0)) }
             ))
             .textFieldStyle(.roundedBorder)
+            .frame(width: Self.contentSpan)
 
         case .sequence(let start, let padding):
-            HStack(spacing: 8) {
+            HStack(spacing: Self.colSpacing) {
                 TextField("1", value: Binding(
                     get: { start },
                     set: { onUpdate(.sequence(start: $0, padding: padding)) }
                 ), format: .number)
                 .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: .infinity)
+                .frame(width: Self.col2Width)
 
-                Picker("", selection: Binding(
-                    get: { padding },
-                    set: { onUpdate(.sequence(start: start, padding: $0)) }
-                )) {
-                    ForEach(SequencePadding.allCases) { p in
-                        Text(p.displayName).tag(p)
-                    }
-                }
-                .labelsHidden()
-                .frame(maxWidth: .infinity)
+                InspectorPopupField(
+                    selection: Binding(
+                        get: { String(padding.rawValue) },
+                        set: { str in
+                            guard let raw = Int(str), let p = SequencePadding(rawValue: raw) else { return }
+                            onUpdate(.sequence(start: start, padding: p))
+                        }
+                    ),
+                    options: Self.paddingOptions
+                )
+                .frame(width: Self.col3Width)
             }
 
         case .sequenceLetter(let uppercase):
-            HStack(spacing: 0) {
-                Picker("", selection: Binding(
-                    get: { uppercase },
-                    set: { onUpdate(.sequenceLetter(uppercase: $0)) }
-                )) {
-                    Text("UPPERCASE").tag(true)
-                    Text("lowercase").tag(false)
-                }
-                .labelsHidden()
-                .frame(width: 240, alignment: .leading)
-                Spacer(minLength: 0)
-            }
+            InspectorPopupField(
+                selection: Binding(
+                    get: { uppercase ? "true" : "false" },
+                    set: { onUpdate(.sequenceLetter(uppercase: $0 == "true")) }
+                ),
+                options: Self.uppercaseOptions
+            )
+            .frame(width: Self.contentSpan)
 
         case .date(let source, let format):
-            HStack(spacing: 8) {
-                Picker("", selection: Binding(
-                    get: { source },
-                    set: { onUpdate(.date(source: $0, format: format)) }
-                )) {
-                    ForEach(DateSource.allCases) { s in
-                        Text(s.displayName).tag(s)
-                    }
-                }
-                .labelsHidden()
-                .frame(maxWidth: .infinity)
+            HStack(spacing: Self.colSpacing) {
+                InspectorPopupField(
+                    selection: Binding(
+                        get: { source.rawValue },
+                        set: { onUpdate(.date(source: DateSource(rawValue: $0) ?? source, format: format)) }
+                    ),
+                    options: Self.dateSourceOptions
+                )
+                .frame(width: Self.col2Width)
 
-                Picker("", selection: Binding(
-                    get: { format },
-                    set: { onUpdate(.date(source: source, format: $0)) }
-                )) {
-                    ForEach(DateFormat.allCases) { f in
-                        Text(f.displayName).tag(f)
-                    }
-                }
-                .labelsHidden()
-                .frame(maxWidth: .infinity)
+                InspectorPopupField(
+                    selection: Binding(
+                        get: { format.rawValue },
+                        set: { onUpdate(.date(source: source, format: DateFormat(rawValue: $0) ?? format)) }
+                    ),
+                    options: Self.dateFormatOptions
+                )
+                .frame(width: Self.col3Width)
             }
 
         case .originalName(let component, let casing):
-            HStack(spacing: 8) {
-                Picker("", selection: Binding(
-                    get: { component },
-                    set: { onUpdate(.originalName(component: $0, casing: casing)) }
-                )) {
-                    ForEach(OriginalNameComponent.allCases) { c in
-                        Text(c.displayName).tag(c)
-                    }
-                }
-                .labelsHidden()
-                .frame(maxWidth: .infinity)
+            HStack(spacing: Self.colSpacing) {
+                InspectorPopupField(
+                    selection: Binding(
+                        get: { component.rawValue },
+                        set: { onUpdate(.originalName(component: OriginalNameComponent(rawValue: $0) ?? component, casing: casing)) }
+                    ),
+                    options: Self.componentOptions
+                )
+                .frame(width: Self.col2Width)
 
-                Picker("", selection: Binding(
-                    get: { casing },
-                    set: { onUpdate(.originalName(component: component, casing: $0)) }
-                )) {
-                    ForEach(OriginalNameCasing.allCases) { c in
-                        Text(c.displayName).tag(c)
-                    }
-                }
-                .labelsHidden()
-                .frame(maxWidth: .infinity)
+                InspectorPopupField(
+                    selection: Binding(
+                        get: { casing.rawValue },
+                        set: { onUpdate(.originalName(component: component, casing: OriginalNameCasing(rawValue: $0) ?? casing)) }
+                    ),
+                    options: Self.casingOptions
+                )
+                .frame(width: Self.col3Width)
             }
         }
     }
