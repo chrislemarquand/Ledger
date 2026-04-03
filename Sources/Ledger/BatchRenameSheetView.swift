@@ -221,7 +221,7 @@ private enum TokenKind: String, CaseIterable, Identifiable, Equatable {
     var displayName: String {
         switch self {
         case .text:           return "Text"
-        case .originalName:   return "Current Filename"
+        case .originalName:   return "Current Name"
         case .newExtension:   return "New Extension"
         case .sequenceNumber: return "Sequence Number"
         case .sequenceLetter: return "Sequence Letter"
