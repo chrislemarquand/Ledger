@@ -434,7 +434,7 @@ struct LocationAdjustSheetView: View {
         _mapRegion = State(
             initialValue: MKCoordinateRegion(
                 center: center,
-                span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.12)
+                span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
             )
         )
     }
