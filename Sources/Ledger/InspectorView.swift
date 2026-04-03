@@ -259,7 +259,7 @@ struct InspectorView: View {
                                                     placeholder: model.placeholderForTag(tag),
                                                     suggestions: model.knownKeywords()
                                                 )
-                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                                .frame(maxWidth: .infinity, minHeight: 26, alignment: .leading)
                                             } else {
                                                 HStack(spacing: 6) {
                                                     TextField(
