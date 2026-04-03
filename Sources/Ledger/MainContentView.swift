@@ -1240,36 +1240,38 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     }
 
     private func makePresetsSubmenu() -> NSMenu {
+        makeSharedPresetsMenu(model: model)
+    }
+
+    fileprivate func makeSharedPresetsMenu(model: AppModel) -> NSMenu {
         let menu = NSMenu(title: "Presets")
-        let applySubmenuItem = NSMenuItem(title: "Apply Preset", action: nil, keyEquivalent: "")
-        let applySubmenu = NSMenu(title: "Apply Preset")
-        if model.presets.isEmpty {
-            let noPresets = NSMenuItem(title: "No Presets", action: nil, keyEquivalent: "")
-            noPresets.isEnabled = false
-            applySubmenu.addItem(noPresets)
-        } else {
+        menu.autoenablesItems = false
+        let hasSelection = !model.selectedFileURLs.isEmpty
+
+        if !model.presets.isEmpty {
             for preset in model.presets {
                 let item = NSMenuItem(title: preset.name, action: #selector(applyPresetFromMenuAction(_:)), keyEquivalent: "")
                 item.representedObject = preset.id.uuidString
                 item.tag = MenuTag.imageApplyPreset
                 item.target = self
-                applySubmenu.addItem(item)
+                item.isEnabled = hasSelection
+                menu.addItem(item)
             }
+            menu.addItem(.separator())
         }
-        applySubmenuItem.submenu = applySubmenu
-        menu.addItem(applySubmenuItem)
-        menu.addItem(.separator())
 
-        let saveItem = NSMenuItem(title: "Save as Preset…", action: #selector(saveCurrentAsPresetAction(_:)), keyEquivalent: "")
+        let saveItem = NSMenuItem(title: "Save Metadata as Preset…", action: #selector(saveCurrentAsPresetAction(_:)), keyEquivalent: "")
         saveItem.tag = MenuTag.imageSavePreset
         saveItem.image = NSImage(systemSymbolName: "square.and.arrow.down.badge.checkmark", accessibilityDescription: nil)
         saveItem.target = self
+        saveItem.isEnabled = hasSelection
         menu.addItem(saveItem)
 
         let manageItem = NSMenuItem(title: "Manage Presets…", action: #selector(managePresetsAction(_:)), keyEquivalent: "")
         manageItem.tag = MenuTag.imageManagePresets
         manageItem.image = NSImage(systemSymbolName: "slider.horizontal.below.square.filled.and.square", accessibilityDescription: nil)
         manageItem.target = self
+        manageItem.isEnabled = true
         menu.addItem(manageItem)
 
         return menu
@@ -2313,50 +2315,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
 
         private func makePresetsMenu(model: AppModel) -> NSMenu {
             guard let controller else { return NSMenu(title: "Presets") }
-            let menu = NSMenu(title: "Presets")
-            menu.autoenablesItems = false
-
-            let applyMenuItem = NSMenuItem(title: "Apply Preset", action: nil, keyEquivalent: "")
-            let applySubmenu = NSMenu(title: "Apply Preset")
-            if model.presets.isEmpty {
-                let emptyItem = NSMenuItem(title: "No Presets", action: nil, keyEquivalent: "")
-                emptyItem.isEnabled = false
-                applySubmenu.addItem(emptyItem)
-            } else {
-                for preset in model.presets {
-                    let item = NSMenuItem(
-                        title: preset.name,
-                        action: #selector(NativeThreePaneSplitViewController.applyPresetFromMenuAction(_:)),
-                        keyEquivalent: ""
-                    )
-                    item.target = controller
-                    item.representedObject = preset.id.uuidString
-                    item.isEnabled = !model.selectedFileURLs.isEmpty
-                    applySubmenu.addItem(item)
-                }
-            }
-            menu.setSubmenu(applySubmenu, for: applyMenuItem)
-            menu.addItem(applyMenuItem)
-            menu.addItem(.separator())
-
-            let saveItem = NSMenuItem(
-                title: "Save Current as Preset…",
-                action: #selector(NativeThreePaneSplitViewController.saveCurrentAsPresetAction(_:)),
-                keyEquivalent: ""
-            )
-            saveItem.target = controller
-            saveItem.image = NSImage(systemSymbolName: "square.and.arrow.down.badge.checkmark", accessibilityDescription: nil)
-            saveItem.isEnabled = !model.selectedFileURLs.isEmpty
-            menu.addItem(saveItem)
-
-            let manageItem = NSMenuItem(
-                title: "Manage Presets…",
-                action: #selector(NativeThreePaneSplitViewController.managePresetsAction(_:)),
-                keyEquivalent: ""
-            )
-            manageItem.target = controller
-            menu.addItem(manageItem)
-            return menu
+            return controller.makeSharedPresetsMenu(model: model)
         }
     }
 }
