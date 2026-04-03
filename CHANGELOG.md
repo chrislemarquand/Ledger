@@ -4,7 +4,7 @@ All notable changes to Ledger are documented here.
 
 ---
 
-## [1.2] — Unreleased
+## [1.2] — 2026-04-03
 
 ### Added
 
