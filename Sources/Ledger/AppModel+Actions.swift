@@ -588,7 +588,7 @@ extension AppModel {
         }
         guard !files.isEmpty else { return }
 
-        guard let primaryFile = files.first, metadataByFile[primaryFile] != nil else {
+        guard !isFolderMetadataLoading else {
             statusMessage = "Metadata is still loading — try again in a moment."
             return
         }
