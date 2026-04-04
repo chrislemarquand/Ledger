@@ -80,7 +80,16 @@ extension AppModel {
     // MARK: - Original Date Extraction
 
     func originalDate(for fileURL: URL, tag: DateTimeTargetTag) -> Date? {
-        guard let editableTag = editableTag(forID: tag.editableTagID) else { return nil }
+        // Look up from the full catalog, not just enabled fields — the date/time
+        // sheet must work even when the corresponding inspector field is hidden.
+        guard let entry = activeInspectorFieldCatalog.first(where: { $0.id == tag.editableTagID }) else { return nil }
+        let editableTag = EditableTag(
+            id: entry.id,
+            namespace: entry.namespace,
+            key: entry.key,
+            label: entry.label,
+            section: entry.section
+        )
         guard let snapshot = availableSnapshot(for: fileURL) else { return nil }
         let raw = normalizedDisplayValue(snapshot, for: editableTag)
         guard !raw.isEmpty else { return nil }
