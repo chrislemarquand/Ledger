@@ -39,7 +39,7 @@ struct DateTimeAdjustSheetView: View {
 
     private var representativeOriginalDate: Date? {
         guard let first = session.fileURLs.first else { return nil }
-        return model.originalDate(for: first, tag: session.launchTag)
+        return session.capturedDates[first]
     }
 
     private var computedAdjustedDate: Date? {

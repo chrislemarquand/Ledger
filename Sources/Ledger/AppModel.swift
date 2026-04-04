@@ -499,6 +499,7 @@ final class AppModel: ObservableObject {
         didSet { notifyInspectorDidChange() }
     }
     @Published var pendingBatchRenameScope: BatchRenameScope?
+    var pendingBatchRenameMetadata: [URL: FileMetadataSnapshot] = [:]
     @Published var pendingDateTimeAdjustSession: DateTimeAdjustSession?
     @Published var pendingLocationAdjustSession: LocationAdjustSession?
     var locationPersistedCoordinates: Bool = true

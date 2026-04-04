@@ -7,6 +7,7 @@ import SwiftUI
 struct BatchRenameSheetView: View {
     @ObservedObject var model: AppModel
     let scope: BatchRenameScope
+    let capturedMetadata: [URL: FileMetadataSnapshot]
 
     private static let sectionSpacing = WorkflowSheetSectionSpacing.uniform(20)
     private static let formRowSpacing: CGFloat = 10
@@ -194,7 +195,7 @@ struct BatchRenameSheetView: View {
     private func refreshPreview() async {
         isLoadingPreview = true
         let currentPattern = pattern
-        let assessment = await model.previewBatchRenameAssessment(pattern: currentPattern, scope: scope)
+        let assessment = await model.previewBatchRenameAssessment(pattern: currentPattern, scope: scope, metadata: capturedMetadata)
         preview = assessment.entries
         previewIssues = assessment.issues
         isLoadingPreview = false
@@ -424,7 +425,7 @@ extension View {
                 }
             }
         )) { scope in
-            BatchRenameSheetView(model: model, scope: scope)
+            BatchRenameSheetView(model: model, scope: scope, capturedMetadata: model.pendingBatchRenameMetadata)
         }
     }
 }
