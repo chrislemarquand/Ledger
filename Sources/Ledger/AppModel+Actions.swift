@@ -579,19 +579,27 @@ extension AppModel {
     }
 
     func beginBatchRename(scope: BatchRenameScope) {
-        let canRename: Bool
+        let files: [URL]
         switch scope {
         case .selection:
-            canRename = !selectedFileURLs.isEmpty
+            files = Array(selectedFileURLs)
         case .folder:
-            canRename = !browserItems.isEmpty
+            files = browserItems.map(\.url)
         }
-        guard canRename else { return }
+        guard !files.isEmpty else { return }
+
+        guard let primaryFile = files.first, metadataByFile[primaryFile] != nil else {
+            statusMessage = "Metadata is still loading — try again in a moment."
+            return
+        }
+
+        pendingBatchRenameMetadata = metadataByFile.filter { files.contains($0.key) }
         pendingBatchRenameScope = scope
     }
 
     func dismissBatchRenameSheet() {
         pendingBatchRenameScope = nil
+        pendingBatchRenameMetadata = [:]
     }
 
     func previewBatchRename(pattern: RenamePattern, scope: BatchRenameScope) async -> [RenamePlanEntry] {
@@ -600,10 +608,14 @@ extension AppModel {
         return await service.buildPlan(files: files, pattern: pattern, assumeSorted: true)
     }
 
-    func previewBatchRenameAssessment(pattern: RenamePattern, scope: BatchRenameScope) async -> RenamePlanAssessment {
+    func previewBatchRenameAssessment(
+        pattern: RenamePattern,
+        scope: BatchRenameScope,
+        metadata: [URL: FileMetadataSnapshot]
+    ) async -> RenamePlanAssessment {
         let files = renameFilesForBatchRename(scope)
         let service = BatchRenameService()
-        return await service.assessPlan(files: files, pattern: pattern, metadata: metadataByFile, assumeSorted: true)
+        return await service.assessPlan(files: files, pattern: pattern, metadata: metadata, assumeSorted: true)
     }
 
     func stageBatchRename(operation: RenameOperation) async {

@@ -14,6 +14,11 @@ extension AppModel {
             return
         }
 
+        guard let primaryFile = files.first, metadataByFile[primaryFile] != nil else {
+            statusMessage = "Metadata is still loading — try again in a moment."
+            return
+        }
+
         var session = DateTimeAdjustSession(
             scope: scope,
             launchTag: launchTag,
@@ -21,6 +26,18 @@ extension AppModel {
         )
         session.sourceTimeZoneID = TimeZone.current.identifier
         session.applyTo = [launchTag]
+
+        var captured: [URL: Date] = [:]
+        for fileURL in files {
+            if let date = originalDate(for: fileURL, tag: launchTag) {
+                captured[fileURL] = date
+            }
+        }
+        session.capturedDates = captured
+        if let primaryDate = captured[primaryFile] {
+            session.specificDate = primaryDate
+        }
+
         pendingDateTimeAdjustSession = session
     }
 
@@ -89,7 +106,7 @@ extension AppModel {
     }
 
     private func computeShiftAdjusted(for fileURL: URL, session: DateTimeAdjustSession) -> Date? {
-        guard let original = originalDate(for: fileURL, tag: session.launchTag) else { return nil }
+        guard let original = session.capturedDates[fileURL] ?? originalDate(for: fileURL, tag: session.launchTag) else { return nil }
         var components = DateComponents()
         components.day = session.shiftDays
         components.hour = session.shiftHours
@@ -99,7 +116,7 @@ extension AppModel {
     }
 
     private func computeTimeZoneAdjusted(for fileURL: URL, session: DateTimeAdjustSession) -> Date? {
-        guard let original = originalDate(for: fileURL, tag: session.launchTag) else { return nil }
+        guard let original = session.capturedDates[fileURL] ?? originalDate(for: fileURL, tag: session.launchTag) else { return nil }
         guard let sourceTZ = resolvedSourceTimeZone(for: session),
               let targetTZ = resolvedTargetTimeZone(for: session) else {
             return nil
@@ -181,7 +198,7 @@ extension AppModel {
 
         for fileURL in session.fileURLs {
             let fileName = fileURL.lastPathComponent
-            let original = originalDate(for: fileURL, tag: session.launchTag)
+            let original = session.capturedDates[fileURL] ?? originalDate(for: fileURL, tag: session.launchTag)
             let adjusted = computeAdjustedDate(for: fileURL, session: session)
 
             let originalDisplay: String

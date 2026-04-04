@@ -92,6 +92,9 @@ struct DateTimeAdjustSession: Identifiable {
     var shiftSeconds: Int = 0
     var specificDate: Date = Date()
     var applyTo: Set<DateTimeTargetTag> = [.dateTimeOriginal]
+    /// Original dates snapshotted at sheet-open time from the loaded metadata.
+    /// Used in place of live model reads to prevent display churn during background loading.
+    var capturedDates: [URL: Date] = [:]
 }
 
 // MARK: - Preview
