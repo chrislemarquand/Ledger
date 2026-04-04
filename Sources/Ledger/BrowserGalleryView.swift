@@ -839,7 +839,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
             titleField.textColor = isWindowKey ? .white : .labelColor
         } else if active {
             titleField.layer?.backgroundColor = isWindowKey
-                ? AppTheme.accentNSColor.cgColor
+                ? GallerySelectionStyling.resolvedAccentCGColor(for: view)
                 : finderSelectionCGColor
             titleField.textColor = isWindowKey ? .white : .labelColor
         } else if hasPendingRename {

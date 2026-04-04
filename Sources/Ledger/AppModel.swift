@@ -92,15 +92,6 @@ enum AppBrand {
     }
 }
 
-enum AppTheme {
-    static var accentNSColor: NSColor {
-        NSColor(named: "AccentColor") ?? .systemTeal
-    }
-
-    static var accentColor: Color {
-        Color(nsColor: accentNSColor)
-    }
-}
 
 protocol SidebarFavoritesStoreProtocol {
     func loadFavorites() throws -> [SidebarFavorite]
