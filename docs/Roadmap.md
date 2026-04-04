@@ -82,76 +82,73 @@ Released: **2026-03-10**.
 
 ---
 
-## v1.3
+## v1.3 (Pre-2.0 Foundations)
 
-- [ ] Drag files out to Finder/Mail/Messages etc. (NSItemProvider/NSPasteboardWriter on gallery/list items).
-- [ ] Drag a folder onto the sidebar to add as a favourite.
 - [ ] Explicit Home/End/Page Up/Page Down keyboard nav in list/gallery.
 - [ ] Gallery metadata lines/subtitle customisation.
 - [ ] Metadata copy/paste:
   - [ ] Field-level copy/paste.
   - [ ] Metadata-set copy/paste.
-
----
-
-## v1.4 (Minor) — Metadata Quality
-
-Deeper inspection, quality checking, and raw-file workflows.
-
-- [ ] **Audit/validation mode**: surfaces missing/inconsistent metadata (missing DateTimeOriginal, missing GPS, missing copyright, conflicting IPTC/XMP). Inspector "Issues" section with one-click fixes where safe.
-- [ ] **Sidecar management**: XMP sidecar create/rebuild/apply; browser badges for sidecar-exists and sidecar-differs-from-embedded states.
-- [ ] Inspector clear-field control: optional trailing `x.circle.fill` action per field for staged-clear UX.
 - [ ] ExifTool console: live readout of ExifTool commands and output as operations run, mirroring what would appear if running ExifTool directly in the terminal.
 
 ---
 
-## v1.5 (Minor) — Search
+## v1.4 (Pre-2.0 Foundations)
 
-Making the collection queryable.
-
-- [ ] Metadata-aware query model.
-- [ ] Search UI integration.
-- [ ] Search persistence/history (scope permitting).
-
----
-
-## v1.6 (Minor) — Performance + Infrastructure
-
-Hardening the foundation before the v2.0 architecture rewrite.
-
-- [ ] Large-folder performance pass (1000+ images).
-- [ ] Render/browse pipeline optimisation.
-- [ ] Thumbnail cache TTL / age-based eviction (currently LRU only; cross-folder sessions accumulate stale entries).
-- [ ] **Full native QuickLook rewrite**: replace current preview implementation with a fully native QuickLook integration.
-
----
-
-## v2.0 (Major) — Gallery Rewrite + Power User Features
-
-Major architecture overhaul and its true dependents.
-
-- [ ] Major gallery/browser architecture rewrite (AppKit-shell-first, Mondrian-inspired).
-- [ ] **Finder-style gallery view**: filmstrip along bottom, large preview at top — third browser mode alongside list and grid (depends on gallery rewrite).
 - [ ] **Import conflict-resolution UI**: dedicated conflict workspace for unresolved/ambiguous import rows with per-row target choice, side-by-side field diff, and bulk resolve actions.
-- [ ] **EOS-1V lens-tag policy system**: merges resolver enhancements and policy controls into one mature feature. Policy modes (`Do not write lens` / `Single lens for import` / `Focal-length mapping table`), unknown focal length behaviour, named lens profiles, import-sheet override selector. *Explicit prerequisite for v3.0.*
-
+- [ ] **EOS-1V lens-tag policy system**: merges resolver enhancements and policy controls into one mature feature. Policy modes (`Do not write lens` / `Single lens for import` / `Focal-length mapping table`), unknown focal length behaviour, named lens profiles, import-sheet override selector.
 
 ---
 
-## v3.0 (Major) — Direct EOS-1V Ingest (CSV Transport)
+## v2.0 (Major) — Bridge Core
 
-Depends on the v2.0 EOS-1V lens-tag policy system being mature.
+- [ ] **Major Photos.app-style rewrite of gallery view architecture.**
+- [ ] Finder-style hierarchical browsing as the core file-browser model.
+- [ ] In-app image viewing as a core workflow for Ledger-supported image formats.
+- [ ] **Finder-style gallery view**: filmstrip along bottom, large preview at top — third browser mode alongside list and grid.
 
+---
+
+## v2.1
+
+- [ ] Drag files out to Finder/Mail/Messages etc. (NSItemProvider/NSPasteboardWriter on gallery/list items).
+- [ ] Drag a folder onto the sidebar to add as a favourite.
+- [ ] Bridge-class search, filter, and sort across folders and metadata facets (type, rating, labels, keywords, and other attributes).
+- [ ] Smart folders.
+
+---
+
+## v2.2+
+
+- [ ] Workflow automation / workflow builder for repeatable multi-step jobs.
+- [ ] Triage/culling workflow.
+- [ ] Batch output: PDF contact sheets.
+
+---
+
+## Parked
+
+- [ ] **Audit/validation mode**: surfaces missing/inconsistent metadata (missing DateTimeOriginal, missing GPS, missing copyright, conflicting IPTC/XMP). Inspector "Issues" section with one-click fixes where safe.
+- [ ] **Sidecar management**: XMP sidecar create/rebuild/apply; browser badges for sidecar-exists and sidecar-differs-from-embedded states.
+
+---
+
+## Completed
+
+- [x] Render/browse pipeline optimisation.
+- [x] Thumbnail cache TTL / age-based eviction (currently LRU only; cross-folder sessions accumulate stale entries).
+- [x] **Full native QuickLook rewrite**: replace current preview implementation with a fully native QuickLook integration.
+
+---
+
+## Cancelled
+
+- [ ] Toolbar customisation.
+- [ ] Inspector clear-field control: optional trailing `x.circle.fill` action per field for staged-clear UX.
+- [ ] Large-folder performance pass (1000+ images).
 - [ ] Connect to EOS-1V and retrieve native shooting-data CSV directly.
 - [ ] Feed retrieved CSV into Ledger import pipeline for normal preview/match/apply.
 - [ ] Research-first reverse-engineering path:
   - [ ] Prioritise macOS 9 driver analysis.
   - [ ] Use Windows XP driver as validation/fallback.
 - [ ] Ship clean Swift behavioural reimplementation only.
-
-
----
-
-## Deferred / Cancelled
-
-- [ ] Toolbar customisation.
