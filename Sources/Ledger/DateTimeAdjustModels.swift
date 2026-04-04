@@ -15,7 +15,7 @@ enum DateTimeAdjustMode: String, CaseIterable, Identifiable {
         case .timeZone: "Time Zone"
         case .shift: "Shift"
         case .specific: "Specific"
-        case .file: "File"
+        case .file: "Data"
         }
     }
 
@@ -25,7 +25,7 @@ enum DateTimeAdjustMode: String, CaseIterable, Identifiable {
         case .timeZone: return "Changing \(noun) to a new time zone"
         case .shift: return "Changing \(noun) by set amount"
         case .specific: return "Changing \(noun) to a specific date and time"
-        case .file: return "Changing \(noun) to the file creation date and time"
+        case .file: return "Changing \(noun) by copying date and time data"
         }
     }
 }
@@ -38,6 +38,11 @@ enum DateTimeAdjustScope: String, CaseIterable, Identifiable {
     case folder
 
     var id: String { rawValue }
+}
+
+enum DateTimeAdjustLaunchContext {
+    case inspector
+    case menu
 }
 
 // MARK: - Target Tag
@@ -75,32 +80,105 @@ enum DateTimeTargetTag: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
+// MARK: - Data Read Source
+
+enum DateTimeDataReadSource: String, CaseIterable, Identifiable, Hashable {
+    case original
+    case digitised
+    case modified
+    case file
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .original: "Original"
+        case .digitised: "Digitised"
+        case .modified: "Modified"
+        case .file: "File"
+        }
+    }
+
+    var sourceTag: DateTimeTargetTag? {
+        switch self {
+        case .original: .dateTimeOriginal
+        case .digitised: .dateTimeDigitized
+        case .modified: .dateTimeModified
+        case .file: nil
+        }
+    }
+
+    var missingValueDescription: String {
+        switch self {
+        case .original: "Original date"
+        case .digitised: "Digitised date"
+        case .modified: "Modified date"
+        case .file: "file creation date"
+        }
+    }
+
+    static func from(tag: DateTimeTargetTag) -> DateTimeDataReadSource {
+        switch tag {
+        case .dateTimeOriginal: .original
+        case .dateTimeDigitized: .digitised
+        case .dateTimeModified: .modified
+        }
+    }
+}
+
+struct DateTimeDataModeDestination {
+    let targetTag: DateTimeTargetTag
+    let currentValue: Date?
+}
+
+struct DateTimeDataModeFileState {
+    let readValue: Date?
+    let destinations: [DateTimeDataModeDestination]
+
+    var hasWritableDestination: Bool {
+        !destinations.isEmpty
+    }
+}
+
 // MARK: - Session
 
 struct DateTimeAdjustSession: Identifiable {
+    static let cameraClockIdentifier = "__camera_clock__"
+    static let cameraClockDisplayName = "Camera Clock"
+
     let id = UUID()
     var mode: DateTimeAdjustMode = .shift
     let scope: DateTimeAdjustScope
     let launchTag: DateTimeTargetTag
     let fileURLs: [URL]
-    var sourceTimeZoneID: String = TimeZone.current.identifier
-    var closestCity: String = ""
-    var targetTimezone: String = ""
+    var sourceTimeZoneID: String = DateTimeAdjustSession.cameraClockIdentifier
+    /// Fixed camera clock baseline offset in seconds. `0` means UTC-like baseline.
+    var cameraClockOffsetSeconds: Int = 0
+    /// Canonical IANA time zone identifier used for calculations (e.g. Europe/Amsterdam).
+    var targetTimeZoneID: String = ""
+    /// User-facing text shown in the New Time Zone field.
+    var targetTimeZoneInput: String = ""
     var shiftDays: Int = 0
     var shiftHours: Int = 0
     var shiftMinutes: Int = 0
     var shiftSeconds: Int = 0
+    var dataReadSource: DateTimeDataReadSource = .original
     var specificDate: Date = Date()
-    var applyTo: Set<DateTimeTargetTag> = [.dateTimeOriginal]
-    /// Original dates snapshotted at sheet-open time from the loaded metadata.
+    var applyTo: Set<DateTimeTargetTag> = []
+    /// Dates snapshotted at sheet-open time for all EXIF date tags, keyed by file URL then tag.
     /// Used in place of live model reads to prevent display churn during background loading.
-    var capturedDates: [URL: Date] = [:]
+    /// All modes (shift, timezone, specific, data) read from this snapshot for stability.
+    var capturedDates: [URL: [DateTimeTargetTag: Date]] = [:]
+
+    var sourceUsesCameraClock: Bool {
+        sourceTimeZoneID == DateTimeAdjustSession.cameraClockIdentifier
+    }
 }
 
 // MARK: - Preview
 
 struct DateTimeAdjustPreviewRow: Identifiable {
-    let id: URL
+    let id: String
     let fileName: String
     let originalDisplay: String
     let adjustedDisplay: String

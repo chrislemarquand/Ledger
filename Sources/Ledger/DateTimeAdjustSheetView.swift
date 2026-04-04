@@ -1,3 +1,4 @@
+import AppKit
 import MapKit
 import SharedUI
 import SwiftUI
@@ -10,6 +11,12 @@ struct DateTimeAdjustSheetView: View {
         case seconds
     }
 
+    private enum DataAdjustedDisplay: Equatable {
+        case blank
+        case single(Date)
+        case multipleValues
+    }
+
     @ObservedObject var model: AppModel
     @State private var session: DateTimeAdjustSession
 
@@ -19,6 +26,7 @@ struct DateTimeAdjustSheetView: View {
     @State private var previewWarnings: [String] = []
     @State private var hasEffectivePreviewChanges = false
     @State private var isLoadingPreview = false
+    @State private var hasUserEditedSpecificDate = false
     @State private var hoveredOffsetField: OffsetFieldID?
     @FocusState private var focusedOffsetField: OffsetFieldID?
 
@@ -29,6 +37,12 @@ struct DateTimeAdjustSheetView: View {
     private static let formRowSpacing: CGFloat = 10
     private static let knownTimeZones: [String] = TimeZone.knownTimeZoneIdentifiers
         .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    private static let sourceTimeZoneOptions: [String] =
+        [DateTimeAdjustSession.cameraClockDisplayName] + knownTimeZones
+    private static let targetTimeZoneOptions: [String] = {
+        Array(Set(TimeZoneCityData.cities.map(\.city) + knownTimeZones))
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }()
 
     init(model: AppModel, initialSession: DateTimeAdjustSession) {
         self.model = model
@@ -39,7 +53,7 @@ struct DateTimeAdjustSheetView: View {
 
     private var representativeOriginalDate: Date? {
         guard let first = session.fileURLs.first else { return nil }
-        return session.capturedDates[first]
+        return session.capturedDates[first]?[session.launchTag]
     }
 
     private var computedAdjustedDate: Date? {
@@ -47,8 +61,42 @@ struct DateTimeAdjustSheetView: View {
         return model.computeAdjustedDate(for: first, session: session)
     }
 
+    private var representativeDataOriginalDisplay: DataAdjustedDisplay {
+        guard session.mode == .file,
+              let representativeFile = session.fileURLs.first else {
+            return .blank
+        }
+
+        let fileState = model.dataModeFileState(for: representativeFile, session: session)
+        guard fileState.hasWritableDestination else { return .blank }
+
+        let baseline = fileState.destinations.first?.currentValue
+        if fileState.destinations.dropFirst().contains(where: { !optionalDatesEqual($0.currentValue, baseline) }) {
+            return .multipleValues
+        }
+        if let currentValue = baseline {
+            return .single(currentValue)
+        }
+        return .blank
+    }
+
+    private var representativeDataAdjustedDisplay: DataAdjustedDisplay {
+        guard session.mode == .file,
+              let representativeFile = session.fileURLs.first else {
+            return .blank
+        }
+
+        let fileState = model.dataModeFileState(for: representativeFile, session: session)
+        guard fileState.hasWritableDestination else { return .blank }
+        guard let sourceValue = fileState.readValue else {
+            return .blank
+        }
+
+        return .single(sourceValue)
+    }
+
     private var hasBlockingIssues: Bool {
-        !previewBlockingIssues.isEmpty || session.applyTo.isEmpty
+        !previewBlockingIssues.isEmpty
     }
 
     private var isPreviewActionEnabled: Bool {
@@ -65,12 +113,14 @@ struct DateTimeAdjustSheetView: View {
         let parts: [String] = [
             session.mode.rawValue,
             session.sourceTimeZoneID,
-            session.closestCity,
-            session.targetTimezone,
+            "\(session.cameraClockOffsetSeconds)",
+            session.targetTimeZoneID,
+            session.targetTimeZoneInput,
             "\(session.shiftDays)",
             "\(session.shiftHours)",
             "\(session.shiftMinutes)",
             "\(session.shiftSeconds)",
+            session.dataReadSource.rawValue,
             "\(session.specificDate.timeIntervalSince1970)",
             session.applyTo.map(\.rawValue).sorted().joined(separator: ","),
         ]
@@ -101,33 +151,81 @@ struct DateTimeAdjustSheetView: View {
                 VStack(alignment: .leading, spacing: Self.formRowSpacing) {
                     // Original row
                     WorkflowFormRow("Original:", labelWidth: Self.labelColumnWidth) {
-                        InspectorDatePickerField(
-                            selection: .constant(representativeOriginalDate ?? Date()),
-                            isEnabled: false,
-                            datePickerElements: [.yearMonthDay, .hourMinuteSecond],
-                            accessibilityLabel: "Original date and time"
-                        )
+                        if session.mode == .file {
+                            switch representativeDataOriginalDisplay {
+                            case .blank:
+                                readOnlyDateField(
+                                    nil,
+                                    accessibilityLabel: "Original date and time"
+                                )
+                            case let .single(date):
+                                readOnlyDateField(
+                                    date,
+                                    accessibilityLabel: "Original date and time"
+                                )
+                            case .multipleValues:
+                                readOnlyTextField(
+                                    "Multiple values",
+                                    accessibilityLabel: "Original date and time"
+                                )
+                            }
+                        } else {
+                            readOnlyDateField(
+                                representativeOriginalDate,
+                                accessibilityLabel: "Original date and time"
+                            )
+                        }
                     }
 
                     // Adjusted row
                     WorkflowFormRow("Adjusted:", labelWidth: Self.labelColumnWidth) {
                         if session.mode == .specific {
-                            InspectorDatePickerField(
-                                selection: $session.specificDate,
-                                datePickerElements: [.yearMonthDay, .hourMinuteSecond],
-                                accessibilityLabel: "Adjusted date and time"
-                            )
+                            if representativeOriginalDate != nil || hasUserEditedSpecificDate {
+                                InspectorDatePickerField(
+                                    selection: specificDateBinding,
+                                    datePickerElements: [.yearMonthDay, .hourMinuteSecond],
+                                    accessibilityLabel: "Adjusted date and time"
+                                )
+                            } else {
+                                readOnlyDateField(
+                                    nil,
+                                    accessibilityLabel: "Adjusted date and time"
+                                )
+                            }
                         } else if session.mode == .shift {
-                            InspectorDatePickerField(
-                                selection: shiftAdjustedBinding,
-                                datePickerElements: [.yearMonthDay, .hourMinuteSecond],
-                                accessibilityLabel: "Adjusted date and time"
-                            )
+                            if computedAdjustedDate != nil {
+                                InspectorDatePickerField(
+                                    selection: shiftAdjustedBinding,
+                                    datePickerElements: [.yearMonthDay, .hourMinuteSecond],
+                                    accessibilityLabel: "Adjusted date and time"
+                                )
+                            } else {
+                                readOnlyDateField(
+                                    nil,
+                                    accessibilityLabel: "Adjusted date and time"
+                                )
+                            }
+                        } else if session.mode == .file {
+                            switch representativeDataAdjustedDisplay {
+                            case .blank:
+                                readOnlyDateField(
+                                    nil,
+                                    accessibilityLabel: "Adjusted date and time"
+                                )
+                            case let .single(date):
+                                readOnlyDateField(
+                                    date,
+                                    accessibilityLabel: "Adjusted date and time"
+                                )
+                            case .multipleValues:
+                                readOnlyTextField(
+                                    "Multiple values",
+                                    accessibilityLabel: "Adjusted date and time"
+                                )
+                            }
                         } else {
-                            InspectorDatePickerField(
-                                selection: .constant(computedAdjustedDate ?? Date()),
-                                isEnabled: false,
-                                datePickerElements: [.yearMonthDay, .hourMinuteSecond],
+                            readOnlyDateField(
+                                computedAdjustedDate,
                                 accessibilityLabel: "Adjusted date and time"
                             )
                         }
@@ -142,6 +240,7 @@ struct DateTimeAdjustSheetView: View {
                             ForEach(DateTimeTargetTag.allCases) { tag in
                                 Toggle(tag.displayName, isOn: applyToBinding(for: tag))
                                     .toggleStyle(.checkbox)
+                                    .disabled(isApplyToTagDisabled(tag))
                             }
                         }
                     }
@@ -177,7 +276,19 @@ struct DateTimeAdjustSheetView: View {
             }
         }
         .task(id: previewKey) {
+            enforceDataModeApplyToRules()
+            hydrateCapturedDatesFromModel()
             await refreshPreview()
+        }
+        .onReceive(model.$metadataByFile) { _ in
+            enforceDataModeApplyToRules()
+            hydrateCapturedDatesFromModel()
+        }
+        .onChange(of: session.mode) { _, _ in
+            enforceDataModeApplyToRules()
+        }
+        .onChange(of: session.dataReadSource) { _, _ in
+            enforceDataModeApplyToRules()
         }
     }
 
@@ -189,21 +300,17 @@ struct DateTimeAdjustSheetView: View {
         case .timeZone:
             WorkflowFormRow("Original Time Zone:", labelWidth: Self.labelColumnWidth) {
                 WorkflowCityComboField(
-                    value: $session.sourceTimeZoneID,
-                    items: Self.knownTimeZones,
-                    placeholder: "Europe/London"
-                )
-            }
-            WorkflowFormRow("Closest City:", labelWidth: Self.labelColumnWidth) {
-                WorkflowCityComboField(
-                    value: $session.closestCity,
-                    items: TimeZoneCityData.cities.map(\.city),
-                    placeholder: "Type a city name"
+                    value: sourceTimeZoneFieldBinding,
+                    items: Self.sourceTimeZoneOptions,
+                    placeholder: DateTimeAdjustSession.cameraClockDisplayName
                 )
             }
             WorkflowFormRow("New Time Zone:", labelWidth: Self.labelColumnWidth) {
-                Text(model.resolvedTimeZoneName(for: session))
-                    .foregroundStyle(.secondary)
+                WorkflowCityComboField(
+                    value: targetTimeZoneFieldBinding,
+                    items: Self.targetTimeZoneOptions,
+                    placeholder: "Type city or time zone"
+                )
             }
         case .shift:
             WorkflowFormRow("Offset:", labelWidth: Self.labelColumnWidth) {
@@ -214,39 +321,152 @@ struct DateTimeAdjustSheetView: View {
                     offsetField(value: $session.shiftSeconds, label: "Secs", id: .seconds)
                 }
             }
-        case .specific, .file:
+        case .file:
+            WorkflowFormRow("Read from:", labelWidth: Self.labelColumnWidth) {
+                WorkflowInlineRadioGroup(
+                    selectionID: dataReadSourceSelectionIDBinding,
+                    options: dataReadSourceRadioOptions
+                )
+            }
+        case .specific:
             EmptyView()
         }
     }
 
     private var shiftAdjustedBinding: Binding<Date> {
         Binding(
-            get: { computedAdjustedDate ?? Date() },
+            get: {
+                computedAdjustedDate
+                ?? representativeOriginalDate
+                ?? session.specificDate
+            },
             set: { newAdjustedDate in
                 applyShiftFromEditedAdjustedDate(newAdjustedDate)
             }
         )
     }
 
-    private func applyShiftFromEditedAdjustedDate(_ adjustedDate: Date) {
-        guard let first = session.fileURLs.first,
-              let original = model.originalDate(for: first, tag: session.launchTag) else {
-            return
-        }
-        setShiftComponents(fromSeconds: Int(adjustedDate.timeIntervalSince(original).rounded()))
+    private var specificDateBinding: Binding<Date> {
+        Binding(
+            get: { session.specificDate },
+            set: { newValue in
+                hasUserEditedSpecificDate = true
+                session.specificDate = newValue
+            }
+        )
     }
 
-    private func setShiftComponents(fromSeconds totalSeconds: Int) {
-        let sign = totalSeconds < 0 ? -1 : 1
-        let absoluteSeconds = abs(totalSeconds)
-        let days = absoluteSeconds / 86_400
-        let hours = (absoluteSeconds % 86_400) / 3_600
-        let minutes = (absoluteSeconds % 3_600) / 60
-        let seconds = absoluteSeconds % 60
-        session.shiftDays = days * sign
-        session.shiftHours = hours * sign
-        session.shiftMinutes = minutes * sign
-        session.shiftSeconds = seconds * sign
+    private var sourceTimeZoneFieldBinding: Binding<String> {
+        Binding(
+            get: {
+                session.sourceUsesCameraClock
+                    ? DateTimeAdjustSession.cameraClockDisplayName
+                    : session.sourceTimeZoneID
+            },
+            set: { newValue in
+                let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.isEmpty
+                    || trimmed.caseInsensitiveCompare(DateTimeAdjustSession.cameraClockDisplayName) == .orderedSame {
+                    session.sourceTimeZoneID = DateTimeAdjustSession.cameraClockIdentifier
+                } else {
+                    session.sourceTimeZoneID = trimmed
+                }
+            }
+        )
+    }
+
+    private var targetTimeZoneFieldBinding: Binding<String> {
+        Binding(
+            get: { session.targetTimeZoneInput },
+            set: { newValue in
+                let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else {
+                    session.targetTimeZoneInput = ""
+                    session.targetTimeZoneID = ""
+                    return
+                }
+                if let normalized = model.normalizeTargetTimeZoneEntry(trimmed) {
+                    session.targetTimeZoneID = normalized.identifier
+                    session.targetTimeZoneInput = normalized.display
+                } else {
+                    session.targetTimeZoneID = ""
+                    session.targetTimeZoneInput = trimmed
+                }
+            }
+        )
+    }
+
+    private func applyShiftFromEditedAdjustedDate(_ adjustedDate: Date) {
+        guard let first = session.fileURLs.first,
+              let original = session.capturedDates[first]?[session.launchTag] ?? model.originalDate(for: first, tag: session.launchTag) else {
+            return
+        }
+        let components = Calendar.current.dateComponents([.day, .hour, .minute, .second], from: original, to: adjustedDate)
+        session.shiftDays = components.day ?? 0
+        session.shiftHours = components.hour ?? 0
+        session.shiftMinutes = components.minute ?? 0
+        session.shiftSeconds = components.second ?? 0
+    }
+
+    @ViewBuilder
+    private func readOnlyDateField(_ date: Date?, accessibilityLabel: String) -> some View {
+        if let date {
+            InspectorDatePickerField(
+                selection: .constant(date),
+                isEnabled: false,
+                datePickerElements: [.yearMonthDay, .hourMinuteSecond],
+                datePickerStyle: .textField,
+                accessibilityLabel: accessibilityLabel
+            )
+        } else {
+            Text("—")
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel(accessibilityLabel)
+        }
+    }
+
+    private func readOnlyTextField(_ text: String, accessibilityLabel: String) -> some View {
+        Text(text)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityLabel(accessibilityLabel)
+    }
+
+    private func optionalDatesEqual(_ lhs: Date?, _ rhs: Date?) -> Bool {
+        switch (lhs, rhs) {
+        case let (left?, right?):
+            return abs(left.timeIntervalSince(right)) < 1
+        case (nil, nil):
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func hydrateCapturedDatesFromModel() {
+        var didAddDate = false
+        for fileURL in session.fileURLs {
+            var tagDates: [DateTimeTargetTag: Date] = session.capturedDates[fileURL] ?? [:]
+            for tag in DateTimeTargetTag.allCases where tagDates[tag] == nil {
+                if let date = model.originalDate(for: fileURL, tag: tag) {
+                    tagDates[tag] = date
+                    didAddDate = true
+                }
+            }
+            session.capturedDates[fileURL] = tagDates.isEmpty ? nil : tagDates
+        }
+
+        if !hasUserEditedSpecificDate,
+           let first = session.fileURLs.first,
+           let firstDate = session.capturedDates[first]?[session.launchTag] {
+            session.specificDate = firstDate
+        }
+
+        guard didAddDate else { return }
+        if showPreview || !previewRows.isEmpty {
+            Task { await refreshPreview() }
+        }
     }
 
     // MARK: - Offset Field
@@ -357,12 +577,57 @@ struct DateTimeAdjustSheetView: View {
             get: { session.applyTo.contains(tag) },
             set: { isOn in
                 if isOn {
+                    guard !isApplyToTagDisabled(tag) else { return }
                     session.applyTo.insert(tag)
                 } else {
                     session.applyTo.remove(tag)
                 }
             }
         )
+    }
+
+    private var dataReadSourceSelectionIDBinding: Binding<String> {
+        Binding(
+            get: { session.dataReadSource.rawValue },
+            set: { rawValue in
+                guard let source = DateTimeDataReadSource(rawValue: rawValue),
+                      isReadSourceAvailable(source) else {
+                    return
+                }
+                session.dataReadSource = source
+            }
+        )
+    }
+
+    private var dataReadSourceRadioOptions: [WorkflowInlineRadioGroup.Option] {
+        DateTimeDataReadSource.allCases.map { source in
+            WorkflowInlineRadioGroup.Option(
+                id: source.rawValue,
+                title: source.displayName,
+                isEnabled: isReadSourceAvailable(source)
+            )
+        }
+    }
+
+    private func isReadSourceAvailable(_ source: DateTimeDataReadSource) -> Bool {
+        guard let first = session.fileURLs.first else { return false }
+        return model.isDataReadSourceAvailable(source, for: first)
+    }
+
+    private func isApplyToTagDisabled(_ tag: DateTimeTargetTag) -> Bool {
+        guard session.mode == .file,
+              let sourceTag = session.dataReadSource.sourceTag else {
+            return false
+        }
+        return sourceTag == tag
+    }
+
+    private func enforceDataModeApplyToRules() {
+        guard session.mode == .file,
+              let sourceTag = session.dataReadSource.sourceTag else {
+            return
+        }
+        session.applyTo.remove(sourceTag)
     }
 
     private func refreshPreview() async {
@@ -373,6 +638,118 @@ struct DateTimeAdjustSheetView: View {
         previewWarnings = assessment.warnings
         hasEffectivePreviewChanges = assessment.effectiveChangeFileCount > 0
         isLoadingPreview = false
+    }
+}
+
+private struct WorkflowInlineRadioGroup: NSViewRepresentable {
+    struct Option: Equatable {
+        let id: String
+        let title: String
+        let isEnabled: Bool
+    }
+
+    @Binding var selectionID: String
+    let options: [Option]
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeNSView(context: Context) -> ContainerView {
+        let view = ContainerView()
+        view.rebuildButtons(options: options, coordinator: context.coordinator)
+        context.coordinator.lastOptionLayout = options.map { "\($0.id)|\($0.title)" }
+        return view
+    }
+
+    func updateNSView(_ nsView: ContainerView, context: Context) {
+        context.coordinator.parent = self
+
+        let optionLayout = options.map { "\($0.id)|\($0.title)" }
+        if context.coordinator.lastOptionLayout != optionLayout {
+            nsView.rebuildButtons(options: options, coordinator: context.coordinator)
+            context.coordinator.lastOptionLayout = optionLayout
+        }
+
+        context.coordinator.isProgrammaticUpdate = true
+        for button in nsView.buttons {
+            guard let id = button.identifier?.rawValue,
+                  let option = options.first(where: { $0.id == id }) else { continue }
+            button.state = id == selectionID ? .on : .off
+            button.isEnabled = option.isEnabled
+        }
+        context.coordinator.isProgrammaticUpdate = false
+    }
+
+    final class Coordinator: NSObject {
+        fileprivate var parent: WorkflowInlineRadioGroup
+        fileprivate var isProgrammaticUpdate = false
+        fileprivate var lastOptionLayout: [String] = []
+
+        fileprivate init(parent: WorkflowInlineRadioGroup) {
+            self.parent = parent
+        }
+
+        @MainActor @objc fileprivate func didSelect(_ sender: NSButton) {
+            guard !isProgrammaticUpdate,
+                  let id = sender.identifier?.rawValue else {
+                return
+            }
+            parent.selectionID = id
+        }
+    }
+
+    final class ContainerView: NSView {
+        let stack: NSStackView
+        var buttons: [NSButton] = []
+
+        override init(frame frameRect: NSRect) {
+            stack = NSStackView()
+            super.init(frame: frameRect)
+            translatesAutoresizingMaskIntoConstraints = false
+
+            stack.orientation = .horizontal
+            stack.alignment = .centerY
+            stack.spacing = 14
+            stack.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(stack)
+
+            NSLayoutConstraint.activate([
+                stack.leadingAnchor.constraint(equalTo: leadingAnchor),
+                stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
+                stack.topAnchor.constraint(equalTo: topAnchor),
+                stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+            ])
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        func rebuildButtons(options: [Option], coordinator: Coordinator) {
+            buttons.forEach { button in
+                stack.removeArrangedSubview(button)
+                button.removeFromSuperview()
+            }
+            buttons.removeAll(keepingCapacity: true)
+
+            for option in options {
+                let button = NSButton(
+                    radioButtonWithTitle: option.title,
+                    target: coordinator,
+                    action: #selector(Coordinator.didSelect(_:))
+                )
+                button.identifier = NSUserInterfaceItemIdentifier(option.id)
+                button.translatesAutoresizingMaskIntoConstraints = false
+                stack.addArrangedSubview(button)
+                buttons.append(button)
+            }
+        }
+
+        override var intrinsicContentSize: NSSize {
+            stack.fittingSize
+        }
     }
 }
 

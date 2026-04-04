@@ -7,17 +7,17 @@ extension AppModel {
 
     // MARK: - Sheet Lifecycle
 
-    func beginDateTimeAdjust(scope: DateTimeAdjustScope, launchTag: DateTimeTargetTag) {
+    func beginDateTimeAdjust(
+        scope: DateTimeAdjustScope,
+        launchTag: DateTimeTargetTag,
+        launchContext: DateTimeAdjustLaunchContext = .inspector
+    ) {
         let files = filesForDateTimeAdjust(scope)
         guard !files.isEmpty else {
             statusMessage = "No files in scope for date/time adjustment."
             return
         }
 
-        guard !isFolderMetadataLoading else {
-            statusMessage = "Metadata is still loading — try again in a moment."
-            return
-        }
         guard let primaryFile = files.first else { return }
 
         var session = DateTimeAdjustSession(
@@ -25,17 +25,29 @@ extension AppModel {
             launchTag: launchTag,
             fileURLs: files
         )
-        session.sourceTimeZoneID = TimeZone.current.identifier
-        session.applyTo = [launchTag]
+        session.sourceTimeZoneID = DateTimeAdjustSession.cameraClockIdentifier
+        session.cameraClockOffsetSeconds = preferredCameraClockOffsetSeconds(for: files)
+        session.dataReadSource = preferredInitialDataReadSource(
+            for: primaryFile,
+            launchTag: launchTag,
+            launchContext: launchContext
+        )
+        session.applyTo = []
 
-        var captured: [URL: Date] = [:]
+        var captured: [URL: [DateTimeTargetTag: Date]] = [:]
         for fileURL in files {
-            if let date = originalDate(for: fileURL, tag: launchTag) {
-                captured[fileURL] = date
+            var tagDates: [DateTimeTargetTag: Date] = [:]
+            for tag in DateTimeTargetTag.allCases {
+                if let date = originalDate(for: fileURL, tag: tag) {
+                    tagDates[tag] = date
+                }
+            }
+            if !tagDates.isEmpty {
+                captured[fileURL] = tagDates
             }
         }
         session.capturedDates = captured
-        if let primaryDate = captured[primaryFile] {
+        if let primaryDate = captured[primaryFile]?[launchTag] {
             session.specificDate = primaryDate
         }
 
@@ -100,6 +112,13 @@ extension AppModel {
         try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.creationDate] as? Date
     }
 
+    func isDataReadSourceAvailable(_ source: DateTimeDataReadSource, for fileURL: URL) -> Bool {
+        if let tag = source.sourceTag {
+            return originalDate(for: fileURL, tag: tag) != nil
+        }
+        return fileCreationDate(for: fileURL) != nil
+    }
+
     // MARK: - Adjusted Date Computation
 
     func computeAdjustedDate(for fileURL: URL, session: DateTimeAdjustSession) -> Date? {
@@ -111,12 +130,67 @@ extension AppModel {
         case .specific:
             return session.specificDate
         case .file:
-            return fileCreationDate(for: fileURL)
+            assertionFailure("Data mode should use dataModeFileState directly, not computeAdjustedDate")
+            return nil
+        }
+    }
+
+    func dataModeFileState(for fileURL: URL, session: DateTimeAdjustSession) -> DateTimeDataModeFileState {
+        let readValue = dataModeReadValue(for: fileURL, session: session)
+        let destinations = dataModeWritableTargets(for: session).map { targetTag in
+            DateTimeDataModeDestination(
+                targetTag: targetTag,
+                currentValue: session.capturedDates[fileURL]?[targetTag] ?? originalDate(for: fileURL, tag: targetTag)
+            )
+        }
+        return DateTimeDataModeFileState(
+            readValue: readValue,
+            destinations: destinations
+        )
+    }
+
+    func dataModeWritableTargets(for session: DateTimeAdjustSession) -> [DateTimeTargetTag] {
+        let sourceTag = session.dataReadSource.sourceTag
+        return DateTimeTargetTag.allCases.filter {
+            session.applyTo.contains($0) && $0 != sourceTag
+        }
+    }
+
+    func dataModeReadValue(for fileURL: URL, session: DateTimeAdjustSession) -> Date? {
+        if let sourceTag = session.dataReadSource.sourceTag {
+            return session.capturedDates[fileURL]?[sourceTag] ?? originalDate(for: fileURL, tag: sourceTag)
+        }
+        return fileCreationDate(for: fileURL)
+    }
+
+    private func preferredInitialDataReadSource(
+        for representativeFile: URL,
+        launchTag: DateTimeTargetTag,
+        launchContext: DateTimeAdjustLaunchContext
+    ) -> DateTimeDataReadSource {
+        switch launchContext {
+        case .inspector:
+            return .from(tag: launchTag)
+        case .menu:
+            return DateTimeDataReadSource.allCases.first {
+                isDataReadSourceAvailable($0, for: representativeFile)
+            } ?? .original
+        }
+    }
+
+    private func dateValuesEqual(_ lhs: Date?, _ rhs: Date?) -> Bool {
+        switch (lhs, rhs) {
+        case let (left?, right?):
+            return abs(left.timeIntervalSince(right)) < 1
+        case (nil, nil):
+            return true
+        default:
+            return false
         }
     }
 
     private func computeShiftAdjusted(for fileURL: URL, session: DateTimeAdjustSession) -> Date? {
-        guard let original = session.capturedDates[fileURL] ?? originalDate(for: fileURL, tag: session.launchTag) else { return nil }
+        guard let original = session.capturedDates[fileURL]?[session.launchTag] ?? originalDate(for: fileURL, tag: session.launchTag) else { return nil }
         var components = DateComponents()
         components.day = session.shiftDays
         components.hour = session.shiftHours
@@ -126,13 +200,18 @@ extension AppModel {
     }
 
     private func computeTimeZoneAdjusted(for fileURL: URL, session: DateTimeAdjustSession) -> Date? {
-        guard let original = session.capturedDates[fileURL] ?? originalDate(for: fileURL, tag: session.launchTag) else { return nil }
-        guard let sourceTZ = resolvedSourceTimeZone(for: session),
-              let targetTZ = resolvedTargetTimeZone(for: session) else {
+        guard let original = session.capturedDates[fileURL]?[session.launchTag] ?? originalDate(for: fileURL, tag: session.launchTag) else { return nil }
+        guard let targetTZ = resolvedTargetTimeZone(for: session) else {
             return nil
         }
 
-        let sourceOffset = sourceTZ.secondsFromGMT(for: original)
+        let sourceOffset: Int
+        if session.sourceUsesCameraClock {
+            sourceOffset = session.cameraClockOffsetSeconds
+        } else {
+            guard let sourceTZ = resolvedSourceTimeZone(for: session) else { return nil }
+            sourceOffset = sourceTZ.secondsFromGMT(for: original)
+        }
         let targetOffset = targetTZ.secondsFromGMT(for: original)
         let delta = TimeInterval(targetOffset - sourceOffset)
         return original.addingTimeInterval(delta)
@@ -146,7 +225,7 @@ extension AppModel {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func timeZone(fromOffsetString offset: String) -> TimeZone? {
+    private func offsetSeconds(fromOffsetString offset: String) -> Int? {
         // Parse "+05:30" or "-08:00" style offsets
         let trimmed = offset.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 5 else { return nil }
@@ -155,8 +234,19 @@ extension AppModel {
         guard digits.count >= 4,
               let hours = Int(digits.prefix(2)),
               let minutes = Int(digits.suffix(2)) else { return nil }
-        let seconds = sign * (hours * 3600 + minutes * 60)
-        return TimeZone(secondsFromGMT: seconds)
+        return sign * (hours * 3600 + minutes * 60)
+    }
+
+    private func preferredCameraClockOffsetSeconds(for files: [URL]) -> Int {
+        guard !files.isEmpty else { return 0 }
+        let offsets = files.compactMap { embeddedOffsetString(for: $0) }
+        if offsets.count == files.count,
+           let first = offsets.first,
+           offsets.allSatisfy({ $0 == first }),
+           let seconds = offsetSeconds(fromOffsetString: first) {
+            return seconds
+        }
+        return 0
     }
 
     // MARK: - Resolved Timezone Name
@@ -169,18 +259,49 @@ extension AppModel {
         return tz.localizedName(for: .standard, locale: .current) ?? identifier
     }
 
+    func normalizeTargetTimeZoneEntry(_ rawInput: String) -> (identifier: String, display: String)? {
+        let trimmed = rawInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let identifier: String
+        if let cityMatch = TimeZoneCityData.identifier(forCity: trimmed), !cityMatch.isEmpty {
+            identifier = cityMatch
+        } else if let canonical = canonicalTimeZoneIdentifier(matching: trimmed) {
+            identifier = canonical
+        } else {
+            return nil
+        }
+
+        let display = TimeZone(identifier: identifier)?
+            .localizedName(for: .standard, locale: .current) ?? identifier
+        return (identifier, display)
+    }
+
     private func resolvedSourceTimeZone(for session: DateTimeAdjustSession) -> TimeZone? {
+        guard !session.sourceUsesCameraClock else { return nil }
         let identifier = session.sourceTimeZoneID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !identifier.isEmpty else { return nil }
-        return TimeZone(identifier: identifier)
+        guard let canonical = canonicalTimeZoneIdentifier(matching: identifier) else { return nil }
+        return TimeZone(identifier: canonical)
+    }
+
+    private func canonicalTimeZoneIdentifier(matching value: String) -> String? {
+        if let exact = TimeZone.knownTimeZoneIdentifiers.first(where: {
+            $0.caseInsensitiveCompare(value) == .orderedSame
+        }) {
+            return exact
+        }
+        return TimeZone(identifier: value)?.identifier
     }
 
     private func resolvedTargetTimeZoneIdentifier(for session: DateTimeAdjustSession) -> String? {
-        if let identifier = TimeZoneCityData.identifier(forCity: session.closestCity), !identifier.isEmpty {
-            return identifier
+        let storedID = session.targetTimeZoneID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !storedID.isEmpty {
+            return canonicalTimeZoneIdentifier(matching: storedID) ?? storedID
         }
-        let fallback = session.targetTimezone.trimmingCharacters(in: .whitespacesAndNewlines)
-        return fallback.isEmpty ? nil : fallback
+        let rawInput = session.targetTimeZoneInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !rawInput.isEmpty else { return nil }
+        return normalizeTargetTimeZoneEntry(rawInput)?.identifier
     }
 
     private func resolvedTargetTimeZone(for session: DateTimeAdjustSession) -> TimeZone? {
@@ -191,6 +312,10 @@ extension AppModel {
     // MARK: - Preview
 
     func previewDateTimeAdjust(session: DateTimeAdjustSession) -> DateTimeAdjustAssessment {
+        if session.mode == .file {
+            return previewDataModeAdjust(session: session)
+        }
+
         var rows: [DateTimeAdjustPreviewRow] = []
         var blockingIssues: [String] = []
         var warnings: [String] = []
@@ -198,7 +323,7 @@ extension AppModel {
         var effectiveChangeFileCount = 0
 
         if session.mode == .timeZone {
-            if resolvedSourceTimeZone(for: session) == nil {
+            if !session.sourceUsesCameraClock, resolvedSourceTimeZone(for: session) == nil {
                 blockingIssues.append("Source time zone is invalid.")
             }
             if resolvedTargetTimeZone(for: session) == nil {
@@ -208,12 +333,12 @@ extension AppModel {
 
         for fileURL in session.fileURLs {
             let fileName = fileURL.lastPathComponent
-            let original = session.capturedDates[fileURL] ?? originalDate(for: fileURL, tag: session.launchTag)
+            let original = session.capturedDates[fileURL]?[session.launchTag] ?? originalDate(for: fileURL, tag: session.launchTag)
             let adjusted = computeAdjustedDate(for: fileURL, session: session)
 
             let originalDisplay: String
             let adjustedDisplay: String
-            let deltaText: String
+            var deltaText: String
             var rowWarnings: [String] = []
 
             if let original {
@@ -234,22 +359,26 @@ extension AppModel {
             if let original, let adjusted {
                 let interval = adjusted.timeIntervalSince(original)
                 deltaText = formattedDelta(interval)
-                if abs(interval) >= 1 {
-                    effectiveChangeFileCount += 1
-                }
-            } else if original == nil, adjusted != nil {
-                // Filling a missing date is still an effective change.
-                deltaText = ""
-                effectiveChangeFileCount += 1
             } else {
                 deltaText = ""
+            }
+
+            if let adjusted {
+                let targetTags = DateTimeTargetTag.allCases.filter { session.applyTo.contains($0) }
+                let hasEffectiveChange = targetTags.contains { tag in
+                    let current = session.capturedDates[fileURL]?[tag] ?? originalDate(for: fileURL, tag: tag)
+                    return !dateValuesEqual(current, adjusted)
+                }
+                if hasEffectiveChange {
+                    effectiveChangeFileCount += 1
+                }
             }
 
             if adjusted == nil {
                 skippedCount += 1
                 switch session.mode {
                 case .file:
-                    rowWarnings.append("No file creation date")
+                    rowWarnings.append("No \(session.dataReadSource.missingValueDescription)")
                 case .timeZone, .shift:
                     rowWarnings.append("No computable source date")
                 case .specific:
@@ -258,7 +387,7 @@ extension AppModel {
             }
 
             rows.append(DateTimeAdjustPreviewRow(
-                id: fileURL,
+                id: fileURL.path,
                 fileName: fileName,
                 originalDisplay: originalDisplay,
                 adjustedDisplay: adjustedDisplay,
@@ -270,7 +399,7 @@ extension AppModel {
         if skippedCount == session.fileURLs.count {
             switch session.mode {
             case .file:
-                blockingIssues.append("No files have a file creation date to use.")
+                blockingIssues.append("No files have a \(session.dataReadSource.missingValueDescription) to use.")
             case .timeZone, .shift:
                 blockingIssues.append("No files have a \(session.launchTag.displayName) date to adjust.")
             case .specific:
@@ -279,7 +408,7 @@ extension AppModel {
         } else if skippedCount > 0 {
             switch session.mode {
             case .file:
-                warnings.append("\(skippedCount) file(s) have no file creation date and will be skipped.")
+                warnings.append("\(skippedCount) file(s) have no \(session.dataReadSource.missingValueDescription) and will be skipped.")
             case .timeZone, .shift:
                 warnings.append("\(skippedCount) file(s) have no \(session.launchTag.displayName) date and will be skipped.")
             case .specific:
@@ -289,6 +418,83 @@ extension AppModel {
 
         if session.applyTo.isEmpty {
             blockingIssues.append("No target tags selected in \"Apply to\".")
+        }
+
+        return DateTimeAdjustAssessment(
+            rows: rows,
+            blockingIssues: blockingIssues,
+            warnings: warnings,
+            effectiveChangeFileCount: effectiveChangeFileCount
+        )
+    }
+
+    private func previewDataModeAdjust(session: DateTimeAdjustSession) -> DateTimeAdjustAssessment {
+        let writableTargets = dataModeWritableTargets(for: session)
+
+        var rows: [DateTimeAdjustPreviewRow] = []
+        var blockingIssues: [String] = []
+        var warnings: [String] = []
+        var missingSourceCount = 0
+        var effectiveChangeFileCount = 0
+
+        if writableTargets.isEmpty {
+            blockingIssues.append("No target tags selected in \"Apply to\".")
+        }
+
+        for fileURL in session.fileURLs {
+            let fileState = dataModeFileState(for: fileURL, session: session)
+            let fileName = fileURL.lastPathComponent
+            var fileHasEffectiveChange = false
+
+            if fileState.readValue == nil {
+                missingSourceCount += 1
+            }
+
+            for destination in fileState.destinations {
+                let existingTargetDate = destination.currentValue
+                let originalDisplay = existingTargetDate.map(Self.exifDateFormatter.string(from:)) ?? "—"
+
+                let adjustedDisplay: String
+                let deltaText: String
+                var rowWarnings: [String] = []
+
+                if let readValue = fileState.readValue {
+                    adjustedDisplay = Self.exifDateFormatter.string(from: readValue)
+                    if let existingTargetDate {
+                        let interval = readValue.timeIntervalSince(existingTargetDate)
+                        deltaText = formattedDelta(interval)
+                    } else {
+                        deltaText = "set"
+                    }
+
+                    if !dateValuesEqual(existingTargetDate, readValue) {
+                        fileHasEffectiveChange = true
+                    }
+                } else {
+                    adjustedDisplay = "—"
+                    deltaText = ""
+                    rowWarnings.append("No \(session.dataReadSource.missingValueDescription)")
+                }
+
+                rows.append(DateTimeAdjustPreviewRow(
+                    id: "\(fileURL.path)#\(destination.targetTag.rawValue)",
+                    fileName: "\(fileName) [\(destination.targetTag.displayName)]",
+                    originalDisplay: originalDisplay,
+                    adjustedDisplay: adjustedDisplay,
+                    deltaText: deltaText,
+                    warnings: rowWarnings
+                ))
+            }
+
+            if fileHasEffectiveChange {
+                effectiveChangeFileCount += 1
+            }
+        }
+
+        if missingSourceCount == session.fileURLs.count {
+            blockingIssues.append("No files have a \(session.dataReadSource.missingValueDescription) to use.")
+        } else if missingSourceCount > 0 {
+            warnings.append("\(missingSourceCount) file(s) have no \(session.dataReadSource.missingValueDescription) and will be skipped.")
         }
 
         return DateTimeAdjustAssessment(
@@ -324,11 +530,26 @@ extension AppModel {
         var stagedCount = 0
 
         for fileURL in session.fileURLs {
-            guard let adjusted = computeAdjustedDate(for: fileURL, session: session) else { continue }
+            let dataModeState = session.mode == .file ? dataModeFileState(for: fileURL, session: session) : nil
+            guard let adjusted = session.mode == .file ? dataModeState?.readValue : computeAdjustedDate(for: fileURL, session: session) else {
+                continue
+            }
             let formatted = Self.exifDateFormatter.string(from: adjusted)
             var stagedForFile = false
 
-            for targetTag in session.applyTo {
+            let targetTags: [DateTimeTargetTag]
+            if let dataModeState {
+                targetTags = dataModeState.destinations.map(\.targetTag)
+            } else {
+                targetTags = DateTimeTargetTag.allCases.filter { session.applyTo.contains($0) }
+            }
+
+            for targetTag in targetTags {
+                if let dataModeState,
+                   let currentValue = dataModeState.destinations.first(where: { $0.targetTag == targetTag })?.currentValue,
+                   dateValuesEqual(currentValue, adjusted) {
+                    continue
+                }
                 guard let tag = editableTag(forID: targetTag.editableTagID) else { continue }
                 stageEdit(formatted, for: tag, fileURLs: [fileURL], source: .manual)
                 stagedForFile = true
