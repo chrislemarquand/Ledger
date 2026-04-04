@@ -1,4 +1,3 @@
-import CoreLocation
 import MapKit
 import SharedUI
 import SwiftUI
@@ -400,7 +399,6 @@ struct LocationAdjustSheetView: View {
 
     @State private var mapRegion: MKCoordinateRegion
     @State private var hasExplicitCoordinate: Bool
-    @StateObject private var userLocationProvider = WorkflowUserLocationProvider()
 
     @State private var showFields = false
     @State private var showPreview = false
@@ -485,7 +483,7 @@ struct LocationAdjustSheetView: View {
     }
 
     private var isAdvancedActionEnabled: Bool {
-        true  // coordinates always available; advanced fields gated by settings
+        !availableAdvancedFields.isEmpty
     }
 
     private var isPreviewActionEnabled: Bool {
@@ -628,8 +626,6 @@ struct LocationAdjustSheetView: View {
             sanitizeAdvancedSelection()
             if hasExplicitCoordinate, let coordinate = selectedCoordinate {
                 scheduleReverseGeocode(for: coordinate)
-            } else {
-                userLocationProvider.requestLocationIfNeeded()
             }
         }
         .task(id: previewKey) {
@@ -641,10 +637,6 @@ struct LocationAdjustSheetView: View {
         .onChange(of: session.selectedAdvancedFields) { _, newFields in
             guard !newFields.isEmpty, hasExplicitCoordinate, let coordinate = selectedCoordinate else { return }
             scheduleReverseGeocode(for: coordinate)
-        }
-        .onReceive(userLocationProvider.$coordinate) { coordinate in
-            guard selectedCoordinate == nil, let coordinate else { return }
-            mapRegion.center = coordinate
         }
         .onDisappear {
             reverseGeocodeTask?.cancel()
@@ -871,6 +863,7 @@ private struct WorkflowLocationMapField: NSViewRepresentable {
         let mapView = MKMapView(frame: .zero)
         mapView.mapType = .standard
         mapView.delegate = context.coordinator
+        mapView.showsUserLocation = false
         mapView.showsCompass = true
         mapView.showsScale = true
         mapView.setRegion(region, animated: false)
@@ -983,56 +976,6 @@ private struct WorkflowLocationMapField: NSViewRepresentable {
     }
 }
 
-private final class WorkflowUserLocationProvider: NSObject, ObservableObject, CLLocationManagerDelegate {
-    @Published var coordinate: CLLocationCoordinate2D?
-
-    private let manager = CLLocationManager()
-    private var hasRequested = false
-
-    override init() {
-        super.init()
-        manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
-    }
-
-    func requestLocationIfNeeded() {
-        guard !hasRequested else { return }
-        hasRequested = true
-        guard CLLocationManager.locationServicesEnabled() else { return }
-
-        switch manager.authorizationStatus {
-        case .authorizedWhenInUse, .authorizedAlways:
-            manager.requestLocation()
-        case .notDetermined:
-            manager.requestWhenInUseAuthorization()
-        case .restricted, .denied:
-            break
-        @unknown default:
-            break
-        }
-    }
-
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        switch manager.authorizationStatus {
-        case .authorizedWhenInUse, .authorizedAlways:
-            manager.requestLocation()
-        case .restricted, .denied, .notDetermined:
-            break
-        @unknown default:
-            break
-        }
-    }
-
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let location = locations.last else { return }
-        coordinate = location.coordinate
-        manager.stopUpdatingLocation()
-    }
-
-    func locationManager(_: CLLocationManager, didFailWithError _: Error) {
-        // Keep location optional; the map remains usable via search and manual pin move.
-    }
-}
 
 extension View {
     func locationAdjustSheet(model: AppModel) -> some View {

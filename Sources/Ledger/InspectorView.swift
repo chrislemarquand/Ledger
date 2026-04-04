@@ -178,7 +178,7 @@ struct InspectorView: View {
                             grouped.section,
                             isExpanded: sectionExpandedBinding(for: grouped.section)
                         ) {
-                            LazyVStack(alignment: .leading, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 10) {
                                     ForEach(grouped.tags) { tag in
                                         InspectorFieldRow {
                                             HStack(spacing: 6) {
@@ -256,8 +256,7 @@ struct InspectorView: View {
                                             } else if isKeywordTag(tag) {
                                                 InspectorTokenField(
                                                     text: textBinding(for: tag),
-                                                    placeholder: model.placeholderForTag(tag),
-                                                    suggestions: model.knownKeywords()
+                                                    placeholder: model.placeholderForTag(tag)
                                                 )
                                                 .frame(maxWidth: .infinity, alignment: .leading)
                                             } else {
