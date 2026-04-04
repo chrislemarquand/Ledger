@@ -39,9 +39,24 @@ public struct ExifToolCommandBuilder: Sendable {
 
         for change in operation.changes {
             let tag = writeTag(for: change)
-            args.append("-\(tag)=\(change.newValue)")
-            if let iptcTag = Self.iptcDualWrite[tag] {
-                args.append("-\(iptcTag)=\(change.newValue)")
+            if change.valueType == .list {
+                // List tags (Subject, Keywords) must be written as separate exiftool values.
+                // Clear the existing list first, then append each item with +=.
+                // patchesForTag already emits explicit IPTC counterpart patches for these
+                // tags, so iptcDualWrite is intentionally skipped here to avoid double-writing.
+                args.append("-\(tag)=")
+                let items = change.newValue
+                    .components(separatedBy: ", ")
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                for item in items {
+                    args.append("-\(tag)+=\(item)")
+                }
+            } else {
+                args.append("-\(tag)=\(change.newValue)")
+                if let iptcTag = Self.iptcDualWrite[tag] {
+                    args.append("-\(iptcTag)=\(change.newValue)")
+                }
             }
         }
 

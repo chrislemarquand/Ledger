@@ -33,6 +33,30 @@ final class ExifToolCommandBuilderTests: XCTestCase {
         XCTAssertEqual(args.last, "/tmp/a.jpg")
     }
 
+    func testWriteArgumentsExpandsListTagsIntoSeparateValues() {
+        let builder = ExifToolCommandBuilder()
+        let operation = EditOperation(
+            targetFiles: [URL(fileURLWithPath: "/tmp/a.jpg")],
+            changes: [
+                MetadataPatch(key: "Subject", namespace: .xmp, newValue: "Travel, Film", valueType: .list),
+                MetadataPatch(key: "Keywords", namespace: .iptc, newValue: "Travel, Film", valueType: .list)
+            ]
+        )
+
+        let args = builder.writeArguments(for: operation, file: URL(fileURLWithPath: "/tmp/a.jpg"))
+
+        // Each list tag must be cleared first, then each item added individually.
+        XCTAssertTrue(args.contains("-XMP:Subject="))
+        XCTAssertTrue(args.contains("-XMP:Subject+=Travel"))
+        XCTAssertTrue(args.contains("-XMP:Subject+=Film"))
+        XCTAssertTrue(args.contains("-IPTC:Keywords="))
+        XCTAssertTrue(args.contains("-IPTC:Keywords+=Travel"))
+        XCTAssertTrue(args.contains("-IPTC:Keywords+=Film"))
+        // The joined string must NOT appear as a single value.
+        XCTAssertFalse(args.contains("-XMP:Subject=Travel, Film"))
+        XCTAssertFalse(args.contains("-IPTC:Keywords=Travel, Film"))
+    }
+
     func testWriteArgumentsRouteGPSKeysToGPSGroup() {
         let builder = ExifToolCommandBuilder()
         let operation = EditOperation(
