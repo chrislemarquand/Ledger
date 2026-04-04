@@ -40,11 +40,13 @@ extension AppModel {
         }
 
         let normalized = normalizedWriteValue(rawValue, for: tag)
+        let isKeywordTag = tag.id == "xmp-subject" || tag.id == "iptc-keywords"
         var patches: [MetadataPatch] = [
             MetadataPatch(
                 key: tag.key,
                 namespace: tag.namespace,
-                newValue: normalized
+                newValue: normalized,
+                valueType: isKeywordTag ? .list : .string
             )
         ]
 
@@ -70,7 +72,8 @@ extension AppModel {
                 MetadataPatch(
                     key: "Keywords",
                     namespace: .iptc,
-                    newValue: normalized
+                    newValue: normalized,
+                    valueType: .list
                 )
             )
         } else if tag.id == "iptc-keywords" {
@@ -78,7 +81,8 @@ extension AppModel {
                 MetadataPatch(
                     key: "Subject",
                     namespace: .xmp,
-                    newValue: normalized
+                    newValue: normalized,
+                    valueType: .list
                 )
             )
         } else if tag.id == "exif-exposure-comp" {

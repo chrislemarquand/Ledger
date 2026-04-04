@@ -17,6 +17,9 @@ public enum MetadataValueType: String, Codable, Sendable {
     case boolean
     case date
     case unknown
+    /// A `", "`-joined string that represents multiple discrete values (e.g. XMP Subject, IPTC Keywords).
+    /// The command builder expands these into a clear-then-add-each sequence.
+    case list
 }
 
 public struct MetadataField: Codable, Hashable, Identifiable, Sendable {
