@@ -14,10 +14,11 @@ extension AppModel {
             return
         }
 
-        guard let primaryFile = files.first, metadataByFile[primaryFile] != nil else {
+        guard !isFolderMetadataLoading else {
             statusMessage = "Metadata is still loading — try again in a moment."
             return
         }
+        guard let primaryFile = files.first else { return }
 
         var session = DateTimeAdjustSession(
             scope: scope,
