@@ -1,12 +1,13 @@
 #!/bin/zsh
 set -euo pipefail
 
-# Reset Ledger window, pane, and list column layout to defaults for UX testing.
+# Reset Ledger window, pane, list column layout, and inspector field visibility to defaults for UX testing.
 #
 # Clears:
 #   - Window frame autosave (position and size)
 #   - Split pane divider positions (sidebar width, inspector width)
 #   - List column widths, order, and visibility
+#   - Inspector field on/off visibility state (resets to app defaults)
 #   - Split autosave migration sentinel (harmless to re-run)
 #   - Saved application state (NSApplicationRestorationState)
 #
@@ -67,11 +68,13 @@ DEFAULTS_KEYS=(
   "${ID_PREFIX}.listColumns.initialFitApplied"
   # Split autosave migration sentinel (safe to re-run, no legacy data present)
   "ui.split.autosave.reset.v4"
+  # Inspector field on/off visibility
+  "ui.settings.inspector.field.visibility"
   # Welcome / What's New seen-version state
   "${ID_PREFIX}.welcomeLastSeenVersion"
 )
 
-echo "This will reset Ledger window and list column layout."
+echo "This will reset Ledger window layout, list columns, and inspector field visibility."
 echo "Sidebar items and preferences will NOT be affected."
 echo ""
 echo "Will remove UserDefaults keys:"

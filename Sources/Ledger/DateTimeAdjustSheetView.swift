@@ -560,7 +560,7 @@ struct DateTimeAdjustSheetView: View {
                                             .help(row.warnings.joined(separator: "\n"))
                                     }
                                 }
-                                .font(.system(.caption, design: .monospaced))
+                                .font(.caption)
                                 .padding(.vertical, 2)
                             }
                         }
@@ -1124,7 +1124,7 @@ struct LocationAdjustSheetView: View {
                                     Text(row.deltaText)
                                         .foregroundStyle(.tertiary)
                                 }
-                                .font(.system(.caption, design: .monospaced))
+                                .font(.caption)
                                 .padding(.vertical, 2)
                             }
                         }

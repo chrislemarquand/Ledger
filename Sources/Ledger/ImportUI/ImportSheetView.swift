@@ -1056,30 +1056,22 @@ struct ImportSheetView: View {
 
     @ViewBuilder
     private var previewPopover: some View {
-        ScrollView {
-            HStack(alignment: .top) {
-                if session.isBusy {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text("Reading file…")
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(8)
-                } else {
-                    let text = isPostImportReviewMode ? session.reportPreviewText : session.previewText
+        VStack(alignment: .leading, spacing: 0) {
+            if session.isBusy {
+                ProgressView()
+                    .frame(maxWidth: .infinity, minHeight: 80)
+                    .padding()
+            } else {
+                let text = isPostImportReviewMode ? session.reportPreviewText : session.previewText
+                ScrollView {
                     Text(text.isEmpty ? "No matches found." : text)
                         .font(.system(.caption, design: .monospaced))
-                        .padding(8)
+                        .padding()
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                Spacer(minLength: 0)
+                .frame(width: 540, height: 320)
             }
         }
-        .frame(width: 560, height: 300)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(.quaternary.opacity(0.35)))
     }
 
     @ViewBuilder

@@ -158,6 +158,7 @@ struct BatchRenameSheetView: View {
                                     .lineLimit(1)
                                     .truncationMode(.middle)
                                     .foregroundStyle(.secondary)
+                                    .frame(width: 200, alignment: .leading)
                                 Image(systemName: "arrow.right")
                                     .font(.caption)
                                     .foregroundStyle(.tertiary)
@@ -170,7 +171,7 @@ struct BatchRenameSheetView: View {
                                         .help("Renamed to avoid a duplicate")
                                 }
                             }
-                            .font(.system(.caption, design: .monospaced))
+                            .font(.caption)
                             .padding(.vertical, 2)
                         }
                     }

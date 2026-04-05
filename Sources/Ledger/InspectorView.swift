@@ -190,95 +190,14 @@ struct InspectorView: View {
                                                 InspectorFieldLabel(tag.label)
                                             }
                                         } value: {
-                                        if model.isDateTimeTag(tag) {
-                                                if let date = model.dateValueForTag(tag) {
-                                                    HStack(spacing: 6) {
-                                                        InspectorDatePickerField(
-                                                            selection: dateBinding(for: tag, fallback: date),
-                                                            datePickerStyle: .textField,
-                                                            accessibilityLabel: tag.label
-                                                        )
-                                                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                                                        Button {
-                                                            beginEditSessionIfNeeded(for: tag)
-                                                            model.clearDateValue(for: tag)
-                                                        } label: {
-                                                            Image(systemName: "xmark.circle.fill")
-                                                                .foregroundStyle(.secondary)
-                                                        }
-                                                        .buttonStyle(.plain)
-                                                        .accessibilityLabel("Clear \(tag.label)")
-                                                        .help("Clear date and time")
-
-                                                        Button("Set\u{2026}") {
-                                                            openDateTimeAdjustSheet(for: tag)
-                                                        }
-                                                        .controlSize(.small)
-                                                    }
-                                                } else {
-                                                    HStack(spacing: 6) {
-                                                        if model.isMixedValue(for: tag) {
-                                                            HStack {
-                                                                Text("Multiple values")
-                                                                    .foregroundStyle(.secondary)
-                                                                    .font(.body)
-                                                                Spacer(minLength: 0)
-                                                            }
-                                                            .padding(.horizontal, 10)
-                                                            .padding(.vertical, 6)
-                                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                                            .background(
-                                                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                                                    .strokeBorder(.quaternary, lineWidth: 1)
-                                                            )
-                                                        } else {
-                                                            TextField("", text: .constant(""))
-                                                                .textFieldStyle(.roundedBorder)
-                                                                .disabled(true)
-                                                                .frame(maxWidth: .infinity, alignment: .leading)
-                                                        }
-
-                                                        Button("Set\u{2026}") {
-                                                            openDateTimeAdjustSheet(for: tag)
-                                                        }
-                                                        .controlSize(.small)
-                                                    }
-                                                }
-                                            } else if let options = model.pickerOptions(for: tag) {
-                                                let popupOptions = inspectorPopupOptions(for: tag, options: options)
-                                                InspectorPopupField(
-                                                    selection: popupBinding(for: tag),
-                                                    options: popupOptions,
-                                                    accessibilityLabel: tag.label
-                                                )
-                                                .frame(maxWidth: .infinity, alignment: .leading)
-                                            } else if isKeywordTag(tag) {
-                                                InspectorTokenField(
-                                                    text: textBinding(for: tag),
-                                                    placeholder: model.placeholderForTag(tag)
-                                                )
-                                                .frame(maxWidth: .infinity, alignment: .leading)
-                                            } else {
-                                                HStack(spacing: 6) {
-                                                    TextField(
-                                                        "",
-                                                        text: textBinding(for: tag),
-                                                        prompt: Text(model.isMixedValue(for: tag) ? "Multiple values" : model.placeholderForTag(tag))
-                                                            .foregroundStyle(.secondary)
-                                                    )
-                                                    .textFieldStyle(.roundedBorder)
-                                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                                    .focused($focusedTagID, equals: tag.id)
-
-                                                    if isLocationCoordinateTag(tag) {
-                                                        Button("Set\u{2026}") {
-                                                            openLocationAdjustSheet()
-                                                        }
-                                                        .controlSize(.small)
-                                                    }
-                                                }
-                                            }
+                                            InspectorTagFieldView(
+                                                tag: tag,
+                                                model: model,
+                                                focusedTagID: $focusedTagID,
+                                                onBeginEditSession: { beginEditSessionIfNeeded(for: tag) },
+                                                onOpenDateTimeAdjust: { openDateTimeAdjustSheet(for: tag) },
+                                                onOpenLocationAdjust: { openLocationAdjustSheet() }
+                                            )
                                         }
                                         .id(tag.id)
                                     }
@@ -505,37 +424,6 @@ struct InspectorView: View {
         )
     }
 
-    private func dateBinding(for tag: AppModel.EditableTag, fallback: Date) -> Binding<Date> {
-        Binding(
-            get: { model.dateValueForTag(tag) ?? fallback },
-            set: { newDate in
-                beginEditSessionIfNeeded(for: tag)
-                model.updateDateValue(newDate, for: tag)
-            }
-        )
-    }
-
-    private func popupBinding(for tag: AppModel.EditableTag) -> Binding<String> {
-        Binding(
-            get: { model.valueForTag(tag) },
-            set: { newValue in
-                guard newValue != model.valueForTag(tag) else { return }
-                beginEditSessionIfNeeded(for: tag)
-                model.updateValue(newValue, for: tag)
-            }
-        )
-    }
-
-    private func textBinding(for tag: AppModel.EditableTag) -> Binding<String> {
-        Binding(
-            get: { model.valueForTag(tag) },
-            set: { newValue in
-                beginEditSessionIfNeeded(for: tag)
-                model.updateValue(newValue, for: tag)
-            }
-        )
-    }
-
     @ViewBuilder
     private func locationMapView(for coordinate: CLLocationCoordinate2D) -> some View {
         SharedUI.InspectorLocationMapView(coordinate: coordinate)
@@ -601,20 +489,6 @@ struct InspectorView: View {
         focusedTagID = nextID
     }
 
-    private func inspectorPopupOptions(for tag: AppModel.EditableTag, options: [AppModel.PickerOption]) -> [InspectorPopupOption] {
-        let currentValue = model.valueForTag(tag)
-        var popupOptions: [InspectorPopupOption] = [
-            .init(value: "", label: model.isMixedValue(for: tag) ? "Multiple values" : "—"),
-        ]
-
-        if !currentValue.isEmpty && !options.contains(where: { $0.value == currentValue }) {
-            popupOptions.append(.init(value: currentValue, label: currentValue))
-        }
-
-        popupOptions.append(contentsOf: options.map { .init(value: $0.value, label: $0.label) })
-        return popupOptions
-    }
-
     private func focusableInspectorTagIDs() -> [String] {
         model.orderedEditableTagSections
             .filter { $0.section != "Rating" && !model.isInspectorSectionCollapsed($0.section) }
@@ -662,19 +536,11 @@ struct InspectorView: View {
     private func openDateTimeAdjustSheet(for tag: AppModel.EditableTag) {
         let targetTag = DateTimeTargetTag.from(editableTagID: tag.id) ?? .dateTimeOriginal
         let scope: DateTimeAdjustScope = model.selectedFileURLs.count > 1 ? .selection : .single
-        model.beginDateTimeAdjust(scope: scope, launchTag: targetTag)
+        model.beginDateTimeAdjust(scope: scope, launchTag: targetTag, launchContext: .inspector)
     }
 
     private func openLocationAdjustSheet() {
         model.beginLocationAdjust()
-    }
-
-    private func isLocationCoordinateTag(_ tag: AppModel.EditableTag) -> Bool {
-        tag.id == "exif-gps-lat" || tag.id == "exif-gps-lon"
-    }
-
-    private func isKeywordTag(_ tag: AppModel.EditableTag) -> Bool {
-        tag.id == "xmp-subject" || tag.id == "iptc-keywords"
     }
 
 }
