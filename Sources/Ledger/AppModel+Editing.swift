@@ -403,67 +403,16 @@ extension AppModel {
     }
 
     func pickerOptions(for tag: EditableTag) -> [PickerOption]? {
-        let base: [PickerOption]
-
-        switch tag.id {
-        case "exif-exposure-program":
-            base = [
-                .init(value: "0", label: "Unknown"),
-                .init(value: "1", label: "Manual"),
-                .init(value: "2", label: "Program AE"),
-                .init(value: "3", label: "Aperture Priority"),
-                .init(value: "4", label: "Shutter Priority"),
-                .init(value: "5", label: "Creative"),
-                .init(value: "6", label: "Action"),
-                .init(value: "7", label: "Portrait"),
-                .init(value: "8", label: "Landscape")
-            ]
-        case "exif-flash":
-            base = [
-                .init(value: "0", label: "No Flash (Did Not Fire)"),
-                .init(value: "1", label: "Fired"),
-                .init(value: "5", label: "Fired, No Return"),
-                .init(value: "7", label: "Fired, Return Detected"),
-                .init(value: "9", label: "On, Did Not Fire"),
-                .init(value: "13", label: "On, No Return"),
-                .init(value: "15", label: "On, Return Detected"),
-                .init(value: "16", label: "Off"),
-                .init(value: "24", label: "Auto, Did Not Fire"),
-                .init(value: "25", label: "Auto, Fired"),
-                .init(value: "29", label: "Auto, Fired, No Return"),
-                .init(value: "31", label: "Auto, Fired, Return Detected"),
-                .init(value: "32", label: "No Flash Function"),
-                .init(value: "65", label: "Fired, Red-Eye Reduction"),
-                .init(value: "69", label: "Fired, Red-Eye, No Return"),
-                .init(value: "71", label: "Fired, Red-Eye, Return Detected"),
-                .init(value: "73", label: "On, Red-Eye, Did Not Fire"),
-                .init(value: "77", label: "On, Red-Eye, No Return"),
-                .init(value: "79", label: "On, Red-Eye, Return Detected"),
-                .init(value: "89", label: "Auto, Fired, Red-Eye"),
-                .init(value: "93", label: "Auto, Fired, Red-Eye, No Return"),
-                .init(value: "95", label: "Auto, Fired, Red-Eye, Return Detected")
-            ]
-        case "exif-metering-mode":
-            base = [
-                .init(value: "0", label: "Unknown"),
-                .init(value: "1", label: "Average"),
-                .init(value: "2", label: "Center-Weighted Average"),
-                .init(value: "3", label: "Spot"),
-                .init(value: "4", label: "Multi-Spot"),
-                .init(value: "5", label: "Multi-Segment"),
-                .init(value: "6", label: "Partial"),
-                .init(value: "255", label: "Other")
-            ]
-        case "xmp-copyright-status":
-            base = [
+        // xmp-copyright-status is stored as .boolean in the catalog, not .enumChoice
+        if tag.id == "xmp-copyright-status" {
+            return [
                 .init(value: "True", label: "Copyrighted"),
                 .init(value: "False", label: "Public Domain / No Copyright")
             ]
-        default:
-            return nil
         }
-
-        return base
+        guard let entry = activeInspectorFieldCatalog.first(where: { $0.id == tag.id }),
+              case .enumChoice(let choices) = entry.inputKind else { return nil }
+        return choices.map { PickerOption(value: $0.value, label: $0.label) }
     }
 
     func isMixedValue(for tag: EditableTag) -> Bool {

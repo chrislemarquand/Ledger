@@ -85,7 +85,7 @@ extension AppModel {
                     self.pendingCommitsByFile.removeValue(forKey: snapshot.fileURL)
                 }
                 self.metadataByFile = map
-                self.folderMetadataLoadCompleted = batchEnd
+                self.folderMetadataLoadCompleted = self.loadedMetadataCount(in: filesToLoad, from: map)
                 let batchURLs = Set(batch)
                 if !self.selectedFileURLs.isEmpty,
                    !self.selectedFileURLs.isDisjoint(with: batchURLs) {
@@ -96,11 +96,19 @@ extension AppModel {
             guard !Task.isCancelled, self.folderMetadataLoadID == loadID else { return }
             self.isFolderMetadataLoading = false
             self.folderMetadataLoadTask = nil
-            self.folderMetadataLoadCompleted = self.folderMetadataLoadTotal
+            self.folderMetadataLoadCompleted = self.loadedMetadataCount(in: filesToLoad, from: map)
             if !self.selectedFileURLs.isEmpty {
                 self.recalculateInspectorState()
             }
             self.scheduleDeferredPreviewPreload(for: files)
+        }
+    }
+
+    private func loadedMetadataCount(in files: [URL], from map: [URL: FileMetadataSnapshot]) -> Int {
+        files.reduce(into: 0) { count, fileURL in
+            if map[fileURL] != nil {
+                count += 1
+            }
         }
     }
 

@@ -212,58 +212,7 @@ struct PresetEditorSheet: View {
     }
 
     private func presetPickerOptions(for tag: AppModel.EditableTag) -> [AppModel.PickerOption]? {
-        switch tag.id {
-        case "exif-exposure-program":
-            return [
-                .init(value: "0", label: "Not Defined"),
-                .init(value: "1", label: "Manual"),
-                .init(value: "2", label: "Program AE"),
-                .init(value: "3", label: "Aperture-priority AE"),
-                .init(value: "4", label: "Shutter-priority AE"),
-                .init(value: "5", label: "Creative Program"),
-                .init(value: "6", label: "Action Program"),
-                .init(value: "7", label: "Portrait Mode"),
-                .init(value: "8", label: "Landscape Mode")
-            ]
-        case "exif-flash":
-            return [
-                .init(value: "0", label: "No Flash"),
-                .init(value: "1", label: "Fired"),
-                .init(value: "5", label: "Fired, Return Not Detected"),
-                .init(value: "7", label: "Fired, Return Detected"),
-                .init(value: "9", label: "On, Did Not Fire"),
-                .init(value: "13", label: "On, Return Not Detected"),
-                .init(value: "15", label: "On, Return Detected"),
-                .init(value: "16", label: "Off, Did Not Fire"),
-                .init(value: "24", label: "Auto, Did Not Fire"),
-                .init(value: "25", label: "Auto, Fired"),
-                .init(value: "29", label: "Auto, Fired, Return Not Detected"),
-                .init(value: "31", label: "Auto, Fired, Return Detected"),
-                .init(value: "32", label: "No Flash Function"),
-                .init(value: "65", label: "Fired, Red-eye Reduction"),
-                .init(value: "69", label: "Fired, Red-eye, Return Not Detected"),
-                .init(value: "71", label: "Fired, Red-eye, Return Detected"),
-                .init(value: "73", label: "On, Red-eye, Did Not Fire"),
-                .init(value: "77", label: "On, Red-eye, Return Not Detected"),
-                .init(value: "79", label: "On, Red-eye, Return Detected"),
-                .init(value: "89", label: "Auto, Fired, Red-eye"),
-                .init(value: "93", label: "Auto, Fired, Red-eye, Return Not Detected"),
-                .init(value: "95", label: "Auto, Fired, Red-eye, Return Detected")
-            ]
-        case "exif-metering-mode":
-            return [
-                .init(value: "0", label: "Unknown"),
-                .init(value: "1", label: "Average"),
-                .init(value: "2", label: "Center-weighted Average"),
-                .init(value: "3", label: "Spot"),
-                .init(value: "4", label: "Multi-spot"),
-                .init(value: "5", label: "Multi-segment"),
-                .init(value: "6", label: "Partial"),
-                .init(value: "255", label: "Other")
-            ]
-        default:
-            return nil
-        }
+        model.pickerOptions(for: tag)
     }
 
     private func handleSave() {

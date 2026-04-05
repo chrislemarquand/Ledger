@@ -712,6 +712,23 @@ final class AppModelTests: XCTestCase {
         )
     }
 
+    func testFolderMetadataProgressTracksLoadedSnapshotsNotBatchBoundaries() async throws {
+        let model = makeModel()
+        let files = [
+            URL(fileURLWithPath: "/tmp/a.cr2"),
+            URL(fileURLWithPath: "/tmp/b.cr2"),
+            URL(fileURLWithPath: "/tmp/c.cr2"),
+        ]
+
+        model.startFolderMetadataPrefetch(for: files, batchSize: 2)
+        try await waitUntil("folder metadata prefetch to finish") {
+            model.isFolderMetadataLoading == false
+        }
+
+        XCTAssertEqual(model.folderMetadataLoadTotal, 3)
+        XCTAssertEqual(model.folderMetadataLoadCompleted, 0)
+    }
+
     // MARK: - Helpers
 
     private func makeBrowserItems(count: Int) -> [AppModel.BrowserItem] {
@@ -847,8 +864,529 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(session.scope, .selection)
         XCTAssertEqual(session.launchTag, .dateTimeDigitized)
         XCTAssertEqual(session.fileURLs.map(\.lastPathComponent), ["A.jpg", "B.jpg"])
-        XCTAssertEqual(session.applyTo, [.dateTimeDigitized])
+        XCTAssertEqual(session.applyTo, [])
+        XCTAssertEqual(session.dataReadSource, .digitised)
         XCTAssertFalse(session.sourceTimeZoneID.isEmpty)
+    }
+
+    func testBeginDateTimeAdjustMenuDefaultsReadSourceToFileWhenMetadataUnavailable() throws {
+        let model = makeModel()
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let fileURL = temp.appendingPathComponent("menu-default.jpg")
+        try Data("x".utf8).write(to: fileURL)
+        model.selectedFileURLs = [fileURL]
+
+        model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal, launchContext: .menu)
+
+        guard let session = model.pendingDateTimeAdjustSession else {
+            XCTFail("Expected pending date/time session")
+            return
+        }
+        XCTAssertEqual(session.dataReadSource, .file)
+    }
+
+    func testBeginDateTimeAdjustInspectorKeepsLaunchFieldAsReadSource() {
+        let model = makeModel()
+        let fileURL = URL(fileURLWithPath: "/tmp/inspector-default.jpg")
+        model.selectedFileURLs = [fileURL]
+        model.metadataByFile = [
+            fileURL: FileMetadataSnapshot(
+                fileURL: fileURL,
+                fields: [
+                    MetadataField(key: "CreateDate", namespace: .exif, value: "2026:03:28 09:00:00")
+                ]
+            )
+        ]
+
+        model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeModified, launchContext: .inspector)
+
+        guard let session = model.pendingDateTimeAdjustSession else {
+            XCTFail("Expected pending date/time session")
+            return
+        }
+        XCTAssertEqual(session.dataReadSource, .modified)
+    }
+
+    func testBeginDateTimeAdjustDoesNotBlockWhenFolderMetadataLoading() {
+        let model = makeModel()
+        let fileURL = URL(fileURLWithPath: "/tmp/A.jpg")
+        model.selectedFileURLs = [fileURL]
+        model.isFolderMetadataLoading = true
+
+        model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal)
+
+        XCTAssertNotNil(model.pendingDateTimeAdjustSession)
+        XCTAssertEqual(model.statusMessage, "Ready")
+    }
+
+    func testBeginDateTimeAdjustSeedsSpecificDateFromFirstSortedFile() {
+        let model = makeModel()
+        let b = URL(fileURLWithPath: "/tmp/B.jpg")
+        let a = URL(fileURLWithPath: "/tmp/A.jpg")
+        model.selectedFileURLs = [b, a]
+        model.metadataByFile = [
+            a: FileMetadataSnapshot(
+                fileURL: a,
+                fields: [
+                    MetadataField(key: "CreateDate", namespace: .exif, value: "2024:01:02 03:04:05")
+                ]
+            ),
+            b: FileMetadataSnapshot(
+                fileURL: b,
+                fields: [
+                    MetadataField(key: "CreateDate", namespace: .exif, value: "2024:02:03 04:05:06")
+                ]
+            ),
+        ]
+
+        model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeDigitized)
+
+        guard let session = model.pendingDateTimeAdjustSession else {
+            XCTFail("Expected pending date/time session")
+            return
+        }
+        guard let firstDate = model.parseDate("2024:01:02 03:04:05") else {
+            XCTFail("Failed to parse expected date")
+            return
+        }
+
+        XCTAssertEqual(session.fileURLs.map(\.lastPathComponent), ["A.jpg", "B.jpg"])
+        XCTAssertEqual(session.capturedDates[a], firstDate)
+        XCTAssertEqual(session.specificDate, firstDate)
+    }
+
+    func testBeginDateTimeAdjustDefaultsToCameraClockAndUsesConsistentOffsetTimeOriginal() {
+        let model = makeModel()
+        let a = URL(fileURLWithPath: "/tmp/A.cr2")
+        let b = URL(fileURLWithPath: "/tmp/B.cr2")
+        model.selectedFileURLs = [a, b]
+        model.metadataByFile = [
+            a: FileMetadataSnapshot(
+                fileURL: a,
+                fields: [
+                    MetadataField(key: "DateTimeOriginal", namespace: .exif, value: "2026:03:28 16:35:32"),
+                    MetadataField(key: "OffsetTimeOriginal", namespace: .exif, value: "+01:00"),
+                ]
+            ),
+            b: FileMetadataSnapshot(
+                fileURL: b,
+                fields: [
+                    MetadataField(key: "DateTimeOriginal", namespace: .exif, value: "2026:03:28 16:36:00"),
+                    MetadataField(key: "OffsetTimeOriginal", namespace: .exif, value: "+01:00"),
+                ]
+            ),
+        ]
+
+        model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal)
+
+        guard let session = model.pendingDateTimeAdjustSession else {
+            XCTFail("Expected pending date/time session")
+            return
+        }
+        XCTAssertEqual(session.sourceTimeZoneID, DateTimeAdjustSession.cameraClockIdentifier)
+        XCTAssertEqual(session.cameraClockOffsetSeconds, 3_600)
+    }
+
+    func testBeginDateTimeAdjustDefaultsToUTCBaselineWhenOffsetTimeOriginalIsMissingOrInconsistent() {
+        let model = makeModel()
+        let a = URL(fileURLWithPath: "/tmp/A.cr2")
+        let b = URL(fileURLWithPath: "/tmp/B.cr2")
+        model.selectedFileURLs = [a, b]
+        model.metadataByFile = [
+            a: FileMetadataSnapshot(
+                fileURL: a,
+                fields: [
+                    MetadataField(key: "DateTimeOriginal", namespace: .exif, value: "2026:03:28 16:35:32"),
+                    MetadataField(key: "OffsetTimeOriginal", namespace: .exif, value: "+00:00"),
+                ]
+            ),
+            b: FileMetadataSnapshot(
+                fileURL: b,
+                fields: [
+                    MetadataField(key: "DateTimeOriginal", namespace: .exif, value: "2026:03:28 16:36:00"),
+                    MetadataField(key: "OffsetTimeOriginal", namespace: .exif, value: "+01:00"),
+                ]
+            ),
+        ]
+
+        model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal)
+
+        guard let session = model.pendingDateTimeAdjustSession else {
+            XCTFail("Expected pending date/time session")
+            return
+        }
+        XCTAssertEqual(session.sourceTimeZoneID, DateTimeAdjustSession.cameraClockIdentifier)
+        XCTAssertEqual(session.cameraClockOffsetSeconds, 0)
+    }
+
+    func testTimeZoneModeCameraClockSupportsMixedOffsetsAcrossDSTBoundary() {
+        let model = makeModel()
+        let before = URL(fileURLWithPath: "/tmp/before.cr2")
+        let after = URL(fileURLWithPath: "/tmp/after.cr2")
+        guard let beforeDate = model.parseDate("2026:03:28 16:35:32"),
+              let afterDate = model.parseDate("2026:03:30 16:35:32") else {
+            XCTFail("Failed to parse test dates")
+            return
+        }
+
+        var session = DateTimeAdjustSession(
+            scope: .selection,
+            launchTag: .dateTimeOriginal,
+            fileURLs: [before, after]
+        )
+        session.mode = .timeZone
+        session.sourceTimeZoneID = DateTimeAdjustSession.cameraClockIdentifier
+        session.cameraClockOffsetSeconds = 0
+        session.targetTimeZoneInput = "Amsterdam"
+        session.capturedDates = [
+            before: beforeDate,
+            after: afterDate,
+        ]
+
+        let beforeAdjusted = model.computeAdjustedDate(for: before, session: session)
+        let afterAdjusted = model.computeAdjustedDate(for: after, session: session)
+        XCTAssertEqual(Int(beforeAdjusted?.timeIntervalSince(beforeDate) ?? 0), 3_600)
+        XCTAssertEqual(Int(afterAdjusted?.timeIntervalSince(afterDate) ?? 0), 7_200)
+    }
+
+    func testTimeZoneModeNamedSourceTimeZoneUsesDSTRulesAutomatically() {
+        let model = makeModel()
+        let before = URL(fileURLWithPath: "/tmp/before.cr2")
+        let after = URL(fileURLWithPath: "/tmp/after.cr2")
+        guard let beforeDate = model.parseDate("2026:03:28 16:35:32"),
+              let afterDate = model.parseDate("2026:03:30 16:35:32") else {
+            XCTFail("Failed to parse test dates")
+            return
+        }
+
+        var session = DateTimeAdjustSession(
+            scope: .selection,
+            launchTag: .dateTimeOriginal,
+            fileURLs: [before, after]
+        )
+        session.mode = .timeZone
+        session.sourceTimeZoneID = "Europe/London"
+        session.targetTimeZoneInput = "Europe/Amsterdam"
+        session.capturedDates = [
+            before: beforeDate,
+            after: afterDate,
+        ]
+
+        let beforeAdjusted = model.computeAdjustedDate(for: before, session: session)
+        let afterAdjusted = model.computeAdjustedDate(for: after, session: session)
+        XCTAssertEqual(Int(beforeAdjusted?.timeIntervalSince(beforeDate) ?? 0), 3_600)
+        XCTAssertEqual(Int(afterAdjusted?.timeIntervalSince(afterDate) ?? 0), 3_600)
+    }
+
+    func testNormalizeTargetTimeZoneEntryResolvesCityToCanonicalIdentifier() {
+        let model = makeModel()
+        let normalized = model.normalizeTargetTimeZoneEntry("Amsterdam")
+        XCTAssertEqual(normalized?.identifier, "Europe/Amsterdam")
+        XCTAssertFalse((normalized?.display ?? "").isEmpty)
+    }
+
+    func testTimeZoneModeUsesStoredTargetIdentifierWhenInputIsLocalizedName() {
+        let model = makeModel()
+        let file = URL(fileURLWithPath: "/tmp/file.cr2")
+        guard let captureDate = model.parseDate("2026:03:28 16:35:32") else {
+            XCTFail("Failed to parse test date")
+            return
+        }
+
+        var session = DateTimeAdjustSession(
+            scope: .selection,
+            launchTag: .dateTimeOriginal,
+            fileURLs: [file]
+        )
+        session.mode = .timeZone
+        session.sourceTimeZoneID = DateTimeAdjustSession.cameraClockIdentifier
+        session.cameraClockOffsetSeconds = 0
+        session.targetTimeZoneID = "Europe/Amsterdam"
+        session.targetTimeZoneInput = "Central European Standard Time"
+        session.capturedDates = [file: captureDate]
+
+        let adjusted = model.computeAdjustedDate(for: file, session: session)
+        XCTAssertEqual(Int(adjusted?.timeIntervalSince(captureDate) ?? 0), 3_600)
+    }
+
+    func testDataModeReadsDateFromSelectedMetadataSource() {
+        let model = makeModel()
+        let fileURL = URL(fileURLWithPath: "/tmp/source-test.cr2")
+        model.metadataByFile = [
+            fileURL: FileMetadataSnapshot(
+                fileURL: fileURL,
+                fields: [
+                    MetadataField(key: "DateTimeOriginal", namespace: .exif, value: "2026:03:28 10:00:00"),
+                    MetadataField(key: "CreateDate", namespace: .exif, value: "2026:03:28 11:00:00"),
+                    MetadataField(key: "ModifyDate", namespace: .exif, value: "2026:03:28 12:00:00"),
+                ]
+            )
+        ]
+
+        var session = DateTimeAdjustSession(
+            scope: .selection,
+            launchTag: .dateTimeOriginal,
+            fileURLs: [fileURL]
+        )
+        session.mode = .file
+        session.dataReadSource = .modified
+
+        let adjusted = model.computeAdjustedDate(for: fileURL, session: session)
+        XCTAssertEqual(adjusted, model.parseDate("2026:03:28 12:00:00"))
+    }
+
+    func testDataModeReadSourceFileUsesFilesystemCreationDate() throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let fileURL = temp.appendingPathComponent("created.jpg")
+        try Data("x".utf8).write(to: fileURL)
+
+        let model = makeModel()
+        var session = DateTimeAdjustSession(
+            scope: .selection,
+            launchTag: .dateTimeOriginal,
+            fileURLs: [fileURL]
+        )
+        session.mode = .file
+        session.dataReadSource = .file
+
+        XCTAssertEqual(
+            model.computeAdjustedDate(for: fileURL, session: session),
+            model.fileCreationDate(for: fileURL)
+        )
+    }
+
+    func testDataModeFileStateExcludesReadSourceFromWritableDestinations() {
+        let model = makeModel()
+        let fileURL = URL(fileURLWithPath: "/tmp/file-state-targets.cr2")
+        model.metadataByFile = [
+            fileURL: FileMetadataSnapshot(
+                fileURL: fileURL,
+                fields: [
+                    MetadataField(key: "DateTimeOriginal", namespace: .exif, value: "2026:03:28 10:00:00"),
+                    MetadataField(key: "CreateDate", namespace: .exif, value: "2026:03:28 09:00:00"),
+                    MetadataField(key: "ModifyDate", namespace: .exif, value: "2026:03:28 08:00:00"),
+                ]
+            )
+        ]
+
+        var session = DateTimeAdjustSession(
+            scope: .selection,
+            launchTag: .dateTimeOriginal,
+            fileURLs: [fileURL]
+        )
+        session.mode = .file
+        session.dataReadSource = .modified
+        session.applyTo = [.dateTimeOriginal, .dateTimeModified]
+
+        let fileState = model.dataModeFileState(for: fileURL, session: session)
+        XCTAssertEqual(fileState.destinations.map(\.targetTag), [.dateTimeOriginal])
+        XCTAssertEqual(fileState.readValue, model.parseDate("2026:03:28 08:00:00"))
+    }
+
+    func testDataModeFileStateUsesSelectedSourceAsReadValue() {
+        let model = makeModel()
+        let fileURL = URL(fileURLWithPath: "/tmp/file-state-read.cr2")
+        model.metadataByFile = [
+            fileURL: FileMetadataSnapshot(
+                fileURL: fileURL,
+                fields: [
+                    MetadataField(key: "DateTimeOriginal", namespace: .exif, value: "2026:03:28 10:00:00"),
+                    MetadataField(key: "CreateDate", namespace: .exif, value: "2026:03:28 11:00:00"),
+                    MetadataField(key: "ModifyDate", namespace: .exif, value: "2026:03:28 12:00:00"),
+                ]
+            )
+        ]
+
+        var session = DateTimeAdjustSession(
+            scope: .selection,
+            launchTag: .dateTimeOriginal,
+            fileURLs: [fileURL]
+        )
+        session.mode = .file
+        session.dataReadSource = .digitised
+        session.applyTo = [.dateTimeModified]
+
+        let fileState = model.dataModeFileState(for: fileURL, session: session)
+        XCTAssertEqual(fileState.readValue, model.parseDate("2026:03:28 11:00:00"))
+        XCTAssertEqual(fileState.destinations.map(\.targetTag), [.dateTimeModified])
+    }
+
+    func testDataModePreviewBlocksWhenChosenReadSourceMissing() {
+        let model = makeModel()
+        let fileURL = URL(fileURLWithPath: "/tmp/missing-source.cr2")
+        model.metadataByFile = [
+            fileURL: FileMetadataSnapshot(
+                fileURL: fileURL,
+                fields: [
+                    MetadataField(key: "DateTimeOriginal", namespace: .exif, value: "2026:03:28 10:00:00")
+                ]
+            )
+        ]
+
+        var session = DateTimeAdjustSession(
+            scope: .selection,
+            launchTag: .dateTimeOriginal,
+            fileURLs: [fileURL]
+        )
+        session.mode = .file
+        session.dataReadSource = .modified
+        session.applyTo = [.dateTimeOriginal]
+
+        let assessment = model.previewDateTimeAdjust(session: session)
+        XCTAssertTrue(assessment.blockingIssues.contains("No files have a Modified date to use."))
+    }
+
+    func testDataModePreviewCountsEffectiveChangeAgainstApplyTargets() {
+        let model = makeModel()
+        let fileURL = URL(fileURLWithPath: "/tmp/effective-change.cr2")
+        model.metadataByFile = [
+            fileURL: FileMetadataSnapshot(
+                fileURL: fileURL,
+                fields: [
+                    MetadataField(key: "DateTimeOriginal", namespace: .exif, value: "2026:03:28 10:00:00"),
+                    MetadataField(key: "CreateDate", namespace: .exif, value: "2026:03:28 10:00:00"),
+                    MetadataField(key: "ModifyDate", namespace: .exif, value: "2026:03:28 12:00:00"),
+                ]
+            )
+        ]
+
+        var session = DateTimeAdjustSession(
+            scope: .selection,
+            launchTag: .dateTimeOriginal,
+            fileURLs: [fileURL]
+        )
+        session.mode = .file
+        session.dataReadSource = .original
+        session.applyTo = [.dateTimeDigitized, .dateTimeModified]
+
+        let assessment = model.previewDateTimeAdjust(session: session)
+        XCTAssertEqual(assessment.effectiveChangeFileCount, 1)
+    }
+
+    func testDataModePreviewUsesSelectedApplyTargetAsOriginalDisplay() {
+        let model = makeModel()
+        let fileURL = URL(fileURLWithPath: "/tmp/preview-target.cr2")
+        model.metadataByFile = [
+            fileURL: FileMetadataSnapshot(
+                fileURL: fileURL,
+                fields: [
+                    MetadataField(key: "DateTimeOriginal", namespace: .exif, value: "2026:03:28 10:00:00"),
+                    MetadataField(key: "CreateDate", namespace: .exif, value: "2026:03:28 09:00:00"),
+                ]
+            )
+        ]
+
+        var session = DateTimeAdjustSession(
+            scope: .selection,
+            launchTag: .dateTimeOriginal,
+            fileURLs: [fileURL]
+        )
+        session.mode = .file
+        session.dataReadSource = .original
+        session.applyTo = [.dateTimeDigitized]
+
+        let assessment = model.previewDateTimeAdjust(session: session)
+        guard let row = assessment.rows.first else {
+            XCTFail("Expected preview row")
+            return
+        }
+        XCTAssertEqual(row.originalDisplay, "2026:03:28 09:00:00")
+        XCTAssertEqual(row.adjustedDisplay, "2026:03:28 10:00:00")
+        XCTAssertEqual(row.deltaText, "+1h")
+    }
+
+    func testDataModePreviewExpandsRowsPerSelectedDestination() {
+        let model = makeModel()
+        let fileURL = URL(fileURLWithPath: "/tmp/per-target-rows.cr2")
+        model.metadataByFile = [
+            fileURL: FileMetadataSnapshot(
+                fileURL: fileURL,
+                fields: [
+                    MetadataField(key: "DateTimeOriginal", namespace: .exif, value: "2026:03:28 10:00:00"),
+                    MetadataField(key: "CreateDate", namespace: .exif, value: "2026:03:28 09:00:00"),
+                    MetadataField(key: "ModifyDate", namespace: .exif, value: "2026:03:28 08:00:00"),
+                ]
+            )
+        ]
+
+        var session = DateTimeAdjustSession(
+            scope: .selection,
+            launchTag: .dateTimeOriginal,
+            fileURLs: [fileURL]
+        )
+        session.mode = .file
+        session.dataReadSource = .original
+        session.applyTo = [.dateTimeDigitized, .dateTimeModified]
+
+        let assessment = model.previewDateTimeAdjust(session: session)
+        XCTAssertEqual(assessment.rows.count, 2)
+        XCTAssertEqual(
+            Set(assessment.rows.map(\.fileName)),
+            ["per-target-rows.cr2 [Digitised]", "per-target-rows.cr2 [Modified]"]
+        )
+    }
+
+    func testDataModePreviewNoEffectiveChangeWhenApplyTargetsAlreadyMatch() {
+        let model = makeModel()
+        let fileURL = URL(fileURLWithPath: "/tmp/no-effective-change.cr2")
+        model.metadataByFile = [
+            fileURL: FileMetadataSnapshot(
+                fileURL: fileURL,
+                fields: [
+                    MetadataField(key: "DateTimeOriginal", namespace: .exif, value: "2026:03:28 10:00:00"),
+                    MetadataField(key: "CreateDate", namespace: .exif, value: "2026:03:28 10:00:00"),
+                    MetadataField(key: "ModifyDate", namespace: .exif, value: "2026:03:28 10:00:00"),
+                ]
+            )
+        ]
+
+        var session = DateTimeAdjustSession(
+            scope: .selection,
+            launchTag: .dateTimeOriginal,
+            fileURLs: [fileURL]
+        )
+        session.mode = .file
+        session.dataReadSource = .original
+        session.applyTo = [.dateTimeDigitized, .dateTimeModified]
+
+        let assessment = model.previewDateTimeAdjust(session: session)
+        XCTAssertEqual(assessment.effectiveChangeFileCount, 0)
+    }
+
+    func testStageDataModeSkipsWritingToReadSourceTag() {
+        let model = makeModel()
+        let fileURL = URL(fileURLWithPath: "/tmp/skip-source.cr2")
+        model.metadataByFile = [
+            fileURL: FileMetadataSnapshot(
+                fileURL: fileURL,
+                fields: [
+                    MetadataField(key: "DateTimeOriginal", namespace: .exif, value: "2026:03:28 10:00:00"),
+                    MetadataField(key: "ModifyDate", namespace: .exif, value: "2026:03:28 12:00:00"),
+                ]
+            )
+        ]
+
+        var session = DateTimeAdjustSession(
+            scope: .selection,
+            launchTag: .dateTimeOriginal,
+            fileURLs: [fileURL]
+        )
+        session.mode = .file
+        session.dataReadSource = .modified
+        session.applyTo = [.dateTimeOriginal, .dateTimeModified]
+
+        model.stageDateTimeAdjustments(session: session)
+
+        guard let originalTag = model.editableTag(forID: "datetime-created"),
+              let modifiedTag = model.editableTag(forID: "datetime-modified"),
+              let edits = model.pendingEditsByFile[fileURL] else {
+            XCTFail("Expected staged edits")
+            return
+        }
+        XCTAssertEqual(edits[originalTag]?.value, "2026:03:28 12:00:00")
+        XCTAssertNil(edits[modifiedTag])
     }
 
     func testSetInspectorFieldEnabledKeepsLatitudeAndLongitudePaired() {

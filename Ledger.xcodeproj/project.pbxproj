@@ -29,6 +29,9 @@
 		A10001440000000000000001 /* BrowserGalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001430000000000000001 /* BrowserGalleryView.swift */; };
 		A10001460000000000000001 /* BrowserListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001450000000000000001 /* BrowserListView.swift */; };
 		A10001480000000000000001 /* InspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001470000000000000001 /* InspectorView.swift */; };
+		A100014A0000000000000001 /* InspectorClearableTextField.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001490000000000000001 /* InspectorClearableTextField.swift */; };
+		A100017B0000000000000001 /* InspectorTagFieldView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100017A0000000000000001 /* InspectorTagFieldView.swift */; };
+		A100017D0000000000000001 /* InspectorDateTimeFieldView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100017C0000000000000001 /* InspectorDateTimeFieldView.swift */; };
 		DD0001010000000000000001 /* LedgerSidebarTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0001000000000000000001 /* LedgerSidebarTypes.swift */; };
 		DD0002020000000000000001 /* SharedUI in Frameworks */ = {isa = PBXBuildFile; productRef = DD0002010000000000000001 /* SharedUI */; };
 		A100014C0000000000000001 /* PresetSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014B0000000000000001 /* PresetSheets.swift */; };
@@ -124,6 +127,9 @@
 		A10001430000000000000001 /* BrowserGalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BrowserGalleryView.swift"; sourceTree = "<group>"; };
 		A10001450000000000000001 /* BrowserListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BrowserListView.swift"; sourceTree = "<group>"; };
 		A10001470000000000000001 /* InspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "InspectorView.swift"; sourceTree = "<group>"; };
+		A10001490000000000000001 /* InspectorClearableTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "InspectorClearableTextField.swift"; sourceTree = "<group>"; };
+		A100017A0000000000000001 /* InspectorTagFieldView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "InspectorTagFieldView.swift"; sourceTree = "<group>"; };
+		A100017C0000000000000001 /* InspectorDateTimeFieldView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "InspectorDateTimeFieldView.swift"; sourceTree = "<group>"; };
 		DD0001000000000000000001 /* LedgerSidebarTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LedgerSidebarTypes.swift"; sourceTree = "<group>"; };
 		A100014B0000000000000001 /* PresetSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PresetSheets.swift"; sourceTree = "<group>"; };
 		A100014D0000000000000001 /* ThumbnailService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ThumbnailService.swift"; sourceTree = "<group>"; };
@@ -309,6 +315,9 @@
 					A10001710000000000000001 /* ListColumnDefinition.swift */,
 					A10001730000000000000001 /* ListColumnStore.swift */,
 				A10001470000000000000001 /* InspectorView.swift */,
+				A10001490000000000000001 /* InspectorClearableTextField.swift */,
+				A100017A0000000000000001 /* InspectorTagFieldView.swift */,
+				A100017C0000000000000001 /* InspectorDateTimeFieldView.swift */,
 				DD0001000000000000000001 /* LedgerSidebarTypes.swift */,
 				A100014B0000000000000001 /* PresetSheets.swift */,
 				A100014D0000000000000001 /* ThumbnailService.swift */,
@@ -537,6 +546,9 @@
 				A10001720000000000000001 /* ListColumnDefinition.swift in Sources */,
 				A10001740000000000000001 /* ListColumnStore.swift in Sources */,
 				A10001480000000000000001 /* InspectorView.swift in Sources */,
+				A100014A0000000000000001 /* InspectorClearableTextField.swift in Sources */,
+				A100017B0000000000000001 /* InspectorTagFieldView.swift in Sources */,
+				A100017D0000000000000001 /* InspectorDateTimeFieldView.swift in Sources */,
 				DD0001010000000000000001 /* LedgerSidebarTypes.swift in Sources */,
 				A100014C0000000000000001 /* PresetSheets.swift in Sources */,
 				A100014E0000000000000001 /* ThumbnailService.swift in Sources */,

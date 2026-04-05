@@ -1910,7 +1910,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
 
     @objc func adjustDateTimeAction(_: Any?) {
         let scope: DateTimeAdjustScope = model.selectedFileURLs.count > 1 ? .selection : .single
-        model.beginDateTimeAdjust(scope: scope, launchTag: .dateTimeOriginal)
+        model.beginDateTimeAdjust(scope: scope, launchTag: .dateTimeOriginal, launchContext: .menu)
     }
 
     @objc
