@@ -27,7 +27,11 @@ struct InspectorTagFieldView: View {
         } else if isKeywordTag {
             InspectorTokenField(
                 text: textBinding,
-                placeholder: model.placeholderForTag(tag)
+                placeholder: model.placeholderForTag(tag),
+                onClearAll: {
+                    onBeginEditSession()
+                    model.updateValue("", for: tag)
+                }
             )
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {

@@ -6,7 +6,8 @@ extension AppModel {
     func currentPendingEditState() -> PendingEditState {
         PendingEditState(
             pendingEditsByFile: pendingEditsByFile,
-            pendingImageOpsByFile: pendingImageOpsByFile
+            pendingImageOpsByFile: pendingImageOpsByFile,
+            pendingRenameByFile: pendingRenameByFile
         )
     }
 
@@ -45,6 +46,11 @@ extension AppModel {
             // it causes the preview to blank while an identical image reloads from disk.
             // Bump stagedOpsDisplayToken instead so gallery cells reconfigure immediately
             // with the updated (undo'd) transform.
+            stagedOpsDisplayToken &+= 1
+        }
+        let previousRenames = pendingRenameByFile
+        pendingRenameByFile = state.pendingRenameByFile
+        if pendingRenameByFile != previousRenames {
             stagedOpsDisplayToken &+= 1
         }
         recalculateInspectorState(forceNotify: true)
