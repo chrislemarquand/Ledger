@@ -4,10 +4,11 @@ import SharedUI
 struct InspectorTagFieldView: View {
     let tag: AppModel.EditableTag
     @ObservedObject var model: AppModel
-    @FocusState.Binding var focusedTagID: String?
     let onBeginEditSession: () -> Void
     let onOpenDateTimeAdjust: () -> Void
     let onOpenLocationAdjust: () -> Void
+    let onFocusChange: (Bool) -> Void
+    let onEscape: () -> Void
 
     var body: some View {
         if model.isDateTimeTag(tag) {
@@ -25,32 +26,59 @@ struct InspectorTagFieldView: View {
             )
             .frame(maxWidth: .infinity, alignment: .leading)
         } else if isKeywordTag {
-            InspectorTokenField(
+            InspectorNSTokenField(
                 text: textBinding,
                 placeholder: model.placeholderForTag(tag),
+                tagID: tag.id,
                 onClearAll: {
                     onBeginEditSession()
                     model.updateValue("", for: tag)
+                },
+                onFocusChange: onFocusChange,
+                onEscape: onEscape,
+                onTab: {
+                    NotificationCenter.default.post(
+                        name: .inspectorDidRequestFieldNavigation,
+                        object: nil,
+                        userInfo: ["backward": false]
+                    )
+                },
+                onShiftTab: {
+                    NotificationCenter.default.post(
+                        name: .inspectorDidRequestFieldNavigation,
+                        object: nil,
+                        userInfo: ["backward": true]
+                    )
                 }
             )
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            InspectorClearableTextField(
+            InspectorTextField(
                 text: textBinding,
-                prompt: model.isMixedValue(for: tag) ? "Multiple values" : model.placeholderForTag(tag),
+                placeholder: model.isMixedValue(for: tag) ? "Multiple values" : model.placeholderForTag(tag),
                 fieldLabel: tag.label,
                 tagID: tag.id,
-                focusedTagID: $focusedTagID,
-                onClear: {
-                    onBeginEditSession()
-                    model.updateValue("", for: tag)
-                }
-            ) {
-                if isLocationCoordinateTag {
-                    Button("Set\u{2026}", action: onOpenLocationAdjust)
-                        .controlSize(.small)
-                }
-            }
+                onFocusChange: onFocusChange,
+                onEscape: onEscape,
+                onTab: {
+                    NotificationCenter.default.post(
+                        name: .inspectorDidRequestFieldNavigation,
+                        object: nil,
+                        userInfo: ["backward": false]
+                    )
+                },
+                onShiftTab: {
+                    NotificationCenter.default.post(
+                        name: .inspectorDidRequestFieldNavigation,
+                        object: nil,
+                        userInfo: ["backward": true]
+                    )
+                },
+                trailingAction: isLocationCoordinateTag
+                    ? (label: "Set\u{2026}", action: onOpenLocationAdjust)
+                    : nil
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

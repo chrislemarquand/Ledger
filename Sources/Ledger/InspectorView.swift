@@ -69,7 +69,7 @@ struct InspectorView: View {
         formatter.countStyle = .file
         return formatter
     }()
-    @FocusState private var focusedTagID: String?
+    @State private var focusedTagID: String?
     @State private var activeEditTagID: String?
     @State private var suppressNextFocusScrollAnimation = false
 
@@ -195,10 +195,11 @@ struct InspectorView: View {
                                             InspectorTagFieldView(
                                                 tag: tag,
                                                 model: model,
-                                                focusedTagID: $focusedTagID,
                                                 onBeginEditSession: { beginEditSessionIfNeeded(for: tag) },
                                                 onOpenDateTimeAdjust: { openDateTimeAdjustSheet(for: tag) },
-                                                onOpenLocationAdjust: { openLocationAdjustSheet() }
+                                                onOpenLocationAdjust: { openLocationAdjustSheet() },
+                                                onFocusChange: { focused in fieldFocusChanged(focused, tagID: tag.id) },
+                                                onEscape: { fieldEscapePressed(tagID: tag.id) }
                                             )
                                         }
                                         .id(tag.id)
@@ -220,14 +221,10 @@ struct InspectorView: View {
             }
             .inspectorScrollSetup()
             .animation(appAnimation(), value: model.collapsedInspectorSections)
-            .onChange(of: focusedTagID) { oldValue, newValue in
-                if oldValue != nil {
-                    // Focus left a text field — end the undo coalescing window so
-                    // the next edit in any field gets its own undo entry.
-                    model.endUndoCoalescing()
-                }
+            .onChange(of: focusedTagID) { _, newValue in
+                // Undo coalescing is handled directly in onFocusChange(false) per field.
+                // This handler only drives scroll-to-focused-field.
                 guard let newValue else { return }
-                guard oldValue != nil else { return }
                 DispatchQueue.main.async {
                     if suppressNextFocusScrollAnimation {
                         var transaction = Transaction()
@@ -249,10 +246,8 @@ struct InspectorView: View {
             model.clearEditSessionSnapshots()
             activeEditTagID = nil
             suppressNextFocusScrollAnimation = true
-            // Defer @FocusState clear: setting it synchronously during the SwiftUI
-            // update phase triggers an AppKit first-responder change which calls
-            // layout() on the NSHostingView while SwiftUI is still processing the
-            // update → NSHostingView reentrant layout fault.
+            // Defer focus clear: resignFirstResponder during the SwiftUI update phase
+            // triggers NSHostingView layout() re-entrancy → layout fault.
             DispatchQueue.main.async {
                 focusedTagID = nil
             }
@@ -488,7 +483,14 @@ struct InspectorView: View {
             nextID = backward ? focusableTagIDs.last! : focusableTagIDs.first!
         }
         guard focusedTagID != nextID else { return }
+        // Update SwiftUI state so onChange drives scroll-to-field.
         focusedTagID = nextID
+        // Post notification so the AppKit text field actually becomes first responder.
+        NotificationCenter.default.post(
+            name: .inspectorDidRequestFieldFocus,
+            object: nil,
+            userInfo: ["tagID": nextID]
+        )
     }
 
     private func focusableInspectorTagIDs() -> [String] {
@@ -533,6 +535,25 @@ struct InspectorView: View {
     private func beginEditSessionIfNeeded(for tag: AppModel.EditableTag) {
         model.beginEditSessionSnapshotIfNeeded(for: tag)
         activeEditTagID = tag.id
+    }
+
+    private func fieldFocusChanged(_ focused: Bool, tagID: String) {
+        focusedTagID = focused ? tagID : nil
+        if !focused { model.endUndoCoalescing() }
+    }
+
+    private func fieldEscapePressed(tagID: String) {
+        guard let snapshot = model.editSessionSnapshot(forTagID: tagID) else {
+            focusedTagID = nil
+            NotificationCenter.default.post(name: .inspectorDidRequestBrowserFocus, object: nil)
+            return
+        }
+        model.restoreEditSession(snapshot)
+        DispatchQueue.main.async { self.model.restoreEditSession(snapshot) }
+        model.removeEditSessionSnapshot(forTagID: tagID)
+        activeEditTagID = nil
+        focusedTagID = nil
+        NotificationCenter.default.post(name: .inspectorDidRequestBrowserFocus, object: nil)
     }
 
     private func openDateTimeAdjustSheet(for tag: AppModel.EditableTag) {
