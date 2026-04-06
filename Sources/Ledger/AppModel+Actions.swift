@@ -638,6 +638,7 @@ extension AppModel {
             return
         }
         let plan = assessment.entries
+        let previousState = currentPendingEditState()
         var didChangePendingRenames = false
         for entry in plan {
             let proposed = entry.finalTargetURL.lastPathComponent
@@ -650,6 +651,7 @@ extension AppModel {
             // Reuse the existing browser invalidation signal so staged rename names/colors
             // appear immediately without waiting for unrelated metadata edits.
             stagedOpsDisplayToken &+= 1
+            registerMetadataUndoIfNeeded(previous: previousState)
         }
         let n = plan.count
         let filesLabel = n == 1 ? "1 file" : "\(n) files"

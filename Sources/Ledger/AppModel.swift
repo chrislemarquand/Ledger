@@ -437,6 +437,7 @@ final class AppModel: ObservableObject {
     struct PendingEditState: Equatable {
         let pendingEditsByFile: [URL: [EditableTag: StagedEditRecord]]
         let pendingImageOpsByFile: [URL: [StagedImageOperation]]
+        let pendingRenameByFile: [URL: String]
     }
 
     @Published var sidebarItems: [SidebarItem] = []

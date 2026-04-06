@@ -186,9 +186,11 @@ struct InspectorView: View {
                                                     Image(systemName: "circle.fill")
                                                         .font(.system(size: 6))
                                                         .foregroundStyle(.orange)
+                                                        .transition(.scale(scale: 0.5).combined(with: .opacity))
                                                 }
                                                 InspectorFieldLabel(tag.label)
                                             }
+                                            .animation(appAnimation(), value: model.hasPendingChange(for: tag))
                                         } value: {
                                             InspectorTagFieldView(
                                                 tag: tag,
