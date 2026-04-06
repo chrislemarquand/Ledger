@@ -53,32 +53,35 @@ struct InspectorTagFieldView: View {
             )
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            InspectorTextField(
-                text: textBinding,
-                placeholder: model.isMixedValue(for: tag) ? "Multiple values" : model.placeholderForTag(tag),
-                fieldLabel: tag.label,
-                tagID: tag.id,
-                onFocusChange: onFocusChange,
-                onEscape: onEscape,
-                onTab: {
-                    NotificationCenter.default.post(
-                        name: .inspectorDidRequestFieldNavigation,
-                        object: nil,
-                        userInfo: ["backward": false]
-                    )
-                },
-                onShiftTab: {
-                    NotificationCenter.default.post(
-                        name: .inspectorDidRequestFieldNavigation,
-                        object: nil,
-                        userInfo: ["backward": true]
-                    )
-                },
-                trailingAction: isLocationCoordinateTag
-                    ? (label: "Set\u{2026}", action: onOpenLocationAdjust)
-                    : nil
-            )
-            .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 6) {
+                InspectorTextField(
+                    text: textBinding,
+                    placeholder: model.isMixedValue(for: tag) ? "Multiple values" : model.placeholderForTag(tag),
+                    fieldLabel: tag.label,
+                    tagID: tag.id,
+                    onFocusChange: onFocusChange,
+                    onEscape: onEscape,
+                    onTab: {
+                        NotificationCenter.default.post(
+                            name: .inspectorDidRequestFieldNavigation,
+                            object: nil,
+                            userInfo: ["backward": false]
+                        )
+                    },
+                    onShiftTab: {
+                        NotificationCenter.default.post(
+                            name: .inspectorDidRequestFieldNavigation,
+                            object: nil,
+                            userInfo: ["backward": true]
+                        )
+                    }
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if isLocationCoordinateTag {
+                    Button("Set\u{2026}", action: onOpenLocationAdjust)
+                        .controlSize(.small)
+                }
+            }
         }
     }
 
