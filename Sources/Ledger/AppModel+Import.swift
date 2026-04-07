@@ -152,13 +152,14 @@ extension AppModel {
                     continue
                 }
                 let trimmed = field.value.trimmingCharacters(in: .whitespacesAndNewlines)
-                if trimmed.isEmpty, emptyValuePolicy == .skip {
+                let clean = FieldDecoration.strip(trimmed, tagID: field.tagID)
+                if clean.isEmpty, emptyValuePolicy == .skip {
                     skippedFields += 1
                     rowSkippedByPolicy += 1
                     continue
                 }
                 stageEdit(
-                    trimmed,
+                    clean,
                     for: tag,
                     fileURLs: [assignment.targetURL],
                     source: .importSource(sourceKind)

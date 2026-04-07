@@ -10,6 +10,8 @@ struct InspectorTagFieldView: View {
     let onFocusChange: (Bool) -> Void
     let onEscape: () -> Void
 
+    @State private var isEditing = false
+
     var body: some View {
         if model.isDateTimeTag(tag) {
             InspectorDateTimeFieldView(
@@ -59,7 +61,10 @@ struct InspectorTagFieldView: View {
                     placeholder: model.isMixedValue(for: tag) ? "Multiple values" : model.placeholderForTag(tag),
                     fieldLabel: tag.label,
                     tagID: tag.id,
-                    onFocusChange: onFocusChange,
+                    onFocusChange: { focused in
+                        isEditing = focused
+                        onFocusChange(focused)
+                    },
                     onEscape: onEscape,
                     onTab: {
                         NotificationCenter.default.post(
@@ -100,10 +105,15 @@ struct InspectorTagFieldView: View {
 
     private var textBinding: Binding<String> {
         Binding(
-            get: { model.valueForTag(tag) },
+            get: {
+                let raw = model.valueForTag(tag)
+                guard !raw.isEmpty, !isEditing else { return raw }
+                return FieldDecoration.apply(raw, tagID: tag.id)
+            },
             set: { newValue in
+                let stripped = FieldDecoration.strip(newValue, tagID: tag.id)
                 onBeginEditSession()
-                model.updateValue(newValue, for: tag)
+                model.updateValue(stripped, for: tag)
             }
         )
     }
@@ -129,4 +139,5 @@ struct InspectorTagFieldView: View {
     private var isLocationCoordinateTag: Bool {
         tag.id == "exif-gps-lat" || tag.id == "exif-gps-lon"
     }
+
 }
