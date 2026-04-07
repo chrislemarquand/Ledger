@@ -4,10 +4,13 @@ import SharedUI
 struct InspectorTagFieldView: View {
     let tag: AppModel.EditableTag
     @ObservedObject var model: AppModel
-    @FocusState.Binding var focusedTagID: String?
     let onBeginEditSession: () -> Void
     let onOpenDateTimeAdjust: () -> Void
     let onOpenLocationAdjust: () -> Void
+    let onFocusChange: (Bool) -> Void
+    let onEscape: () -> Void
+
+    @State private var isEditing = false
 
     var body: some View {
         if model.isDateTimeTag(tag) {
@@ -25,27 +28,60 @@ struct InspectorTagFieldView: View {
             )
             .frame(maxWidth: .infinity, alignment: .leading)
         } else if isKeywordTag {
-            InspectorTokenField(
+            InspectorNSTokenField(
                 text: textBinding,
                 placeholder: model.placeholderForTag(tag),
+                tagID: tag.id,
                 onClearAll: {
                     onBeginEditSession()
                     model.updateValue("", for: tag)
+                },
+                onFocusChange: onFocusChange,
+                onEscape: onEscape,
+                onTab: {
+                    NotificationCenter.default.post(
+                        name: .inspectorDidRequestFieldNavigation,
+                        object: nil,
+                        userInfo: ["backward": false]
+                    )
+                },
+                onShiftTab: {
+                    NotificationCenter.default.post(
+                        name: .inspectorDidRequestFieldNavigation,
+                        object: nil,
+                        userInfo: ["backward": true]
+                    )
                 }
             )
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            InspectorClearableTextField(
-                text: textBinding,
-                prompt: model.isMixedValue(for: tag) ? "Multiple values" : model.placeholderForTag(tag),
-                fieldLabel: tag.label,
-                tagID: tag.id,
-                focusedTagID: $focusedTagID,
-                onClear: {
-                    onBeginEditSession()
-                    model.updateValue("", for: tag)
-                }
-            ) {
+            HStack(spacing: 6) {
+                InspectorTextField(
+                    text: textBinding,
+                    placeholder: model.isMixedValue(for: tag) ? "Multiple values" : model.placeholderForTag(tag),
+                    fieldLabel: tag.label,
+                    tagID: tag.id,
+                    onFocusChange: { focused in
+                        isEditing = focused
+                        onFocusChange(focused)
+                    },
+                    onEscape: onEscape,
+                    onTab: {
+                        NotificationCenter.default.post(
+                            name: .inspectorDidRequestFieldNavigation,
+                            object: nil,
+                            userInfo: ["backward": false]
+                        )
+                    },
+                    onShiftTab: {
+                        NotificationCenter.default.post(
+                            name: .inspectorDidRequestFieldNavigation,
+                            object: nil,
+                            userInfo: ["backward": true]
+                        )
+                    }
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
                 if isLocationCoordinateTag {
                     Button("Set\u{2026}", action: onOpenLocationAdjust)
                         .controlSize(.small)
@@ -69,10 +105,15 @@ struct InspectorTagFieldView: View {
 
     private var textBinding: Binding<String> {
         Binding(
-            get: { model.valueForTag(tag) },
+            get: {
+                let raw = model.valueForTag(tag)
+                guard !raw.isEmpty, !isEditing else { return raw }
+                return FieldDecoration.apply(raw, tagID: tag.id)
+            },
             set: { newValue in
+                let stripped = FieldDecoration.strip(newValue, tagID: tag.id)
                 onBeginEditSession()
-                model.updateValue(newValue, for: tag)
+                model.updateValue(stripped, for: tag)
             }
         )
     }
@@ -98,4 +139,5 @@ struct InspectorTagFieldView: View {
     private var isLocationCoordinateTag: Bool {
         tag.id == "exif-gps-lat" || tag.id == "exif-gps-lon"
     }
+
 }
