@@ -683,8 +683,8 @@ extension AppModel {
 
         return mounted.compactMap { url in
             guard let values = try? url.resourceValues(forKeys: Set(keys)),
-                  values.volumeIsRootFileSystem != true,
-                  values.volumeIsBrowsable != false
+                  values.volumeIsRootFileSystem == false,
+                  values.volumeIsBrowsable == true
             else {
                 return nil
             }
