@@ -149,7 +149,7 @@ struct PresetEditorSheet: View {
     private func valueBinding(for tag: AppModel.EditableTag) -> Binding<String> {
         Binding(
             get: { editor.valuesByTagID[tag.id] ?? "" },
-            set: { updatePresetValue($0, for: tag) }
+            set: { updatePresetValue(FieldDecoration.strip($0, tagID: tag.id), for: tag) }
         )
     }
 
