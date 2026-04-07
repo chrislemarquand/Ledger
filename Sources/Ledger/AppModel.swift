@@ -481,6 +481,9 @@ final class AppModel: ObservableObject {
     @Published var backupRetentionCount: Int = 20 {
         didSet { UserDefaults.standard.set(backupRetentionCount, forKey: Self.backupRetentionCountKey) }
     }
+    @Published var gearLibrary: GearLibrary = .empty {
+        didSet { saveGearLibrary() }
+    }
     @Published var draftValues: [EditableTag: String] = [:]
     @Published var baselineValues: [EditableTag: String?] = [:]
     @Published var presets: [MetadataPreset] = []
@@ -613,6 +616,7 @@ final class AppModel: ObservableObject {
     private static let keepBackupsKey = "ui.settings.keep.backups"
     private static let backupRetentionCountKey = "ui.settings.backup.retention.count"
     static let inspectorFieldVisibilityKey = "ui.settings.inspector.field.visibility"
+    private static let gearLibraryKey = "ui.settings.gear.library"
     static let legacyUserDefaultsPrefixes = ["Logbook"]
     static let selectionMetadataBatchSize = 120
     static let selectionMetadataDebounceNanoseconds: UInt64 = 90_000_000
@@ -772,6 +776,7 @@ final class AppModel: ObservableObject {
             selectedPresetID = selectedPresetUUID
         }
         loadPresets()
+        loadGearLibrary()
         let retentionCount = backupRetentionCount
         Task.detached(priority: .background) { [backupDirectory, retentionCount] in
             try? BackupManager(baseDirectory: backupDirectory).pruneOperations(keepLast: retentionCount)
@@ -801,5 +806,19 @@ final class AppModel: ObservableObject {
 
 
     @Published var filteredBrowserItems: [BrowserItem] = []
+
+    // MARK: - Gear library persistence
+
+    private func loadGearLibrary() {
+        guard let data = UserDefaults.standard.data(forKey: Self.gearLibraryKey),
+              let library = try? JSONDecoder().decode(GearLibrary.self, from: data)
+        else { return }
+        gearLibrary = library
+    }
+
+    private func saveGearLibrary() {
+        guard let data = try? JSONEncoder().encode(gearLibrary) else { return }
+        UserDefaults.standard.set(data, forKey: Self.gearLibraryKey)
+    }
 
 }

@@ -70,6 +70,11 @@
 		C200020D0000000000000001 /* ReferenceImportSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010D0000000000000001 /* ReferenceImportSupport.swift */; };
 		C200020E0000000000000001 /* ImportSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010E0000000000000001 /* ImportSheetView.swift */; };
 		C200020F0000000000000001 /* ExifToolCSVExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010F0000000000000001 /* ExifToolCSVExportService.swift */; };
+		F100002000000000000001 /* ImportReviewRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F100001000000000000001 /* ImportReviewRow.swift */; };
+		F100004000000000000001 /* ReferenceDescriptionParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F100003000000000000001 /* ReferenceDescriptionParser.swift */; };
+		F100006000000000000001 /* ImportReviewSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F100005000000000000001 /* ImportReviewSheetView.swift */; };
+		F100008000000000000001 /* GearLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F100007000000000000001 /* GearLibrary.swift */; };
+		F10000A000000000000001 /* GearSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F100009000000000000001 /* GearSettingsView.swift */; };
 		D100000300000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */; };
 		DD0001010000000000000001 /* LedgerSidebarTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0001000000000000000001 /* LedgerSidebarTypes.swift */; };
 		DD0002020000000000000001 /* SharedUI in Frameworks */ = {isa = PBXBuildFile; productRef = DD0002010000000000000001 /* SharedUI */; };
@@ -168,6 +173,11 @@
 		C200010D0000000000000001 /* ReferenceImportSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceImportSupport.swift; sourceTree = "<group>"; };
 		C200010E0000000000000001 /* ImportSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportSheetView.swift; sourceTree = "<group>"; };
 		C200010F0000000000000001 /* ExifToolCSVExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifToolCSVExportService.swift; sourceTree = "<group>"; };
+		F100001000000000000001 /* ImportReviewRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportReviewRow.swift; sourceTree = "<group>"; };
+		F100003000000000000001 /* ReferenceDescriptionParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceDescriptionParser.swift; sourceTree = "<group>"; };
+		F100005000000000000001 /* ImportReviewSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportReviewSheetView.swift; sourceTree = "<group>"; };
+		F100007000000000000001 /* GearLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GearLibrary.swift; sourceTree = "<group>"; };
+		F100009000000000000001 /* GearSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GearSettingsView.swift; sourceTree = "<group>"; };
 		D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/BatchRenameSheetView.swift; sourceTree = SOURCE_ROOT; };
 		DD0001000000000000000001 /* LedgerSidebarTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerSidebarTypes.swift; sourceTree = "<group>"; };
 		E10001000000000000000001 /* DateTimeAdjustModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateTimeAdjustModels.swift; sourceTree = "<group>"; };
@@ -283,6 +293,7 @@
 				B100000D0000000000000001 /* Assets.xcassets */,
 				C20000F00000000000000001 /* Import */,
 				C20000F10000000000000001 /* ImportUI */,
+				F10000B000000000000001 /* Gear */,
 				A100000B0000000000000001 /* AppModel.swift */,
 				D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */,
 				E10001000000000000000001 /* DateTimeAdjustModels.swift */,
@@ -356,6 +367,8 @@
 				C200010C0000000000000001 /* ReferenceImageImportAdapter.swift */,
 				C200010D0000000000000001 /* ReferenceImportSupport.swift */,
 				C200010F0000000000000001 /* ExifToolCSVExportService.swift */,
+				F100001000000000000001 /* ImportReviewRow.swift */,
+				F100003000000000000001 /* ReferenceDescriptionParser.swift */,
 			);
 			path = Import;
 			sourceTree = "<group>";
@@ -364,8 +377,18 @@
 			isa = PBXGroup;
 			children = (
 				C200010E0000000000000001 /* ImportSheetView.swift */,
+				F100005000000000000001 /* ImportReviewSheetView.swift */,
 			);
 			path = ImportUI;
+			sourceTree = "<group>";
+		};
+		F10000B000000000000001 /* Gear */ = {
+			isa = PBXGroup;
+			children = (
+				F100007000000000000001 /* GearLibrary.swift */,
+				F100009000000000000001 /* GearSettingsView.swift */,
+			);
+			path = Gear;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -563,6 +586,11 @@
 				C200020D0000000000000001 /* ReferenceImportSupport.swift in Sources */,
 				C200020F0000000000000001 /* ExifToolCSVExportService.swift in Sources */,
 				C200020E0000000000000001 /* ImportSheetView.swift in Sources */,
+				F100002000000000000001 /* ImportReviewRow.swift in Sources */,
+				F100004000000000000001 /* ReferenceDescriptionParser.swift in Sources */,
+				F100006000000000000001 /* ImportReviewSheetView.swift in Sources */,
+				F100008000000000000001 /* GearLibrary.swift in Sources */,
+				F10000A000000000000001 /* GearSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

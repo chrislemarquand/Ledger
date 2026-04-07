@@ -41,6 +41,14 @@ final class ImportSession: ObservableObject {
     @Published var shouldEnterPostImportReview = false
     @Published var isBusy = false
     @Published var previewError: String?
+    @Published var pendingReviewState: ImportReviewState?
+    var reviewEnabled: Bool {
+        get { UserDefaults.standard.object(forKey: reviewEnabledKey) as? Bool ?? defaultReviewEnabled }
+        set { UserDefaults.standard.set(newValue, forKey: reviewEnabledKey) }
+    }
+    private var reviewEnabledKey: String { "ui.import.review.enabled.\(options.sourceKind.rawValue)" }
+    private var defaultReviewEnabled: Bool { options.sourceKind == .eos1v || options.sourceKind == .referenceFolder }
+    var supportsReview: Bool { options.sourceKind == .eos1v || options.sourceKind == .referenceFolder }
     private var previewTask: Task<Void, Never>?
     private unowned let model: AppModel
 
@@ -191,6 +199,21 @@ final class ImportSession: ObservableObject {
         }
 
         let activeTagIDs = effectiveActiveTagIDSet(model: model)
+
+        // Review sheet path: build review state and wait for user to apply
+        if reviewEnabled, supportsReview {
+            let reviewState = buildReviewState(
+                assignments: resolve.assignments,
+                run: run,
+                tagCatalog: model.importTagCatalog
+            )
+            if reviewState.hasAnyData {
+                pendingReviewState = reviewState
+                isBusy = false
+                return false
+            }
+        }
+
         let eosLensResult = applyEOSLensPolicy(assignments: resolve.assignments, run: run, activeTagIDs: activeTagIDs)
         if eosLensResult.cancelled {
             previewError = "Import was cancelled while choosing EOS lens values."
@@ -829,6 +852,170 @@ final class ImportSession: ObservableObject {
         warning.message.hasPrefix("Using row-order matching:")
             || warning.message.hasPrefix("Using row-order fallback for ")
     }
+
+    // MARK: - Review sheet support
+
+    /// Columns shown in the review grid (EOS 1V and Reference Folder focus on capture data).
+    private static let reviewPriorityTagIDs = [
+        "exif-focal", "exif-aperture", "exif-shutter", "exif-iso",
+        "exif-lens", "exif-make", "exif-model",
+    ]
+
+    /// Columns excluded from the review grid (constant / not user-editable in this context).
+    private static let reviewExcludedTagIDs: Set<String> = [
+        "exif-make", "exif-model", "xmp-subject",
+    ]
+
+    func buildReviewState(
+        assignments: [ImportAssignment],
+        run: ImportPreparedRun,
+        tagCatalog: [ImportTagDescriptor]
+    ) -> ImportReviewState {
+        let labelByTagID = Dictionary(uniqueKeysWithValues: tagCatalog.map { ($0.id, $0.label) })
+
+        // For EOS 1V: pre-populate lens from the mapping (first candidate)
+        let lensMapping = options.sourceKind == .eos1v ? loadEOSLensMapping() : [:]
+
+        // Build a map of source row by target URL for carry-forward lens detection
+        var rowByTargetURL: [URL: ImportRow] = [:]
+        for match in run.matchResult.matched where rowByTargetURL[match.targetURL] == nil {
+            rowByTargetURL[match.targetURL] = match.row
+        }
+
+        var rows: [ImportReviewRow] = []
+        for assignment in assignments {
+            var fields: [ReviewableField] = assignment.fields
+                .filter { !Self.reviewExcludedTagIDs.contains($0.tagID) }
+                .map { ReviewableField(tagID: $0.tagID, value: $0.value, isIncluded: !$0.value.isEmpty) }
+
+            // For EOS 1V: add lens field pre-populated from mapping if not already present
+            if options.sourceKind == .eos1v, !fields.contains(where: { $0.tagID == "exif-lens" }) {
+                let focalRaw = rowByTargetURL[assignment.targetURL]?.fields
+                    .first(where: { $0.tagID == "exif-focal" })?.value ?? ""
+                let focalMM = focalLengthMillimeters(from: focalRaw)
+                let firstCandidate = focalMM.flatMap { lensMapping[$0]?.first } ?? ""
+                fields.append(ReviewableField(tagID: "exif-lens", value: firstCandidate, isIncluded: !firstCandidate.isEmpty))
+            }
+
+            // For Reference Folder: parse description field from snapshot
+            if options.sourceKind == .referenceFolder {
+                // Description parsing is done at the batch level below; skip per-row here
+            }
+
+            rows.append(ImportReviewRow(fileURL: assignment.targetURL, fields: fields))
+        }
+
+        // For Reference Folder: run description parser over all source snapshots in order
+        if options.sourceKind == .referenceFolder {
+            rows = applyDescriptionParsing(to: rows, run: run)
+        }
+
+        // Determine columns: all distinct tagIDs from rows, in priority order
+        var seenTagIDs = Set<String>()
+        var columnTagIDs: [String] = []
+        for tagID in Self.reviewPriorityTagIDs {
+            if rows.contains(where: { $0.field(forTagID: tagID) != nil }), !seenTagIDs.contains(tagID) {
+                columnTagIDs.append(tagID)
+                seenTagIDs.insert(tagID)
+            }
+        }
+        for row in rows {
+            for field in row.fields where !seenTagIDs.contains(field.tagID) {
+                columnTagIDs.append(field.tagID)
+                seenTagIDs.insert(field.tagID)
+            }
+        }
+
+        var columnLabels: [String: String] = [:]
+        for tagID in columnTagIDs {
+            columnLabels[tagID] = labelByTagID[tagID] ?? tagID
+        }
+
+        return ImportReviewState(rows: rows, columnTagIDs: columnTagIDs, columnLabels: columnLabels)
+    }
+
+    private func applyDescriptionParsing(to rows: [ImportReviewRow], run: ImportPreparedRun) -> [ImportReviewRow] {
+        // Build (sourceFileURL, description) pairs in matched order
+        let descriptionInputs: [(fileURL: URL, description: String)] = run.matchResult.matched.compactMap { match in
+            guard let snapshot = model.metadataByFile[match.row.fields.first.map { _ in match.targetURL } ?? match.targetURL] else {
+                // Fall back to looking up snapshot by the source file — reference folder uses filename matching
+                return nil
+            }
+            let description = snapshot.fields.first(where: {
+                $0.key == "Caption-Abstract" || $0.key == "CaptionAbstract"
+            })?.value ?? snapshot.fields.first(where: {
+                $0.key == "Description"
+            })?.value ?? ""
+            guard !description.isEmpty else { return nil }
+            return (fileURL: match.targetURL, description: description)
+        }
+
+        guard !descriptionInputs.isEmpty else { return rows }
+
+        let parsedRows = ReferenceDescriptionParser.parse(rows: descriptionInputs)
+        var rowByURL: [URL: ImportReviewRow] = Dictionary(uniqueKeysWithValues: rows.map { ($0.fileURL, $0) })
+
+        for parsedRow in parsedRows {
+            guard var existing = rowByURL[parsedRow.fileURL] else { continue }
+            for field in parsedRow.fields {
+                // Only add description-parsed fields if not already present from EXIF
+                if existing.field(forTagID: field.tagID) == nil {
+                    existing.fields.append(field)
+                }
+            }
+            existing.lensIsCarriedForward = parsedRow.lensIsCarriedForward
+            rowByURL[parsedRow.fileURL] = existing
+        }
+
+        // Preserve original row order
+        return rows.map { rowByURL[$0.fileURL] ?? $0 }
+    }
+
+    /// Convert reviewed rows back to assignments and stage.
+    func commitReview(rows: [ImportReviewRow], model: AppModel) {
+        let activeTagIDs = effectiveActiveTagIDSet(model: model)
+        let assignments: [ImportAssignment] = rows.map { row in
+            let fields = row.fields
+                .filter { $0.isIncluded && activeTagIDs.contains($0.tagID) }
+                .map { ImportFieldValue(tagID: $0.tagID, value: $0.value) }
+            return ImportAssignment(targetURL: row.fileURL, fields: fields)
+        }
+
+        let run: ImportPreparedRun
+        if let existing = preparedRun {
+            run = existing
+        } else {
+            previewError = "Import data is no longer available. Please re-import."
+            pendingReviewState = nil
+            return
+        }
+
+        let policyAppliedAssignments = applyMissingFieldPolicy(
+            assignments: assignments,
+            run: run,
+            model: model,
+            emptyValuePolicyOverride: options.emptyValuePolicy
+        )
+
+        let stageSummary = model.stageImportAssignments(
+            policyAppliedAssignments,
+            sourceKind: run.options.sourceKind,
+            emptyValuePolicy: options.emptyValuePolicy
+        )
+        importReport = makeImportReport(
+            run: run,
+            resolve: ImportConflictResolveResult(assignments: assignments, unresolvedConflicts: [], skippedConflicts: [], warnings: []),
+            stageSummary: stageSummary
+        )
+        shouldEnterPostImportReview = shouldReview(report: importReport)
+        pendingReviewState = nil
+
+        if stageSummary.stagedFiles > 0 {
+            let fields = stageSummary.stagedFields == 1 ? "1 field" : "\(stageSummary.stagedFields) fields"
+            let files = stageSummary.stagedFiles == 1 ? "1 file" : "\(stageSummary.stagedFiles) files"
+            model.statusMessage = "Prepared \(fields) for \(files). Ready to apply."
+        }
+    }
 }
 
 // MARK: - Import Sheet View
@@ -904,7 +1091,16 @@ struct ImportSheetView: View {
                     ProgressView(value: importProgress ?? 0)
                         .opacity(importProgress == nil ? 0 : 1)
                 }
-                .padding(.bottom, Self.sectionSpacing.mainToFooter)
+                .padding(.bottom, session.supportsReview ? 8 : Self.sectionSpacing.mainToFooter)
+
+                if session.supportsReview {
+                    Toggle("Review before applying", isOn: Binding(
+                        get: { session.reviewEnabled },
+                        set: { session.reviewEnabled = $0 }
+                    ))
+                    .disabled(isPostImportReviewMode)
+                    .padding(.bottom, Self.sectionSpacing.mainToFooter)
+                }
 
                 // Footer: Fields… | [Advanced…] | [Details…]   Cancel  Import
                 HStack {
@@ -965,6 +1161,24 @@ struct ImportSheetView: View {
                 session.options.scope = .folder
             }
         }
+        .importReviewSheet(
+            model: model,
+            reviewState: Binding(
+                get: { session.pendingReviewState },
+                set: { session.pendingReviewState = $0 }
+            ),
+            onApply: { reviewedRows in
+                session.commitReview(rows: reviewedRows, model: model)
+                if session.shouldEnterPostImportReview {
+                    isPostImportReviewMode = true
+                } else {
+                    model.dismissImportSheet()
+                }
+            },
+            onCancel: {
+                importProgress = nil
+            }
+        )
     }
 
     // MARK: - Computed
