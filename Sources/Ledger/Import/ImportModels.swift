@@ -280,7 +280,7 @@ struct ImportRunOptions: Hashable, Codable, Sendable {
             selectedTagIDs: [],
             gpxToleranceSeconds: 600,
             gpxCameraOffsetSeconds: 0,
-            referenceFolderRowFallbackEnabled: false,
+            referenceFolderRowFallbackEnabled: sourceKind == .referenceFolder,
             cameraTimezoneIdentifier: TimeZone.current.identifier
         )
     }
@@ -323,7 +323,7 @@ struct ImportRunOptions: Hashable, Codable, Sendable {
         selectedTagIDs = try container.decode([String].self, forKey: .selectedTagIDs)
         gpxToleranceSeconds = try container.decode(Int.self, forKey: .gpxToleranceSeconds)
         gpxCameraOffsetSeconds = try container.decode(Int.self, forKey: .gpxCameraOffsetSeconds)
-        referenceFolderRowFallbackEnabled = try container.decodeIfPresent(Bool.self, forKey: .referenceFolderRowFallbackEnabled) ?? false
+        referenceFolderRowFallbackEnabled = try container.decodeIfPresent(Bool.self, forKey: .referenceFolderRowFallbackEnabled) ?? (sourceKind == .referenceFolder)
         cameraTimezoneIdentifier = try container.decode(String.self, forKey: .cameraTimezoneIdentifier)
     }
 }

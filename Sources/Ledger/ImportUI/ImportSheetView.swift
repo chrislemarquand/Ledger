@@ -77,6 +77,11 @@ final class ImportSession: ObservableObject {
             opts.gpxToleranceSeconds = defaults.gpxToleranceSeconds
             opts.gpxCameraOffsetSeconds = defaults.gpxCameraOffsetSeconds
         }
+        if sourceKind == .referenceFolder {
+            // Reference images almost never share filenames with target files —
+            // row-order fallback must be on by default for the review path to work.
+            opts.referenceFolderRowFallbackEnabled = true
+        }
         let selectedCount = model.selectedFileURLs.count
         opts.scope = selectedCount >= 2 ? .selection : .folder
         opts.emptyValuePolicy = .clear
@@ -180,6 +185,23 @@ final class ImportSession: ObservableObject {
         }
 
         let resolve = coordinator.resolveAssignments(preparedRun: run, resolutions: [:])
+
+        // For review-supported sources the review sheet is the resolution mechanism.
+        // Present it for all matched rows and ignore excess/unmatched conflicts —
+        // those rows have no target and cannot be imported regardless.
+        if reviewEnabled, supportsReview {
+            let reviewState = buildReviewState(
+                assignments: resolve.assignments,
+                run: run,
+                tagCatalog: model.importTagCatalog
+            )
+            if reviewState.hasAnyData {
+                pendingReviewState = reviewState
+                isBusy = false
+                return false
+            }
+        }
+
         if !resolve.unresolvedConflicts.isEmpty {
             let conflictCount = resolve.unresolvedConflicts.count
             let conflicts = conflictCount == 1 ? "1 conflict needs" : "\(conflictCount) conflicts need"
@@ -199,20 +221,6 @@ final class ImportSession: ObservableObject {
         }
 
         let activeTagIDs = effectiveActiveTagIDSet(model: model)
-
-        // Review sheet path: build review state and wait for user to apply
-        if reviewEnabled, supportsReview {
-            let reviewState = buildReviewState(
-                assignments: resolve.assignments,
-                run: run,
-                tagCatalog: model.importTagCatalog
-            )
-            if reviewState.hasAnyData {
-                pendingReviewState = reviewState
-                isBusy = false
-                return false
-            }
-        }
 
         let eosLensResult = applyEOSLensPolicy(assignments: resolve.assignments, run: run, activeTagIDs: activeTagIDs)
         if eosLensResult.cancelled {
