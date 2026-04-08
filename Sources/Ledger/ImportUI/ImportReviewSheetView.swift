@@ -16,55 +16,76 @@ private let rowToggleWidth: CGFloat = 24
 
 struct ImportReviewSheetView: View {
     @ObservedObject var model: AppModel
+    @ObservedObject var session: ImportSession
     @Binding var reviewState: ImportReviewState
     let onApply: ([ImportReviewRow]) -> Void
     let onCancel: () -> Void
 
     private static let sectionSpacing = WorkflowSheetSectionSpacing.uniform(16)
+    private static let sheetWidth: CGFloat = 840
+    private static let rowsViewportHeight: CGFloat = 320
+    private static let gridBlockHeight: CGFloat = 352
+    @State private var showFields = false
+
+    private var foundTagIDs: Set<String> {
+        if let found = session.foundTagIDs {
+            return found
+        }
+        return Set(reviewState.rows.flatMap { $0.fields.map(\.tagID) })
+    }
 
     private var columns: [ReviewColumn] {
         reviewState.columnTagIDs.map { tagID in
-            ReviewColumn(
+            guard session.isTagSelectedInFields(tagID, foundTagIDs: foundTagIDs) else { return nil }
+            return ReviewColumn(
                 tagID: tagID,
                 label: reviewState.columnLabels[tagID] ?? tagID,
                 width: columnWidth(for: tagID)
             )
         }
+        .compactMap { $0 }
     }
 
     private var totalGridWidth: CGFloat {
-        rowToggleWidth + fileColumnWidth + columns.reduce(0) { $0 + $1.width + 8 }
+        rowToggleWidth + fileColumnWidth + columns.reduce(0) { $0 + $1.width + 8 } + 8
     }
 
     var body: some View {
         WorkflowSheetContainer(
             title: "Review Import",
             subtitle: rowSummary,
-            width: max(totalGridWidth + 40, 620),
+            width: Self.sheetWidth,
             sectionSpacing: Self.sectionSpacing
         ) {
             VStack(alignment: .leading, spacing: 0) {
-                headerRow
-                    .padding(.bottom, 4)
+                ScrollView(.horizontal) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        headerRow
+                            .padding(.bottom, 4)
 
-                Divider()
+                        Divider()
 
-                ScrollView([.vertical]) {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach($reviewState.rows) { $row in
-                            ReviewRowView(
-                                row: $row,
-                                columns: columns,
-                                gearLibrary: model.gearLibrary,
-                                onLensEdited: { newValue in
-                                    cascadeLens(newValue, fromRowID: row.id)
+                        ScrollView(.vertical) {
+                            LazyVStack(alignment: .leading, spacing: 0) {
+                                ForEach($reviewState.rows) { $row in
+                                    ReviewRowView(
+                                        row: $row,
+                                        columns: columns,
+                                        gearLibrary: model.gearLibrary,
+                                        onLensEdited: { newValue in
+                                            cascadeLens(newValue, fromRowID: row.id)
+                                        }
+                                    )
+                                    Divider().opacity(0.4)
                                 }
-                            )
-                            Divider().opacity(0.4)
+                            }
                         }
+                        .frame(width: totalGridWidth, height: Self.rowsViewportHeight, alignment: .topLeading)
                     }
+                    .frame(width: totalGridWidth, alignment: .topLeading)
                 }
-                .frame(minHeight: 220, maxHeight: 420)
+                .frame(height: Self.gridBlockHeight, alignment: .topLeading)
+                .scrollIndicators(.visible)
                 .padding(.bottom, Self.sectionSpacing.mainToFooter)
 
                 footerRow
@@ -88,13 +109,21 @@ struct ImportReviewSheetView: View {
                     .frame(width: col.width, alignment: .leading)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(width: totalGridWidth, alignment: .leading)
     }
 
     // MARK: - Footer
 
     private var footerRow: some View {
         HStack {
+            Button("Fields…") {
+                showFields = true
+            }
+            .disabled(session.foundTagIDs == nil)
+            .popover(isPresented: $showFields) {
+                fieldsPopover
+            }
+
             Spacer()
             Button("Cancel", action: onCancel)
                 .keyboardShortcut(.cancelAction)
@@ -137,6 +166,43 @@ struct ImportReviewSheetView: View {
             reviewState.rows[idx].fields[lensIdx].value = newValue
         }
     }
+
+    @ViewBuilder
+    private var fieldsPopover: some View {
+        let tags = model.importTagCatalog
+        let availableIDs = foundTagIDs
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Choose Fields")
+                .font(.headline)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(tags, id: \.id) { tag in
+                        let isSelectable = session.isTagSelectableInFields(tag.id, foundTagIDs: availableIDs)
+                        let isDependencyBlocked = session.isTagDependencyBlockedInFields(tag.id, foundTagIDs: availableIDs)
+                        Toggle(tag.label, isOn: Binding(
+                            get: { session.isTagSelectedInFields(tag.id, foundTagIDs: availableIDs) },
+                            set: { isOn in
+                                session.setTagSelectedInFields(tag.id, isOn: isOn, foundTagIDs: availableIDs)
+                            }
+                        ))
+                        .toggleStyle(.checkbox)
+                        .disabled(!isSelectable || isDependencyBlocked)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .frame(maxHeight: 300)
+            HStack {
+                Spacer()
+                Button("Apply") {
+                    showFields = false
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding()
+        .frame(minWidth: 240)
+    }
 }
 
 // MARK: - Row view
@@ -174,7 +240,6 @@ private struct ReviewRowView: View {
     @ViewBuilder
     private func cellView(for col: ReviewColumn) -> some View {
         let tagID = col.tagID
-        let currentValue = row.field(forTagID: tagID)?.value ?? ""
         let valueBinding = Binding<String>(
             get: { row.field(forTagID: tagID)?.value ?? "" },
             set: { newVal in
@@ -229,6 +294,7 @@ private struct ReviewRowView: View {
 extension View {
     func importReviewSheet(
         model: AppModel,
+        session: ImportSession,
         reviewState: Binding<ImportReviewState?>,
         onApply: @escaping ([ImportReviewRow]) -> Void,
         onCancel: @escaping () -> Void
@@ -236,6 +302,7 @@ extension View {
         sheet(item: reviewState) { _ in
             ImportReviewSheetView(
                 model: model,
+                session: session,
                 reviewState: Binding(
                     get: { reviewState.wrappedValue ?? ImportReviewState(rows: [], columnTagIDs: [], columnLabels: [:]) },
                     set: { reviewState.wrappedValue = $0 }

@@ -1171,6 +1171,7 @@ struct ImportSheetView: View {
         }
         .importReviewSheet(
             model: model,
+            session: session,
             reviewState: Binding(
                 get: { session.pendingReviewState },
                 set: { session.pendingReviewState = $0 }
