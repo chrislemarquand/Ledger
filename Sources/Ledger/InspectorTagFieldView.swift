@@ -61,6 +61,7 @@ struct InspectorTagFieldView: View {
                     placeholder: model.isMixedValue(for: tag) ? "Multiple values" : model.placeholderForTag(tag),
                     fieldLabel: tag.label,
                     tagID: tag.id,
+                    isMixedValue: model.isMixedValue(for: tag),
                     onFocusChange: { focused in
                         isEditing = focused
                         onFocusChange(focused)

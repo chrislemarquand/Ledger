@@ -399,6 +399,9 @@ extension AppModel {
                 if failureCount > 0 {
                     parts.append("\(failureCount) \(failureCount == 1 ? "file" : "files") failed")
                 }
+                if let firstError = result.failed.first {
+                    parts.append(firstError.message)
+                }
                 statusMessage = parts.joined(separator: ". ") + "."
             }
             applyMetadataCompleted = applyMetadataTotal

@@ -12,7 +12,9 @@ extension AppModel {
     func updateValue(_ value: String, for tag: EditableTag) {
         let currentValue = draftValues[tag] ?? ""
         if currentValue == value {
-            return
+            // Allow clearing a mixed-state tag even though draftValues[tag] is already "":
+            // trackPendingEdit must run so each file's non-empty value gets staged as empty.
+            guard value.isEmpty && mixedTags.contains(tag) else { return }
         }
 
         let currentTrimmed = currentValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -20,11 +22,13 @@ extension AppModel {
         if currentTrimmed == incomingTrimmed {
             // Focus transitions in NSTextField can emit whitespace-equivalent reassignments.
             // Treat these as no-ops to avoid transient staged-edit dots.
-            return
+            // Exception: clearing a mixed-state tag must still stage the empty value.
+            guard value.isEmpty && mixedTags.contains(tag) else { return }
         }
 
         let previousState = currentPendingEditState()
         draftValues[tag] = value
+        if value.isEmpty { mixedTags.remove(tag) }
         trackPendingEdit(value, for: tag, source: .manual)
         // Coalesce undo entries within a continuous text-field edit session.
         // Only push on the first keystroke in a field; subsequent keystrokes in the
