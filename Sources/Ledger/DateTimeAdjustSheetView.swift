@@ -180,18 +180,11 @@ struct DateTimeAdjustSheetView: View {
                     // Adjusted row
                     WorkflowFormRow("Adjusted:", labelWidth: Self.labelColumnWidth) {
                         if session.mode == .specific {
-                            if representativeOriginalDate != nil || hasUserEditedSpecificDate {
-                                InspectorDatePickerField(
-                                    selection: specificDateBinding,
-                                    datePickerElements: [.yearMonthDay, .hourMinuteSecond],
-                                    accessibilityLabel: "Adjusted date and time"
-                                )
-                            } else {
-                                readOnlyDateField(
-                                    nil,
-                                    accessibilityLabel: "Adjusted date and time"
-                                )
-                            }
+                            InspectorDatePickerField(
+                                selection: specificDateBinding,
+                                datePickerElements: [.yearMonthDay, .hourMinuteSecond],
+                                accessibilityLabel: "Adjusted date and time"
+                            )
                         } else if session.mode == .shift {
                             if computedAdjustedDate != nil {
                                 InspectorDatePickerField(

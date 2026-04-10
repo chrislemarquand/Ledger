@@ -35,7 +35,7 @@ public struct ExifToolCommandBuilder: Sendable {
     }
 
     public func writeArguments(for operation: EditOperation, file: URL) -> [String] {
-        var args = ["-overwrite_original"]
+        var args = ["-overwrite_original", "-n"]
 
         for change in operation.changes {
             let tag = writeTag(for: change)
