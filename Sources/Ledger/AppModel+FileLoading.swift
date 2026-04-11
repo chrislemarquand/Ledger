@@ -52,7 +52,7 @@ extension AppModel {
 
 
     func didChooseFolder(_ folderURL: URL) {
-        if let item = noteRecentLocation(folderURL, promoteToTopIfExisting: false) {
+        if let item = noteRecentLocation(folderURL, promoteToTopIfExisting: true) {
             if selectedSidebarID != item.id {
                 selectedSidebarID = item.id
             }

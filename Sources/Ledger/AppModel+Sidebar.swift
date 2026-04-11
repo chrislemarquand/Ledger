@@ -54,8 +54,9 @@ extension AppModel {
         } else {
             // Keep insertion order stable by recording first-seen time once.
             recentLocationLastOpenedAtByID[id] = now
-            locationItems.append(
-                SidebarItem(id: id, title: title, section: "Recents", kind: .folder(canonical))
+            locationItems.insert(
+                SidebarItem(id: id, title: title, section: "Recents", kind: .folder(canonical)),
+                at: 0
             )
             trimRecentLocationsToLimit()
             didMutateRecentLocations = true
