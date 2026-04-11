@@ -32,7 +32,7 @@ final class AppModelTests: XCTestCase {
 
         if case let .enumChoice(choices)? = byID["exif-exposure-program"]?.inputKind {
             XCTAssertTrue(choices.contains(.init(value: "1", label: "Manual")))
-            XCTAssertTrue(choices.contains(.init(value: "4", label: "Shutter Priority")))
+            XCTAssertTrue(choices.contains(.init(value: "4", label: "Shutter speed priority AE")))
         } else {
             XCTFail("Expected exif-exposure-program to use enumChoice input kind")
         }
@@ -97,13 +97,13 @@ final class AppModelTests: XCTestCase {
 
         XCTAssertEqual(
             model.orderedEditableTagSections.map(\.section),
-            ["Rating", "Camera", "Capture", "Date and Time", "Location", "Descriptive", "Rights"]
+            ["Rating", "Camera", "Capture", "Date and Time", "Location", "Descriptive"]
         )
 
         model.setInspectorFieldEnabled(fieldID: "xmp-credit", isEnabled: true)
         XCTAssertEqual(
             model.orderedEditableTagSections.map(\.section),
-            ["Rating", "Camera", "Capture", "Date and Time", "Location", "Descriptive", "Editorial", "Rights"]
+            ["Rating", "Camera", "Capture", "Date and Time", "Location", "Descriptive", "Editorial"]
         )
 
         model.setInspectorSectionEnabled(section: "Editorial", isEnabled: false)
@@ -245,7 +245,7 @@ final class AppModelTests: XCTestCase {
         firstLaunch.openFolder(at: b)
 
         let firstRecent = firstLaunch.sidebarItems.filter { $0.section == "Recents" }
-        XCTAssertEqual(firstRecent.map(\.title), ["A", "B"])
+        XCTAssertEqual(firstRecent.map(\.title), ["B", "A"])
 
         let secondLaunch = makeModel(recentLocationsStore: recentLocationsStore)
         let secondRecent = secondLaunch.sidebarItems.filter { $0.section == "Recents" }
@@ -270,7 +270,7 @@ final class AppModelTests: XCTestCase {
 
         XCTAssertEqual(model.selectedSidebarID, "folder::\(b.path)")
         let recents = model.sidebarItems.filter { $0.section == "Recents" }
-        XCTAssertEqual(recents.map(\.title), ["A", "B"])
+        XCTAssertEqual(recents.map(\.title), ["B", "A"])
     }
 
     func testPinnedLocationIsRemovedFromRecentsAndSelectedOnOpen() throws {
@@ -287,7 +287,7 @@ final class AppModelTests: XCTestCase {
         model.openFolder(at: b)
 
         let recentsBeforePin = model.sidebarItems.filter { $0.section == "Recents" }
-        XCTAssertEqual(recentsBeforePin.map(\.title), ["A", "B"])
+        XCTAssertEqual(recentsBeforePin.map(\.title), ["B", "A"])
 
         guard let bRecent = recentsBeforePin.first(where: { $0.title == "B" }) else {
             XCTFail("Expected B in recents before pin")
@@ -952,7 +952,7 @@ final class AppModelTests: XCTestCase {
         }
 
         XCTAssertEqual(session.fileURLs.map(\.lastPathComponent), ["A.jpg", "B.jpg"])
-        XCTAssertEqual(session.capturedDates[a], firstDate)
+        XCTAssertEqual(session.capturedDates[a]?[.dateTimeDigitized], firstDate)
         XCTAssertEqual(session.specificDate, firstDate)
     }
 
@@ -1040,8 +1040,8 @@ final class AppModelTests: XCTestCase {
         session.cameraClockOffsetSeconds = 0
         session.targetTimeZoneInput = "Amsterdam"
         session.capturedDates = [
-            before: beforeDate,
-            after: afterDate,
+            before: [.dateTimeOriginal: beforeDate],
+            after: [.dateTimeOriginal: afterDate],
         ]
 
         let beforeAdjusted = model.computeAdjustedDate(for: before, session: session)
@@ -1069,8 +1069,8 @@ final class AppModelTests: XCTestCase {
         session.sourceTimeZoneID = "Europe/London"
         session.targetTimeZoneInput = "Europe/Amsterdam"
         session.capturedDates = [
-            before: beforeDate,
-            after: afterDate,
+            before: [.dateTimeOriginal: beforeDate],
+            after: [.dateTimeOriginal: afterDate],
         ]
 
         let beforeAdjusted = model.computeAdjustedDate(for: before, session: session)
@@ -1104,7 +1104,7 @@ final class AppModelTests: XCTestCase {
         session.cameraClockOffsetSeconds = 0
         session.targetTimeZoneID = "Europe/Amsterdam"
         session.targetTimeZoneInput = "Central European Standard Time"
-        session.capturedDates = [file: captureDate]
+        session.capturedDates = [file: [.dateTimeOriginal: captureDate]]
 
         let adjusted = model.computeAdjustedDate(for: file, session: session)
         XCTAssertEqual(Int(adjusted?.timeIntervalSince(captureDate) ?? 0), 3_600)
@@ -1132,7 +1132,7 @@ final class AppModelTests: XCTestCase {
         session.mode = .file
         session.dataReadSource = .modified
 
-        let adjusted = model.computeAdjustedDate(for: fileURL, session: session)
+        let adjusted = model.dataModeReadValue(for: fileURL, session: session)
         XCTAssertEqual(adjusted, model.parseDate("2026:03:28 12:00:00"))
     }
 
@@ -1152,7 +1152,7 @@ final class AppModelTests: XCTestCase {
         session.dataReadSource = .file
 
         XCTAssertEqual(
-            model.computeAdjustedDate(for: fileURL, session: session),
+            model.dataModeReadValue(for: fileURL, session: session),
             model.fileCreationDate(for: fileURL)
         )
     }
