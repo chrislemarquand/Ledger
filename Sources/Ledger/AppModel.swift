@@ -564,6 +564,8 @@ final class AppModel: ObservableObject {
     var favoriteItems: [SidebarItem] = []
     var locationItems: [SidebarItem] = []
     var recentLocationLastOpenedAtByID: [String: Date] = [:]
+    /// Timestamps captured at pin-time so a drag back to Recents restores the original sort position.
+    var pinnedFolderPreservedLastOpenedAt: [String: Date] = [:]
     var folderMetadataLoadTask: Task<Void, Never>?
     var folderMetadataLoadID = UUID()
     var browserItemHydrationTask: Task<Void, Never>?

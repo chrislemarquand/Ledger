@@ -270,11 +270,13 @@ extension AppModel {
            mountedVolumeSidebarItem(forCanonicalURL: canonical) == nil {
             let recentID = "folder::\(canonical.path)"
             if !locationItems.contains(where: { $0.id == recentID }) {
-                recentLocationLastOpenedAtByID[recentID] = Date()
-                locationItems.insert(
-                    SidebarItem(id: recentID, title: item.title, section: "Recents", kind: .folder(canonical)),
-                    at: 0
-                )
+                let timestamp = pinnedFolderPreservedLastOpenedAt.removeValue(forKey: recentID) ?? .distantPast
+                recentLocationLastOpenedAtByID[recentID] = timestamp
+                let restoredItem = SidebarItem(id: recentID, title: item.title, section: "Recents", kind: .folder(canonical))
+                let insertIndex = locationItems.firstIndex { candidate in
+                    (recentLocationLastOpenedAtByID[candidate.id] ?? .distantPast) < timestamp
+                } ?? locationItems.endIndex
+                locationItems.insert(restoredItem, at: insertIndex)
                 trimRecentLocationsToLimit()
                 persistRecentLocations()
                 restoredRecentID = recentID
@@ -404,6 +406,12 @@ extension AppModel {
         guard !favoriteItems.contains(where: { $0.id == id }) else {
             statusMessage = "This location is already pinned."
             return
+        }
+
+        // Preserve the recency timestamp so a later drag back to Recents can restore sort order.
+        let recentID = "folder::\(canonical.path)"
+        if let preserved = recentLocationLastOpenedAtByID[recentID] {
+            pinnedFolderPreservedLastOpenedAt[recentID] = preserved
         }
 
         favoriteItems.append(
