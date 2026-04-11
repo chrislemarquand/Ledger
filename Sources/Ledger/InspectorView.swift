@@ -538,7 +538,7 @@ struct InspectorView: View {
     }
 
     private func fieldFocusChanged(_ focused: Bool, tagID: String) {
-        focusedTagID = focused ? tagID : nil
+        DispatchQueue.main.async { focusedTagID = focused ? tagID : nil }
         if !focused { model.endUndoCoalescing() }
     }
 

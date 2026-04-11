@@ -158,7 +158,8 @@ extension AppModel {
                   let denominator = Double(parts[1]),
                   denominator != 0
             else {
-                return trimmed
+                // Incomplete fraction (e.g. "1/" with no denominator) — treat as empty.
+                return ""
             }
 
             return Self.compactDecimalString(numerator / denominator)

@@ -62,11 +62,13 @@ struct InspectorTagFieldView: View {
                     fieldLabel: tag.label,
                     tagID: tag.id,
                     isMixedValue: model.isMixedValue(for: tag),
+                    editingPrefix: tag.id == "exif-shutter" ? "1/" : nil,
                     onFocusChange: { focused in
-                        isEditing = focused
+                        DispatchQueue.main.async { isEditing = focused }
                         onFocusChange(focused)
                     },
                     onEscape: onEscape,
+                    onCommit: { NSApp.keyWindow?.makeFirstResponder(nil) },
                     onTab: {
                         NotificationCenter.default.post(
                             name: .inspectorDidRequestFieldNavigation,
