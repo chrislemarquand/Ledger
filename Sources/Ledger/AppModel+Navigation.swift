@@ -77,13 +77,30 @@ extension AppModel {
         }
     }
 
-    func refreshMetadata(for fileURLs: [URL]) {
+    func refreshMetadata(for fileURLs: [URL], allowFolderReloadFallback: Bool = true) {
         let files = Array(Set(fileURLs)).sorted { $0.path < $1.path }
         guard !files.isEmpty else { return }
 
         Task {
+            let existingFiles = files.filter { FileManager.default.fileExists(atPath: $0.path) }
+            let missingCount = files.count - existingFiles.count
+
+            if allowFolderReloadFallback, missingCount > 0, let item = selectedSidebarItem {
+                await loadFiles(for: item.kind)
+                refreshMetadata(for: browserItems.map(\.url), allowFolderReloadFallback: false)
+                return
+            }
+
+            guard !existingFiles.isEmpty else {
+                if missingCount > 0 {
+                    let missingText = missingCount == 1 ? "1 file was" : "\(missingCount) files were"
+                    statusMessage = "\(missingText) not found. Refresh the folder to update renamed or moved files."
+                }
+                return
+            }
+
             do {
-                let snapshots = try await engine.readMetadata(files: files)
+                let snapshots = try await engine.readMetadata(files: existingFiles)
                 var map = metadataByFile
                 for snapshot in snapshots {
                     map[snapshot.fileURL] = snapshot
@@ -91,20 +108,27 @@ extension AppModel {
                     pendingCommitsByFile.removeValue(forKey: snapshot.fileURL)
                 }
                 metadataByFile = map
-                invalidateInspectorPreviews(for: files)
-                ThumbnailPipeline.invalidateCachedImages(for: Set(files))
-                for fileURL in files {
+                invalidateInspectorPreviews(for: existingFiles)
+                ThumbnailPipeline.invalidateCachedImages(for: Set(existingFiles))
+                for fileURL in existingFiles {
                     forceReloadInspectorPreview(for: fileURL)
                 }
-                invalidateBrowserThumbnails(for: files)
+                invalidateBrowserThumbnails(for: existingFiles)
                 recalculateInspectorState()
-                if let selectedURL = primarySelectionURL, files.contains(selectedURL) {
+                if let selectedURL = primarySelectionURL, existingFiles.contains(selectedURL) {
                     ensureInspectorPreviewLoaded(for: selectedURL)
                 }
-                let refreshed = files.count == 1 ? "1 file" : "\(files.count) files"
-                setStatusMessage("Refreshed metadata for \(refreshed).", autoClearAfterSuccess: true)
+                let refreshed = existingFiles.count == 1 ? "1 file" : "\(existingFiles.count) files"
+                if missingCount > 0 {
+                    let missing = missingCount == 1 ? "1 file was missing." : "\(missingCount) files were missing."
+                    setStatusMessage("Refreshed metadata for \(refreshed). \(missing)", autoClearAfterSuccess: true)
+                } else {
+                    setStatusMessage("Refreshed metadata for \(refreshed).", autoClearAfterSuccess: true)
+                }
             } catch {
-                statusMessage = error.localizedDescription
+                let raw = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+                let firstLine = raw.split(whereSeparator: \.isNewline).first.map(String.init) ?? raw
+                statusMessage = firstLine.isEmpty ? "Couldn’t refresh metadata." : firstLine
             }
         }
     }

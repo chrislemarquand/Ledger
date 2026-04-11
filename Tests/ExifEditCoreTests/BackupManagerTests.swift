@@ -77,4 +77,90 @@ final class BackupManagerTests: XCTestCase {
         let manager = BackupManager(baseDirectory: missingDir)
         XCTAssertNoThrow(try manager.pruneOperations(keepLast: 10))
     }
+
+    // MARK: - Rename-restore tests
+
+    func testRenameRestoreDeletesRenamedOutputsAndRestoresOriginals() throws {
+        let temp = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let original = temp.appendingPathComponent("original.jpg")
+        try Data("original".utf8).write(to: original)
+
+        let manager = BackupManager(baseDirectory: temp.appendingPathComponent("backups"))
+        let operationID = UUID()
+        _ = try manager.createBackup(operationID: operationID, files: [original])
+
+        // Simulate a rename: move original → renamed
+        let renamed = temp.appendingPathComponent("renamed.jpg")
+        try FileManager.default.moveItem(at: original, to: renamed)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: original.path))
+
+        // Record the renamed output
+        try manager.recordRenamedOutputs(operationID: operationID, renamedPaths: [renamed])
+
+        // Restore — should delete renamed.jpg and put original.jpg back
+        let result = try manager.restoreBackup(operationID: operationID)
+
+        XCTAssertEqual(result.succeeded.count, 1)
+        XCTAssertTrue(result.failed.isEmpty)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: original.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: renamed.path))
+        XCTAssertEqual(
+            String(decoding: try Data(contentsOf: original), as: UTF8.self),
+            "original"
+        )
+    }
+
+    func testLegacyManifestWithoutRenamedOutputPathsRestoresNormally() throws {
+        let temp = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let file = temp.appendingPathComponent("legacy.jpg")
+        try Data("original".utf8).write(to: file)
+
+        let manager = BackupManager(baseDirectory: temp.appendingPathComponent("backups"))
+        let operationID = UUID()
+        _ = try manager.createBackup(operationID: operationID, files: [file])
+
+        // Overwrite the file (simulating metadata edit, no rename)
+        try Data("updated".utf8).write(to: file)
+
+        // Restore without ever recording renamedOutputPaths — should work unchanged
+        let result = try manager.restoreBackup(operationID: operationID)
+
+        XCTAssertEqual(result.succeeded.count, 1)
+        XCTAssertEqual(
+            String(decoding: try Data(contentsOf: file), as: UTF8.self),
+            "original"
+        )
+    }
+
+    func testRecordRenamedOutputsUpdatesManifest() throws {
+        let temp = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let file = temp.appendingPathComponent("test.jpg")
+        try Data("x".utf8).write(to: file)
+
+        let manager = BackupManager(baseDirectory: temp.appendingPathComponent("backups"))
+        let operationID = UUID()
+        _ = try manager.createBackup(operationID: operationID, files: [file])
+
+        let fakeOutput = temp.appendingPathComponent("renamed.jpg")
+        try manager.recordRenamedOutputs(operationID: operationID, renamedPaths: [fakeOutput])
+
+        // Decode the manifest and verify
+        let backupsDir = temp.appendingPathComponent("backups")
+        let manifestURL = backupsDir
+            .appendingPathComponent(operationID.uuidString)
+            .appendingPathComponent("manifest.json")
+        let data = try Data(contentsOf: manifestURL)
+        let manifest = try JSONDecoder().decode(BackupManager.BackupManifest.self, from: data)
+
+        XCTAssertEqual(manifest.renamedOutputPaths, [fakeOutput.path])
+    }
 }

@@ -85,7 +85,7 @@ extension AppModel {
                     self.pendingCommitsByFile.removeValue(forKey: snapshot.fileURL)
                 }
                 self.metadataByFile = map
-                self.folderMetadataLoadCompleted = batchEnd
+                self.folderMetadataLoadCompleted = self.loadedMetadataCount(in: filesToLoad, from: map)
                 let batchURLs = Set(batch)
                 if !self.selectedFileURLs.isEmpty,
                    !self.selectedFileURLs.isDisjoint(with: batchURLs) {
@@ -96,11 +96,19 @@ extension AppModel {
             guard !Task.isCancelled, self.folderMetadataLoadID == loadID else { return }
             self.isFolderMetadataLoading = false
             self.folderMetadataLoadTask = nil
-            self.folderMetadataLoadCompleted = self.folderMetadataLoadTotal
+            self.folderMetadataLoadCompleted = self.loadedMetadataCount(in: filesToLoad, from: map)
             if !self.selectedFileURLs.isEmpty {
                 self.recalculateInspectorState()
             }
             self.scheduleDeferredPreviewPreload(for: files)
+        }
+    }
+
+    private func loadedMetadataCount(in files: [URL], from map: [URL: FileMetadataSnapshot]) -> Int {
+        files.reduce(into: 0) { count, fileURL in
+            if map[fileURL] != nil {
+                count += 1
+            }
         }
     }
 
@@ -122,26 +130,23 @@ extension AppModel {
         deferredPreviewPreloadTask = nil
         let preloadID = UUID()
         previewPreloadID = preloadID
+        let preloadCandidates = previewPreloadCandidates(from: files)
 
         var filesToPreload: [URL] = []
-        for fileURL in files {
-            let currentSide = inspectorPreviewRenderedSide[fileURL] ?? 0
-            if currentSide >= Self.inspectorPreviewTargetSide {
+        for fileURL in preloadCandidates {
+            if ThumbnailService.cachedImage(for: fileURL, minRenderedSide: Self.inspectorPreviewTargetSide) != nil {
+                // Already have an adequate-quality image; ensure it's wired up as a preview.
+                if let cached = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: Self.inspectorPreviewTargetSide) {
+                    storeInspectorPreview(cached, for: fileURL, renderedSide: renderedSide(for: cached))
+                }
                 continue
             }
-            if let cached = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: Self.inspectorPreviewTargetSide) {
-                storeInspectorPreview(
-                    cached,
-                    for: fileURL,
-                    renderedSide: max(Self.inspectorPreviewTargetSide, renderedSide(for: cached))
-                )
-            } else {
-                if currentSide <= 0,
-                   let cachedLowRes = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: 1) {
-                    storeInspectorPreview(cachedLowRes, for: fileURL, renderedSide: renderedSide(for: cachedLowRes))
-                }
-                filesToPreload.append(fileURL)
+            // Show a low-res placeholder immediately if anything is cached.
+            if inspectorPreviewImages[fileURL] == nil,
+               let cachedLowRes = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: 1) {
+                storeInspectorPreview(cachedLowRes, for: fileURL, renderedSide: renderedSide(for: cachedLowRes))
             }
+            filesToPreload.append(fileURL)
         }
 
         guard !filesToPreload.isEmpty else {
@@ -187,7 +192,7 @@ extension AppModel {
         forceRefresh: Bool
     ) async -> NSImage? {
         await Task.detached(priority: priority) {
-            await SharedThumbnailRequestBroker.shared.request(
+            await ThumbnailService.request(
                 url: fileURL,
                 requiredSide: Self.inspectorPreviewFullSide,
                 forceRefresh: forceRefresh
@@ -291,19 +296,19 @@ extension AppModel {
 
     func loadInspectorPreview(for fileURL: URL, force: Bool, priority: TaskPriority? = nil) {
         let requestPriority = priority ?? (selectedFileURLs.contains(fileURL) ? .userInitiated : .utility)
-        if !force, (inspectorPreviewRenderedSide[fileURL] ?? 0) >= Self.inspectorPreviewTargetSide {
+        // Already have a high-quality image — nothing to do.
+        if !force, ThumbnailService.cachedImage(for: fileURL, minRenderedSide: Self.inspectorPreviewTargetSide) != nil,
+           inspectorPreviewImages[fileURL] != nil {
             markInspectorPreviewAsRecentlyUsed(fileURL)
             return
         }
+        // Adequate-quality image is in the cache — wire it up and return.
         if !force,
            let cached = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: Self.inspectorPreviewTargetSide) {
-            storeInspectorPreview(
-                cached,
-                for: fileURL,
-                renderedSide: max(Self.inspectorPreviewTargetSide, renderedSide(for: cached))
-            )
+            storeInspectorPreview(cached, for: fileURL, renderedSide: renderedSide(for: cached))
             return
         }
+        // Show a low-res placeholder immediately while the full-size request runs.
         if !force, inspectorPreviewImages[fileURL] == nil,
            let cachedLowRes = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: 1) {
             storeInspectorPreview(cachedLowRes, for: fileURL, renderedSide: renderedSide(for: cachedLowRes))
@@ -314,7 +319,6 @@ extension AppModel {
             inspectorPreviewTasksByURL[fileURL] = nil
             inspectorPreviewInflight.remove(fileURL)
             inspectorPreviewImages[fileURL] = nil
-            inspectorPreviewRenderedSide[fileURL] = nil
         }
         guard !inspectorPreviewInflight.contains(fileURL) else { return }
         inspectorPreviewInflight.insert(fileURL)
@@ -347,7 +351,6 @@ extension AppModel {
             inspectorPreviewTasksByURL[fileURL] = nil
             inspectorPreviewInflight.remove(fileURL)
             inspectorPreviewImages[fileURL] = nil
-            inspectorPreviewRenderedSide[fileURL] = nil
         }
         inspectorPreviewRecency.removeAll(where: { targets.contains($0) })
     }
@@ -376,9 +379,7 @@ extension AppModel {
 
     private func storeInspectorPreview(_ image: NSImage, for fileURL: URL, renderedSide: CGFloat) {
         inspectorPreviewImages[fileURL] = image
-        let side = max(1, renderedSide)
-        inspectorPreviewRenderedSide[fileURL] = max(side, inspectorPreviewRenderedSide[fileURL] ?? 0)
-        ThumbnailPipeline.storeCachedImage(image, for: fileURL, renderedSide: side)
+        ThumbnailService.storeCachedImage(image, for: fileURL, renderedSide: max(1, renderedSide))
         markInspectorPreviewAsRecentlyUsed(fileURL)
         trimInspectorPreviewCacheIfNeeded()
     }
@@ -442,7 +443,6 @@ extension AppModel {
         let evicted = inspectorPreviewRecency.prefix(excessCount)
         for fileURL in evicted {
             inspectorPreviewImages[fileURL] = nil
-            inspectorPreviewRenderedSide[fileURL] = nil
             inspectorPreviewInflight.remove(fileURL)
         }
         inspectorPreviewRecency.removeFirst(excessCount)
@@ -465,8 +465,10 @@ extension AppModel {
         guard !isFolderMetadataLoading, !isPreviewPreloading else { return }
         do { try await Task.sleep(nanoseconds: Self.previewBulkStartDelayNanoseconds) } catch { return }
         guard !isFolderMetadataLoading, !isPreviewPreloading else { return }
+        let warmCandidates = previewPreloadCandidates(from: files)
+        guard !warmCandidates.isEmpty else { return }
 
-        let filesNeedingMetadata = files.filter { fileURL in
+        let filesNeedingMetadata = warmCandidates.filter { fileURL in
             staleMetadataFiles.contains(fileURL) || metadataByFile[fileURL] == nil
         }
         if !filesNeedingMetadata.isEmpty {
@@ -487,12 +489,14 @@ extension AppModel {
             metadataByFile = map
         }
 
-        let filesNeedingPreview = files.filter { (inspectorPreviewRenderedSide[$0] ?? 0) < Self.inspectorPreviewTargetSide }
+        let filesNeedingPreview = warmCandidates.filter {
+            ThumbnailService.cachedImage(for: $0, minRenderedSide: Self.inspectorPreviewTargetSide) == nil
+        }
         for fileURL in filesNeedingPreview {
             if Task.isCancelled { return }
             await Task.yield()
 
-            if (inspectorPreviewRenderedSide[fileURL] ?? 0) >= Self.inspectorPreviewTargetSide { continue }
+            if ThumbnailService.cachedImage(for: fileURL, minRenderedSide: Self.inspectorPreviewTargetSide) != nil { continue }
             if let cached = ThumbnailPipeline.cachedImage(for: fileURL, minRenderedSide: Self.inspectorPreviewTargetSide) {
                 storeInspectorPreview(
                     cached,
@@ -515,6 +519,46 @@ extension AppModel {
             }
             inspectorPreviewInflight.remove(fileURL)
         }
+    }
+
+    private func previewPreloadCandidates(from files: [URL]) -> [URL] {
+        guard !files.isEmpty else { return [] }
+        guard !selectedFileURLs.isEmpty else { return [] }
+
+        let browserOrder = browserItems.map(\.url)
+        let orderedUniverse = browserOrder.isEmpty ? files : browserOrder
+        guard !orderedUniverse.isEmpty else { return [] }
+
+        let indexByURL = Dictionary(uniqueKeysWithValues: orderedUniverse.enumerated().map { ($1, $0) })
+        var candidateIndices: Set<Int> = []
+        let radius = Self.previewPreloadNeighborRadius
+
+        for selectedURL in selectedFileURLs {
+            guard let center = indexByURL[selectedURL] else { continue }
+            let lower = max(0, center - radius)
+            let upper = min(orderedUniverse.count - 1, center + radius)
+            for i in lower...upper {
+                candidateIndices.insert(i)
+            }
+        }
+
+        guard !candidateIndices.isEmpty else { return [] }
+
+        let selectedCountCap = max(Self.maxPreviewPreloadCandidates, selectedFileURLs.count)
+        let orderedByDistance: [Int]
+        if let primary = primarySelectionURL, let primaryIndex = indexByURL[primary] {
+            orderedByDistance = candidateIndices.sorted { lhs, rhs in
+                let leftDistance = abs(lhs - primaryIndex)
+                let rightDistance = abs(rhs - primaryIndex)
+                if leftDistance != rightDistance { return leftDistance < rightDistance }
+                return lhs < rhs
+            }
+        } else {
+            orderedByDistance = candidateIndices.sorted()
+        }
+
+        let capped = Array(orderedByDistance.prefix(selectedCountCap)).sorted()
+        return capped.map { orderedUniverse[$0] }
     }
 
     private func cancelStaleInspectorPreviewTasks(keeping keepURLs: Set<URL>) {

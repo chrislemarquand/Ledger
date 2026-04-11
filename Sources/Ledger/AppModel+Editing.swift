@@ -12,7 +12,9 @@ extension AppModel {
     func updateValue(_ value: String, for tag: EditableTag) {
         let currentValue = draftValues[tag] ?? ""
         if currentValue == value {
-            return
+            // Allow clearing a mixed-state tag even though draftValues[tag] is already "":
+            // trackPendingEdit must run so each file's non-empty value gets staged as empty.
+            guard value.isEmpty && mixedTags.contains(tag) else { return }
         }
 
         let currentTrimmed = currentValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -20,11 +22,13 @@ extension AppModel {
         if currentTrimmed == incomingTrimmed {
             // Focus transitions in NSTextField can emit whitespace-equivalent reassignments.
             // Treat these as no-ops to avoid transient staged-edit dots.
-            return
+            // Exception: clearing a mixed-state tag must still stage the empty value.
+            guard value.isEmpty && mixedTags.contains(tag) else { return }
         }
 
         let previousState = currentPendingEditState()
         draftValues[tag] = value
+        if value.isEmpty { mixedTags.remove(tag) }
         trackPendingEdit(value, for: tag, source: .manual)
         // Coalesce undo entries within a continuous text-field edit session.
         // Only push on the first keystroke in a field; subsequent keystrokes in the
@@ -148,6 +152,10 @@ extension AppModel {
         }
     }
 
+    func isBooleanTag(_ tag: EditableTag) -> Bool {
+        tag.id == "xmp-copyright-status"
+    }
+
     func dateValueForTag(_ tag: EditableTag) -> Date? {
         guard isDateTimeTag(tag) else { return nil }
         let raw = valueForTag(tag).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -185,6 +193,10 @@ extension AppModel {
         !(pendingEditsByFile[fileURL]?.isEmpty ?? true) || !effectiveImageOperations(for: fileURL).isEmpty
     }
 
+    func hasAnyPendingChanges(for fileURL: URL) -> Bool {
+        hasPendingEdits(for: fileURL) || pendingRenameByFile[fileURL] != nil
+    }
+
     func hasPendingImageEdits(for fileURL: URL) -> Bool {
         !effectiveImageOperations(for: fileURL).isEmpty
     }
@@ -213,26 +225,148 @@ extension AppModel {
 
     func listColumnValue(for fileURL: URL, columnID: String, fallbackItem: BrowserItem?) -> String {
         switch columnID {
-        case "name":
+        case ListColumnDefinition.idName:
+            if let proposed = pendingRenameByFile[fileURL] {
+                return proposed
+            }
             return fallbackItem?.name ?? fileURL.lastPathComponent
-        case "created":
+        case ListColumnDefinition.idCreated:
             if let date = fallbackItem?.createdAt {
                 return Self.listDateFormatter.string(from: date)
             }
             return "—"
-        case "size":
+        case ListColumnDefinition.idModified:
+            if let date = fallbackItem?.modifiedAt {
+                return Self.listDateFormatter.string(from: date)
+            }
+            return "—"
+        case ListColumnDefinition.idSize:
             if let size = fallbackItem?.sizeBytes, size >= 0 {
                 return Self.byteCountFormatter.string(fromByteCount: Int64(size))
             }
             return "—"
-        case "kind":
+        case ListColumnDefinition.idKind:
             if let kind = fallbackItem?.kind, !kind.isEmpty {
                 return kind
             }
             return "—"
+        case ListColumnDefinition.idDimensions:
+            if let (w, h) = imagePixelDimensions(for: fileURL) {
+                return "\(w) × \(h)"
+            }
+            return "—"
+        case ListColumnDefinition.idRating:
+            let raw = metadataStringValue(for: fileURL, keys: ["Rating"])
+            return raw == "0" ? "—" : raw
+        case ListColumnDefinition.idMake:
+            return metadataStringValue(for: fileURL, keys: ["Make"])
+        case ListColumnDefinition.idModel:
+            return metadataStringValue(for: fileURL, keys: ["Model"])
+        case ListColumnDefinition.idLens:
+            return metadataStringValue(for: fileURL, keys: ["LensModel", "Lens"])
+        case ListColumnDefinition.idAperture:
+            return metadataAperture(for: fileURL)
+        case ListColumnDefinition.idShutter:
+            return metadataShutter(for: fileURL)
+        case ListColumnDefinition.idISO:
+            return metadataISO(for: fileURL)
+        case ListColumnDefinition.idFocal:
+            return metadataFocalLength(for: fileURL)
+        case ListColumnDefinition.idDateTaken:
+            return metadataDateTaken(for: fileURL)
+        case ListColumnDefinition.idTitle:
+            return metadataStringValue(for: fileURL, keys: ["Title"])
+        case ListColumnDefinition.idDescription:
+            return metadataStringValue(for: fileURL, keys: ["Description", "Caption-Abstract"])
+        case ListColumnDefinition.idKeywords:
+            return metadataStringValue(for: fileURL, keys: ["Subject", "Keywords"])
+        case ListColumnDefinition.idCopyright:
+            return metadataStringValue(for: fileURL, keys: ["Copyright"])
+        case ListColumnDefinition.idCreator:
+            return metadataStringValue(for: fileURL, keys: ["Creator", "Artist"])
         default:
             return "—"
         }
+    }
+
+    func knownKeywords() -> [String] {
+        var seen = Set<String>()
+        for snapshot in metadataByFile.values {
+            for field in snapshot.fields where field.key == "Subject" || field.key == "Keywords" {
+                for keyword in field.value.components(separatedBy: ", ") {
+                    let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty { seen.insert(trimmed) }
+                }
+            }
+        }
+        return seen.sorted()
+    }
+
+    private func metadataStringValue(for fileURL: URL, keys: [String]) -> String {
+        guard let snapshot = metadataByFile[fileURL] else { return "—" }
+        for key in keys {
+            if let value = snapshot.fields.first(where: { $0.key == key })?.value {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return trimmed }
+            }
+        }
+        return "—"
+    }
+
+    private func metadataAperture(for fileURL: URL) -> String {
+        let raw = metadataStringValue(for: fileURL, keys: ["FNumber", "Aperture"])
+        guard raw != "—" else { return raw }
+        if raw.lowercased().hasPrefix("f/") { return raw }
+        return "f/\(raw)"
+    }
+
+    private func metadataShutter(for fileURL: URL) -> String {
+        let raw = metadataStringValue(for: fileURL, keys: ["ExposureTime", "ShutterSpeedValue"])
+        guard raw != "—" else { return raw }
+        // ExifTool commonly returns "1/250" directly
+        if raw.contains("/") { return "\(raw) s" }
+        guard let value = Double(raw) else { return raw }
+        if value >= 1.0 {
+            let formatted = value.truncatingRemainder(dividingBy: 1) == 0
+                ? String(Int(value))
+                : String(format: "%.1f", value)
+            return "\(formatted) s"
+        } else if value > 0 {
+            let denominator = Int((1.0 / value).rounded())
+            return "1/\(denominator) s"
+        }
+        return raw
+    }
+
+    private func metadataISO(for fileURL: URL) -> String {
+        let raw = metadataStringValue(for: fileURL, keys: ["ISO"])
+        guard raw != "—" else { return raw }
+        if let d = Double(raw), d >= 0, d.truncatingRemainder(dividingBy: 1) == 0 {
+            return String(Int(d))
+        }
+        return raw
+    }
+
+    private func metadataFocalLength(for fileURL: URL) -> String {
+        let raw = metadataStringValue(for: fileURL, keys: ["FocalLength"])
+        guard raw != "—" else { return raw }
+        if raw.lowercased().contains("mm") { return raw }
+        if let d = Double(raw) {
+            if d.truncatingRemainder(dividingBy: 1) == 0 {
+                return "\(Int(d)) mm"
+            }
+            return "\(raw) mm"
+        }
+        return raw
+    }
+
+    private func metadataDateTaken(for fileURL: URL) -> String {
+        let raw = metadataStringValue(for: fileURL, keys: ["DateTimeOriginal", "CreateDate"])
+        guard raw != "—" else { return raw }
+        if let date = Self.exifDateFormatter.date(from: raw) {
+            return Self.listDateFormatter.string(from: date)
+        }
+        return raw
     }
 
     func imagePixelDimensions(for fileURL: URL) -> (Int, Int)? {
@@ -273,62 +407,16 @@ extension AppModel {
     }
 
     func pickerOptions(for tag: EditableTag) -> [PickerOption]? {
-        let base: [PickerOption]
-
-        switch tag.id {
-        case "exif-exposure-program":
-            base = [
-                .init(value: "0", label: "Unknown"),
-                .init(value: "1", label: "Manual"),
-                .init(value: "2", label: "Program AE"),
-                .init(value: "3", label: "Aperture Priority"),
-                .init(value: "4", label: "Shutter Priority"),
-                .init(value: "5", label: "Creative"),
-                .init(value: "6", label: "Action"),
-                .init(value: "7", label: "Portrait"),
-                .init(value: "8", label: "Landscape")
+        // xmp-copyright-status is stored as .boolean in the catalog, not .enumChoice
+        if tag.id == "xmp-copyright-status" {
+            return [
+                .init(value: "True", label: "Copyrighted"),
+                .init(value: "False", label: "Public Domain / No Copyright")
             ]
-        case "exif-flash":
-            base = [
-                .init(value: "0", label: "No Flash"),
-                .init(value: "1", label: "Fired"),
-                .init(value: "5", label: "Fired, No Return"),
-                .init(value: "7", label: "Fired, Return Detected"),
-                .init(value: "9", label: "On, Did Not Fire"),
-                .init(value: "13", label: "On, No Return"),
-                .init(value: "15", label: "On, Return Detected"),
-                .init(value: "16", label: "Off"),
-                .init(value: "24", label: "Auto, Did Not Fire"),
-                .init(value: "25", label: "Auto, Fired"),
-                .init(value: "29", label: "Auto, Fired, No Return"),
-                .init(value: "31", label: "Auto, Fired, Return Detected"),
-                .init(value: "32", label: "No Flash"),
-                .init(value: "65", label: "Fired, Red-Eye Reduction"),
-                .init(value: "69", label: "Fired, Red-Eye, No Return"),
-                .init(value: "71", label: "Fired, Red-Eye, Return Detected"),
-                .init(value: "73", label: "On, Red-Eye, Did Not Fire"),
-                .init(value: "77", label: "On, Red-Eye, No Return"),
-                .init(value: "79", label: "On, Red-Eye, Return Detected"),
-                .init(value: "89", label: "Auto, Fired, Red-Eye"),
-                .init(value: "93", label: "Auto, Fired, Red-Eye, No Return"),
-                .init(value: "95", label: "Auto, Fired, Red-Eye, Return Detected")
-            ]
-        case "exif-metering-mode":
-            base = [
-                .init(value: "0", label: "Unknown"),
-                .init(value: "1", label: "Average"),
-                .init(value: "2", label: "Center-Weighted Average"),
-                .init(value: "3", label: "Spot"),
-                .init(value: "4", label: "Multi-Spot"),
-                .init(value: "5", label: "Multi-Segment"),
-                .init(value: "6", label: "Partial"),
-                .init(value: "255", label: "Other")
-            ]
-        default:
-            return nil
         }
-
-        return base
+        guard let entry = activeInspectorFieldCatalog.first(where: { $0.id == tag.id }),
+              case .enumChoice(let choices) = entry.inputKind else { return nil }
+        return choices.map { PickerOption(value: $0.value, label: $0.label) }
     }
 
     func isMixedValue(for tag: EditableTag) -> Bool {
@@ -336,10 +424,13 @@ extension AppModel {
     }
 
     var pendingEditedFileCount: Int {
-        browserItems
-            .map(\.url)
-            .filter { hasPendingEdits(for: $0) }
-            .count
+        let metadataOrImagePending = Set(
+            browserItems
+                .map(\.url)
+                .filter { hasAnyPendingChanges(for: $0) }
+        )
+        let renamedPending = Set(pendingRenameByFile.keys)
+        return metadataOrImagePending.union(renamedPending).count
     }
 
     func stageImageOperation(_ operation: StagedImageOperation, for fileURL: URL) {
@@ -819,25 +910,6 @@ extension AppModel {
         selectedFileURLs = nextSelection
         selectionAnchorURL = items.first?.url
         selectionFocusURL = items.last?.url
-        selectionChanged()
-    }
-
-    func extendSelectionToBoundary(towardStart: Bool) {
-        let items = filteredBrowserItems
-        guard !items.isEmpty else { return }
-
-        let targetURL = towardStart ? items.first!.url : items.last!.url
-        let previousSelection = selectedFileURLs
-
-        if selectedFileURLs.isEmpty {
-            selectedFileURLs = [targetURL]
-            selectionAnchorURL = targetURL
-            selectionFocusURL = targetURL
-        } else {
-            applyRangeSelection(to: targetURL, additive: false, in: items)
-        }
-
-        guard selectedFileURLs != previousSelection else { return }
         selectionChanged()
     }
 

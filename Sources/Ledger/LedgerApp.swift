@@ -40,6 +40,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showAboutPanel()
     }
 
+    func showWelcomeScreen() {
+        guard let appModel else { return }
+        appModel.activeWelcomePresentation = AppWelcomePresentation(
+            appName: AppBrand.displayName,
+            features: Self.welcomeFeatures,
+            primaryButtonTitle: "Get Started",
+            onPrimaryAction: {
+                WelcomeCoordinator.markSeen()
+            }
+        )
+    }
+
+    @objc
+    func showWhatsNewAction(_: Any?) {
+        showWelcomeScreen()
+    }
+
+    private static let welcomeFeatures: [AppWelcomeFeature] = [
+        .init(
+            symbolName: "character.cursor.ibeam",
+            title: "Batch Rename",
+            subtitle: "Rename folders of files using custom patterns with date, sequence, and metadata tokens."
+        ),
+        .init(
+            symbolName: "star.leadinghalf.filled",
+            title: "Expanded Inspector",
+            subtitle: "Edit star ratings, flags, colour labels, and a wider range of EXIF and IPTC fields."
+        ),
+    ]
+
     @objc
     func showSettingsWindowAction(_: Any?) {
         settingsWindowController?.showWindowAndActivate()
@@ -108,12 +138,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             SettingsTabDescriptor(symbolName: "gearshape", label: "General",
                 viewController: GeneralSettingsViewController(model: model)),
             SettingsTabDescriptor(symbolName: "slider.horizontal.3", label: "Inspector",
-                viewController: InspectorSettingsViewController(model: model), preferredHeight: 620),
+                viewController: InspectorSettingsViewController(model: model), preferredHeight: 660),
         ])
         let windowController = MainWindowController(model: model)
         mainWindowController = windowController
         windowController.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
+        if WelcomeCoordinator.shouldShowOnLaunch {
+            Task { @MainActor in self.showWelcomeScreen() }
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -130,6 +163,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldRestoreApplicationState(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    // MARK: - Dock Menu
+
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        let menu = NSMenu()
+        var hasItems = false
+
+        if let model = appModel, !model.favoriteItems.isEmpty {
+            for item in model.favoriteItems {
+                let menuItem = NSMenuItem(title: item.title, action: #selector(openSidebarItemFromDock(_:)), keyEquivalent: "")
+                menuItem.representedObject = item.id
+                menuItem.target = self
+                menu.addItem(menuItem)
+            }
+            hasItems = true
+        }
+
+        if let model = appModel {
+            let recents = model.locationItems.prefix(3)
+            if !recents.isEmpty {
+                if hasItems { menu.addItem(.separator()) }
+                for item in recents {
+                    let menuItem = NSMenuItem(title: item.title, action: #selector(openSidebarItemFromDock(_:)), keyEquivalent: "")
+                    menuItem.representedObject = item.id
+                    menuItem.target = self
+                    menu.addItem(menuItem)
+                }
+                hasItems = true
+            }
+        }
+
+        if hasItems { menu.addItem(.separator()) }
+        let openItem = NSMenuItem(title: "Open Folder…", action: #selector(openFolderFromDock(_:)), keyEquivalent: "")
+        openItem.target = self
+        menu.addItem(openItem)
+
+        return menu
+    }
+
+    @objc private func openSidebarItemFromDock(_ sender: NSMenuItem) {
+        guard let sidebarID = sender.representedObject as? String,
+              let model = appModel else { return }
+        mainWindowController?.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        model.handleExplicitSidebarSelectionChange(to: sidebarID)
+    }
+
+    @objc private func openFolderFromDock(_ sender: Any?) {
+        mainWindowController?.showWindow(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        appModel?.openFolder()
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -149,7 +234,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "You have unsaved metadata changes."
+        alert.messageText = "You have unsaved changes."
         alert.informativeText = "Quit and discard your prepared changes?"
         alert.addButton(withTitle: "Quit and Discard")
         alert.addButton(withTitle: "Cancel")

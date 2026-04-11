@@ -53,7 +53,7 @@ private struct InspectorPreviewActionLabel: View {
         VStack(spacing: 4) {
             Image(systemName: symbolName)
                 .font(.body)
-                .foregroundStyle(isPressed ? Color.white : (isHovered ? Color.primary : Color.secondary))
+                .foregroundStyle(isPressed ? Color.primary.opacity(0.7) : (isHovered ? Color.primary : Color.secondary))
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -69,7 +69,7 @@ struct InspectorView: View {
         formatter.countStyle = .file
         return formatter
     }()
-    @FocusState private var focusedTagID: String?
+    @State private var focusedTagID: String?
     @State private var activeEditTagID: String?
     @State private var suppressNextFocusScrollAnimation = false
 
@@ -89,8 +89,9 @@ struct InspectorView: View {
                     if model.selectedFileURLs.count == 1,
                        let first = model.selectedFileURLs.first {
                         InspectorHeaderView(
-                            title: first.deletingPathExtension().lastPathComponent,
-                            subtitle: singleSelectionSubtitle
+                            title: inspectorTitle(for: first),
+                            subtitle: singleSelectionSubtitle,
+                            pendingChange: model.pendingRenameByFile[first] != nil
                         )
                     } else {
                         InspectorHeaderView(
@@ -99,17 +100,25 @@ struct InspectorView: View {
                         )
                     }
 
+                    InspectorRatingFlagView(
+                        rating: Int(model.valueForTag(AppModel.EditableTag.rating).trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0,
+                        ratingPending: model.hasPendingChange(for: AppModel.EditableTag.rating),
+                        ratingEnabled: model.isInspectorFieldEnabled(AppModel.EditableTag.rating.id),
+                        onRatingChange: { model.updateValue($0 == 0 ? "" : String($0), for: AppModel.EditableTag.rating) },
+                        pick: Int(model.valueForTag(AppModel.EditableTag.pick).trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0,
+                        pickPending: model.hasPendingChange(for: AppModel.EditableTag.pick),
+                        pickEnabled: model.isInspectorFieldEnabled(AppModel.EditableTag.pick.id),
+                        onPickChange: { model.updateValue($0 == 0 ? "" : String($0), for: AppModel.EditableTag.pick) },
+                        label: model.valueForTag(AppModel.EditableTag.label).trimmingCharacters(in: .whitespacesAndNewlines),
+                        labelPending: model.hasPendingChange(for: AppModel.EditableTag.label),
+                        labelEnabled: model.isInspectorFieldEnabled(AppModel.EditableTag.label.id),
+                        onLabelChange: { model.updateValue($0, for: AppModel.EditableTag.label) }
+                    )
+
                     if model.selectedFileURLs.count == 1 {
                         InspectorSectionContainer(
                             "Preview",
-                            isExpanded: Binding(
-                                get: { !model.isInspectorSectionCollapsed("Preview") },
-                                set: { _ in
-                                    DispatchQueue.main.async {
-                                        model.toggleInspectorSection("Preview")
-                                    }
-                                }
-                            )
+                            isExpanded: sectionExpandedBinding(for: "Preview")
                         ) {
                             if let previewURL = primarySelectedFileURL {
                                 VStack(spacing: 10) {
@@ -120,7 +129,8 @@ struct InspectorView: View {
                                         if model.hasPendingImageEdits(for: previewURL) {
                                             Image(systemName: "circle.fill")
                                                 .font(.system(size: 9))
-                                                .foregroundStyle(.orange)
+                                                .symbolRenderingMode(.monochrome)
+                                                .foregroundStyle(Color(nsColor: .systemOrange))
                                                 .padding(8)
                                         }
                                     }
@@ -140,9 +150,6 @@ struct InspectorView: View {
                                         }
                                         .buttonStyle(InspectorPreviewActionButtonStyle())
 
-                                        Divider()
-                                            .frame(height: 28)
-
                                         Button {
                                             model.flipHorizontal(fileURL: previewURL)
                                         } label: {
@@ -151,9 +158,6 @@ struct InspectorView: View {
                                             .contentShape(Rectangle())
                                         }
                                         .buttonStyle(InspectorPreviewActionButtonStyle())
-
-                                        Divider()
-                                            .frame(height: 28)
 
                                         Button {
                                             model.openInDefaultApp(previewURL)
@@ -169,17 +173,10 @@ struct InspectorView: View {
                         }
                     }
 
-                    ForEach(model.orderedEditableTagSections) { grouped in
+                    ForEach(model.orderedEditableTagSections.filter { $0.section != "Rating" }) { grouped in
                         InspectorSectionContainer(
                             grouped.section,
-                            isExpanded: Binding(
-                                get: { !model.isInspectorSectionCollapsed(grouped.section) },
-                                set: { _ in
-                                    DispatchQueue.main.async {
-                                        model.toggleInspectorSection(grouped.section)
-                                    }
-                                }
-                            )
+                            isExpanded: sectionExpandedBinding(for: grouped.section)
                         ) {
                             VStack(alignment: .leading, spacing: 10) {
                                     ForEach(grouped.tags) { tag in
@@ -189,124 +186,21 @@ struct InspectorView: View {
                                                     Image(systemName: "circle.fill")
                                                         .font(.system(size: 6))
                                                         .foregroundStyle(.orange)
+                                                        .transition(.scale(scale: 0.5).combined(with: .opacity))
                                                 }
                                                 InspectorFieldLabel(tag.label)
                                             }
+                                            .animation(appAnimation(), value: model.hasPendingChange(for: tag))
                                         } value: {
-                                        if model.isDateTimeTag(tag) {
-                                                if let date = model.dateValueForTag(tag) {
-                                                    HStack(spacing: 6) {
-                                                        DatePicker(
-                                                            "",
-                                                            selection: Binding(
-                                                                get: { model.dateValueForTag(tag) ?? date },
-                                                                set: {
-                                                                    beginEditSessionIfNeeded(for: tag)
-                                                                    let newDate = $0
-                                                                    DispatchQueue.main.async {
-                                                                        model.updateDateValue(newDate, for: tag)
-                                                                    }
-                                                                }
-                                                            ),
-                                                            displayedComponents: [.date, .hourAndMinute]
-                                                        )
-                                                        .labelsHidden()
-                                                        .datePickerStyle(.stepperField)
-
-                                                        Spacer()
-
-                                                        Button {
-                                                            beginEditSessionIfNeeded(for: tag)
-                                                            DispatchQueue.main.async {
-                                                                model.clearDateValue(for: tag)
-                                                            }
-                                                        } label: {
-                                                            Image(systemName: "xmark.circle.fill")
-                                                                .foregroundStyle(.secondary)
-                                                        }
-                                                        .buttonStyle(.plain)
-                                                        .help("Clear date and time")
-                                                    }
-                                                } else {
-                                                    HStack(spacing: 6) {
-                                                        if model.isMixedValue(for: tag) {
-                                                            HStack {
-                                                                Text("Multiple values")
-                                                                    .foregroundStyle(.secondary)
-                                                                    .font(.body)
-                                                                Spacer(minLength: 0)
-                                                            }
-                                                            .padding(.horizontal, 10)
-                                                            .padding(.vertical, 6)
-                                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                                            .background(
-                                                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                                                    .strokeBorder(.quaternary, lineWidth: 1)
-                                                            )
-                                                        } else {
-                                                            TextField("", text: .constant(""))
-                                                                .textFieldStyle(.roundedBorder)
-                                                                .disabled(true)
-                                                                .frame(maxWidth: .infinity, alignment: .leading)
-                                                        }
-
-                                                        Button("Set") {
-                                                            beginEditSessionIfNeeded(for: tag)
-                                                            let now = Date()
-                                                            DispatchQueue.main.async {
-                                                                model.updateDateValue(now, for: tag)
-                                                            }
-                                                        }
-                                                        .controlSize(.small)
-                                                    }
-                                                }
-                                            } else if let options = model.pickerOptions(for: tag) {
-                                                Picker("", selection: Binding(
-                                                    get: { model.valueForTag(tag) },
-                                                    set: {
-                                                        guard $0 != model.valueForTag(tag) else { return }
-                                                        beginEditSessionIfNeeded(for: tag)
-                                                        let newValue = $0
-                                                        DispatchQueue.main.async {
-                                                            model.updateValue(newValue, for: tag)
-                                                        }
-                                                    }
-                                                )) {
-                                                    // Always include tag("") so SwiftUI never sees an
-                                                    // untagged selection when the field has no value.
-                                                    Text(model.isMixedValue(for: tag) ? "Multiple values" : "—")
-                                                        .tag("")
-                                                    let currentValue = model.valueForTag(tag)
-                                                    if !currentValue.isEmpty && !options.contains(where: { $0.value == currentValue }) {
-                                                        Text(currentValue).tag(currentValue)
-                                                    }
-                                                    ForEach(options, id: \.value) { option in
-                                                        Text(option.label).tag(option.value)
-                                                    }
-                                                }
-                                                .labelsHidden()
-                                                .pickerStyle(.menu)
-                                                .frame(maxWidth: .infinity, alignment: .leading)
-                                            } else {
-                                                TextField(
-                                                    "",
-                                                    text: Binding(
-                                                        get: { model.valueForTag(tag) },
-                                                        set: {
-                                                            beginEditSessionIfNeeded(for: tag)
-                                                            let newValue = $0
-                                                            DispatchQueue.main.async {
-                                                                model.updateValue(newValue, for: tag)
-                                                            }
-                                                        }
-                                                    ),
-                                                    prompt: Text(model.isMixedValue(for: tag) ? "Multiple values" : model.placeholderForTag(tag))
-                                                        .foregroundStyle(.secondary)
-                                                )
-                                                .textFieldStyle(.roundedBorder)
-                                                .frame(maxWidth: .infinity, alignment: .leading)
-                                                .focused($focusedTagID, equals: tag.id)
-                                            }
+                                            InspectorTagFieldView(
+                                                tag: tag,
+                                                model: model,
+                                                onBeginEditSession: { beginEditSessionIfNeeded(for: tag) },
+                                                onOpenDateTimeAdjust: { openDateTimeAdjustSheet(for: tag) },
+                                                onOpenLocationAdjust: { openLocationAdjustSheet() },
+                                                onFocusChange: { focused in fieldFocusChanged(focused, tagID: tag.id) },
+                                                onEscape: { fieldEscapePressed(tagID: tag.id) }
+                                            )
                                         }
                                         .id(tag.id)
                                     }
@@ -314,6 +208,7 @@ struct InspectorView: View {
                                     if grouped.section == "Location", let coordinate = photoCoordinate {
                                         locationMapView(for: coordinate)
                                     }
+
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -326,14 +221,10 @@ struct InspectorView: View {
             }
             .inspectorScrollSetup()
             .animation(appAnimation(), value: model.collapsedInspectorSections)
-            .onChange(of: focusedTagID) { oldValue, newValue in
-                if oldValue != nil {
-                    // Focus left a text field — end the undo coalescing window so
-                    // the next edit in any field gets its own undo entry.
-                    model.endUndoCoalescing()
-                }
+            .onChange(of: focusedTagID) { _, newValue in
+                // Undo coalescing is handled directly in onFocusChange(false) per field.
+                // This handler only drives scroll-to-focused-field.
                 guard let newValue else { return }
-                guard oldValue != nil else { return }
                 DispatchQueue.main.async {
                     if suppressNextFocusScrollAnimation {
                         var transaction = Transaction()
@@ -355,10 +246,8 @@ struct InspectorView: View {
             model.clearEditSessionSnapshots()
             activeEditTagID = nil
             suppressNextFocusScrollAnimation = true
-            // Defer @FocusState clear: setting it synchronously during the SwiftUI
-            // update phase triggers an AppKit first-responder change which calls
-            // layout() on the NSHostingView while SwiftUI is still processing the
-            // update → NSHostingView reentrant layout fault.
+            // Defer focus clear: resignFirstResponder during the SwiftUI update phase
+            // triggers NSHostingView layout() re-entrancy → layout fault.
             DispatchQueue.main.async {
                 focusedTagID = nil
             }
@@ -387,6 +276,16 @@ struct InspectorView: View {
         .onReceive(NotificationCenter.default.publisher(for: .inspectorDidRequestFieldNavigation)) { notification in
             let backward = (notification.userInfo?["backward"] as? Bool) ?? false
             moveInspectorFieldFocus(backward: backward)
+        }
+        .sheet(item: Binding(
+            get: { model.activeWelcomePresentation },
+            set: { newValue in
+                Task { @MainActor in
+                    model.activeWelcomePresentation = newValue
+                }
+            }
+        )) { presentation in
+            AppWelcomeSheetView(presentation: presentation)
         }
         .sheet(item: Binding(
             get: { model.activePresetEditor },
@@ -422,6 +321,9 @@ struct InspectorView: View {
         )) { sourceKind in
             ImportSheetView(model: model, sourceKind: sourceKind)
         }
+        .batchRenameSheet(model: model)
+        .dateTimeAdjustSheet(model: model)
+        .locationAdjustSheet(model: model)
     }
 
     private var photoCoordinate: CLLocationCoordinate2D? {
@@ -439,6 +341,14 @@ struct InspectorView: View {
     private var primarySelectedFileURL: URL? {
         model.selectedFileURLs.sorted { $0.path < $1.path }.first
     }
+
+    private func inspectorTitle(for fileURL: URL) -> String {
+        if let stagedName = model.pendingRenameByFile[fileURL], !stagedName.isEmpty {
+            return URL(fileURLWithPath: stagedName).deletingPathExtension().lastPathComponent
+        }
+        return fileURL.deletingPathExtension().lastPathComponent
+    }
+
 
     private var singleSelectionSubtitle: String? {
         guard model.selectedFileURLs.count == 1,
@@ -502,6 +412,15 @@ struct InspectorView: View {
         return parseCoordinate(raw)
     }
 
+    private func sectionExpandedBinding(for section: String) -> Binding<Bool> {
+        Binding(
+            get: { !model.isInspectorSectionCollapsed(section) },
+            set: { _ in
+                model.toggleInspectorSection(section)
+            }
+        )
+    }
+
     @ViewBuilder
     private func locationMapView(for coordinate: CLLocationCoordinate2D) -> some View {
         SharedUI.InspectorLocationMapView(coordinate: coordinate)
@@ -551,6 +470,39 @@ struct InspectorView: View {
         return parsed
     }
 
+    private func moveInspectorFieldFocus(backward: Bool) {
+        let focusableTagIDs = focusableInspectorTagIDs()
+        guard !focusableTagIDs.isEmpty else { return }
+        let current = focusedTagID ?? activeEditTagID
+        let nextID: String
+        if let current, let currentIndex = focusableTagIDs.firstIndex(of: current) {
+            let delta = backward ? -1 : 1
+            let nextIndex = (currentIndex + delta + focusableTagIDs.count) % focusableTagIDs.count
+            nextID = focusableTagIDs[nextIndex]
+        } else {
+            nextID = backward ? focusableTagIDs.last! : focusableTagIDs.first!
+        }
+        guard focusedTagID != nextID else { return }
+        // Update SwiftUI state so onChange drives scroll-to-field.
+        focusedTagID = nextID
+        // Post notification so the AppKit text field actually becomes first responder.
+        NotificationCenter.default.post(
+            name: .inspectorDidRequestFieldFocus,
+            object: nil,
+            userInfo: ["tagID": nextID]
+        )
+    }
+
+    private func focusableInspectorTagIDs() -> [String] {
+        model.orderedEditableTagSections
+            .filter { $0.section != "Rating" && !model.isInspectorSectionCollapsed($0.section) }
+            .flatMap(\.tags)
+            .filter { tag in
+                !model.isDateTimeTag(tag) && model.pickerOptions(for: tag) == nil
+            }
+            .map(\.id)
+    }
+
     private enum CoordinateDirection {
         case north
         case south
@@ -585,35 +537,33 @@ struct InspectorView: View {
         activeEditTagID = tag.id
     }
 
-    private func moveInspectorFieldFocus(backward: Bool) {
-        let focusableTagIDs = focusableInspectorTagIDs()
+    private func fieldFocusChanged(_ focused: Bool, tagID: String) {
+        DispatchQueue.main.async { focusedTagID = focused ? tagID : nil }
+        if !focused { model.endUndoCoalescing() }
+    }
 
-        guard !focusableTagIDs.isEmpty else { return }
-
-        let current = focusedTagID ?? activeEditTagID
-        let nextID: String
-
-        if let current,
-           let currentIndex = focusableTagIDs.firstIndex(of: current) {
-            let delta = backward ? -1 : 1
-            let nextIndex = (currentIndex + delta + focusableTagIDs.count) % focusableTagIDs.count
-            nextID = focusableTagIDs[nextIndex]
-        } else {
-            nextID = backward ? focusableTagIDs.last! : focusableTagIDs.first!
+    private func fieldEscapePressed(tagID: String) {
+        guard let snapshot = model.editSessionSnapshot(forTagID: tagID) else {
+            focusedTagID = nil
+            NotificationCenter.default.post(name: .inspectorDidRequestBrowserFocus, object: nil)
+            return
         }
-
-        guard focusedTagID != nextID else { return }
-        focusedTagID = nextID
+        model.restoreEditSession(snapshot)
+        DispatchQueue.main.async { self.model.restoreEditSession(snapshot) }
+        model.removeEditSessionSnapshot(forTagID: tagID)
+        activeEditTagID = nil
+        focusedTagID = nil
+        NotificationCenter.default.post(name: .inspectorDidRequestBrowserFocus, object: nil)
     }
 
-    private func focusableInspectorTagIDs() -> [String] {
-        model.orderedEditableTagSections
-            .filter { !model.isInspectorSectionCollapsed($0.section) }
-            .flatMap(\.tags)
-            .filter { tag in
-                !model.isDateTimeTag(tag) && model.pickerOptions(for: tag) == nil
-            }
-            .map(\.id)
+    private func openDateTimeAdjustSheet(for tag: AppModel.EditableTag) {
+        let targetTag = DateTimeTargetTag.from(editableTagID: tag.id) ?? .dateTimeOriginal
+        let scope: DateTimeAdjustScope = model.selectedFileURLs.count > 1 ? .selection : .single
+        model.beginDateTimeAdjust(scope: scope, launchTag: targetTag, launchContext: .inspector)
     }
+
+    private func openLocationAdjustSheet() {
+        model.beginLocationAdjust()
+    }
+
 }
-

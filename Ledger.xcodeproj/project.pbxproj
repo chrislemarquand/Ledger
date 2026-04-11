@@ -17,18 +17,17 @@
 		A10000210000000000000001 /* ExifToolCommandBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000140000000000000001 /* ExifToolCommandBuilder.swift */; };
 		A10000220000000000000001 /* ExifToolService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000150000000000000001 /* ExifToolService.swift */; };
 		A10000230000000000000001 /* MetadataValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000160000000000000001 /* MetadataValidator.swift */; };
-		A10000240000000000000001 /* BackupManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000180000000000000001 /* BackupManagerTests.swift */; };
-		A10000250000000000000001 /* ExifToolCommandBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000190000000000000001 /* ExifToolCommandBuilderTests.swift */; };
-		A10000260000000000000001 /* MetadataValidatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100001A0000000000000001 /* MetadataValidatorTests.swift */; };
+		A10000240000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000180000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift */; };
+		A10000250000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000190000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift */; };
+		A10000260000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100001A0000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift */; };
 		A10000270000000000000001 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A100003A0000000000000001 /* XCTest.framework */; };
 		A10000280000000000000001 /* libExifEditCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000370000000000000001 /* libExifEditCore.a */; };
 		A10000290000000000000001 /* libExifEditCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000370000000000000001 /* libExifEditCore.a */; };
+		A10000B10000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000B20000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift */; };
 		A10001420000000000000001 /* Presets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001410000000000000001 /* Presets.swift */; };
 		A10001440000000000000001 /* BrowserGalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001430000000000000001 /* BrowserGalleryView.swift */; };
 		A10001460000000000000001 /* BrowserListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001450000000000000001 /* BrowserListView.swift */; };
 		A10001480000000000000001 /* InspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001470000000000000001 /* InspectorView.swift */; };
-		DD0001010000000000000001 /* LedgerSidebarTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0001000000000000000001 /* LedgerSidebarTypes.swift */; };
-		DD0002020000000000000001 /* SharedUI in Frameworks */ = {isa = PBXBuildFile; productRef = DD0002010000000000000001 /* SharedUI */; };
 		A100014C0000000000000001 /* PresetSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014B0000000000000001 /* PresetSheets.swift */; };
 		A100014E0000000000000001 /* ThumbnailService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014D0000000000000001 /* ThumbnailService.swift */; };
 		A10001500000000000000001 /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014F0000000000000001 /* SettingsWindowController.swift */; };
@@ -47,6 +46,14 @@
 		A100016C0000000000000001 /* AppModel+MetadataPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100015F0000000000000001 /* AppModel+MetadataPipeline.swift */; };
 		A100016D0000000000000001 /* AppModel+UndoStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001600000000000000001 /* AppModel+UndoStatus.swift */; };
 		A100016E0000000000000001 /* AppModel+FieldCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001610000000000000001 /* AppModel+FieldCatalog.swift */; };
+		A100017F0000000000000001 /* FieldDecoration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100017E0000000000000001 /* FieldDecoration.swift */; };
+		A10001700000000000000001 /* WelcomeCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100016F0000000000000001 /* WelcomeCoordinator.swift */; };
+		A10001720000000000000001 /* ListColumnDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001710000000000000001 /* ListColumnDefinition.swift */; };
+		A10001740000000000000001 /* ListColumnStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001730000000000000001 /* ListColumnStore.swift */; };
+		A10001760000000000000001 /* MainContentView+Chrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001750000000000000001 /* MainContentView+Chrome.swift */; };
+		A10001780000000000000001 /* BrowserContainerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001770000000000000001 /* BrowserContainerViewController.swift */; };
+		A100017B0000000000000001 /* InspectorTagFieldView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100017A0000000000000001 /* InspectorTagFieldView.swift */; };
+		A100017D0000000000000001 /* InspectorDateTimeFieldView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100017C0000000000000001 /* InspectorDateTimeFieldView.swift */; };
 		B100001D0000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000D0000000000000001 /* Assets.xcassets */; };
 		C20002010000000000000001 /* CSVImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001010000000000000001 /* CSVImportAdapter.swift */; };
 		C20002020000000000000001 /* CSVSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001020000000000000001 /* CSVSupport.swift */; };
@@ -63,6 +70,12 @@
 		C200020D0000000000000001 /* ReferenceImportSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010D0000000000000001 /* ReferenceImportSupport.swift */; };
 		C200020E0000000000000001 /* ImportSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010E0000000000000001 /* ImportSheetView.swift */; };
 		C200020F0000000000000001 /* ExifToolCSVExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010F0000000000000001 /* ExifToolCSVExportService.swift */; };
+		D100000300000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */; };
+		DD0001010000000000000001 /* LedgerSidebarTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0001000000000000000001 /* LedgerSidebarTypes.swift */; };
+		DD0002020000000000000001 /* SharedUI in Frameworks */ = {isa = PBXBuildFile; productRef = DD0002010000000000000001 /* SharedUI */; };
+		E10001010000000000000001 /* DateTimeAdjustModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10001000000000000000001 /* DateTimeAdjustModels.swift */; };
+		E10001030000000000000001 /* AppModel+DateTimeAdjust.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10001020000000000000001 /* AppModel+DateTimeAdjust.swift */; };
+		E10001050000000000000001 /* DateTimeAdjustSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10001040000000000000001 /* DateTimeAdjustSheetView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -83,39 +96,39 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		469CE1902F4B7DE400D51BC9 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = "AppIcon.icon"; sourceTree = "<group>"; };
+		469CE1902F4B7DE400D51BC9 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		A10000010000000000000001 /* Ledger.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Ledger.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000020000000000000001 /* ExifEditCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ExifEditCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		A10000030000000000000001 /* Ledger-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Config/Ledger-Info.plist"; sourceTree = SOURCE_ROOT; };
-		A10000040000000000000001 /* Ledger.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Config/Ledger.entitlements; sourceTree = SOURCE_ROOT; };
-		A10000050000000000000001 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Debug.xcconfig; sourceTree = SOURCE_ROOT; };
-		A10000060000000000000001 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Release.xcconfig; sourceTree = SOURCE_ROOT; };
-		A10000070000000000000001 /* archive.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = scripts/release/archive.sh; sourceTree = SOURCE_ROOT; };
-		A10000080000000000000001 /* create_dmg.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = scripts/release/create_dmg.sh; sourceTree = SOURCE_ROOT; };
-		A10000090000000000000001 /* notarize.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = scripts/release/notarize.sh; sourceTree = SOURCE_ROOT; };
-		A100000A0000000000000001 /* release.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = scripts/release/release.sh; sourceTree = SOURCE_ROOT; };
-		A100000B0000000000000001 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel.swift"; sourceTree = "<group>"; };
-		A100000C0000000000000001 /* LedgerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LedgerApp.swift"; sourceTree = "<group>"; };
-		A100000D0000000000000001 /* MainContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MainContentView.swift"; sourceTree = "<group>"; };
-		A10000110000000000000001 /* BackupManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BackupManager.swift"; sourceTree = "<group>"; };
-		A10000120000000000000001 /* Domain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Domain.swift"; sourceTree = "<group>"; };
-		A10000130000000000000001 /* ExifEditEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ExifEditEngine.swift"; sourceTree = "<group>"; };
-		A10000140000000000000001 /* ExifToolCommandBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ExifToolCommandBuilder.swift"; sourceTree = "<group>"; };
-		A10000150000000000000001 /* ExifToolService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ExifToolService.swift"; sourceTree = "<group>"; };
-		A10000160000000000000001 /* MetadataValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MetadataValidator.swift"; sourceTree = "<group>"; };
-		A10000180000000000000001 /* BackupManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/BackupManagerTests.swift; sourceTree = SOURCE_ROOT; };
-		A10000190000000000000001 /* ExifToolCommandBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift; sourceTree = SOURCE_ROOT; };
-		A100001A0000000000000001 /* MetadataValidatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/MetadataValidatorTests.swift; sourceTree = SOURCE_ROOT; };
+		A10000030000000000000001 /* Config/Ledger-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Config/Ledger-Info.plist"; sourceTree = SOURCE_ROOT; };
+		A10000040000000000000001 /* Config/Ledger.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Config/Ledger.entitlements; sourceTree = SOURCE_ROOT; };
+		A10000050000000000000001 /* Config/Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Debug.xcconfig; sourceTree = SOURCE_ROOT; };
+		A10000060000000000000001 /* Config/Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Release.xcconfig; sourceTree = SOURCE_ROOT; };
+		A10000070000000000000001 /* scripts/release/archive.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = scripts/release/archive.sh; sourceTree = SOURCE_ROOT; };
+		A10000080000000000000001 /* scripts/release/create_dmg.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = scripts/release/create_dmg.sh; sourceTree = SOURCE_ROOT; };
+		A10000090000000000000001 /* scripts/release/notarize.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = scripts/release/notarize.sh; sourceTree = SOURCE_ROOT; };
+		A100000A0000000000000001 /* scripts/release/release.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = scripts/release/release.sh; sourceTree = SOURCE_ROOT; };
+		A100000B0000000000000001 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		A100000C0000000000000001 /* LedgerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerApp.swift; sourceTree = "<group>"; };
+		A100000D0000000000000001 /* MainContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainContentView.swift; sourceTree = "<group>"; };
+		A10000110000000000000001 /* BackupManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupManager.swift; sourceTree = "<group>"; };
+		A10000120000000000000001 /* Domain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domain.swift; sourceTree = "<group>"; };
+		A10000130000000000000001 /* ExifEditEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifEditEngine.swift; sourceTree = "<group>"; };
+		A10000140000000000000001 /* ExifToolCommandBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifToolCommandBuilder.swift; sourceTree = "<group>"; };
+		A10000150000000000000001 /* ExifToolService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifToolService.swift; sourceTree = "<group>"; };
+		A10000160000000000000001 /* MetadataValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataValidator.swift; sourceTree = "<group>"; };
+		A10000180000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/BackupManagerTests.swift; sourceTree = SOURCE_ROOT; };
+		A10000190000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift; sourceTree = SOURCE_ROOT; };
+		A100001A0000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/MetadataValidatorTests.swift; sourceTree = SOURCE_ROOT; };
 		A10000370000000000000001 /* libExifEditCore.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libExifEditCore.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		A100003A0000000000000001 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
-		A10001410000000000000001 /* Presets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Presets.swift"; sourceTree = "<group>"; };
-		A10001430000000000000001 /* BrowserGalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BrowserGalleryView.swift"; sourceTree = "<group>"; };
-		A10001450000000000000001 /* BrowserListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BrowserListView.swift"; sourceTree = "<group>"; };
-		A10001470000000000000001 /* InspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "InspectorView.swift"; sourceTree = "<group>"; };
-		DD0001000000000000000001 /* LedgerSidebarTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LedgerSidebarTypes.swift"; sourceTree = "<group>"; };
-		A100014B0000000000000001 /* PresetSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PresetSheets.swift"; sourceTree = "<group>"; };
-		A100014D0000000000000001 /* ThumbnailService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ThumbnailService.swift"; sourceTree = "<group>"; };
-		A100014F0000000000000001 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsWindowController.swift"; sourceTree = "<group>"; };
+		A10000B20000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/BatchRenameService.swift; sourceTree = SOURCE_ROOT; };
+		A10001410000000000000001 /* Presets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Presets.swift; sourceTree = "<group>"; };
+		A10001430000000000000001 /* BrowserGalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserGalleryView.swift; sourceTree = "<group>"; };
+		A10001450000000000000001 /* BrowserListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserListView.swift; sourceTree = "<group>"; };
+		A10001470000000000000001 /* InspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorView.swift; sourceTree = "<group>"; };
+		A100014B0000000000000001 /* PresetSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetSheets.swift; sourceTree = "<group>"; };
+		A100014D0000000000000001 /* ThumbnailService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailService.swift; sourceTree = "<group>"; };
+		A100014F0000000000000001 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
 		A10001530000000000000001 /* AppModel+Sidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Sidebar.swift"; sourceTree = "<group>"; };
 		A10001540000000000000001 /* AppModel+Preview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Preview.swift"; sourceTree = "<group>"; };
 		A10001550000000000000001 /* AppModel+Actions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Actions.swift"; sourceTree = "<group>"; };
@@ -131,22 +144,35 @@
 		A100015F0000000000000001 /* AppModel+MetadataPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+MetadataPipeline.swift"; sourceTree = "<group>"; };
 		A10001600000000000000001 /* AppModel+UndoStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+UndoStatus.swift"; sourceTree = "<group>"; };
 		A10001610000000000000001 /* AppModel+FieldCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+FieldCatalog.swift"; sourceTree = "<group>"; };
-		B100000D0000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Assets.xcassets"; sourceTree = "<group>"; };
-		C20001010000000000000001 /* CSVImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CSVImportAdapter.swift"; sourceTree = "<group>"; };
-		C20001020000000000000001 /* CSVSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CSVSupport.swift"; sourceTree = "<group>"; };
-		C20001030000000000000001 /* EOS1VImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EOS1VImportAdapter.swift"; sourceTree = "<group>"; };
-		C20001040000000000000001 /* GPXImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GPXImportAdapter.swift"; sourceTree = "<group>"; };
-		C20001050000000000000001 /* ImportConflictResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ImportConflictResolver.swift"; sourceTree = "<group>"; };
-		C20001060000000000000001 /* ImportCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ImportCoordinator.swift"; sourceTree = "<group>"; };
-		C20001070000000000000001 /* ImportMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ImportMatcher.swift"; sourceTree = "<group>"; };
-		C20001080000000000000001 /* ImportModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ImportModels.swift"; sourceTree = "<group>"; };
-		C20001090000000000000001 /* EOSLensMappingEmbedded.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EOSLensMappingEmbedded.swift"; sourceTree = "<group>"; };
-		C200010A0000000000000001 /* ImportSourceAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ImportSourceAdapter.swift"; sourceTree = "<group>"; };
-		C200010B0000000000000001 /* ReferenceFolderImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ReferenceFolderImportAdapter.swift"; sourceTree = "<group>"; };
-		C200010C0000000000000001 /* ReferenceImageImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ReferenceImageImportAdapter.swift"; sourceTree = "<group>"; };
-		C200010D0000000000000001 /* ReferenceImportSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ReferenceImportSupport.swift"; sourceTree = "<group>"; };
-		C200010E0000000000000001 /* ImportSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ImportSheetView.swift"; sourceTree = "<group>"; };
-		C200010F0000000000000001 /* ExifToolCSVExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ExifToolCSVExportService.swift"; sourceTree = "<group>"; };
+		A100017E0000000000000001 /* FieldDecoration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FieldDecoration.swift"; sourceTree = "<group>"; };
+		A100016F0000000000000001 /* WelcomeCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeCoordinator.swift; sourceTree = "<group>"; };
+		A10001710000000000000001 /* ListColumnDefinition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListColumnDefinition.swift; sourceTree = "<group>"; };
+		A10001730000000000000001 /* ListColumnStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListColumnStore.swift; sourceTree = "<group>"; };
+		A10001750000000000000001 /* MainContentView+Chrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MainContentView+Chrome.swift"; sourceTree = "<group>"; };
+		A10001770000000000000001 /* BrowserContainerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserContainerViewController.swift; sourceTree = "<group>"; };
+		A100017A0000000000000001 /* InspectorTagFieldView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorTagFieldView.swift; sourceTree = "<group>"; };
+		A100017C0000000000000001 /* InspectorDateTimeFieldView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorDateTimeFieldView.swift; sourceTree = "<group>"; };
+		B100000D0000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		C20001010000000000000001 /* CSVImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSVImportAdapter.swift; sourceTree = "<group>"; };
+		C20001020000000000000001 /* CSVSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSVSupport.swift; sourceTree = "<group>"; };
+		C20001030000000000000001 /* EOS1VImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VImportAdapter.swift; sourceTree = "<group>"; };
+		C20001040000000000000001 /* GPXImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPXImportAdapter.swift; sourceTree = "<group>"; };
+		C20001050000000000000001 /* ImportConflictResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportConflictResolver.swift; sourceTree = "<group>"; };
+		C20001060000000000000001 /* ImportCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportCoordinator.swift; sourceTree = "<group>"; };
+		C20001070000000000000001 /* ImportMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportMatcher.swift; sourceTree = "<group>"; };
+		C20001080000000000000001 /* ImportModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportModels.swift; sourceTree = "<group>"; };
+		C20001090000000000000001 /* EOSLensMappingEmbedded.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOSLensMappingEmbedded.swift; sourceTree = "<group>"; };
+		C200010A0000000000000001 /* ImportSourceAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportSourceAdapter.swift; sourceTree = "<group>"; };
+		C200010B0000000000000001 /* ReferenceFolderImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceFolderImportAdapter.swift; sourceTree = "<group>"; };
+		C200010C0000000000000001 /* ReferenceImageImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceImageImportAdapter.swift; sourceTree = "<group>"; };
+		C200010D0000000000000001 /* ReferenceImportSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceImportSupport.swift; sourceTree = "<group>"; };
+		C200010E0000000000000001 /* ImportSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportSheetView.swift; sourceTree = "<group>"; };
+		C200010F0000000000000001 /* ExifToolCSVExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifToolCSVExportService.swift; sourceTree = "<group>"; };
+		D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/BatchRenameSheetView.swift; sourceTree = SOURCE_ROOT; };
+		DD0001000000000000000001 /* LedgerSidebarTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerSidebarTypes.swift; sourceTree = "<group>"; };
+		E10001000000000000000001 /* DateTimeAdjustModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateTimeAdjustModels.swift; sourceTree = "<group>"; };
+		E10001020000000000000001 /* AppModel+DateTimeAdjust.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+DateTimeAdjust.swift"; sourceTree = "<group>"; };
+		E10001040000000000000001 /* DateTimeAdjustSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateTimeAdjustSheetView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -207,16 +233,15 @@
 				A10000560000000000000001 /* Ledger */,
 				A10000570000000000000001 /* ExifEditCore */,
 			);
-			name = Sources;
 			path = Sources;
 			sourceTree = SOURCE_ROOT;
 		};
 		A10000520000000000000001 /* Tests */ = {
 			isa = PBXGroup;
 			children = (
-				A10000180000000000000001 /* BackupManagerTests.swift */,
-				A10000190000000000000001 /* ExifToolCommandBuilderTests.swift */,
-				A100001A0000000000000001 /* MetadataValidatorTests.swift */,
+				A10000180000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift */,
+				A10000190000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift */,
+				A100001A0000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift */,
 			);
 			path = Tests;
 			sourceTree = SOURCE_ROOT;
@@ -224,10 +249,10 @@
 		A10000530000000000000001 /* Config */ = {
 			isa = PBXGroup;
 			children = (
-				A10000030000000000000001 /* Ledger-Info.plist */,
-				A10000040000000000000001 /* Ledger.entitlements */,
-				A10000050000000000000001 /* Debug.xcconfig */,
-				A10000060000000000000001 /* Release.xcconfig */,
+				A10000030000000000000001 /* Config/Ledger-Info.plist */,
+				A10000040000000000000001 /* Config/Ledger.entitlements */,
+				A10000050000000000000001 /* Config/Debug.xcconfig */,
+				A10000060000000000000001 /* Config/Release.xcconfig */,
 			);
 			path = Config;
 			sourceTree = SOURCE_ROOT;
@@ -235,10 +260,10 @@
 		A10000540000000000000001 /* scripts/release */ = {
 			isa = PBXGroup;
 			children = (
-				A10000070000000000000001 /* archive.sh */,
-				A10000080000000000000001 /* create_dmg.sh */,
-				A10000090000000000000001 /* notarize.sh */,
-				A100000A0000000000000001 /* release.sh */,
+				A10000070000000000000001 /* scripts/release/archive.sh */,
+				A10000080000000000000001 /* scripts/release/create_dmg.sh */,
+				A10000090000000000000001 /* scripts/release/notarize.sh */,
+				A100000A0000000000000001 /* scripts/release/release.sh */,
 			);
 			path = scripts/release;
 			sourceTree = SOURCE_ROOT;
@@ -253,39 +278,50 @@
 		};
 		A10000560000000000000001 /* Ledger */ = {
 			isa = PBXGroup;
-				children = (
-					469CE1902F4B7DE400D51BC9 /* AppIcon.icon */,
-					B100000D0000000000000001 /* Assets.xcassets */,
-					C20000F00000000000000001 /* Import */,
-					C20000F10000000000000001 /* ImportUI */,
-					A100000B0000000000000001 /* AppModel.swift */,
-					A10001530000000000000001 /* AppModel+Sidebar.swift */,
-					A10001540000000000000001 /* AppModel+Preview.swift */,
-					A10001550000000000000001 /* AppModel+Actions.swift */,
-					A10001560000000000000001 /* AppModel+Navigation.swift */,
-					A10001570000000000000001 /* AppModel+ApplyRestore.swift */,
-					A10001580000000000000001 /* AppModel+Presets.swift */,
-					A10001590000000000000001 /* AppModel+Editing.swift */,
-					A100015A0000000000000001 /* AppModel+InspectorFields.swift */,
-					A100015B0000000000000001 /* AppModel+Import.swift */,
-					A100015C0000000000000001 /* AppModel+FileLoading.swift */,
-					A100015D0000000000000001 /* AppModel+MetadataValues.swift */,
-					A100015E0000000000000001 /* AppModel+Formatters.swift */,
-					A100015F0000000000000001 /* AppModel+MetadataPipeline.swift */,
-					A10001600000000000000001 /* AppModel+UndoStatus.swift */,
-					A10001610000000000000001 /* AppModel+FieldCatalog.swift */,
-					A100000C0000000000000001 /* LedgerApp.swift */,
-					A100000D0000000000000001 /* MainContentView.swift */,
+			children = (
+				469CE1902F4B7DE400D51BC9 /* AppIcon.icon */,
+				B100000D0000000000000001 /* Assets.xcassets */,
+				C20000F00000000000000001 /* Import */,
+				C20000F10000000000000001 /* ImportUI */,
+				A100000B0000000000000001 /* AppModel.swift */,
+				D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */,
+				E10001000000000000000001 /* DateTimeAdjustModels.swift */,
+				E10001020000000000000001 /* AppModel+DateTimeAdjust.swift */,
+				E10001040000000000000001 /* DateTimeAdjustSheetView.swift */,
+				A10001530000000000000001 /* AppModel+Sidebar.swift */,
+				A10001540000000000000001 /* AppModel+Preview.swift */,
+				A10001550000000000000001 /* AppModel+Actions.swift */,
+				A10001560000000000000001 /* AppModel+Navigation.swift */,
+				A10001570000000000000001 /* AppModel+ApplyRestore.swift */,
+				A10001580000000000000001 /* AppModel+Presets.swift */,
+				A10001590000000000000001 /* AppModel+Editing.swift */,
+				A100015A0000000000000001 /* AppModel+InspectorFields.swift */,
+				A100015B0000000000000001 /* AppModel+Import.swift */,
+				A100015C0000000000000001 /* AppModel+FileLoading.swift */,
+				A100015D0000000000000001 /* AppModel+MetadataValues.swift */,
+				A100015E0000000000000001 /* AppModel+Formatters.swift */,
+				A100015F0000000000000001 /* AppModel+MetadataPipeline.swift */,
+				A10001600000000000000001 /* AppModel+UndoStatus.swift */,
+				A10001610000000000000001 /* AppModel+FieldCatalog.swift */,
+				A100017E0000000000000001 /* FieldDecoration.swift */,
+				A100016F0000000000000001 /* WelcomeCoordinator.swift */,
+				A100000C0000000000000001 /* LedgerApp.swift */,
+				A100000D0000000000000001 /* MainContentView.swift */,
+				A10001750000000000000001 /* MainContentView+Chrome.swift */,
+				A10001770000000000000001 /* BrowserContainerViewController.swift */,
 				A10001410000000000000001 /* Presets.swift */,
 				A10001430000000000000001 /* BrowserGalleryView.swift */,
 				A10001450000000000000001 /* BrowserListView.swift */,
+				A10001710000000000000001 /* ListColumnDefinition.swift */,
+				A10001730000000000000001 /* ListColumnStore.swift */,
 				A10001470000000000000001 /* InspectorView.swift */,
+				A100017A0000000000000001 /* InspectorTagFieldView.swift */,
+				A100017C0000000000000001 /* InspectorDateTimeFieldView.swift */,
 				DD0001000000000000000001 /* LedgerSidebarTypes.swift */,
 				A100014B0000000000000001 /* PresetSheets.swift */,
 				A100014D0000000000000001 /* ThumbnailService.swift */,
 				A100014F0000000000000001 /* SettingsWindowController.swift */,
 			);
-			name = Ledger;
 			path = Ledger;
 			sourceTree = "<group>";
 		};
@@ -298,8 +334,8 @@
 				A10000140000000000000001 /* ExifToolCommandBuilder.swift */,
 				A10000150000000000000001 /* ExifToolService.swift */,
 				A10000160000000000000001 /* MetadataValidator.swift */,
+				A10000B20000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift */,
 			);
-			name = ExifEditCore;
 			path = ExifEditCore;
 			sourceTree = "<group>";
 		};
@@ -321,7 +357,6 @@
 				C200010D0000000000000001 /* ReferenceImportSupport.swift */,
 				C200010F0000000000000001 /* ExifToolCSVExportService.swift */,
 			);
-			name = Import;
 			path = Import;
 			sourceTree = "<group>";
 		};
@@ -330,7 +365,6 @@
 			children = (
 				C200010E0000000000000001 /* ImportSheetView.swift */,
 			);
-			name = ImportUI;
 			path = ImportUI;
 			sourceTree = "<group>";
 		};
@@ -422,12 +456,12 @@
 				en,
 				Base,
 			);
-			mainGroup = A10000500000000000000001;
+			mainGroup = A10000500000000000000001 /* Ledger */;
+			packageReferences = (
+				DD0002000000000000000001 /* XCLocalSwiftPackageReference "../SharedUI" */,
+			);
 			productRefGroup = A10000360000000000000001 /* Products */;
 			projectDirPath = "";
-			packageReferences = (
-				DD0002000000000000000001 /* XCLocalSwiftPackageReference "SharedUI" */,
-			);
 			projectRoot = "";
 			targets = (
 				A10000600000000000000001 /* Ledger */,
@@ -475,29 +509,41 @@
 		A10000800000000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-				files = (
-					A100001B0000000000000001 /* AppModel.swift in Sources */,
-					A10001510000000000000001 /* AppModel+Sidebar.swift in Sources */,
-					A10001520000000000000001 /* AppModel+Preview.swift in Sources */,
-					A10001620000000000000001 /* AppModel+Actions.swift in Sources */,
-					A10001630000000000000001 /* AppModel+Navigation.swift in Sources */,
-					A10001640000000000000001 /* AppModel+ApplyRestore.swift in Sources */,
-					A10001650000000000000001 /* AppModel+Presets.swift in Sources */,
-					A10001660000000000000001 /* AppModel+Editing.swift in Sources */,
-					A10001670000000000000001 /* AppModel+InspectorFields.swift in Sources */,
-					A10001680000000000000001 /* AppModel+Import.swift in Sources */,
-					A10001690000000000000001 /* AppModel+FileLoading.swift in Sources */,
-					A100016A0000000000000001 /* AppModel+MetadataValues.swift in Sources */,
-					A100016B0000000000000001 /* AppModel+Formatters.swift in Sources */,
-					A100016C0000000000000001 /* AppModel+MetadataPipeline.swift in Sources */,
-					A100016D0000000000000001 /* AppModel+UndoStatus.swift in Sources */,
-					A100016E0000000000000001 /* AppModel+FieldCatalog.swift in Sources */,
-					A100001C0000000000000001 /* LedgerApp.swift in Sources */,
-					A100001D0000000000000001 /* MainContentView.swift in Sources */,
+			files = (
+				A100001B0000000000000001 /* AppModel.swift in Sources */,
+				D100000300000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift in Sources */,
+				E10001010000000000000001 /* DateTimeAdjustModels.swift in Sources */,
+				E10001030000000000000001 /* AppModel+DateTimeAdjust.swift in Sources */,
+				E10001050000000000000001 /* DateTimeAdjustSheetView.swift in Sources */,
+				A10001510000000000000001 /* AppModel+Sidebar.swift in Sources */,
+				A10001520000000000000001 /* AppModel+Preview.swift in Sources */,
+				A10001620000000000000001 /* AppModel+Actions.swift in Sources */,
+				A10001630000000000000001 /* AppModel+Navigation.swift in Sources */,
+				A10001640000000000000001 /* AppModel+ApplyRestore.swift in Sources */,
+				A10001650000000000000001 /* AppModel+Presets.swift in Sources */,
+				A10001660000000000000001 /* AppModel+Editing.swift in Sources */,
+				A10001670000000000000001 /* AppModel+InspectorFields.swift in Sources */,
+				A10001680000000000000001 /* AppModel+Import.swift in Sources */,
+				A10001690000000000000001 /* AppModel+FileLoading.swift in Sources */,
+				A100016A0000000000000001 /* AppModel+MetadataValues.swift in Sources */,
+				A100016B0000000000000001 /* AppModel+Formatters.swift in Sources */,
+				A100016C0000000000000001 /* AppModel+MetadataPipeline.swift in Sources */,
+				A100016D0000000000000001 /* AppModel+UndoStatus.swift in Sources */,
+				A100016E0000000000000001 /* AppModel+FieldCatalog.swift in Sources */,
+				A100017F0000000000000001 /* FieldDecoration.swift in Sources */,
+				A10001700000000000000001 /* WelcomeCoordinator.swift in Sources */,
+				A100001C0000000000000001 /* LedgerApp.swift in Sources */,
+				A100001D0000000000000001 /* MainContentView.swift in Sources */,
+				A10001760000000000000001 /* MainContentView+Chrome.swift in Sources */,
+				A10001780000000000000001 /* BrowserContainerViewController.swift in Sources */,
 				A10001420000000000000001 /* Presets.swift in Sources */,
 				A10001440000000000000001 /* BrowserGalleryView.swift in Sources */,
 				A10001460000000000000001 /* BrowserListView.swift in Sources */,
+				A10001720000000000000001 /* ListColumnDefinition.swift in Sources */,
+				A10001740000000000000001 /* ListColumnStore.swift in Sources */,
 				A10001480000000000000001 /* InspectorView.swift in Sources */,
+				A100017B0000000000000001 /* InspectorTagFieldView.swift in Sources */,
+				A100017D0000000000000001 /* InspectorDateTimeFieldView.swift in Sources */,
 				DD0001010000000000000001 /* LedgerSidebarTypes.swift in Sources */,
 				A100014C0000000000000001 /* PresetSheets.swift in Sources */,
 				A100014E0000000000000001 /* ThumbnailService.swift in Sources */,
@@ -530,6 +576,7 @@
 				A10000210000000000000001 /* ExifToolCommandBuilder.swift in Sources */,
 				A10000220000000000000001 /* ExifToolService.swift in Sources */,
 				A10000230000000000000001 /* MetadataValidator.swift in Sources */,
+				A10000B10000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -537,9 +584,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10000240000000000000001 /* BackupManagerTests.swift in Sources */,
-				A10000250000000000000001 /* ExifToolCommandBuilderTests.swift in Sources */,
-				A10000260000000000000001 /* MetadataValidatorTests.swift in Sources */,
+				A10000240000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift in Sources */,
+				A10000250000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift in Sources */,
+				A10000260000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -561,7 +608,7 @@
 /* Begin XCBuildConfiguration section */
 		A10001200000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = A10000050000000000000001 /* Debug.xcconfig */;
+			baseConfigurationReference = A10000050000000000000001 /* Config/Debug.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -605,7 +652,7 @@
 		};
 		A10001210000000000000001 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = A10000060000000000000001 /* Release.xcconfig */;
+			baseConfigurationReference = A10000060000000000000001 /* Config/Release.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -629,7 +676,7 @@
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				COPY_PHASE_STRIP = NO;
+				COPY_PHASE_STRIP = YES;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -647,7 +694,7 @@
 		};
 		A10001220000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = A10000050000000000000001 /* Debug.xcconfig */;
+			baseConfigurationReference = A10000050000000000000001 /* Config/Debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -670,7 +717,7 @@
 		};
 		A10001230000000000000001 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = A10000060000000000000001 /* Release.xcconfig */;
+			baseConfigurationReference = A10000060000000000000001 /* Config/Release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -693,7 +740,7 @@
 		};
 		A10001240000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = A10000050000000000000001 /* Debug.xcconfig */;
+			baseConfigurationReference = A10000050000000000000001 /* Config/Debug.xcconfig */;
 			buildSettings = {
 				DEAD_CODE_STRIPPING = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
@@ -705,7 +752,7 @@
 		};
 		A10001250000000000000001 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = A10000060000000000000001 /* Release.xcconfig */;
+			baseConfigurationReference = A10000060000000000000001 /* Config/Release.xcconfig */;
 			buildSettings = {
 				DEAD_CODE_STRIPPING = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
@@ -717,7 +764,7 @@
 		};
 		A10001260000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = A10000050000000000000001 /* Debug.xcconfig */;
+			baseConfigurationReference = A10000050000000000000001 /* Config/Debug.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "";
 				DEAD_CODE_STRIPPING = YES;
@@ -732,7 +779,7 @@
 		};
 		A10001270000000000000001 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = A10000060000000000000001 /* Release.xcconfig */;
+			baseConfigurationReference = A10000060000000000000001 /* Config/Release.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "";
 				DEAD_CODE_STRIPPING = YES;
@@ -786,17 +833,17 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		DD0002000000000000000001 /* XCLocalSwiftPackageReference "SharedUI" */ = {
+/* Begin XCLocalSwiftPackageReference section */
+		DD0002000000000000000001 /* XCLocalSwiftPackageReference "../SharedUI" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../SharedUI;
 		};
-/* End XCRemoteSwiftPackageReference section */
+/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		DD0002010000000000000001 /* SharedUI */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = DD0002000000000000000001 /* XCLocalSwiftPackageReference "SharedUI" */;
+			package = DD0002000000000000000001 /* XCLocalSwiftPackageReference "../SharedUI" */;
 			productName = SharedUI;
 		};
 /* End XCSwiftPackageProductDependency section */

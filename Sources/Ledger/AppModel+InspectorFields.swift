@@ -60,8 +60,10 @@ extension AppModel {
     }
 
     func setInspectorFieldEnabled(fieldID: String, isEnabled: Bool) {
+        let coordinatePairIDs: Set<String> = ["exif-gps-lat", "exif-gps-lon"]
+        let targetIDs: Set<String> = coordinatePairIDs.contains(fieldID) ? coordinatePairIDs : [fieldID]
         let updated = activeInspectorFieldCatalog.map { entry in
-            guard entry.id == fieldID else { return entry }
+            guard targetIDs.contains(entry.id) else { return entry }
             return entry.withEnabled(isEnabled)
         }
         applyInspectorFieldCatalogUpdate(updated)
