@@ -23,6 +23,13 @@ struct LedgerSidebarItem: AppKitSidebarItemType {
         if case .favorite = kind { return true }
         return false
     }
+    var sidebarPromotionTargets: Set<LedgerSidebarSection> {
+        switch kind {
+        case .folder:   return [.pinned]
+        case .favorite: return [.recents]
+        default:        return []
+        }
+    }
 
     // Identity is the stable folder/location id — badgeText and title are display state
     // and must not participate in equality. Without this, a count loading asynchronously

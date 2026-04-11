@@ -65,6 +65,16 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         sc.onItemsReordered = { [weak self] reorderedItems in
             self?.applySidebarReorder(from: reorderedItems)
         }
+        sc.onItemPromotedToSection = { [weak self] item, targetSection in
+            guard let self,
+                  let sidebarItem = self.model.sidebarItems.first(where: { $0.id == item.id })
+            else { return }
+            switch targetSection {
+            case .pinned:   self.model.pinSidebarItem(sidebarItem)
+            case .recents:  self.model.unpinSidebarItem(sidebarItem)
+            case .sources:  break
+            }
+        }
 
         onPaneStateChanged = { [weak self] in
             guard let self else { return }
