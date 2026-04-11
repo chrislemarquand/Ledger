@@ -40,11 +40,13 @@ extension AppModel {
         }
 
         let normalized = normalizedWriteValue(rawValue, for: tag)
+        let isKeywordTag = tag.id == "xmp-subject" || tag.id == "iptc-keywords"
         var patches: [MetadataPatch] = [
             MetadataPatch(
                 key: tag.key,
                 namespace: tag.namespace,
-                newValue: normalized
+                newValue: normalized,
+                valueType: isKeywordTag ? .list : .string
             )
         ]
 
@@ -70,7 +72,8 @@ extension AppModel {
                 MetadataPatch(
                     key: "Keywords",
                     namespace: .iptc,
-                    newValue: normalized
+                    newValue: normalized,
+                    valueType: .list
                 )
             )
         } else if tag.id == "iptc-keywords" {
@@ -78,7 +81,8 @@ extension AppModel {
                 MetadataPatch(
                     key: "Subject",
                     namespace: .xmp,
-                    newValue: normalized
+                    newValue: normalized,
+                    valueType: .list
                 )
             )
         } else if tag.id == "exif-exposure-comp" {
@@ -141,6 +145,9 @@ extension AppModel {
 
     private func normalizedWriteValue(_ value: String, for tag: EditableTag) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if tag.id == "exif-exposure-program" || tag.id == "exif-flash" || tag.id == "exif-metering-mode" {
+            return normalizeEnumForWrite(trimmed, for: tag) ?? trimmed
+        }
         guard tag.id == "exif-shutter" else { return trimmed }
         guard !trimmed.isEmpty else { return trimmed }
 
@@ -151,7 +158,8 @@ extension AppModel {
                   let denominator = Double(parts[1]),
                   denominator != 0
             else {
-                return trimmed
+                // Incomplete fraction (e.g. "1/" with no denominator) — treat as empty.
+                return ""
             }
 
             return Self.compactDecimalString(numerator / denominator)
@@ -557,11 +565,22 @@ extension AppModel {
         }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        if tag.id == "xmp-rating", trimmed == "0" {
+            // An explicit Rating=0 is semantically identical to an absent tag.
+            // Normalise to "" so clearing the rating on a file that stores an
+            // explicit 0 (Lightroom, Capture One etc.) doesn't produce a false
+            // pending edit — the comparison in trackPendingEdit sees "" == "" and
+            // cancels rather than staging a redundant delete-tag patch.
+            return ""
+        }
         if tag.id == "exif-shutter" {
             return formatExposureTime(trimmed)
         }
         if tag.id == "exif-exposure-program" || tag.id == "exif-flash" || tag.id == "exif-metering-mode" {
-            return normalizeEnumRawValue(trimmed)
+            return normalizeEnumRawValue(trimmed, for: tag)
+        }
+        if tag.id == "xmp-copyright-status" {
+            return normalizeBooleanRawValue(trimmed)
         }
         if tag.id == "exif-aperture" || tag.id == "exif-focal" || tag.id == "exif-iso" || tag.id == "exif-exposure-comp" || tag.id == "xmp-exposure-bias" {
             return normalizeNumericRawValue(trimmed)
@@ -570,12 +589,75 @@ extension AppModel {
         return trimmed
     }
 
-    private func normalizeEnumRawValue(_ raw: String) -> String {
+    private func normalizeEnumRawValue(_ raw: String, for tag: EditableTag) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let number = Double(trimmed), number.isFinite else { return trimmed }
-        let rounded = number.rounded()
-        if abs(number - rounded) < 0.000_001 {
-            return String(Int(rounded))
+        guard !trimmed.isEmpty else { return "" }
+        if let number = Double(trimmed), number.isFinite {
+            let rounded = number.rounded()
+            if abs(number - rounded) < 0.000_001 {
+                return String(Int(rounded))
+            }
+        }
+        if let normalized = normalizeEnumForWrite(trimmed, for: tag), normalized != trimmed {
+            return normalized
+        }
+        return trimmed
+    }
+
+    private func normalizeEnumForWrite(_ raw: String, for tag: EditableTag) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+
+        if let number = Double(trimmed), number.isFinite {
+            let rounded = number.rounded()
+            if abs(number - rounded) < 0.000_001 {
+                return String(Int(rounded))
+            }
+        }
+
+        guard let options = pickerOptions(for: tag) else { return nil }
+        let normalizedRaw = canonicalEnumToken(trimmed)
+        guard !normalizedRaw.isEmpty else { return nil }
+
+        if let matched = options.first(where: { canonicalEnumToken($0.label) == normalizedRaw }) {
+            return matched.value
+        }
+        if let matched = options.first(where: { canonicalEnumToken($0.value) == normalizedRaw }) {
+            return matched.value
+        }
+        return nil
+    }
+
+    private func canonicalEnumToken(_ raw: String) -> String {
+        var token = raw.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { return "" }
+
+        token = token.replacingOccurrences(of: "&", with: " and ")
+        token = token.replacingOccurrences(of: "return not detected", with: "no return")
+        token = token.replacingOccurrences(of: "flash fired", with: "fired")
+        token = token.replacingOccurrences(of: "flash did not fire", with: "did not fire")
+
+        token = token.replacingOccurrences(
+            of: "[^a-z0-9]+",
+            with: " ",
+            options: .regularExpression
+        )
+        token = token.replacingOccurrences(
+            of: "\\s+",
+            with: " ",
+            options: .regularExpression
+        )
+        return token.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func normalizeBooleanRawValue(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowered = trimmed.lowercased()
+        if ["1", "true", "t", "yes", "y"].contains(lowered) {
+            return "True"
+        }
+        if ["0", "false", "f", "no", "n"].contains(lowered) {
+            return "False"
         }
         return trimmed
     }

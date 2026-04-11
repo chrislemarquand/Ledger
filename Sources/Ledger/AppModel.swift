@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import ExifEditCore
 import Foundation
 import OSLog
@@ -29,13 +30,6 @@ enum ThumbnailPipeline {
         ThumbnailService.fallbackIcon(for: fileURL, side: side)
     }
 
-    static func generateThumbnail(fileURL: URL, maxPixelSize: CGFloat) async -> NSImage? {
-        await ThumbnailService.generateThumbnail(fileURL: fileURL, maxPixelSize: maxPixelSize)
-    }
-
-    static func isLikelyImageFile(_ fileURL: URL) -> Bool {
-        ThumbnailService.isLikelyImageFile(fileURL)
-    }
 }
 
 enum AppBrand {
@@ -98,15 +92,6 @@ enum AppBrand {
     }
 }
 
-enum AppTheme {
-    static var accentNSColor: NSColor {
-        NSColor(named: "AccentColor") ?? .systemTeal
-    }
-
-    static var accentColor: Color {
-        Color(nsColor: accentNSColor)
-    }
-}
 
 protocol SidebarFavoritesStoreProtocol {
     func loadFavorites() throws -> [SidebarFavorite]
@@ -268,11 +253,14 @@ final class AppModel: ObservableObject {
     enum FileActionID: CaseIterable {
         case openInDefaultApp
         case sendToPhotos
+        case sendToLightroom
         case sendToLightroomClassic
         case refreshMetadata
         case applyMetadataChanges
         case clearMetadataChanges
         case restoreFromLastBackup
+        case batchRenameSelection
+        case batchRenameFolder
     }
 
     struct FileActionState: Hashable {
@@ -285,6 +273,7 @@ final class AppModel: ObservableObject {
     enum BrowserSort: String, CaseIterable, Identifiable {
         case name
         case created
+        case modified
         case size
         case kind
 
@@ -320,28 +309,50 @@ final class AppModel: ObservableObject {
             .init(id: "exif-model", namespace: .exif, key: "Model", label: "Model", section: "Camera"),
             .init(id: "exif-serial", namespace: .exif, key: "SerialNumber", label: "Serial Number", section: "Camera"),
             .init(id: "exif-lens", namespace: .exif, key: "LensModel", label: "Lens Model", section: "Camera"),
+            .init(id: "exif-lens-serial", namespace: .exif, key: "LensSerialNumber", label: "Lens Serial Number", section: "Camera"),
             .init(id: "exif-aperture", namespace: .exif, key: "FNumber", label: "Aperture", section: "Capture"),
             .init(id: "exif-shutter", namespace: .exif, key: "ExposureTime", label: "Shutter Speed", section: "Capture"),
             .init(id: "exif-iso", namespace: .exif, key: "ISO", label: "ISO", section: "Capture"),
             .init(id: "exif-focal", namespace: .exif, key: "FocalLength", label: "Focal Length", section: "Capture"),
             .init(id: "exif-exposure-program", namespace: .exif, key: "ExposureProgram", label: "Exposure Program", section: "Capture"),
+            .init(id: "exif-exposure-mode", namespace: .exif, key: "ExposureMode", label: "Exposure Mode", section: "Capture"),
             .init(id: "exif-flash", namespace: .exif, key: "Flash", label: "Flash", section: "Capture"),
             .init(id: "exif-metering-mode", namespace: .exif, key: "MeteringMode", label: "Metering Mode", section: "Capture"),
+            .init(id: "exif-white-balance", namespace: .exif, key: "WhiteBalance", label: "White Balance", section: "Capture"),
+            .init(id: "exif-scene-capture-type", namespace: .exif, key: "SceneCaptureType", label: "Scene Capture Type", section: "Capture"),
             .init(id: "exif-exposure-comp", namespace: .exif, key: "ExposureCompensation", label: "Exposure Compensation", section: "Capture"),
-            .init(id: "datetime-modified", namespace: .exif, key: "ModifyDate", label: "Date Time", section: "Date and Time"),
-            .init(id: "datetime-digitized", namespace: .exif, key: "CreateDate", label: "Date Time Digitized", section: "Date and Time"),
-            .init(id: "datetime-created", namespace: .exif, key: "DateTimeOriginal", label: "Date Time Original", section: "Date and Time"),
+            .init(id: "datetime-created", namespace: .exif, key: "DateTimeOriginal", label: "Original", section: "Date and Time"),
+            .init(id: "datetime-digitized", namespace: .exif, key: "CreateDate", label: "Digitised", section: "Date and Time"),
+            .init(id: "datetime-modified", namespace: .exif, key: "ModifyDate", label: "Modified", section: "Date and Time"),
             .init(id: "exif-gps-lat", namespace: .exif, key: "GPSLatitude", label: "Latitude", section: "Location"),
             .init(id: "exif-gps-lon", namespace: .exif, key: "GPSLongitude", label: "Longitude", section: "Location"),
             .init(id: "exif-gps-alt", namespace: .exif, key: "GPSAltitude", label: "Altitude", section: "Location"),
             .init(id: "exif-gps-direction", namespace: .exif, key: "GPSImgDirection", label: "Direction", section: "Location"),
+            .init(id: "iptc-sublocation",  namespace: .xmpIptcCore,  key: "Location",              label: "Sublocation",      section: "Location"),
+            .init(id: "iptc-city",         namespace: .xmpPhotoshop, key: "City",                  label: "City",             section: "Location"),
+            .init(id: "iptc-state",        namespace: .xmpPhotoshop, key: "State",                 label: "State / Province", section: "Location"),
+            .init(id: "iptc-country",      namespace: .xmpPhotoshop, key: "Country",               label: "Country",          section: "Location"),
+            .init(id: "iptc-country-code", namespace: .xmpIptcCore,  key: "CountryCode",           label: "Country Code",     section: "Location"),
             .init(id: "xmp-title", namespace: .xmp, key: "Title", label: "Title", section: "Descriptive"),
             .init(id: "xmp-description", namespace: .xmp, key: "Description", label: "Description", section: "Descriptive"),
             .init(id: "xmp-subject", namespace: .xmp, key: "Subject", label: "Keywords", section: "Descriptive"),
+            .init(id: "xmp-headline",      namespace: .xmpPhotoshop, key: "Headline",              label: "Headline",         section: "Editorial"),
+            .init(id: "xmp-caption-writer", namespace: .xmpPhotoshop, key: "CaptionWriter",        label: "Caption Writer",   section: "Editorial"),
+            .init(id: "xmp-credit",         namespace: .xmpPhotoshop, key: "Credit",               label: "Credit",           section: "Editorial"),
+            .init(id: "xmp-source",         namespace: .xmpPhotoshop, key: "Source",               label: "Source",           section: "Editorial"),
+            .init(id: "xmp-instructions",   namespace: .xmpPhotoshop, key: "Instructions",         label: "Instructions",     section: "Editorial"),
+            .init(id: "xmp-job-id",         namespace: .xmpPhotoshop, key: "TransmissionReference", label: "Job ID",          section: "Editorial"),
             .init(id: "exif-artist", namespace: .exif, key: "Artist", label: "Artist", section: "Rights"),
             .init(id: "exif-copyright", namespace: .exif, key: "Copyright", label: "Copyright", section: "Rights"),
             .init(id: "xmp-creator", namespace: .xmp, key: "Creator", label: "Creator", section: "Rights"),
+            .init(id: "xmp-copyright-status", namespace: .xmpRights, key: "Marked",          label: "Copyright Status", section: "Rights"),
+            .init(id: "xmp-usage-terms",      namespace: .xmpRights, key: "UsageTerms",      label: "Usage Terms",      section: "Rights"),
+            .init(id: "xmp-copyright-url",    namespace: .xmpRights, key: "WebStatement",    label: "Copyright URL",    section: "Rights"),
         ]
+
+        static let rating = EditableTag(id: "xmp-rating", namespace: .xmp,   key: "Rating", label: "Star Rating",  section: "Rating")
+        static let pick   = EditableTag(id: "xmp-pick",   namespace: .xmpDM, key: "Pick",   label: "Flag",         section: "Rating")
+        static let label  = EditableTag(id: "xmp-label",  namespace: .xmp,   key: "Label",  label: "Colour Label", section: "Rating")
     }
 
     struct FieldCatalogEntry: Hashable, Identifiable {
@@ -426,6 +437,7 @@ final class AppModel: ObservableObject {
     struct PendingEditState: Equatable {
         let pendingEditsByFile: [URL: [EditableTag: StagedEditRecord]]
         let pendingImageOpsByFile: [URL: [StagedImageOperation]]
+        let pendingRenameByFile: [URL: String]
     }
 
     @Published var sidebarItems: [SidebarItem] = []
@@ -466,6 +478,9 @@ final class AppModel: ObservableObject {
     @Published var keepBackups = true {
         didSet { UserDefaults.standard.set(keepBackups, forKey: Self.keepBackupsKey) }
     }
+    @Published var backupRetentionCount: Int = 20 {
+        didSet { UserDefaults.standard.set(backupRetentionCount, forKey: Self.backupRetentionCountKey) }
+    }
     @Published var draftValues: [EditableTag: String] = [:]
     @Published var baselineValues: [EditableTag: String?] = [:]
     @Published var presets: [MetadataPreset] = []
@@ -479,6 +494,7 @@ final class AppModel: ObservableObject {
             notifyInspectorDidChange()
         }
     }
+    @Published var activeWelcomePresentation: AppWelcomePresentation?
     @Published var isManagePresetsPresented = false {
         didSet {
             notifyInspectorDidChange()
@@ -487,6 +503,17 @@ final class AppModel: ObservableObject {
     @Published var pendingImportSourceKind: ImportSourceKind? {
         didSet { notifyInspectorDidChange() }
     }
+    @Published var pendingBatchRenameScope: BatchRenameScope?
+    var pendingBatchRenameMetadata: [URL: FileMetadataSnapshot] = [:]
+    @Published var pendingDateTimeAdjustSession: DateTimeAdjustSession?
+    @Published var pendingLocationAdjustSession: LocationAdjustSession?
+    var locationPersistedCoordinates: Bool = true
+    var locationPersistedAdvancedFields: Set<LocationAdvancedField> = []
+    @Published var isRenaming = false
+    @Published var renameProgress: (completed: Int, total: Int) = (0, 0)
+    /// Maps current on-disk URL → proposed final filename (basename + ext).
+    /// Populated when the user stages a batch rename; cleared on apply or discard.
+    @Published var pendingRenameByFile: [URL: String] = [:]
     // Search UI removed for v1.0 (name-only, aesthetically wrong). Property kept
     // so filteredBrowserItems/rebuildFilteredBrowserItems can be wired up for R14
     // (metadata-aware search) without a data-model rewrite.
@@ -518,12 +545,17 @@ final class AppModel: ObservableObject {
 
     @Published var pendingEditsByFile: [URL: [EditableTag: StagedEditRecord]] = [:]
     @Published var pendingImageOpsByFile: [URL: [StagedImageOperation]] = [:]
+
+    var pendingEditsCount: Int {
+        Set(pendingEditsByFile.keys).union(pendingImageOpsByFile.keys).count
+    }
+
+    private var badgeObservers: [AnyCancellable] = []
     /// Values written to disk but not yet confirmed by an exiftool re-read.
     /// Sits between pendingEditsByFile and availableSnapshot in the inspector priority order
     /// so the inspector shows the applied value during the reload gap rather than the old on-disk snapshot.
     var pendingCommitsByFile: [URL: [EditableTag: String]] = [:]
     @Published var inspectorPreviewImages: [URL: NSImage] = [:]
-    @Published var inspectorPreviewRenderedSide: [URL: CGFloat] = [:]
     var mixedTags: Set<EditableTag> = []
     var editSessionSnapshotsByTagID: [String: EditSessionSnapshot] = [:]
     /// Set to true the first time selectSidebar(id:) is called, meaning the user
@@ -532,6 +564,8 @@ final class AppModel: ObservableObject {
     var favoriteItems: [SidebarItem] = []
     var locationItems: [SidebarItem] = []
     var recentLocationLastOpenedAtByID: [String: Date] = [:]
+    /// Timestamps captured at pin-time so a drag back to Recents restores the original sort position.
+    var pinnedFolderPreservedLastOpenedAt: [String: Date] = [:]
     var folderMetadataLoadTask: Task<Void, Never>?
     var folderMetadataLoadID = UUID()
     var browserItemHydrationTask: Task<Void, Never>?
@@ -557,7 +591,7 @@ final class AppModel: ObservableObject {
     let favoritesStore: SidebarFavoritesStoreProtocol
     let recentLocationsStore: RecentLocationsStoreProtocol
     var lastOperationIDs: [UUID] = []
-    var lastOperationFilesByID: [UUID: URL] = [:]
+    var lastOperationFilesByID: [UUID: Set<URL>] = [:]
     var statusResetTask: Task<Void, Never>?
     var inspectorDebounceTask: Task<Void, Never>?
     var metadataUndoStack: [PendingEditState] = []
@@ -579,6 +613,7 @@ final class AppModel: ObservableObject {
     private static let confirmBeforeApplyKey = "ui.settings.confirm.before.apply"
     private static let autoRefreshAfterApplyKey = "ui.settings.auto.refresh.after.apply"
     private static let keepBackupsKey = "ui.settings.keep.backups"
+    private static let backupRetentionCountKey = "ui.settings.backup.retention.count"
     static let inspectorFieldVisibilityKey = "ui.settings.inspector.field.visibility"
     static let legacyUserDefaultsPrefixes = ["Logbook"]
     static let selectionMetadataBatchSize = 120
@@ -591,7 +626,9 @@ final class AppModel: ObservableObject {
     static let initialThumbnailWarmupSide: CGFloat = 180
     static let inspectorPreviewTargetSide: CGFloat = 700
     static let inspectorPreviewFullSide: CGFloat = 1400
-    static let maxInspectorPreviewCacheEntries = 600
+    static let maxInspectorPreviewCacheEntries = 48
+    static let previewPreloadNeighborRadius = 10
+    static let maxPreviewPreloadCandidates = 64
     static let maxRecentLocations = 20
     nonisolated static let supportedImageExtensions: Set<String> = [
         "jpg", "jpeg", "tif", "tiff", "png", "heic", "heif", "dng", "arw", "cr2", "cr3", "nef", "orf", "rw2", "raf"
@@ -611,6 +648,9 @@ final class AppModel: ObservableObject {
 
     var hasUnsavedEdits: Bool {
         if !pendingEditsByFile.isEmpty {
+            return true
+        }
+        if !pendingRenameByFile.isEmpty {
             return true
         }
         return pendingImageOpsByFile.values.contains { !Self.normalizeStagedImageOperations($0).isEmpty }
@@ -710,6 +750,11 @@ final class AppModel: ObservableObject {
             defaults: defaults,
             as: Bool.self
         ) ?? true
+        backupRetentionCount = Self.firstUserDefaultsValue(
+            for: Self.backupRetentionCountKey,
+            defaults: defaults,
+            as: Int.self
+        ) ?? 20
         let visibility = Self.firstUserDefaultsValue(
             for: Self.inspectorFieldVisibilityKey,
             defaults: defaults,
@@ -729,10 +774,17 @@ final class AppModel: ObservableObject {
             selectedPresetID = selectedPresetUUID
         }
         loadPresets()
-        Task.detached(priority: .background) { [backupDirectory] in
-            try? BackupManager(baseDirectory: backupDirectory).pruneOperations(keepLast: 20)
+        let retentionCount = backupRetentionCount
+        Task.detached(priority: .background) { [backupDirectory, retentionCount] in
+            try? BackupManager(baseDirectory: backupDirectory).pruneOperations(keepLast: retentionCount)
         }
 
+        $pendingEditsByFile.combineLatest($pendingImageOpsByFile)
+            .sink { edits, imageOps in
+                let count = Set(edits.keys).union(imageOps.keys).count
+                NSApp?.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
+            }
+            .store(in: &badgeObservers)
     }
 
 

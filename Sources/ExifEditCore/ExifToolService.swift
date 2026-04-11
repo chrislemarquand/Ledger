@@ -31,6 +31,25 @@ public extension Notification.Name {
 }
 
 public struct ExifToolService: ExifToolServiceProtocol {
+    private final class PipeAccumulator: @unchecked Sendable {
+        private let lock = NSLock()
+        private var buffer = Data()
+
+        func append(_ data: Data) {
+            lock.lock()
+            buffer.append(data)
+            lock.unlock()
+        }
+
+        func finalize(with trailingData: Data) -> Data {
+            lock.lock()
+            buffer.append(trailingData)
+            let data = buffer
+            lock.unlock()
+            return data
+        }
+    }
+
     private let executableURL: URL
     private let commandBuilder: ExifToolCommandBuilder
     private let readTimeout: TimeInterval
@@ -171,6 +190,18 @@ public struct ExifToolService: ExifToolServiceProtocol {
         if normalized.hasPrefix("IPTC") {
             return .iptc
         }
+        if normalized.hasPrefix("XMP-XMPDM") {
+            return .xmpDM
+        }
+        if normalized.hasPrefix("XMP-PHOTOSHOP") {
+            return .xmpPhotoshop
+        }
+        if normalized.hasPrefix("XMP-IPTCCORE") {
+            return .xmpIptcCore
+        }
+        if normalized.hasPrefix("XMP-XMPRIGHTS") {
+            return .xmpRights
+        }
         if normalized.hasPrefix("XMP") {
             return .xmp
         }
@@ -251,6 +282,20 @@ public struct ExifToolService: ExifToolServiceProtocol {
         let stderr = Pipe()
         process.standardOutput = stdout
         process.standardError = stderr
+        let stdoutAccumulator = PipeAccumulator()
+        let stderrAccumulator = PipeAccumulator()
+        let stdoutHandle = stdout.fileHandleForReading
+        let stderrHandle = stderr.fileHandleForReading
+        stdoutHandle.readabilityHandler = { handle in
+            let data = handle.availableData
+            guard !data.isEmpty else { return }
+            stdoutAccumulator.append(data)
+        }
+        stderrHandle.readabilityHandler = { handle in
+            let data = handle.availableData
+            guard !data.isEmpty else { return }
+            stderrAccumulator.append(data)
+        }
 
         try process.run()
         let deadline = startedAt.addingTimeInterval(timeout(for: kind))
@@ -269,8 +314,10 @@ public struct ExifToolService: ExifToolServiceProtocol {
         }
         process.waitUntilExit()
 
-        let stdoutData = stdout.fileHandleForReading.readDataToEndOfFile()
-        let stderrData = stderr.fileHandleForReading.readDataToEndOfFile()
+        stdoutHandle.readabilityHandler = nil
+        stderrHandle.readabilityHandler = nil
+        let stdoutData = stdoutAccumulator.finalize(with: stdoutHandle.readDataToEndOfFile())
+        let stderrData = stderrAccumulator.finalize(with: stderrHandle.readDataToEndOfFile())
         let stdoutText = String(decoding: stdoutData, as: UTF8.self)
         var stderrText = String(decoding: stderrData, as: UTF8.self)
         if timedOut {

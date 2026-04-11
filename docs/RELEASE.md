@@ -32,9 +32,29 @@ export NOTARY_PROFILE="EXIFEDIT_NOTARY"
 ./scripts/release/release.sh
 ```
 
+Before final v1.2 release packaging, run through `docs/v1.2-performance-streamlining-plan.md` (especially payload-size and runtime sanity checks).
+
 The final artifact is produced at:
 
 - `build/dmg/Ledger.dmg` (or `build/dmg/<AppName>.dmg` when `APP_NAME` is overridden)
+
+## Local Unsigned Release Build (No Developer ID / Notary)
+
+For local validation without signing/notarization:
+
+```bash
+xcodebuild \
+  -project Ledger.xcodeproj \
+  -scheme Ledger \
+  -configuration Release \
+  -derivedDataPath /tmp/LedgerLocalRelease \
+  CODE_SIGNING_ALLOWED=NO \
+  build
+```
+
+App output:
+
+- `/tmp/LedgerLocalRelease/Build/Products/Release/Ledger.app`
 
 ## Script breakdown
 

@@ -2,6 +2,7 @@ import Foundation
 
 public protocol BackupManaging: Sendable {
     func createBackup(operationID: UUID, files: [URL]) throws -> URL
+    func recordRenamedOutputs(operationID: UUID, renamedPaths: [URL]) throws
     func restoreBackup(operationID: UUID) throws -> OperationResult
     func pruneOperations(keepLast count: Int) throws
 }
@@ -15,6 +16,9 @@ public struct BackupManager: BackupManaging {
 
         public let operationID: UUID
         public let entries: [Entry]
+        /// Paths written by a batch rename operation; populated after rename completes.
+        /// Absent in legacy manifests (decodes as nil).
+        public var renamedOutputPaths: [String]?
     }
 
     private let baseDirectory: URL
@@ -56,6 +60,16 @@ public struct BackupManager: BackupManaging {
         return operationFolder
     }
 
+    public func recordRenamedOutputs(operationID: UUID, renamedPaths: [URL]) throws {
+        let folder = baseDirectory.appendingPathComponent(operationID.uuidString, isDirectory: true)
+        let manifestURL = folder.appendingPathComponent("manifest.json")
+        let data = try Data(contentsOf: manifestURL)
+        var manifest = try JSONDecoder().decode(BackupManifest.self, from: data)
+        manifest.renamedOutputPaths = renamedPaths.map(\.path)
+        let updated = try JSONEncoder().encode(manifest)
+        try updated.write(to: manifestURL, options: .atomic)
+    }
+
     public func restoreBackup(operationID: UUID) throws -> OperationResult {
         let startedAt = Date()
         let folder = baseDirectory.appendingPathComponent(operationID.uuidString, isDirectory: true)
@@ -67,6 +81,17 @@ public struct BackupManager: BackupManaging {
 
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder().decode(BackupManifest.self, from: data)
+
+        // If this was a rename operation, delete the renamed outputs first so
+        // the originals can be restored to their original paths.
+        if let renamedPaths = manifest.renamedOutputPaths {
+            for path in renamedPaths {
+                let url = URL(fileURLWithPath: path)
+                if FileManager.default.fileExists(atPath: url.path) {
+                    try? FileManager.default.removeItem(at: url)
+                }
+            }
+        }
 
         var succeeded: [URL] = []
         var failed: [FileError] = []

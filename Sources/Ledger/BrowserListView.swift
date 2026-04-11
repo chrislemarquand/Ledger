@@ -3,30 +3,131 @@ import ExifEditCore
 import SharedUI
 
 @MainActor
-final class BrowserListViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
+enum BrowserContextMenuBuilder {
+    struct Actions {
+        let open: Selector
+        let revealInFinder: Selector
+        let apply: Selector
+        let refresh: Selector
+        let clear: Selector
+        let restore: Selector
+    }
+
+    static func makeMenu(
+        target: AnyObject,
+        model: AppModel,
+        targetURLs: [URL],
+        actions: Actions
+    ) -> NSMenu {
+        let openState = model.fileActionState(for: .openInDefaultApp, targetURLs: targetURLs)
+        let refreshState = model.fileActionState(for: .refreshMetadata, targetURLs: targetURLs)
+        let applyState = model.fileActionState(for: .applyMetadataChanges, targetURLs: targetURLs)
+        let clearState = model.fileActionState(for: .clearMetadataChanges, targetURLs: targetURLs)
+        let restoreState = model.fileActionState(for: .restoreFromLastBackup, targetURLs: targetURLs)
+        let applyTitle = model.applyMetadataSelectionTitle(for: targetURLs)
+
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        menu.addItem(ContextMenuSupport.makeMenuItem(
+            title: openState.title,
+            action: actions.open,
+            target: target,
+            symbolName: openState.symbolName,
+            isEnabled: openState.isEnabled
+        ))
+        menu.addItem(ContextMenuSupport.makeMenuItem(
+            title: "Reveal in Finder",
+            action: actions.revealInFinder,
+            target: target,
+            symbolName: "folder",
+            isEnabled: !targetURLs.isEmpty
+        ))
+        menu.addItem(.separator())
+        menu.addItem(ContextMenuSupport.makeMenuItem(
+            title: applyTitle,
+            action: actions.apply,
+            target: target,
+            symbolName: applyState.symbolName,
+            isEnabled: applyState.isEnabled
+        ))
+        menu.addItem(ContextMenuSupport.makeMenuItem(
+            title: refreshState.title,
+            action: actions.refresh,
+            target: target,
+            symbolName: refreshState.symbolName,
+            isEnabled: refreshState.isEnabled
+        ))
+        menu.addItem(ContextMenuSupport.makeMenuItem(
+            title: clearState.title,
+            action: actions.clear,
+            target: target,
+            symbolName: clearState.symbolName,
+            isEnabled: clearState.isEnabled
+        ))
+        menu.addItem(ContextMenuSupport.makeMenuItem(
+            title: restoreState.title,
+            action: actions.restore,
+            target: target,
+            symbolName: restoreState.symbolName,
+            isEnabled: restoreState.isEnabled
+        ))
+        return menu
+    }
+}
+
+@MainActor
+final class BrowserListViewController: NSViewController, SharedBrowserListHosting {
     private var model: AppModel
     private var items: [AppModel.BrowserItem]
 
-    private let scrollView = NSScrollView()
-    private let tableView = BrowserListTableView(frame: .zero)
+    private let sharedListController: SharedBrowserListViewController
+    private var scrollView: NSScrollView { sharedListController.scrollView }
+    private var tableView: SharedBrowserListTableView { sharedListController.tableView }
 
     private var isApplyingProgrammaticSelection = false
-    private var isApplyingProgrammaticSort = false
     private var lastThumbnailInvalidationToken = UUID()
     private var pendingInvalidatedThumbnailURLs: Set<URL> = []
     private var pendingThumbnailRefreshURLs: Set<URL> = []
     private var isRenderingState = false
     private var lastRenderedItemURLs: [URL] = []
+    private var lastRenderedNameSignatures: [RowNameSignature] = []
+    private var lastRenderedDetailSignatures: [RowDetailSignature] = []
     private var lastRenderedViewMode: AppModel.BrowserViewMode?
     private var contextMenuTargetURLs: [URL] = []
-    private var didApplyInitialColumnFit = false
     private var browserFocusObserver: NSObjectProtocol?
     private var viewModeObserver: NSObjectProtocol?
+    private var pendingSelectionAdoptionTask: Task<Void, Never>?
+
+    private struct RowNameSignature: Equatable {
+        let url: URL
+        let displayName: String
+        let isPendingRename: Bool
+        let hasPendingEdits: Bool
+        let imageOperations: [AppModel.StagedImageOperation]
+    }
+
+    private struct RowDetailSignature: Equatable {
+        let url: URL
+        let values: [String]
+    }
 
     init(model: AppModel, items: [AppModel.BrowserItem]) {
         self.model = model
         self.items = items
         self.lastThumbnailInvalidationToken = model.browserThumbnailInvalidationToken
+        self.sharedListController = SharedBrowserListViewController(
+            columns: Self.sharedColumns(from: ListColumnDefinition.all),
+            persistence: SharedListPersistenceConfig(
+                autosaveName: "\(AppBrand.identifierPrefix).BrowserList",
+                visibilityDefaultsKey: "\(AppBrand.identifierPrefix).listColumns.visible",
+                initialFitDefaultsKey: "\(AppBrand.identifierPrefix).listColumns.initialFitApplied"
+            ),
+            layoutConfig: SharedListLayoutConfig(
+                primaryColumnID: ListColumnDefinition.idName,
+                rowHeight: UIMetrics.List.rowHeight,
+                hasHorizontalScroller: true
+            )
+        )
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -43,7 +144,6 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
     override func viewDidLoad() {
         super.viewDidLoad()
         configureList()
-        updateListPresentationState(hasItems: !items.isEmpty)
         browserFocusObserver = NotificationCenter.default.addObserver(
             forName: .browserDidRequestFocus,
             object: nil,
@@ -66,6 +166,8 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
 
     override func viewWillDisappear() {
         super.viewWillDisappear()
+        pendingSelectionAdoptionTask?.cancel()
+        pendingSelectionAdoptionTask = nil
         let visibleRows = tableView.rows(in: tableView.visibleRect)
         if visibleRows.length > 0 {
             let nameColumn = tableView.column(withIdentifier: NSUserInterfaceItemIdentifier("name"))
@@ -88,19 +190,6 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
             NotificationCenter.default.removeObserver(viewModeObserver)
             self.viewModeObserver = nil
         }
-    }
-
-    override func viewDidLayout() {
-        super.viewDidLayout()
-        syncTableWidthToViewportIfNeeded()
-        applyInitialColumnFitIfNeeded()
-        updateListPresentationState(hasItems: !items.isEmpty)
-    }
-
-    override func viewDidAppear() {
-        super.viewDidAppear()
-        syncTableWidthToViewportIfNeeded()
-        applyInitialColumnFitIfNeeded()
     }
 
     func update(model: AppModel, items: [AppModel.BrowserItem]) {
@@ -126,10 +215,12 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
             }
         }
 
-        syncTableWidthToViewportIfNeeded()
-        applyInitialColumnFitIfNeeded()
-        updateListPresentationState(hasItems: !items.isEmpty)
-        if hasListChanged() {
+        let currentURLs = items.map(\.url)
+        let detailColumnIDs = visibleDetailColumnIDs()
+        let currentNameSignatures = items.map { makeNameSignature(for: $0) }
+        let currentDetailSignatures = items.map { makeDetailSignature(for: $0, detailColumnIDs: detailColumnIDs) }
+
+        if hasListChanged(currentURLs) {
             // Clear stale row selection before reloading. NSTableView preserves
             // selection by row index across reloadData(), so a prior row 0 selection
             // survives into the new folder's data. Combined with selectedFileURLs
@@ -139,53 +230,66 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
             isApplyingProgrammaticSelection = true
             tableView.selectRowIndexes([], byExtendingSelection: false)
             isApplyingProgrammaticSelection = false
-            tableView.reloadData()
+            sharedListController.reloadData()
         } else {
-            if pendingInvalidatedThumbnailURLs.isEmpty {
-                tableView.reloadData(forRowIndexes: IndexSet(integersIn: 0 ..< items.count), columnIndexes: IndexSet(integersIn: 0 ..< tableView.numberOfColumns))
-            } else {
-                let rowsToReload = IndexSet(items.enumerated().compactMap { index, item in
-                    pendingInvalidatedThumbnailURLs.contains(item.url) ? index : nil
-                })
-                if rowsToReload.isEmpty {
-                    tableView.reloadData(forRowIndexes: IndexSet(integersIn: 0 ..< items.count), columnIndexes: IndexSet(integersIn: 0 ..< tableView.numberOfColumns))
+            let rowsNeedingNameReload = IndexSet(items.enumerated().compactMap { index, item in
+                if pendingInvalidatedThumbnailURLs.contains(item.url) || pendingThumbnailRefreshURLs.contains(item.url) {
+                    return index
+                }
+                guard index < lastRenderedNameSignatures.count else { return index }
+                return currentNameSignatures[index] != lastRenderedNameSignatures[index] ? index : nil
+            })
+            let rowsNeedingDetailReload = IndexSet(items.indices.compactMap { index in
+                guard index < lastRenderedDetailSignatures.count else { return index }
+                return currentDetailSignatures[index] != lastRenderedDetailSignatures[index] ? index : nil
+            })
+
+            if !rowsNeedingNameReload.isEmpty {
+                let nameColumn = tableView.column(withIdentifier: NSUserInterfaceItemIdentifier("name"))
+                if nameColumn >= 0 {
+                    tableView.reloadData(forRowIndexes: rowsNeedingNameReload, columnIndexes: IndexSet(integer: nameColumn))
                 } else {
-                    let nameColumn = tableView.column(withIdentifier: NSUserInterfaceItemIdentifier("name"))
-                    if nameColumn >= 0 {
-                        tableView.reloadData(forRowIndexes: rowsToReload, columnIndexes: IndexSet(integer: nameColumn))
-                    } else {
-                        tableView.reloadData()
-                    }
+                    tableView.reloadData()
+                }
+            }
+            if !rowsNeedingDetailReload.isEmpty && !detailColumnIDs.isEmpty {
+                let detailColumnIndexes = IndexSet(detailColumnIDs.compactMap { columnID in
+                    let index = tableView.column(withIdentifier: NSUserInterfaceItemIdentifier(columnID))
+                    return index >= 0 ? index : nil
+                })
+                if !detailColumnIndexes.isEmpty {
+                    tableView.reloadData(forRowIndexes: rowsNeedingDetailReload, columnIndexes: detailColumnIndexes)
                 }
             }
         }
         pendingInvalidatedThumbnailURLs = []
+        lastRenderedNameSignatures = currentNameSignatures
+        lastRenderedDetailSignatures = currentDetailSignatures
 
         if shouldAdoptTableSelectionIntoModel() {
-            let urls = Set(
-                tableView.selectedRowIndexes.compactMap { row -> URL? in
-                    guard row >= 0, row < items.count else { return nil }
-                    return items[row].url
-                }
-            )
+            let urls = currentTableSelectionURLs()
             if !urls.isEmpty {
-                let focusedURL: URL?
-                if tableView.selectedRow >= 0, tableView.selectedRow < items.count {
-                    focusedURL = items[tableView.selectedRow].url
-                } else {
-                    focusedURL = nil
-                }
+                let focusedURL = currentFocusedTableSelectionURL()
+                pendingSelectionAdoptionTask?.cancel()
                 // Defer out of the SwiftUI update cycle. setSelectionFromList mutates
                 // @Published selectedFileURLs which causes B14 when called synchronously
                 // from updateNSViewController (inside SwiftUI's render pass).
-                Task { @MainActor [weak self] in
+                pendingSelectionAdoptionTask = Task { @MainActor [weak self] in
                     guard let self else { return }
+                    defer { self.pendingSelectionAdoptionTask = nil }
+                    guard !Task.isCancelled else { return }
+                    guard self.model.selectedFileURLs.isEmpty else { return }
+                    guard self.currentTableSelectionURLs() == urls else { return }
+                    guard self.currentFocusedTableSelectionURL() == focusedURL else { return }
                     self.model.setSelectionFromList(urls, focusedURL: focusedURL)
                     self.updateQuickLookSourceFrameFromCurrentSelection()
                 }
             }
             return
         }
+
+        pendingSelectionAdoptionTask?.cancel()
+        pendingSelectionAdoptionTask = nil
 
         let selectedIndexes = IndexSet(
             items.enumerated().compactMap { index, item in
@@ -210,10 +314,7 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
 
     private func syncSortIndicator() {
         let expected = NSSortDescriptor(key: model.browserSort.rawValue, ascending: model.browserSortAscending)
-        guard tableView.sortDescriptors.first != expected else { return }
-        isApplyingProgrammaticSort = true
-        tableView.sortDescriptors = [expected]
-        isApplyingProgrammaticSort = false
+        sharedListController.setSortDescriptor(expected)
     }
 
     private func shouldAdoptTableSelectionIntoModel() -> Bool {
@@ -224,17 +325,18 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
         return responderView === tableView || responderView.isDescendant(of: tableView)
     }
 
-    private func focusListForKeyboardNavigation() {
-        guard model.browserViewMode == .list else { return }
-        guard let window = view.window else { return }
-        window.makeFirstResponder(tableView)
+    private func currentTableSelectionURLs() -> Set<URL> {
+        Set(
+            tableView.selectedRowIndexes.compactMap { row -> URL? in
+                guard row >= 0, row < items.count else { return nil }
+                return items[row].url
+            }
+        )
     }
 
-    private func scrollSelectionIntoView() {
-        guard model.browserViewMode == .list else { return }
-        guard let primary = model.primarySelectionURL,
-              let row = items.firstIndex(where: { $0.url == primary }) else { return }
-        tableView.scrollRowToVisible(row)
+    private func currentFocusedTableSelectionURL() -> URL? {
+        guard tableView.selectedRow >= 0, tableView.selectedRow < items.count else { return nil }
+        return items[tableView.selectedRow].url
     }
 
     private func focusInspectorFromBrowser() {
@@ -247,134 +349,81 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
         )
     }
 
-    private func configureList() {
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
-        scrollView.autohidesScrollers = true
-        scrollView.borderType = .noBorder
-        scrollView.drawsBackground = false
+    private func focusListForKeyboardNavigation() {
+        guard model.browserViewMode == .list else { return }
+        guard let window = view.window else { return }
+        window.makeFirstResponder(tableView)
+    }
 
-        tableView.translatesAutoresizingMaskIntoConstraints = true
-        tableView.frame = NSRect(origin: .zero, size: scrollView.contentView.bounds.size)
-        tableView.autoresizingMask = [.width]
-        tableView.usesAutomaticRowHeights = false
-        tableView.rowHeight = UIMetrics.List.rowHeight
-        tableView.usesAlternatingRowBackgroundColors = true
-        tableView.headerView = NSTableHeaderView()
-        tableView.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
-        tableView.allowsColumnResizing = true
-        tableView.allowsMultipleSelection = true
-        tableView.allowsEmptySelection = true
-        tableView.focusRingType = .none
-        tableView.gridStyleMask = []
-        tableView.backgroundColor = .clear
-        tableView.selectionHighlightStyle = .regular
+    func clearVisualSelection() {
+        pendingSelectionAdoptionTask?.cancel()
+        pendingSelectionAdoptionTask = nil
+        isApplyingProgrammaticSelection = true
+        tableView.selectRowIndexes([], byExtendingSelection: false)
+        isApplyingProgrammaticSelection = false
+    }
+
+    private func scrollSelectionIntoView() {
+        guard model.browserViewMode == .list else { return }
+        guard let primary = model.primarySelectionURL,
+              let row = items.firstIndex(where: { $0.url == primary }) else { return }
+        tableView.scrollRowToVisible(row)
+    }
+
+    private func configureList() {
+        sharedListController.host = self
+        addChild(sharedListController)
+        let sharedView = sharedListController.view
+        sharedView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(sharedView)
+        NSLayoutConstraint.activate([
+            sharedView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            sharedView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            sharedView.topAnchor.constraint(equalTo: view.topAnchor),
+            sharedView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+
         tableView.doubleAction = #selector(doubleClicked(_:))
         tableView.target = self
-        tableView.delegate = self
-        tableView.dataSource = self
 
-        tableView.onBackgroundClick = { [weak self] in
-            self?.model.clearSelection()
-        }
-        tableView.onModifiedRowClick = { [weak self] row, modifiers in
-            self?.handleModifiedRowClick(row: row, modifiers: modifiers)
-        }
-        tableView.contextMenuProvider = { [weak self] row in
-            self?.menuForRow(row)
-        }
         tableView.onActivateSelection = { [weak self] in
             self?.focusInspectorFromBrowser()
         }
-
-        let nameColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
-        nameColumn.title = "Name"
-        nameColumn.minWidth = 60
-        nameColumn.width = 300
-        nameColumn.resizingMask = [.autoresizingMask, .userResizingMask]
-        nameColumn.sortDescriptorPrototype = NSSortDescriptor(key: AppModel.BrowserSort.name.rawValue, ascending: true)
-
-        let createdColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("created"))
-        createdColumn.title = "Date Created"
-        createdColumn.minWidth = 84
-        createdColumn.width = 160
-        createdColumn.resizingMask = .userResizingMask
-        createdColumn.sortDescriptorPrototype = NSSortDescriptor(key: AppModel.BrowserSort.created.rawValue, ascending: true)
-
-        let sizeColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("size"))
-        sizeColumn.title = "Size"
-        sizeColumn.minWidth = 64
-        sizeColumn.width = 90
-        sizeColumn.resizingMask = .userResizingMask
-        sizeColumn.sortDescriptorPrototype = NSSortDescriptor(key: AppModel.BrowserSort.size.rawValue, ascending: true)
-
-        let kindColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("kind"))
-        kindColumn.title = "Kind"
-        kindColumn.minWidth = 84
-        kindColumn.width = 120
-        kindColumn.resizingMask = .userResizingMask
-        kindColumn.sortDescriptorPrototype = NSSortDescriptor(key: AppModel.BrowserSort.kind.rawValue, ascending: true)
-
-        tableView.addTableColumn(nameColumn)
-        tableView.addTableColumn(createdColumn)
-        tableView.addTableColumn(sizeColumn)
-        tableView.addTableColumn(kindColumn)
-
-        // Set initial sort indicator to match persisted model state.
-        tableView.sortDescriptors = [NSSortDescriptor(key: model.browserSort.rawValue, ascending: model.browserSortAscending)]
-
-        scrollView.documentView = tableView
-        view.addSubview(scrollView)
-        NSLayoutConstraint.activate([
-            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: view.topAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
-        ])
+        sharedListController.contextMenuProvider = { [weak self] row in
+            self?.menuForRow(row)
+        }
+        sharedListController.setSortDescriptor(
+            NSSortDescriptor(key: model.browserSort.rawValue, ascending: model.browserSortAscending)
+        )
     }
 
-    private func syncTableWidthToViewportIfNeeded() {
-        let width = scrollView.contentView.bounds.width
-        guard width > 0 else { return }
-        if abs(tableView.frame.width - width) > 0.5 {
-            var frame = tableView.frame
-            frame.size.width = width
-            tableView.frame = frame
+    private static func sharedColumns(from definitions: [ListColumnDefinition]) -> [SharedListColumnDefinition] {
+        let builtInIDs = Set(ListColumnDefinition.builtIn.map(\.id))
+        return definitions.map { definition in
+            SharedListColumnDefinition(
+                id: definition.id,
+                title: definition.label,
+                defaultWidth: definition.defaultWidth,
+                minWidth: definition.minWidth,
+                defaultIsVisible: definition.defaultIsVisible,
+                isSortable: definition.isSortable,
+                isToggleable: definition.id != ListColumnDefinition.idName,
+                group: builtInIDs.contains(definition.id) ? .builtIn : .metadata
+            )
         }
     }
 
-    private func updateListPresentationState(hasItems: Bool) {
-        tableView.usesAlternatingRowBackgroundColors = hasItems
-        tableView.headerView?.isHidden = !hasItems
+    func numberOfRows(in controller: SharedBrowserListViewController) -> Int {
+        _ = controller
+        return items.count
     }
 
-    private func applyInitialColumnFitIfNeeded() {
-        guard !didApplyInitialColumnFit else { return }
-        guard let nameColumn = tableView.tableColumns.first(where: { $0.identifier.rawValue == "name" }),
-              let createdColumn = tableView.tableColumns.first(where: { $0.identifier.rawValue == "created" }),
-              let sizeColumn = tableView.tableColumns.first(where: { $0.identifier.rawValue == "size" }),
-              let kindColumn = tableView.tableColumns.first(where: { $0.identifier.rawValue == "kind" })
-        else {
-            return
-        }
-
-        let viewportWidth = scrollView.contentView.bounds.width
-        guard viewportWidth > 0 else { return }
-
-        let spacing = tableView.intercellSpacing.width * CGFloat(max(tableView.numberOfColumns - 1, 0))
-        let fixedWidth = createdColumn.width + sizeColumn.width + kindColumn.width + spacing + 8
-        let fittedNameWidth = max(nameColumn.minWidth, floor(viewportWidth - fixedWidth))
-        nameColumn.width = fittedNameWidth
-        tableView.tile()
-        didApplyInitialColumnFit = true
-    }
-
-    func numberOfRows(in tableView: NSTableView) -> Int {
-        items.count
-    }
-
-    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+    func sharedBrowserList(
+        _ controller: SharedBrowserListViewController,
+        viewFor tableColumn: NSTableColumn?,
+        row: Int
+    ) -> NSView? {
+        _ = controller
         guard row >= 0, row < items.count else { return nil }
         let item = items[row]
         let columnID = tableColumn?.identifier.rawValue ?? ""
@@ -407,22 +456,27 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
         }
     }
 
-    func tableViewSelectionDidChange(_ notification: Notification) {
-        guard !isApplyingProgrammaticSelection,
-              let tableView = notification.object as? NSTableView
-        else {
+    func sharedBrowserListSelectionDidChange(
+        _ controller: SharedBrowserListViewController,
+        selectedRows: IndexSet,
+        focusedRow: Int?
+    ) {
+        _ = controller
+        pendingSelectionAdoptionTask?.cancel()
+        pendingSelectionAdoptionTask = nil
+        guard !isApplyingProgrammaticSelection else {
             return
         }
 
         let urls = Set(
-            tableView.selectedRowIndexes.compactMap { row -> URL? in
+            selectedRows.compactMap { row -> URL? in
                 guard row >= 0, row < items.count else { return nil }
                 return items[row].url
             }
         )
         let focusedURL: URL?
-        if tableView.selectedRow >= 0, tableView.selectedRow < items.count {
-            focusedURL = items[tableView.selectedRow].url
+        if let focusedRow, focusedRow >= 0, focusedRow < items.count {
+            focusedURL = items[focusedRow].url
         } else {
             focusedURL = nil
         }
@@ -430,12 +484,23 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
         updateQuickLookSourceFrameFromCurrentSelection()
     }
 
-    func tableView(_ tableView: NSTableView, sortDescriptorsDidChange _: [NSSortDescriptor]) {
-        guard !isApplyingProgrammaticSort else { return }
-        guard let descriptor = tableView.sortDescriptors.first,
+    func sharedBrowserListSortDidChange(
+        _ controller: SharedBrowserListViewController,
+        descriptor: NSSortDescriptor?
+    ) {
+        _ = controller
+        guard let descriptor,
               let sort = AppModel.BrowserSort(rawValue: descriptor.key ?? "") else { return }
         model.browserSort = sort
         model.browserSortAscending = descriptor.ascending
+    }
+
+    func sharedBrowserListColumnVisibilityDidChange(
+        _ controller: SharedBrowserListViewController,
+        columnID _: String,
+        isVisible _: Bool
+    ) {
+        _ = controller
     }
 
     @objc
@@ -464,71 +529,19 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
             orderedItems: orderedURLs
         )
         contextMenuTargetURLs = targetURLs
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        let openState = model.fileActionState(for: .openInDefaultApp, targetURLs: targetURLs)
-        let refreshState = model.fileActionState(for: .refreshMetadata, targetURLs: targetURLs)
-        let applyState = model.fileActionState(for: .applyMetadataChanges, targetURLs: targetURLs)
-        let clearState = model.fileActionState(for: .clearMetadataChanges, targetURLs: targetURLs)
-        let restoreState = model.fileActionState(for: .restoreFromLastBackup, targetURLs: targetURLs)
-        let applyTitle = model.applyMetadataSelectionTitle(for: targetURLs)
-
-        let openItem = ContextMenuSupport.makeMenuItem(
-            title: openState.title,
-            action: #selector(openFromContextMenu(_:)),
+        return BrowserContextMenuBuilder.makeMenu(
             target: self,
-            symbolName: openState.symbolName,
-            isEnabled: openState.isEnabled
+            model: model,
+            targetURLs: targetURLs,
+            actions: .init(
+                open: #selector(openFromContextMenu(_:)),
+                revealInFinder: #selector(revealInFinderFromContextMenu(_:)),
+                apply: #selector(applyFromContextMenu(_:)),
+                refresh: #selector(refreshFromContextMenu(_:)),
+                clear: #selector(clearFromContextMenu(_:)),
+                restore: #selector(restoreFromContextMenu(_:))
+            )
         )
-        menu.addItem(openItem)
-
-        let revealItem = ContextMenuSupport.makeMenuItem(
-            title: "Reveal in Finder",
-            action: #selector(revealInFinderFromContextMenu(_:)),
-            target: self,
-            symbolName: "folder",
-            isEnabled: !targetURLs.isEmpty
-        )
-        menu.addItem(revealItem)
-
-        menu.addItem(.separator())
-
-        let applyItem = ContextMenuSupport.makeMenuItem(
-            title: applyTitle,
-            action: #selector(applyFromContextMenu(_:)),
-            target: self,
-            symbolName: applyState.symbolName,
-            isEnabled: applyState.isEnabled
-        )
-        menu.addItem(applyItem)
-
-        let refreshItem = ContextMenuSupport.makeMenuItem(
-            title: refreshState.title,
-            action: #selector(refreshFromContextMenu(_:)),
-            target: self,
-            symbolName: refreshState.symbolName,
-            isEnabled: refreshState.isEnabled
-        )
-        menu.addItem(refreshItem)
-
-        let clearItem = ContextMenuSupport.makeMenuItem(
-            title: clearState.title,
-            action: #selector(clearFromContextMenu(_:)),
-            target: self,
-            symbolName: clearState.symbolName,
-            isEnabled: clearState.isEnabled
-        )
-        menu.addItem(clearItem)
-
-        let restoreItem = ContextMenuSupport.makeMenuItem(
-            title: restoreState.title,
-            action: #selector(restoreFromContextMenu(_:)),
-            target: self,
-            symbolName: restoreState.symbolName,
-            isEnabled: restoreState.isEnabled
-        )
-        menu.addItem(restoreItem)
-        return menu
     }
 
     @objc
@@ -567,26 +580,38 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
         model.performFileAction(.restoreFromLastBackup, targetURLs: contextMenuTargetURLs)
     }
 
-    private func handleModifiedRowClick(row: Int, modifiers: NSEvent.ModifierFlags) {
-        guard row >= 0, row < items.count else { return }
-        model.selectFile(items[row].url, modifiers: modifiers, in: items)
-
-        let selectedIndexes = IndexSet(
-            items.enumerated().compactMap { index, item in
-                model.selectedFileURLs.contains(item.url) ? index : nil
-            }
-        )
-        isApplyingProgrammaticSelection = true
-        tableView.selectRowIndexes(selectedIndexes, byExtendingSelection: false)
-        isApplyingProgrammaticSelection = false
-        updateQuickLookSourceFrameFromCurrentSelection()
-    }
-
-    private func hasListChanged() -> Bool {
-        let currentURLs = items.map(\.url)
+    private func hasListChanged(_ currentURLs: [URL]) -> Bool {
         guard currentURLs != lastRenderedItemURLs else { return false }
         lastRenderedItemURLs = currentURLs
         return true
+    }
+
+    private func visibleDetailColumnIDs() -> [String] {
+        tableView.tableColumns
+            .map(\.identifier.rawValue)
+            .filter { $0 != ListColumnDefinition.idName }
+    }
+
+    private func makeNameSignature(for item: AppModel.BrowserItem) -> RowNameSignature {
+        RowNameSignature(
+            url: item.url,
+            displayName: model.listColumnValue(for: item.url, columnID: ListColumnDefinition.idName, fallbackItem: item),
+            isPendingRename: model.pendingRenameByFile[item.url] != nil,
+            hasPendingEdits: model.hasPendingEdits(for: item.url),
+            imageOperations: model.effectiveImageOperations(for: item.url)
+        )
+    }
+
+    private func makeDetailSignature(
+        for item: AppModel.BrowserItem,
+        detailColumnIDs: [String]
+    ) -> RowDetailSignature {
+        RowDetailSignature(
+            url: item.url,
+            values: detailColumnIDs.map { columnID in
+                model.listColumnValue(for: item.url, columnID: columnID, fallbackItem: item)
+            }
+        )
     }
 
     private func updateQuickLookSourceFrameFromCurrentSelection() {
@@ -612,6 +637,11 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
     private func configureNameCell(_ cell: BrowserListNameCellView, for item: AppModel.BrowserItem) {
         cell.textField?.lineBreakMode = .byTruncatingMiddle
         cell.textField?.stringValue = model.listColumnValue(for: item.url, columnID: "name", fallbackItem: item)
+        if model.pendingRenameByFile[item.url] != nil {
+            cell.textField?.textColor = .systemOrange
+        } else {
+            cell.textField?.textColor = nil
+        }
         cell.applyPending(hasPendingEdits: model.hasPendingEdits(for: item.url))
 
         let iconView = cell.iconView
@@ -625,14 +655,22 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
             model.setQuickLookSourceFrame(for: item.url, rectOnScreen: iconRectOnScreen)
         }
 
-        if let cached = ThumbnailPipeline.cachedImage(for: item.url, minRenderedSide: 1) {
-            iconView.setImageWithTransition(model.displayImageForCurrentStagedState(cached, fileURL: item.url))
-            requestListThumbnail(for: item, in: cell, forceRefresh: pendingThumbnailRefreshURLs.contains(item.url))
-            return
+        let forceRefresh = pendingThumbnailRefreshURLs.contains(item.url)
+        // Skip the image update when reconfiguring a cell that is already showing this URL.
+        // Every selection change triggers reloadData across all visible rows. The inspector
+        // preview (700 px) overwrites the list thumbnail (64 px) in NSCache, so subsequent
+        // calls get a different NSImage object and setImageWithTransition fires a CATransition
+        // fade on every row — the flash. Guarding on configuredURL prevents this; configuredURL
+        // is reset to nil in prepareForReuse so cell reuse always gets a fresh image update.
+        if cell.configuredURL != item.url || forceRefresh {
+            if let cached = ThumbnailPipeline.cachedImage(for: item.url, minRenderedSide: 1) {
+                iconView.setImageWithTransition(model.displayImageForCurrentStagedState(cached, fileURL: item.url))
+            } else {
+                iconView.setImageWithTransition(ThumbnailPipeline.fallbackIcon(for: item.url, side: 16))
+            }
         }
-
-        iconView.setImageWithTransition(ThumbnailPipeline.fallbackIcon(for: item.url, side: 16))
-        requestListThumbnail(for: item, in: cell, forceRefresh: pendingThumbnailRefreshURLs.contains(item.url))
+        cell.configuredURL = item.url
+        requestListThumbnail(for: item, in: cell, forceRefresh: forceRefresh)
     }
 
     private func requestListThumbnail(for item: AppModel.BrowserItem, in cell: BrowserListNameCellView, forceRefresh: Bool) {
@@ -650,59 +688,10 @@ final class BrowserListViewController: NSViewController, NSTableViewDataSource, 
     }
 }
 
-private final class BrowserListTableView: NSTableView {
-    var onBackgroundClick: (() -> Void)?
-    var onModifiedRowClick: ((Int, NSEvent.ModifierFlags) -> Void)?
-    var contextMenuProvider: ((Int) -> NSMenu?)?
-    var onActivateSelection: (() -> Void)?
-
-    override func mouseDown(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
-        let clickedRow = row(at: point)
-
-        if clickedRow == -1 {
-            deselectAll(nil)
-            onBackgroundClick?()
-            return
-        }
-
-        let selectionModifiers = event.modifierFlags.intersection([.command, .shift])
-        if !selectionModifiers.isEmpty {
-            onModifiedRowClick?(clickedRow, selectionModifiers)
-            return
-        }
-
-        if clickedRow >= 0 {
-            super.mouseDown(with: event)
-        }
-    }
-
-    override func menu(for event: NSEvent) -> NSMenu? {
-        let point = convert(event.locationInWindow, from: nil)
-        let clickedRow = row(at: point)
-        guard clickedRow >= 0 else { return nil }
-        return contextMenuProvider?(clickedRow)
-    }
-
-    override func keyDown(with event: NSEvent) {
-        guard event.modifierFlags.intersection([.command, .control, .option, .shift, .function]).isEmpty else {
-            super.keyDown(with: event)
-            return
-        }
-
-        if event.keyCode == KeyCode.return || event.keyCode == KeyCode.numpadReturn {
-            onActivateSelection?()
-            return
-        }
-
-        super.keyDown(with: event)
-    }
-
-}
-
 private final class BrowserListNameCellView: NSTableCellView {
     let pendingDot = NSImageView(frame: .zero)
     let iconView = BrowserListIconView(frame: .zero)
+    var configuredURL: URL?
 
     init(reuseIdentifier: NSUserInterfaceItemIdentifier) {
         super.init(frame: .zero)
@@ -718,7 +707,9 @@ private final class BrowserListNameCellView: NSTableCellView {
     override func prepareForReuse() {
         super.prepareForReuse()
         iconView.cancelThumbnailRequest()
+        iconView.image = nil
         iconView.toolTip = nil
+        configuredURL = nil
     }
 
     func applyPending(hasPendingEdits: Bool) {
@@ -794,7 +785,7 @@ private final class BrowserListIconView: NSImageView {
 
         requestTask = Task { [weak self] in
             guard let self else { return }
-            let image = await SharedThumbnailRequestBroker.shared.request(
+            let image = await ThumbnailService.request(
                 url: url,
                 requiredSide: requiredSide,
                 forceRefresh: forceRefresh
@@ -813,15 +804,6 @@ private final class BrowserListIconView: NSImageView {
 
     func setImageWithTransition(_ nextImage: NSImage?) {
         guard image !== nextImage else { return }
-        if image != nil,
-           nextImage != nil,
-           !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            let transition = CATransition()
-            transition.type = .fade
-            transition.duration = Motion.duration
-            transition.timingFunction = Motion.timingFunction
-            layer?.add(transition, forKey: "listThumbnailSwapFade")
-        }
         alphaValue = 1
         image = nextImage
     }

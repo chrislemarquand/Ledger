@@ -3,7 +3,7 @@ import ExifEditCore
 import SharedUI
 
 @MainActor
-final class BrowserGalleryViewController: NSViewController, NSCollectionViewDataSource, NSCollectionViewDelegate {
+final class BrowserGalleryViewController: NSViewController, NSCollectionViewDataSource, NSCollectionViewDelegate, NSCollectionViewPrefetching {
     private var model: AppModel
     private var items: [AppModel.BrowserItem]
 
@@ -28,6 +28,7 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
     private let pinchZoomAccumulator = PinchZoomAccumulator()
     private var browserFocusObserver: NSObjectProtocol?
     private var viewModeObserver: NSObjectProtocol?
+    private var selectionAppearanceObserver: GallerySelectionAppearanceObserver?
     private var lastRenderedViewMode: AppModel.BrowserViewMode?
 
     init(model: AppModel, items: [AppModel.BrowserItem]) {
@@ -69,6 +70,17 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
         }
     }
 
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        if selectionAppearanceObserver == nil {
+            selectionAppearanceObserver = GallerySelectionAppearanceObserver(hostView: view) { [weak self] in
+                self?.refreshSelectionAppearanceForVisibleCells()
+            }
+        }
+        selectionAppearanceObserver?.start()
+        refreshSelectionAppearanceForVisibleCells()
+    }
+
     override func viewWillDisappear() {
         super.viewWillDisappear()
         for indexPath in collectionView.indexPathsForVisibleItems() {
@@ -82,6 +94,7 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
             NotificationCenter.default.removeObserver(viewModeObserver)
             self.viewModeObserver = nil
         }
+        selectionAppearanceObserver?.stop()
     }
 
     func update(model: AppModel, items: [AppModel.BrowserItem]) {
@@ -104,6 +117,17 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
         renderState()
     }
 
+    private func refreshSelectionAppearanceForVisibleCells() {
+        let visibleURLs = Set(items.map(\.url))
+        let selectedURLs = model.selectedFileURLs.intersection(visibleURLs)
+        for indexPath in collectionView.indexPathsForVisibleItems() {
+            guard indexPath.item >= 0, indexPath.item < items.count else { continue }
+            guard let cell = collectionView.item(at: indexPath) as? AppKitGalleryItem else { continue }
+            let item = items[indexPath.item]
+            cell.applySelection(isSelected: selectedURLs.contains(item.url))
+        }
+    }
+
     private func configureGallery() {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
@@ -116,13 +140,13 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
         collectionView.frame = NSRect(origin: .zero, size: scrollView.contentView.bounds.size)
         collectionView.autoresizingMask = [.width]
         collectionView.backgroundColors = [.clear]
-        collectionView.collectionViewLayout = layout
+        collectionView.collectionViewLayout = layout.collectionViewLayout
         collectionView.isSelectable = true
         collectionView.allowsMultipleSelection = true
         collectionView.allowsEmptySelection = true
-        collectionView.focusRingType = .none
         collectionView.dataSource = self
         collectionView.delegate = self
+        collectionView.prefetchDataSource = self
         collectionView.register(AppKitGalleryItem.self, forItemWithIdentifier: AppKitGalleryItem.reuseIdentifier)
 
         collectionView.onBackgroundClick = { [weak self] in
@@ -162,10 +186,40 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
         ])
     }
 
+    private func focusInspectorFromBrowser() {
+        guard model.browserViewMode == .gallery else { return }
+        guard !model.selectedFileURLs.isEmpty else { return }
+        _ = NSApp.sendAction(
+            #selector(NativeThreePaneSplitViewController.focusInspectorEntryAction(_:)),
+            to: nil,
+            from: self
+        )
+    }
+
+    private func handleModifiedItemClick(indexPath: IndexPath, modifiers: NSEvent.ModifierFlags) {
+        guard indexPath.item >= 0, indexPath.item < items.count else { return }
+        model.selectFile(items[indexPath.item].url, modifiers: modifiers, in: items)
+        let selectedIndexPaths = Set(
+            items.enumerated().compactMap { index, item -> IndexPath? in
+                model.selectedFileURLs.contains(item.url) ? IndexPath(item: index, section: 0) : nil
+            }
+        )
+        isApplyingProgrammaticSelection = true
+        collectionView.selectionIndexPaths = selectedIndexPaths
+        isApplyingProgrammaticSelection = false
+        updateQuickLookArtifacts()
+    }
+
     private func focusGalleryForKeyboardNavigation() {
         guard model.browserViewMode == .gallery else { return }
         guard let window = view.window else { return }
         window.makeFirstResponder(collectionView)
+    }
+
+    func clearVisualSelection() {
+        isApplyingProgrammaticSelection = true
+        collectionView.selectionIndexPaths = []
+        isApplyingProgrammaticSelection = false
     }
 
     private func scrollSelectionIntoView() {
@@ -185,16 +239,6 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
             guard let attrs = self.collectionView.collectionViewLayout?.layoutAttributesForItem(at: indexPath) else { return }
             self.collectionView.scrollToVisible(attrs.frame)
         }
-    }
-
-    private func focusInspectorFromBrowser() {
-        guard model.browserViewMode == .gallery else { return }
-        guard !model.selectedFileURLs.isEmpty else { return }
-        _ = NSApp.sendAction(
-            #selector(NativeThreePaneSplitViewController.focusInspectorEntryAction(_:)),
-            to: nil,
-            from: self
-        )
     }
 
     private func renderState() {
@@ -353,10 +397,11 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
                     ?? ThumbnailPipeline.fallbackIcon(for: item.url, side: 128)
                 let displayImage = model.displayImageForCurrentStagedState(baseImage, fileURL: item.url)
                 cell.configure(
-                    name: item.name,
+                    name: model.pendingRenameByFile[item.url] ?? item.name,
                     image: displayImage,
                     isSelected: selectedURLs.contains(item.url),
                     hasPendingEdits: pendingURLs.contains(item.url),
+                    isPendingRename: model.pendingRenameByFile[item.url] != nil,
                     tileSide: max(layout.tileSide, 40),
                     preferredAspectRatio: preferredAspectRatio(for: item.url)
                 )
@@ -406,60 +451,19 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
             selected: selectedURLs,
             orderedItems: orderedURLs
         )
-
-        let openState = model.fileActionState(for: .openInDefaultApp, targetURLs: contextMenuTargetURLs)
-        let refreshState = model.fileActionState(for: .refreshMetadata, targetURLs: contextMenuTargetURLs)
-        let applyState = model.fileActionState(for: .applyMetadataChanges, targetURLs: contextMenuTargetURLs)
-        let clearState = model.fileActionState(for: .clearMetadataChanges, targetURLs: contextMenuTargetURLs)
-        let restoreState = model.fileActionState(for: .restoreFromLastBackup, targetURLs: contextMenuTargetURLs)
-        let applyTitle = model.applyMetadataSelectionTitle(for: contextMenuTargetURLs)
-
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        menu.addItem(ContextMenuSupport.makeMenuItem(
-            title: openState.title,
-            action: #selector(openFromContextMenu(_:)),
+        return BrowserContextMenuBuilder.makeMenu(
             target: self,
-            symbolName: openState.symbolName,
-            isEnabled: openState.isEnabled
-        ))
-        menu.addItem(ContextMenuSupport.makeMenuItem(
-            title: "Reveal in Finder",
-            action: #selector(revealInFinderFromContextMenu(_:)),
-            target: self,
-            symbolName: "folder",
-            isEnabled: !contextMenuTargetURLs.isEmpty
-        ))
-        menu.addItem(.separator())
-        menu.addItem(ContextMenuSupport.makeMenuItem(
-            title: applyTitle,
-            action: #selector(applyFromContextMenu(_:)),
-            target: self,
-            symbolName: applyState.symbolName,
-            isEnabled: applyState.isEnabled
-        ))
-        menu.addItem(ContextMenuSupport.makeMenuItem(
-            title: refreshState.title,
-            action: #selector(refreshFromContextMenu(_:)),
-            target: self,
-            symbolName: refreshState.symbolName,
-            isEnabled: refreshState.isEnabled
-        ))
-        menu.addItem(ContextMenuSupport.makeMenuItem(
-            title: clearState.title,
-            action: #selector(clearFromContextMenu(_:)),
-            target: self,
-            symbolName: clearState.symbolName,
-            isEnabled: clearState.isEnabled
-        ))
-        menu.addItem(ContextMenuSupport.makeMenuItem(
-            title: restoreState.title,
-            action: #selector(restoreFromContextMenu(_:)),
-            target: self,
-            symbolName: restoreState.symbolName,
-            isEnabled: restoreState.isEnabled
-        ))
-        return menu
+            model: model,
+            targetURLs: contextMenuTargetURLs,
+            actions: .init(
+                open: #selector(openFromContextMenu(_:)),
+                revealInFinder: #selector(revealInFinderFromContextMenu(_:)),
+                apply: #selector(applyFromContextMenu(_:)),
+                refresh: #selector(refreshFromContextMenu(_:)),
+                clear: #selector(clearFromContextMenu(_:)),
+                restore: #selector(restoreFromContextMenu(_:))
+            )
+        )
     }
 
     @objc
@@ -531,10 +535,11 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
         let displayImage = model.displayImageForCurrentStagedState(baseImage, fileURL: item.url)
 
         cell.configure(
-            name: item.name,
+            name: model.pendingRenameByFile[item.url] ?? item.name,
             image: displayImage,
             isSelected: model.selectedFileURLs.contains(item.url),
             hasPendingEdits: model.hasPendingEdits(for: item.url),
+            isPendingRename: model.pendingRenameByFile[item.url] != nil,
             tileSide: max(layout.tileSide, 40),
             preferredAspectRatio: preferredAspectRatio(for: item.url)
         )
@@ -579,21 +584,6 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
             return items[indexPath.item].url
         }
         model.setSelectionFromList(urls, focusedURL: focusedURL)
-        updateQuickLookArtifacts()
-    }
-
-    private func handleModifiedItemClick(indexPath: IndexPath, modifiers: NSEvent.ModifierFlags) {
-        guard indexPath.item >= 0, indexPath.item < items.count else { return }
-        model.selectFile(items[indexPath.item].url, modifiers: modifiers, in: items)
-
-        let selectedIndexPaths = Set(
-            items.enumerated().compactMap { index, item -> IndexPath? in
-                model.selectedFileURLs.contains(item.url) ? IndexPath(item: index, section: 0) : nil
-            }
-        )
-        isApplyingProgrammaticSelection = true
-        collectionView.selectionIndexPaths = selectedIndexPaths
-        isApplyingProgrammaticSelection = false
         updateQuickLookArtifacts()
     }
 
@@ -654,6 +644,26 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
     }
 }
 
+extension BrowserGalleryViewController {
+    func collectionView(_ collectionView: NSCollectionView, prefetchItemsAt indexPaths: [IndexPath]) {
+        let requiredSide = max(layout.tileSide, 120) * 1.5
+        for indexPath in indexPaths {
+            guard indexPath.item < items.count else { continue }
+            let url = items[indexPath.item].url
+            guard ThumbnailPipeline.cachedImage(for: url, minRenderedSide: requiredSide * 0.9) == nil else { continue }
+            Task(priority: .utility) {
+                _ = await ThumbnailService.request(url: url, requiredSide: requiredSide, forceRefresh: false)
+            }
+        }
+    }
+
+    func collectionView(_ collectionView: NSCollectionView, cancelPrefetchingForItemsAt indexPaths: [IndexPath]) {
+        // Deliberate no-op. Cancelling individual prefetch tasks risks cancelling a task that a
+        // now-visible cell is also awaiting (same dedup key). The broker's 4-slot concurrency
+        // limit and 200-waiter cap bound queue growth without per-task cancellation.
+    }
+}
+
 private final class AppKitGalleryItem: NSCollectionViewItem {
     static let reuseIdentifier = NSUserInterfaceItemIdentifier("AppKitGalleryItem")
     private let imageInset: CGFloat = GalleryMetrics.default.imageInset
@@ -671,9 +681,15 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
     private var representedURL: URL?
     private var thumbnailRequestToken = UUID()
     private var thumbnailTask: Task<Void, Never>?
+    private var hasPendingRename = false
 
     override func loadView() {
-        view = NSView(frame: .zero)
+        let rootView = AppearanceAwareView(frame: .zero)
+        rootView.onEffectiveAppearanceChange = { [weak self] in
+            guard let self else { return }
+            self.applySelection(isSelected: self.isSelected)
+        }
+        view = rootView
         configureViewHierarchy()
     }
 
@@ -681,6 +697,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         super.viewDidLayout()
         let liveSide = max(1, floor(min(thumbnailContainer.bounds.width, thumbnailContainer.bounds.height)))
         updateTileSide(liveSide, animated: false)
+        titleField.layer?.cornerRadius = 4
     }
 
     override func prepareForReuse() {
@@ -724,8 +741,11 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         titleField.alignment = .center
         titleField.lineBreakMode = .byTruncatingMiddle
         titleField.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        titleField.textColor = .secondaryLabelColor
+        titleField.textColor = .labelColor
+        titleField.wantsLayer = true
+        titleField.setContentHuggingPriority(.required, for: .horizontal)
         view.addSubview(titleField)
+        self.textField = titleField
 
         NSLayoutConstraint.activate([
             thumbnailContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -742,8 +762,9 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
             thumbnailImageView.centerYAnchor.constraint(equalTo: thumbnailContainer.centerYAnchor),
 
             titleField.topAnchor.constraint(equalTo: thumbnailContainer.bottomAnchor, constant: UIMetrics.Gallery.titleGap),
-            titleField.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            titleField.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            titleField.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            titleField.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor),
+            titleField.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor),
             titleField.bottomAnchor.constraint(lessThanOrEqualTo: view.bottomAnchor),
         ])
 
@@ -758,10 +779,12 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         image: NSImage?,
         isSelected: Bool,
         hasPendingEdits: Bool,
+        isPendingRename: Bool = false,
         tileSide: CGFloat,
         preferredAspectRatio: CGFloat?
     ) {
         titleField.stringValue = name
+        self.hasPendingRename = isPendingRename
         self.preferredAspectRatio = preferredAspectRatio
         setImage(image, animated: false)
         applySelection(isSelected: isSelected)
@@ -796,10 +819,38 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         }
     }
 
+    override var highlightState: NSCollectionViewItem.HighlightState {
+        didSet { applySelection(isSelected: isSelected) }
+    }
+
     func applySelection(isSelected: Bool) {
-        selectionBackgroundView.layer?.backgroundColor = isSelected
-            ? AppTheme.accentNSColor.withAlphaComponent(0.22).cgColor
+        let finderSelectionCGColor = GallerySelectionStyling.resolvedTileSelectionBackgroundCGColor(for: view)
+        let finderSelectionColor = GallerySelectionStyling.tileSelectionBackgroundColor
+        let isWindowKey = GallerySelectionStyling.isSelectionEmphasized(in: view)
+        let highlighted = highlightState == .forSelection
+        let active = isSelected || highlighted
+        selectionBackgroundView.layer?.backgroundColor = active
+            ? finderSelectionCGColor
             : NSColor.clear.cgColor
+        if active && hasPendingRename {
+            titleField.layer?.backgroundColor = isWindowKey
+                ? NSColor.systemOrange.cgColor
+                : finderSelectionCGColor
+            titleField.textColor = isWindowKey ? .white : .labelColor
+        } else if active {
+            titleField.layer?.backgroundColor = isWindowKey
+                ? GallerySelectionStyling.resolvedAccentCGColor(for: view)
+                : finderSelectionCGColor
+            titleField.textColor = isWindowKey ? .white : .labelColor
+        } else if hasPendingRename {
+            titleField.layer?.backgroundColor = NSColor.clear.cgColor
+            titleField.textColor = isWindowKey
+                ? .systemOrange
+                : finderSelectionColor
+        } else {
+            titleField.layer?.backgroundColor = NSColor.clear.cgColor
+            titleField.textColor = .labelColor
+        }
     }
 
     func applyPending(hasPendingEdits: Bool) {
@@ -855,7 +906,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
 
         thumbnailTask = Task { [weak self] in
             guard let self else { return }
-            let image = await SharedThumbnailRequestBroker.shared.request(
+            let image = await ThumbnailService.request(
                 url: url,
                 requiredSide: requiredSide,
                 forceRefresh: forceRefresh
@@ -916,4 +967,5 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
             return CGSize(width: width, height: height)
         }
     }
+
 }

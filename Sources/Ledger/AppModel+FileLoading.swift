@@ -52,7 +52,7 @@ extension AppModel {
 
 
     func didChooseFolder(_ folderURL: URL) {
-        if let item = noteRecentLocation(folderURL, promoteToTopIfExisting: false) {
+        if let item = noteRecentLocation(folderURL, promoteToTopIfExisting: true) {
             if selectedSidebarID != item.id {
                 selectedSidebarID = item.id
             }
@@ -259,7 +259,6 @@ extension AppModel {
         removeAllStagedQuickLookPreviewFiles()
         if !preserveSessionCaches {
             inspectorPreviewImages = [:]
-            inspectorPreviewRenderedSide = [:]
             inspectorPreviewRecency = []
         }
         inspectorPreviewInflight = []
@@ -282,7 +281,7 @@ extension AppModel {
                 if await MainActor.run(body: { self.activeFolderLoadID != loadID }) {
                     return
                 }
-                _ = await SharedThumbnailRequestBroker.shared.request(
+                _ = await ThumbnailService.request(
                     url: fileURL,
                     requiredSide: Self.initialThumbnailWarmupSide,
                     forceRefresh: false
@@ -376,6 +375,15 @@ extension AppModel {
                 return cmp(lhs.url.path < rhs.url.path)
             case .created:
                 switch (lhs.createdAt, rhs.createdAt) {
+                case let (l?, r?):
+                    if l != r { return cmp(l < r) }
+                case (nil, nil): break
+                case (nil, _?): return false  // nil always last
+                case (_?, nil): return true   // nil always last
+                }
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            case .modified:
+                switch (lhs.modifiedAt, rhs.modifiedAt) {
                 case let (l?, r?):
                     if l != r { return cmp(l < r) }
                 case (nil, nil): break
