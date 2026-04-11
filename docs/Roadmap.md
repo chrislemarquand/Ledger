@@ -84,6 +84,7 @@ Released: **2026-03-10**.
 
 ## v1.3 (Pre-2.0 Foundations)
 
+- [ ] No-op batch rename: suppress the staged/applied state when a rename pattern produces no changes (filenames unchanged).
 - [ ] Explicit Home/End/Page Up/Page Down keyboard nav in list/gallery.
 - [ ] Gallery metadata lines/subtitle customisation.
 - [ ] Metadata copy/paste:
