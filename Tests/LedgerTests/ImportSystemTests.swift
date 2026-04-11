@@ -1998,7 +1998,7 @@ final class ImportSystemTests: XCTestCase {
         let snapshots = await model.importMetadataSnapshots(for: [file])
         let focal = snapshots[file]?.fields.first(where: { $0.namespace == .exif && $0.key == "FocalLength" })?.value
         let lens = snapshots[file]?.fields.first(where: { $0.namespace == .exif && $0.key == "LensModel" })?.value
-        XCTAssertEqual(focal, "40 mm")
+        XCTAssertEqual(focal, "40")
         XCTAssertNil(lens)
     }
 

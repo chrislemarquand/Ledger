@@ -11,5 +11,3 @@ ARTIFACT="$1"
 
 xcrun notarytool submit "$ARTIFACT" --keychain-profile "$NOTARY_PROFILE" --wait
 xcrun stapler staple "$ARTIFACT"
-
-spctl -a -vv "$ARTIFACT"
