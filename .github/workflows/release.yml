@@ -40,7 +40,7 @@ jobs:
       - name: Install ExifTool
         run: |
           curl -fsSL -o /tmp/exiftool.tar.gz \
-            https://exiftool.org/ExifTool-13.50.tar.gz
+            https://cpan.metacpan.org/authors/id/E/EX/EXIFTOOL/Image-ExifTool-13.50.tar.gz
           tar -xzf /tmp/exiftool.tar.gz -C /tmp
           chmod +x /tmp/Image-ExifTool-13.50/exiftool
           echo "EXIFTOOL_SOURCE_PATH=/tmp/Image-ExifTool-13.50/exiftool" >> "$GITHUB_ENV"
