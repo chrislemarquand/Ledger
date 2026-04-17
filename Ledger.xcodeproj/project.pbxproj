@@ -73,6 +73,8 @@
 		D100000300000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */; };
 		DD0001010000000000000001 /* LedgerSidebarTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0001000000000000000001 /* LedgerSidebarTypes.swift */; };
 		DD0002020000000000000001 /* SharedUI in Frameworks */ = {isa = PBXBuildFile; productRef = DD0002010000000000000001 /* SharedUI */; };
+		F10000030000000000000001 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000020000000000000001 /* UpdateService.swift */; };
+		F10000050000000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = F10000040000000000000001 /* Sparkle */; };
 		E10001010000000000000001 /* DateTimeAdjustModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10001000000000000000001 /* DateTimeAdjustModels.swift */; };
 		E10001030000000000000001 /* AppModel+DateTimeAdjust.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10001020000000000000001 /* AppModel+DateTimeAdjust.swift */; };
 		E10001050000000000000001 /* DateTimeAdjustSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10001040000000000000001 /* DateTimeAdjustSheetView.swift */; };
@@ -170,6 +172,7 @@
 		C200010F0000000000000001 /* ExifToolCSVExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifToolCSVExportService.swift; sourceTree = "<group>"; };
 		D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/BatchRenameSheetView.swift; sourceTree = SOURCE_ROOT; };
 		DD0001000000000000000001 /* LedgerSidebarTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerSidebarTypes.swift; sourceTree = "<group>"; };
+		F10000020000000000000001 /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
 		E10001000000000000000001 /* DateTimeAdjustModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateTimeAdjustModels.swift; sourceTree = "<group>"; };
 		E10001020000000000000001 /* AppModel+DateTimeAdjust.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+DateTimeAdjust.swift"; sourceTree = "<group>"; };
 		E10001040000000000000001 /* DateTimeAdjustSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateTimeAdjustSheetView.swift; sourceTree = "<group>"; };
@@ -182,6 +185,7 @@
 			files = (
 				A10000280000000000000001 /* libExifEditCore.a in Frameworks */,
 				DD0002020000000000000001 /* SharedUI in Frameworks */,
+				F10000050000000000000001 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -321,6 +325,7 @@
 				A100014B0000000000000001 /* PresetSheets.swift */,
 				A100014D0000000000000001 /* ThumbnailService.swift */,
 				A100014F0000000000000001 /* SettingsWindowController.swift */,
+				F10000020000000000000001 /* UpdateService.swift */,
 			);
 			path = Ledger;
 			sourceTree = "<group>";
@@ -388,6 +393,7 @@
 			name = Ledger;
 			packageProductDependencies = (
 				DD0002010000000000000001 /* SharedUI */,
+				F10000040000000000000001 /* Sparkle */,
 			);
 			productName = Ledger;
 			productReference = A10000010000000000000001 /* Ledger.app */;
@@ -459,6 +465,7 @@
 			mainGroup = A10000500000000000000001 /* Ledger */;
 			packageReferences = (
 				DD0002000000000000000001 /* XCLocalSwiftPackageReference "../SharedUI" */,
+				F10000010000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			productRefGroup = A10000360000000000000001 /* Products */;
 			projectDirPath = "";
@@ -548,6 +555,7 @@
 				A100014C0000000000000001 /* PresetSheets.swift in Sources */,
 				A100014E0000000000000001 /* ThumbnailService.swift in Sources */,
 				A10001500000000000000001 /* SettingsWindowController.swift in Sources */,
+				F10000030000000000000001 /* UpdateService.swift in Sources */,
 				C20002010000000000000001 /* CSVImportAdapter.swift in Sources */,
 				C20002020000000000000001 /* CSVSupport.swift in Sources */,
 				C20002030000000000000001 /* EOS1VImportAdapter.swift in Sources */,
@@ -840,11 +848,27 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		F10000010000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		DD0002010000000000000001 /* SharedUI */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = DD0002000000000000000001 /* XCLocalSwiftPackageReference "../SharedUI" */;
 			productName = SharedUI;
+		};
+		F10000040000000000000001 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F10000010000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

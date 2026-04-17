@@ -26,5 +26,9 @@
     <string>AccentColor</string>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © $(CURRENT_YEAR) Chris Le Marquand</string>
+    <key>SUFeedURL</key>
+    <string>https://chrislemarquand.github.io/Ledger/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>$(SPARKLE_PUBLIC_ED_KEY)</string>
 </dict>
 </plist>

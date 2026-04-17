@@ -13,6 +13,7 @@ ARCHIVE_PATH="$BUILD_DIR/archive/${APP_NAME}.xcarchive"
 : "${APP_NAME:?Set APP_NAME or APP_DISPLAY_NAME in Config/Base.xcconfig.}"
 
 mkdir -p "$BUILD_DIR/archive"
+ARCHIVE_LOG="$BUILD_DIR/archive/xcodebuild.log"
 
 xcodebuild \
   -project "$PROJECT_PATH" \
@@ -21,10 +22,11 @@ xcodebuild \
   -archivePath "$ARCHIVE_PATH" \
   -destination 'platform=macOS,arch=arm64' \
   ARCHS=arm64 \
+  EXCLUDED_ARCHS=x86_64 \
   DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="$DEVELOPER_ID_APPLICATION" \
-  archive >&2
+  archive 2>&1 | tee "$ARCHIVE_LOG" >&2
 
 APP_PATH="$(find "$ARCHIVE_PATH/Products/Applications" -maxdepth 1 -type d -name '*.app' -print -quit)"
 if [[ -z "$APP_PATH" || ! -d "$APP_PATH" ]]; then
@@ -32,12 +34,15 @@ if [[ -z "$APP_PATH" || ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 
-# Sign all nested Mach-O binaries (bundles, dylibs, shared objects) that
-# xcodebuild didn't sign — e.g. third-party Perl XS extensions in ExifTool.
-echo "Signing nested binaries..." >&2
+# Sign all nested Mach-O binaries that xcodebuild didn't sign (bundled tools,
+# Perl XS extensions, etc.). Detect by file content, not extension, to catch
+# plain executables like osxphotos.
+echo "Signing nested Mach-O binaries..." >&2
 while IFS= read -r f; do
-  codesign --force --sign "$DEVELOPER_ID_APPLICATION" --timestamp --options runtime "$f" >&2
-done < <(find "$APP_PATH" -type f \( -name "*.bundle" -o -name "*.dylib" -o -name "*.so" \))
+  if /usr/bin/file "$f" 2>/dev/null | /usr/bin/grep -q "Mach-O"; then
+    codesign --force --sign "$DEVELOPER_ID_APPLICATION" --timestamp --options runtime "$f" >&2
+  fi
+done < <(find "$APP_PATH" -type f -not -path "*/MacOS/*")
 
 # Re-sign the app bundle to incorporate the newly-signed nested binaries.
 echo "Re-signing app bundle..." >&2

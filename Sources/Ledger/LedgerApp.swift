@@ -20,6 +20,7 @@ enum LedgerMain {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindowController: MainWindowController?
     private var settingsWindowController: SettingsWindowController?
+    private var updateService: UpdateService?
     private var isShowingTerminateConfirmation = false
     private var allowImmediateTermination = false
     var appModel: AppModel? { mainWindowController?.appModel }
@@ -75,6 +76,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindowController?.showWindowAndActivate()
     }
 
+    @objc
+    func checkForUpdatesAction(_ sender: Any?) {
+        updateService?.checkForUpdates(sender)
+    }
+
     private func configureApplicationMenu() {
         let appName = AppBrand.displayName
         let mainMenu = NSApp.mainMenu ?? NSMenu(title: "MainMenu")
@@ -93,7 +99,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenuItem.submenu = makeStandardAppMenu(
             appName: appName,
             aboutAction: #selector(showAboutPanelMenuAction(_:)),
-            settingsAction: #selector(showSettingsWindowAction(_:))
+            settingsAction: #selector(showSettingsWindowAction(_:)),
+            checkForUpdatesAction: #selector(checkForUpdatesAction(_:))
         )
     }
 
@@ -132,7 +139,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSWindow.allowsAutomaticWindowTabbing = false
+        updateService = UpdateService()
         configureApplicationMenu()
+        updateService?.performBackgroundCheck()
         let model = AppModel()
         settingsWindowController = SettingsWindowController(tabs: [
             SettingsTabDescriptor(symbolName: "gearshape", label: "General",
