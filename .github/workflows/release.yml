@@ -2,10 +2,18 @@ name: macOS Release
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
 
 jobs:
   release:
-    runs-on: macos-14
+    runs-on: macos-26
     env:
       DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
       DEVELOPER_ID_APPLICATION: ${{ secrets.DEVELOPER_ID_APPLICATION }}
@@ -13,13 +21,29 @@ jobs:
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
+      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Checkout SharedUI
+        run: git clone https://github.com/chrislemarquand/SharedUI.git ../SharedUI
+
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Resolve package dependencies
+        run: xcodebuild -resolvePackageDependencies -project Ledger.xcodeproj -scheme Ledger -derivedDataPath build/derived
+
+      - name: Install Sparkle tools
+        run: |
+          curl -fsSL -o /tmp/sparkle.tar.xz \
+            https://github.com/sparkle-project/Sparkle/releases/download/2.9.1/Sparkle-2.9.1.tar.xz
+          mkdir -p /tmp/sparkle
+          tar -xJf /tmp/sparkle.tar.xz -C /tmp/sparkle
+          echo "SPARKLE_GENERATE_APPCAST=/tmp/sparkle/bin/generate_appcast" >> "$GITHUB_ENV"
 
       - name: Import Developer ID certificate
         env:
@@ -47,11 +71,41 @@ jobs:
             --team-id "$APPLE_TEAM_ID" \
             --password "$APPLE_APP_SPECIFIC_PASSWORD"
 
-      - name: Build, notarize, and package
+      - name: Build, notarize, package, and generate appcast
+        env:
+          GENERATE_APPCAST: "1"
         run: ./scripts/release/release.sh
 
-      - name: Upload DMG
+      - name: Upload build log on failure
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: ExifEditMac-dmg
-          path: build/dmg/ExifEditMac.dmg
+          name: xcodebuild-log
+          path: build/archive/xcodebuild.log
+          if-no-files-found: ignore
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger-release-artifacts
+          path: |
+            build/archive/Ledger.zip
+            build/dmg/Ledger.dmg
+            build/appcast/appcast.xml
+
+      - name: Upload appcast for Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/appcast
+
+  publish_appcast:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: release
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
