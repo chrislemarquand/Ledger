@@ -21,3 +21,6 @@ tmp/
 
 # Local test fixtures (not for sharing)
 docs/fixtures/
+
+# Sparkle private key — never commit this
+*sparkle_private_key*
