@@ -100,8 +100,10 @@ struct EOS1VImportAdapter: ImportSourceAdapter {
             )
             var fields: [ImportFieldValue] = []
 
-            if let dto = buildDateTimeOriginal(row: map, inputFormatters: inputFormatters, outputFormatter: outputFormatter) {
-                fields.append(ImportFieldValue(tagID: "datetime-created", value: dto))
+            if let result = buildDateTimeOriginal(row: map, inputFormatters: inputFormatters, outputFormatter: outputFormatter) {
+                fields.append(ImportFieldValue(tagID: "datetime-created", value: result.dto))
+                let offset = utcOffsetString(for: result.date, timezone: context.options.cameraTimezone)
+                fields.append(ImportFieldValue(tagID: "exif-offset-time-original", value: offset))
             } else {
                 warnings.append(
                     ImportWarning(
@@ -244,17 +246,24 @@ struct EOS1VImportAdapter: ImportSourceAdapter {
         row: [String: String],
         inputFormatters: [DateFormatter],
         outputFormatter: DateFormatter
-    ) -> String? {
+    ) -> (dto: String, date: Date)? {
         let date = columnValue(in: row, matching: ["Date"])
         let time = columnValue(in: row, matching: ["Time"])
         guard !date.isEmpty, !time.isEmpty else { return nil }
         let input = "\(date) \(time)"
         for formatter in inputFormatters {
             if let parsed = formatter.date(from: input) {
-                return outputFormatter.string(from: parsed)
+                return (outputFormatter.string(from: parsed), parsed)
             }
         }
         return nil
+    }
+
+    private func utcOffsetString(for date: Date, timezone: TimeZone) -> String {
+        let totalSeconds = timezone.secondsFromGMT(for: date)
+        let sign = totalSeconds >= 0 ? "+" : "-"
+        let abs = Swift.abs(totalSeconds)
+        return String(format: "%@%02d:%02d", sign, abs / 3600, (abs % 3600) / 60)
     }
 
     private func looksLikeEOSDataRow(_ row: [String: String]) -> Bool {

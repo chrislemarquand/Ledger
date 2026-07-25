@@ -16,8 +16,18 @@ extension AppModel {
     }
 
     var activeEditableTagsByID: [String: EditableTag] {
-        Dictionary(uniqueKeysWithValues: activeEditableTags.map { ($0.id, $0) })
+        var dict = Dictionary(uniqueKeysWithValues: activeEditableTags.map { ($0.id, $0) })
+        for tag in Self.offsetSystemTags { dict[tag.id] = tag }
+        return dict
     }
+
+    // Offset tags are always stageable but not shown in inspector settings.
+    // They are written by the import pipeline and passed through from ExifTool CSVs.
+    static let offsetSystemTags: [EditableTag] = [
+        .init(id: "exif-offset-time-original",  namespace: .exif, key: "OffsetTimeOriginal",  label: "UTC Offset (Original)",  section: "Date and Time"),
+        .init(id: "exif-offset-time-digitized", namespace: .exif, key: "OffsetTimeDigitized", label: "UTC Offset (Digitised)", section: "Date and Time"),
+        .init(id: "exif-offset-time",           namespace: .exif, key: "OffsetTime",          label: "UTC Offset (Modified)",  section: "Date and Time"),
+    ]
 
     // MARK: - Canonical EXIF enum values (single source of truth)
     // Labels match ExifTool's PrintConv table exactly.

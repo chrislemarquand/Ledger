@@ -4,7 +4,7 @@ import Foundation
 @MainActor
 extension AppModel {
     var importTagCatalog: [ImportTagDescriptor] {
-        activeInspectorFieldCatalog.filter(\.isEnabled).map {
+        let catalogEntries = activeInspectorFieldCatalog.filter(\.isEnabled).map {
             ImportTagDescriptor(
                 id: $0.id,
                 key: $0.key,
@@ -14,6 +14,17 @@ extension AppModel {
                 inputKind: $0.inputKind
             )
         }
+        let offsetEntries = AppModel.offsetSystemTags.map {
+            ImportTagDescriptor(
+                id: $0.id,
+                key: $0.key,
+                namespace: $0.namespace,
+                label: $0.label,
+                section: $0.section,
+                inputKind: .text
+            )
+        }
+        return catalogEntries + offsetEntries
     }
 
     /// Returns files in stable browser-visible order for import matching.

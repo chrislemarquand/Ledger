@@ -9,6 +9,7 @@ extension AppModel {
         }
 
         let enabledIDs = Set(activeInspectorFieldCatalog.filter(\.isEnabled).map(\.id))
+            .union(Self.offsetSystemTags.map(\.id))
         var allPatches: [MetadataPatch] = []
         for (tag, record) in staged {
             guard enabledIDs.contains(tag.id) else { continue }

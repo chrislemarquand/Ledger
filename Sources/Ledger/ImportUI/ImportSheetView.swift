@@ -384,8 +384,11 @@ final class ImportSession: ObservableObject {
         activeTagIDs: Set<String>
     ) -> [ImportAssignment] {
         let selected = selectedTagIDs.isEmpty ? activeTagIDs : Set(selectedTagIDs).intersection(activeTagIDs)
+        let systemIDs = Set(AppModel.offsetSystemTags.map(\.id))
         return assignments.map {
-            ImportAssignment(targetURL: $0.targetURL, fields: $0.fields.filter { selected.contains($0.tagID) })
+            ImportAssignment(targetURL: $0.targetURL, fields: $0.fields.filter {
+                selected.contains($0.tagID) || systemIDs.contains($0.tagID)
+            })
         }
     }
 
