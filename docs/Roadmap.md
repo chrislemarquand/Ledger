@@ -84,6 +84,7 @@ Released: **2026-03-10**.
 
 ## v1.3 (Pre-2.0 Foundations)
 
+- [ ] Bump bundled ExifTool from 13.50 to latest (13.59 as of 2026-07-25). Includes three security updates (13.53, 13.54, 13.59), Exif 3.1 spec tags (13.56), and Canon/Nikon/Sony lens improvements.
 - [ ] No-op batch rename: suppress the staged/applied state when a rename pattern produces no changes (filenames unchanged).
 - [ ] Explicit Home/End/Page Up/Page Down keyboard nav in list/gallery.
 - [ ] Gallery metadata lines/subtitle customisation.
