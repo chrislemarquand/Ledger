@@ -34,7 +34,7 @@ final class ImportSession: ObservableObject {
     private let eosLensMappingURLOverride: URL?
     private let lensChoiceProvider: ((EOSLensChoiceRequest) -> String?)?
     private let lensChoiceDecisionProvider: ((EOSLensChoiceRequest) -> EOSLensChoiceDecision?)?
-    private var eosLensMappingCache: [Int: [String]]?
+    private var eosLensMappingCache: [Int: [(lens: String, maxAperture: Double?)]]?
     @Published var options: ImportRunOptions
     @Published var preparedRun: ImportPreparedRun?
     @Published var importReport: ImportRunReport?
@@ -426,10 +426,13 @@ final class ImportSession: ObservableObject {
             if hasLens { continue }
             guard let focalRaw = row.fields.first(where: { $0.tagID == "exif-focal" })?.value,
                   let focalMM = focalLengthMillimeters(from: focalRaw),
-                  let candidates = mapping[focalMM],
-                  candidates.count > 1
+                  let candidates = mapping[focalMM]
             else { continue }
-            remainingAmbiguousRowsByFocal[focalMM, default: 0] += 1
+            let frameMaxAperture = maxApertureFromRow(row)
+            let filtered = apertureFilteredCandidates(candidates, frameMaxAperture: frameMaxAperture)
+            if filtered.count > 1 {
+                remainingAmbiguousRowsByFocal[focalMM, default: 0] += 1
+            }
         }
 
         for index in updatedAssignments.indices {
@@ -453,9 +456,12 @@ final class ImportSession: ObservableObject {
                   !candidates.isEmpty
             else { continue }
 
+            let frameMaxAperture = maxApertureFromRow(row)
+            let filtered = apertureFilteredCandidates(candidates, frameMaxAperture: frameMaxAperture)
+
             let chosenLens: String?
-            if candidates.count == 1 {
-                chosenLens = candidates[0]
+            if filtered.count == 1 {
+                chosenLens = filtered[0]
             } else {
                 defer {
                     if let current = remainingAmbiguousRowsByFocal[focalMM], current > 0 {
@@ -464,7 +470,7 @@ final class ImportSession: ObservableObject {
                 }
 
                 if let remembered = applyLensChoiceToRemainingByFocal[focalMM],
-                   candidates.contains(remembered)
+                   filtered.contains(remembered)
                 {
                     chosenLens = remembered
                 } else {
@@ -473,7 +479,7 @@ final class ImportSession: ObservableObject {
                         sourceIdentifier: row.sourceIdentifier,
                         targetFileName: assignment.targetURL.lastPathComponent,
                         focalMillimeters: focalMM,
-                        candidates: candidates,
+                        candidates: filtered,
                         remainingRowsAtFocal: max(remainingAmbiguousRowsByFocal[focalMM, default: 0] - 1, 0)
                     )
                     guard let decision = chooseLens(for: request) else {
@@ -503,7 +509,28 @@ final class ImportSession: ObservableObject {
         return (updatedAssignments, false)
     }
 
-    private func loadEOSLensMapping() -> [Int: [String]] {
+    private func maxApertureFromRow(_ row: ImportRow) -> Double? {
+        guard let raw = row.fields.first(where: { $0.tagID == "eos1v-max-aperture" })?.value,
+              !raw.isEmpty
+        else { return nil }
+        return Double(raw)
+    }
+
+    private func apertureFilteredCandidates(
+        _ candidates: [(lens: String, maxAperture: Double?)],
+        frameMaxAperture: Double?
+    ) -> [String] {
+        guard let frameAp = frameMaxAperture else {
+            return candidates.map(\.lens)
+        }
+        let filtered = candidates.filter { candidate in
+            guard let candAp = candidate.maxAperture else { return true }
+            return abs(candAp - frameAp) < 0.15
+        }
+        return filtered.isEmpty ? candidates.map(\.lens) : filtered.map(\.lens)
+    }
+
+    private func loadEOSLensMapping() -> [Int: [(lens: String, maxAperture: Double?)]] {
         if let cached = eosLensMappingCache {
             return cached
         }
@@ -527,26 +554,40 @@ final class ImportSession: ObservableObject {
             eosLensMappingCache = [:]
             return [:]
         }
-        let lensColumns = normalizedHeader.enumerated()
-            .filter { $0.element.hasPrefix("lens") }
-            .map(\.offset)
+
+        // Collect lens columns paired with their optional max aperture column.
+        // "Lens 1" / "Max aperture 1" are paired by shared numeric suffix.
+        var lensColumns: [(lensIndex: Int, maxApertureIndex: Int?)] = []
+        for (i, col) in normalizedHeader.enumerated() {
+            guard col.hasPrefix("lens") else { continue }
+            let suffix = String(col.dropFirst(4))
+            let maxApertureKey = "maxaperture\(suffix)"
+            let maxApertureIndex = normalizedHeader.firstIndex(of: maxApertureKey)
+            lensColumns.append((lensIndex: i, maxApertureIndex: maxApertureIndex))
+        }
         guard !lensColumns.isEmpty else {
             eosLensMappingCache = [:]
             return [:]
         }
 
-        var map: [Int: [String]] = [:]
+        var map: [Int: [(lens: String, maxAperture: Double?)]] = [:]
         for row in rows.dropFirst() {
             guard focalColumn < row.count,
                   let focalMM = focalLengthMillimeters(from: row[focalColumn])
             else { continue }
-            var candidates: [String] = []
-            for column in lensColumns where column < row.count {
-                let lens = CSVSupport.trim(row[column])
+            var candidates: [(lens: String, maxAperture: Double?)] = []
+            for col in lensColumns where col.lensIndex < row.count {
+                let lens = CSVSupport.trim(row[col.lensIndex])
                 if lens.isEmpty { continue }
-                if !candidates.contains(lens) {
-                    candidates.append(lens)
+                if candidates.contains(where: { $0.lens == lens }) { continue }
+                let maxAperture: Double?
+                if let maxApIndex = col.maxApertureIndex, maxApIndex < row.count {
+                    let raw = CSVSupport.trim(row[maxApIndex])
+                    maxAperture = raw.isEmpty ? nil : Double(raw)
+                } else {
+                    maxAperture = nil
                 }
+                candidates.append((lens: lens, maxAperture: maxAperture))
             }
             if !candidates.isEmpty {
                 map[focalMM] = candidates

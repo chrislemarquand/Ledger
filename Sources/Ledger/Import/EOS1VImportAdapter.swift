@@ -123,6 +123,8 @@ struct EOS1VImportAdapter: ImportSourceAdapter {
 
             let focal = normalizeFocalLength(columnValue(in: map, matching: ["Focal length", "Focal Length", "Focal"]))
             appendIfNotEmpty(&fields, tagID: "exif-focal", value: focal)
+            let maxAperture = cleanMaxAperture(columnValue(in: map, matching: ["Max. aperture", "Max aperture", "MaxAperture"]))
+            appendIfNotEmpty(&fields, tagID: "eos1v-max-aperture", value: maxAperture)
             appendIfNotEmpty(&fields, tagID: "exif-metering-mode", value: mapMeteringMode(columnValue(in: map, matching: ["Metering mode", "Metering"])))
             appendIfNotEmpty(&fields, tagID: "exif-exposure-program", value: mapExposureProgram(columnValue(in: map, matching: ["Shooting mode", "Exposure mode"])))
 
@@ -335,6 +337,12 @@ struct EOS1VImportAdapter: ImportSourceAdapter {
 
     private func cleanAperture(_ raw: String?) -> String {
         CSVSupport.trim(raw ?? "")
+            .lowercased()
+            .replacingOccurrences(of: "f/", with: "")
+    }
+
+    private func cleanMaxAperture(_ raw: String) -> String {
+        CSVSupport.trim(raw)
             .lowercased()
             .replacingOccurrences(of: "f/", with: "")
     }
