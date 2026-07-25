@@ -370,7 +370,7 @@ extension AppModel {
             func cmp(_ before: Bool) -> Bool { asc ? before : !before }
             switch browserSort {
             case .name:
-                let c = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
+                let c = lhs.name.localizedStandardCompare(rhs.name)
                 if c != .orderedSame { return cmp(c == .orderedAscending) }
                 return cmp(lhs.url.path < rhs.url.path)
             case .created:
@@ -381,7 +381,7 @@ extension AppModel {
                 case (nil, _?): return false  // nil always last
                 case (_?, nil): return true   // nil always last
                 }
-                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
             case .modified:
                 switch (lhs.modifiedAt, rhs.modifiedAt) {
                 case let (l?, r?):
@@ -390,7 +390,7 @@ extension AppModel {
                 case (nil, _?): return false  // nil always last
                 case (_?, nil): return true   // nil always last
                 }
-                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
             case .size:
                 switch (lhs.sizeBytes, rhs.sizeBytes) {
                 case let (l?, r?):
@@ -399,13 +399,13 @@ extension AppModel {
                 case (nil, _?): return false  // nil always last
                 case (_?, nil): return true   // nil always last
                 }
-                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
             case .kind:
                 let lKind = lhs.kind ?? ""
                 let rKind = rhs.kind ?? ""
-                let c = lKind.localizedCaseInsensitiveCompare(rKind)
+                let c = lKind.localizedStandardCompare(rKind)
                 if c != .orderedSame { return cmp(c == .orderedAscending) }
-                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
             }
         }
     }
