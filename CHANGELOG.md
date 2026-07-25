@@ -4,6 +4,19 @@ All notable changes to Ledger are documented here.
 
 ---
 
+## [1.2.2] — 2026-07-25
+
+### Fixed
+
+- Name sort now uses natural/numeric ordering, matching how Finder sorts files with numbers in their names.
+- EOS 1V import now writes `OffsetTimeOriginal` alongside `DateTimeOriginal`, fixing incorrect sort order in Apple Photos for rolls shot across DST boundaries.
+
+### Improved
+
+- EOS 1V lens disambiguation now reads the `Max. aperture` column from the camera's CSV export. Most ambiguous focal lengths (40mm, 50mm, 24–35mm) are now resolved automatically without prompting.
+
+---
+
 ## [1.2] — 2026-04-03
 
 ### Added
