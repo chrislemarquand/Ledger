@@ -46,7 +46,6 @@
 		A100016C0000000000000001 /* AppModel+MetadataPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100015F0000000000000001 /* AppModel+MetadataPipeline.swift */; };
 		A100016D0000000000000001 /* AppModel+UndoStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001600000000000000001 /* AppModel+UndoStatus.swift */; };
 		A100016E0000000000000001 /* AppModel+FieldCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001610000000000000001 /* AppModel+FieldCatalog.swift */; };
-		A100017F0000000000000001 /* FieldDecoration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100017E0000000000000001 /* FieldDecoration.swift */; };
 		A10001700000000000000001 /* WelcomeCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100016F0000000000000001 /* WelcomeCoordinator.swift */; };
 		A10001720000000000000001 /* ListColumnDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001710000000000000001 /* ListColumnDefinition.swift */; };
 		A10001740000000000000001 /* ListColumnStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001730000000000000001 /* ListColumnStore.swift */; };
@@ -54,6 +53,7 @@
 		A10001780000000000000001 /* BrowserContainerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001770000000000000001 /* BrowserContainerViewController.swift */; };
 		A100017B0000000000000001 /* InspectorTagFieldView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100017A0000000000000001 /* InspectorTagFieldView.swift */; };
 		A100017D0000000000000001 /* InspectorDateTimeFieldView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100017C0000000000000001 /* InspectorDateTimeFieldView.swift */; };
+		A100017F0000000000000001 /* FieldDecoration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100017E0000000000000001 /* FieldDecoration.swift */; };
 		B100001D0000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000D0000000000000001 /* Assets.xcassets */; };
 		C20002010000000000000001 /* CSVImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001010000000000000001 /* CSVImportAdapter.swift */; };
 		C20002020000000000000001 /* CSVSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001020000000000000001 /* CSVSupport.swift */; };
@@ -73,11 +73,11 @@
 		D100000300000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */; };
 		DD0001010000000000000001 /* LedgerSidebarTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0001000000000000000001 /* LedgerSidebarTypes.swift */; };
 		DD0002020000000000000001 /* SharedUI in Frameworks */ = {isa = PBXBuildFile; productRef = DD0002010000000000000001 /* SharedUI */; };
-		F10000030000000000000001 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000020000000000000001 /* UpdateService.swift */; };
-		F10000050000000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = F10000040000000000000001 /* Sparkle */; };
 		E10001010000000000000001 /* DateTimeAdjustModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10001000000000000000001 /* DateTimeAdjustModels.swift */; };
 		E10001030000000000000001 /* AppModel+DateTimeAdjust.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10001020000000000000001 /* AppModel+DateTimeAdjust.swift */; };
 		E10001050000000000000001 /* DateTimeAdjustSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10001040000000000000001 /* DateTimeAdjustSheetView.swift */; };
+		F10000030000000000000001 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000020000000000000001 /* UpdateService.swift */; };
+		F10000050000000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = F10000040000000000000001 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -146,7 +146,6 @@
 		A100015F0000000000000001 /* AppModel+MetadataPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+MetadataPipeline.swift"; sourceTree = "<group>"; };
 		A10001600000000000000001 /* AppModel+UndoStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+UndoStatus.swift"; sourceTree = "<group>"; };
 		A10001610000000000000001 /* AppModel+FieldCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+FieldCatalog.swift"; sourceTree = "<group>"; };
-		A100017E0000000000000001 /* FieldDecoration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FieldDecoration.swift"; sourceTree = "<group>"; };
 		A100016F0000000000000001 /* WelcomeCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeCoordinator.swift; sourceTree = "<group>"; };
 		A10001710000000000000001 /* ListColumnDefinition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListColumnDefinition.swift; sourceTree = "<group>"; };
 		A10001730000000000000001 /* ListColumnStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListColumnStore.swift; sourceTree = "<group>"; };
@@ -154,6 +153,7 @@
 		A10001770000000000000001 /* BrowserContainerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserContainerViewController.swift; sourceTree = "<group>"; };
 		A100017A0000000000000001 /* InspectorTagFieldView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorTagFieldView.swift; sourceTree = "<group>"; };
 		A100017C0000000000000001 /* InspectorDateTimeFieldView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorDateTimeFieldView.swift; sourceTree = "<group>"; };
+		A100017E0000000000000001 /* FieldDecoration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldDecoration.swift; sourceTree = "<group>"; };
 		B100000D0000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C20001010000000000000001 /* CSVImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSVImportAdapter.swift; sourceTree = "<group>"; };
 		C20001020000000000000001 /* CSVSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSVSupport.swift; sourceTree = "<group>"; };
@@ -172,10 +172,10 @@
 		C200010F0000000000000001 /* ExifToolCSVExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifToolCSVExportService.swift; sourceTree = "<group>"; };
 		D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/BatchRenameSheetView.swift; sourceTree = SOURCE_ROOT; };
 		DD0001000000000000000001 /* LedgerSidebarTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerSidebarTypes.swift; sourceTree = "<group>"; };
-		F10000020000000000000001 /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
 		E10001000000000000000001 /* DateTimeAdjustModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateTimeAdjustModels.swift; sourceTree = "<group>"; };
 		E10001020000000000000001 /* AppModel+DateTimeAdjust.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+DateTimeAdjust.swift"; sourceTree = "<group>"; };
 		E10001040000000000000001 /* DateTimeAdjustSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateTimeAdjustSheetView.swift; sourceTree = "<group>"; };
+		F10000020000000000000001 /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -384,6 +384,7 @@
 				A10000410000000000000001 /* Frameworks */,
 				A10000810000000000000001 /* Resources */,
 				A10001300000000000000001 /* Bundle ExifTool */,
+				A10001400000000000000001 /* Set Build Number */,
 			);
 			buildRules = (
 			);
@@ -440,7 +441,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1620;
-				LastUpgradeCheck = 2630;
+				LastUpgradeCheck = 2700;
 				TargetAttributes = {
 					A10000600000000000000001 = {
 						CreatedOnToolsVersion = 16.2;
@@ -509,6 +510,24 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"${SRCROOT}/scripts/build/bundle_exiftool.sh\"\n";
+		};
+		A10001400000000000000001 /* Set Build Number */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Set Build Number";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/scripts/build/set_build_number.sh\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
