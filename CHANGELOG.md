@@ -4,6 +4,19 @@ All notable changes to Ledger are documented here.
 
 ---
 
+## [1.2.3] — 2026-08-15
+
+### Fixed
+
+- Fixed a crash in gallery view that could occur when a list change and thumbnail invalidation happened at the same time.
+- Fixed incorrect capture semantics in the post-apply cleanup task.
+
+### Changed
+
+- Migrated GPS reverse geocoding to `MKReverseGeocodingRequest` for macOS 27.
+
+---
+
 ## [1.2.2] — 2026-07-25
 
 ### Fixed
@@ -14,6 +27,14 @@ All notable changes to Ledger are documented here.
 ### Improved
 
 - EOS 1V lens disambiguation now reads the `Max. aperture` column from the camera's CSV export. Most ambiguous focal lengths (40mm, 50mm, 24–35mm) are now resolved automatically without prompting.
+
+---
+
+## [1.2.1] — 2026-04-17
+
+### Added
+
+- Automatic update checking via Sparkle, aligned with the shared Librarian release pipeline.
 
 ---
 
@@ -43,6 +64,20 @@ All notable changes to Ledger are documented here.
 
 - Restore from Backup now stays correctly associated with files after rename-backed operations by tracking the post-rename URLs through apply/restore flows.
 - Full package automation now covers the v1.2 release candidate surface, including batch rename rollback/manifests, rename-backed restore, field-catalog defaults, metadata list columns, and GPX camera-offset matching.
+
+---
+
+## [1.1.1] — 2026-03-20
+
+### Changed
+
+- Adopted the SharedUI package for sidebar, toolbar, inspector, settings, and app menu infrastructure, improving UI consistency and reducing duplicated code across apps.
+- Updated deployment target to macOS 26.
+
+### Fixed
+
+- Fixed the main window not centring on first launch.
+- Fixed sidebar selection being lost while item counts were loading.
 
 ---
 
