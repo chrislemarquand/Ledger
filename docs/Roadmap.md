@@ -89,7 +89,7 @@ Compatibility and modernisation pass for macOS 27 on Xcode 27. Full build agains
 - [x] **Geocoder migration**: `CLGeocoder` / `reverseGeocodeLocation` / `placemark` in `DateTimeAdjustSheetView.swift` are deprecated as of macOS 26. Migrated to MapKit `MKReverseGeocodingRequest` + `addressRepresentations` (both reverse-geocode and search paths share `applyResolvedPlace(from:)`). Known behaviour change: the new API exposes no structured administrative area, so **State/Province is removed from the Set Location sheet entirely** (no checkbox, no "no resolved value" warning; `LocationAdvancedField.geocodableCases` is the single source). Manual entry remains via the inspector's IPTC State field — verified against MKAddressRepresentations' runtime surface, decision 2026-08-15.
 - [x] Fix SharedUI concurrency warning: capture of non-Sendable `SourceID.Type` in an isolated closure (`QuickLookPanelCoordinator.swift`). Fixed by constraining `SourceID: Hashable & Sendable` — correct semantics for an ID that crosses the KVO/main-actor boundary; both consumers (Ledger `URL`, Librarian `String`) already satisfy it.
 - [x] Fix capture-semantics warning in apply/restore path (`AppModel+ApplyRestore.swift`): inner post-apply task used `[weak self]` while the enclosing apply closure held `self` strongly. Dropped the weak capture to match the sibling alert task — `AppModel` is app-lifetime and the task is short and unstored, so no cycle risk; state reset (`isApplyingMetadata`) now reliably runs.
-- [ ] **HDR-aware previews**: decode via ImageIO `kCGImageSourceDecodeToHDR`, render with constrained dynamic range (`NSImageView.preferredDynamicRange` / `CGImage.contentHeadroom`) so HDR TIFF/HEIC scans display correctly alongside UI. Headline "new OS feature" item for this release.
+Deferred: HDR-aware previews (moved to v2.0 — belongs with the in-app viewer and gallery-pipeline rewrite; benefit today is limited since film-scan TIFFs are SDR).
 
 ---
 
@@ -121,6 +121,7 @@ Compatibility and modernisation pass for macOS 27 on Xcode 27. Full build agains
 - [ ] **Major Photos.app-style rewrite of gallery view architecture.**
 - [ ] Finder-style hierarchical browsing as the core file-browser model.
 - [ ] In-app image viewing as a core workflow for Ledger-supported image formats.
+- [ ] **HDR-aware rendering** (moved from v1.2.3, 2026-08-15): decode HDR/gain-map images via ImageIO `kCGImageSourceDecodeToHDR` (+ `kCGComputeHDRStats`); render inspector/grid previews with `NSImage.DynamicRange.constrainedHigh` (`NSImageView.preferredImageDynamicRange` / SwiftUI `allowedDynamicRange`) and the in-app viewer with `.high` on EDR displays. SDR files are unaffected (decode option is a no-op). Keep the JPEG thumbnail disk cache SDR; HDR applies to live decodes only. Benefits iPhone HEICs, gain-map JPEGs, and HDR DNGs — not classic film-scan TIFFs.
 - [ ] **Finder-style gallery view**: filmstrip along bottom, large preview at top — third browser mode alongside list and grid.
 
 ---
