@@ -585,7 +585,7 @@ extension AppModel {
     }
 
     func enabledLocationAdvancedFields() -> [LocationAdvancedField] {
-        LocationAdvancedField.allCases.filter { isInspectorFieldEnabled($0.tagID) }
+        LocationAdvancedField.geocodableCases.filter { isInspectorFieldEnabled($0.tagID) }
     }
 
     func canOpenLocationAdjustSheet() -> Bool {
@@ -614,8 +614,9 @@ extension AppModel {
             session.longitude = coordinate.longitude
         }
         session.includeCoordinates = locationPersistedCoordinates
+        let enabledFields = Set(enabledLocationAdvancedFields())
         session.selectedAdvancedFields = locationPersistedAdvancedFields
-            .filter { isInspectorFieldEnabled($0.tagID) }
+            .filter { enabledFields.contains($0) }
         pendingLocationAdjustSession = session
     }
 

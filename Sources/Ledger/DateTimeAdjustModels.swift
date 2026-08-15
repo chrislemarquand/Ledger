@@ -254,6 +254,14 @@ enum LocationAdvancedField: String, CaseIterable, Identifiable, Hashable {
     case country
     case countryCode
 
+    /// Fields the location sheet can auto-resolve via MapKit reverse geocoding.
+    /// State/Province is excluded: MKAddressRepresentations exposes no structured
+    /// administrative area, so offering it would always yield an empty value.
+    /// It remains editable manually through the inspector's IPTC fields.
+    static var geocodableCases: [LocationAdvancedField] {
+        allCases.filter { $0 != .stateProvince }
+    }
+
     var id: String { rawValue }
 
     var tagID: String {

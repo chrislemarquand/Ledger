@@ -1155,7 +1155,7 @@ struct LocationAdjustSheetView: View {
                 center: coordinate,
                 span: MKCoordinateSpan(latitudeDelta: 0.08, longitudeDelta: 0.08)
             )
-            applyPlacemark(first.placemark)
+            applyResolvedPlace(from: first)
         } catch {
             searchMessage = "Location search failed."
         }
@@ -1182,31 +1182,31 @@ struct LocationAdjustSheetView: View {
     private func scheduleReverseGeocode(for coordinate: CLLocationCoordinate2D) {
         reverseGeocodeTask?.cancel()
         reverseGeocodeTask = Task {
-            await resolvePlacemark(for: coordinate)
+            await resolvePlace(for: coordinate)
         }
     }
 
-    private func resolvePlacemark(for coordinate: CLLocationCoordinate2D) async {
-        let geocoder = CLGeocoder()
+    private func resolvePlace(for coordinate: CLLocationCoordinate2D) async {
         let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        guard let request = MKReverseGeocodingRequest(location: location) else { return }
         do {
-            let placemarks = try await geocoder.reverseGeocodeLocation(location)
-            guard !Task.isCancelled, let placemark = placemarks.first else { return }
-            applyPlacemark(placemark)
+            let mapItems = try await request.mapItems
+            guard !Task.isCancelled, let item = mapItems.first else { return }
+            applyResolvedPlace(from: item)
         } catch {
             // Keep advanced metadata optional.
         }
     }
 
-    private func applyPlacemark(_ placemark: CLPlacemark) {
-        let sublocation = [placemark.subLocality, placemark.name]
-            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .first(where: { !$0.isEmpty }) ?? ""
-        session.setResolvedValue(sublocation, for: .sublocation)
-        session.setResolvedValue(placemark.locality?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "", for: .city)
-        session.setResolvedValue(placemark.administrativeArea?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "", for: .stateProvince)
-        session.setResolvedValue(placemark.country?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "", for: .country)
-        session.setResolvedValue((placemark.isoCountryCode ?? "").trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), for: .countryCode)
+    private func applyResolvedPlace(from item: MKMapItem) {
+        func trimmed(_ value: String?) -> String {
+            value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        }
+        let representations = item.addressRepresentations
+        session.setResolvedValue(trimmed(item.name), for: .sublocation)
+        session.setResolvedValue(trimmed(representations?.cityName), for: .city)
+        session.setResolvedValue(trimmed(representations?.regionName), for: .country)
+        session.setResolvedValue(trimmed(representations?.region?.identifier).uppercased(), for: .countryCode)
     }
 
     private func refreshPreview() async {

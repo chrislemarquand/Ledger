@@ -82,8 +82,20 @@ Released: **2026-03-10**.
 
 ---
 
+## v1.2.3 (Patch) — macOS Golden Gate Readiness
+
+Compatibility and modernisation pass for macOS 27 on Xcode 27. Full build against SDK 27 is clean (2026-08-15): no `@State` macro or `@ContentBuilder` source breakage, so no forced SwiftUI fixes. UI/Liquid Glass adoption deliberately deferred.
+
+- [x] **Geocoder migration**: `CLGeocoder` / `reverseGeocodeLocation` / `placemark` in `DateTimeAdjustSheetView.swift` are deprecated as of macOS 26. Migrated to MapKit `MKReverseGeocodingRequest` + `addressRepresentations` (both reverse-geocode and search paths share `applyResolvedPlace(from:)`). Known behaviour change: the new API exposes no structured administrative area, so **State/Province is removed from the Set Location sheet entirely** (no checkbox, no "no resolved value" warning; `LocationAdvancedField.geocodableCases` is the single source). Manual entry remains via the inspector's IPTC State field — verified against MKAddressRepresentations' runtime surface, decision 2026-08-15.
+- [ ] Fix SharedUI concurrency warning: capture of non-Sendable `SourceID.Type` in an isolated closure (`QuickLookPanelCoordinator.swift:69`).
+- [ ] Fix capture-semantics warning in apply/restore path: `weak self` capture differs from implicitly-captured strong `self` in outer scope (`AppModel+ApplyRestore.swift:410`) — verify intended lifetime behaviour, not just silence.
+- [ ] **HDR-aware previews**: decode via ImageIO `kCGImageSourceDecodeToHDR`, render with constrained dynamic range (`NSImageView.preferredDynamicRange` / `CGImage.contentHeadroom`) so HDR TIFF/HEIC scans display correctly alongside UI. Headline "new OS feature" item for this release.
+
+---
+
 ## v1.3 (Pre-2.0 Foundations)
 
+- [ ] **iCloud Drive file-state UI**: make it obvious in list/gallery/inspector when a file is a cloud placeholder rather than downloaded locally (evicted/dataless items currently look like a thumbnail/metadata loading failure — exiftool reads time out silently and previews stall while fileproviderd materialises multi-hundred-MB scans). Detect via `URLResourceValues` (`isUbiquitousItem` / `ubiquitousItemDownloadingStatus`) and badge undownloaded items with an iCloud symbol using SharedUI's `makeGalleryOverlaySymbol` (`Gallery/GalleryOverlay.swift`), in the style of Librarian's shared-library `person.2.fill` grid badge. Consider a download affordance/progress and skipping exiftool reads until files are materialised.
 - [ ] Bump bundled ExifTool from 13.50 to latest (13.59 as of 2026-07-25). Includes three security updates (13.53, 13.54, 13.59), Exif 3.1 spec tags (13.56), and Canon/Nikon/Sony lens improvements.
 - [ ] No-op batch rename: suppress the staged/applied state when a rename pattern produces no changes (filenames unchanged).
 - [ ] Explicit Home/End/Page Up/Page Down keyboard nav in list/gallery.
@@ -92,6 +104,8 @@ Released: **2026-03-10**.
   - [ ] Field-level copy/paste.
   - [ ] Metadata-set copy/paste.
 - [ ] ExifTool console: live readout of ExifTool commands and output as operations run, mirroring what would appear if running ExifTool directly in the terminal.
+- [ ] AppKit/UI + performance/memory/disk audit follow-ups: see `docs/appkit-ui-performance-audit-2026-07.md`. Notably batching `exiftool` metadata writes into a single invocation instead of one process per file, and adding eviction to the thumbnail disk cache.
+- [ ] Window/list-column resize fix: window frame, split dividers, and table column widths are restored via three independent absolute-pixel autosave systems with no reconciliation against current available width, causing inconsistent window size and columns/scrollbar overflow. Root-cause diagnosis and fix plan in `docs/window-list-resize-diagnosis-2026-07.md`.
 
 ---
 
