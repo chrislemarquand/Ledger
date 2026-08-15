@@ -13,21 +13,16 @@ ARCHIVE_PATH="$BUILD_DIR/archive/${APP_NAME}.xcarchive"
 : "${APP_NAME:?Set APP_NAME or APP_DISPLAY_NAME in Config/Base.xcconfig.}"
 
 # Derive MARKETING_VERSION from the git tag (e.g. v1.3 → 1.3) when available.
-# CURRENT_PROJECT_VERSION is computed as MAJOR*10000 + MINOR*100 + PATCH so it is
-# always monotonically increasing without requiring a full git history.
+# CURRENT_PROJECT_VERSION is set automatically for every build by the "Set Build Number"
+# script phase (scripts/build/set_build_number.sh) — nothing to compute or pass here.
 GIT_TAG="${GITHUB_REF_NAME:-$(git -C "$ROOT_DIR" describe --tags --exact-match 2>/dev/null || true)}"
 if [[ "$GIT_TAG" =~ ^v([0-9].*)$ ]]; then
   MARKETING_VERSION="${BASH_REMATCH[1]}"
 else
   MARKETING_VERSION="${MARKETING_VERSION:-$(grep -E '^MARKETING_VERSION' "$ROOT_DIR/Config/Base.xcconfig" | awk -F'=' '{gsub(/[[:space:]]/, "", $2); print $2}')}"
 fi
-if [[ "$MARKETING_VERSION" =~ ^([0-9]+)\.([0-9]+)(\.([0-9]+))?$ ]]; then
-  BUILD_NUMBER=$(( ${BASH_REMATCH[1]} * 10000 + ${BASH_REMATCH[2]} * 100 + ${BASH_REMATCH[4]:-0} ))
-else
-  BUILD_NUMBER="$(git -C "$ROOT_DIR" rev-list --count HEAD 2>/dev/null || echo 1)"
-fi
 
-echo "Building version $MARKETING_VERSION (build $BUILD_NUMBER)" >&2
+echo "Building version $MARKETING_VERSION" >&2
 
 mkdir -p "$BUILD_DIR/archive"
 ARCHIVE_LOG="$BUILD_DIR/archive/xcodebuild.log"
@@ -44,7 +39,6 @@ xcodebuild \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="$DEVELOPER_ID_APPLICATION" \
   MARKETING_VERSION="$MARKETING_VERSION" \
-  CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
   archive 2>&1 | tee "$ARCHIVE_LOG" >&2
 
 APP_PATH="$(find "$ARCHIVE_PATH/Products/Applications" -maxdepth 1 -type d -name '*.app' -print -quit)"
