@@ -11,6 +11,7 @@ struct ListColumnDefinition {
     // MARK: - Built-in column IDs
 
     static let idName        = "name"
+    static let idCloudStatus = "cloud-status"
     static let idCreated     = "created"
     static let idModified    = "modified"
     static let idSize        = "size"
@@ -37,7 +38,8 @@ struct ListColumnDefinition {
     // MARK: - Column sets
 
     static let builtIn: [ListColumnDefinition] = [
-        .init(id: idName,     label: "Name",          defaultWidth: 300, minWidth: 60, defaultIsVisible: true,  isSortable: true),
+        .init(id: idName,        label: "Name",          defaultWidth: 300, minWidth: 60, defaultIsVisible: true,  isSortable: true),
+        .init(id: idCloudStatus, label: "",              defaultWidth: 22,  minWidth: 22, defaultIsVisible: true,  isSortable: false),
         .init(id: idCreated,  label: "Date Created",  defaultWidth: 160, minWidth: 84, defaultIsVisible: true,  isSortable: true),
         .init(id: idModified, label: "Date Modified", defaultWidth: 160, minWidth: 84, defaultIsVisible: false, isSortable: true),
         .init(id: idSize,     label: "Size",          defaultWidth: 90,  minWidth: 64, defaultIsVisible: true,  isSortable: true),
@@ -64,6 +66,6 @@ struct ListColumnDefinition {
 
     static var all: [ListColumnDefinition] { builtIn + metadata }
 
-    /// All columns except Name, which is always visible and not user-toggleable.
-    static var toggleable: [ListColumnDefinition] { all.filter { $0.id != idName } }
+    /// All columns except Name and the cloud-status indicator, which are always visible and not user-toggleable.
+    static var toggleable: [ListColumnDefinition] { all.filter { $0.id != idName && $0.id != idCloudStatus } }
 }

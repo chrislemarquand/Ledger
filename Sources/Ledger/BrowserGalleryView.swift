@@ -19,6 +19,7 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
     private var lastRenderedURLs: [URL] = []
     private var lastRenderedSelected: Set<URL> = []
     private var lastRenderedPending: Set<URL> = []
+    private var lastRenderedCloudStates: [CloudFileState] = []
     private var lastRenderedPrimarySelectionURL: URL?
     private var lastStagedOpsDisplayToken: UInt64 = 0
     private var lastThumbnailInvalidationToken = UUID()
@@ -255,6 +256,8 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
         let columnsChanged = layout.columnCount != targetColumnCount
         let selectionChanged = selectedURLs != lastRenderedSelected
         let pendingChanged = pendingURLs != lastRenderedPending
+        let cloudStates = items.map(\.cloudState)
+        let cloudStatesChanged = cloudStates != lastRenderedCloudStates
         let primaryChanged = model.primarySelectionURL != lastRenderedPrimarySelectionURL
         let stagedOpsChanged = lastStagedOpsDisplayToken != model.stagedOpsDisplayToken
         if stagedOpsChanged { lastStagedOpsDisplayToken = model.stagedOpsDisplayToken }
@@ -309,13 +312,14 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
             lastRenderedPrimarySelectionURL = model.primarySelectionURL
         }
 
-        if listChanged || columnsChanged || selectionChanged || pendingChanged || stagedOpsChanged || justBecameActive {
+        if listChanged || columnsChanged || selectionChanged || pendingChanged || cloudStatesChanged || stagedOpsChanged || justBecameActive {
             refreshVisibleCellState(
                 pendingURLs: pendingURLs,
                 selectedURLs: selectedURLs,
                 needsFullReconfigure: listChanged || columnsChanged || pendingChanged || stagedOpsChanged || justBecameActive
             )
             lastRenderedPending = pendingURLs
+            lastRenderedCloudStates = cloudStates
         }
 
         // When switching from list → gallery the view just became visible.
@@ -414,12 +418,16 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
                     hasPendingEdits: pendingURLs.contains(item.url),
                     isPendingRename: model.pendingRenameByFile[item.url] != nil,
                     tileSide: max(layout.tileSide, 40),
-                    preferredAspectRatio: preferredAspectRatio(for: item.url)
+                    preferredAspectRatio: preferredAspectRatio(for: item.url),
+                    cloudState: item.cloudState
                 )
+                cell.onCloudBadgeTapped = { [weak model] in model?.requestCloudDownload(for: item.url) }
                 requestThumbnail(for: item, in: cell, tileSide: max(layout.tileSide, 40))
             } else {
                 cell.applySelection(isSelected: selectedURLs.contains(item.url))
                 cell.applyPending(hasPendingEdits: pendingURLs.contains(item.url))
+                cell.applyCloudState(item.cloudState)
+                cell.onCloudBadgeTapped = { [weak model] in model?.requestCloudDownload(for: item.url) }
                 if awaitingRefresh {
                     requestThumbnail(for: item, in: cell, tileSide: max(layout.tileSide, 40))
                 }
@@ -469,6 +477,7 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
             actions: .init(
                 open: #selector(openFromContextMenu(_:)),
                 revealInFinder: #selector(revealInFinderFromContextMenu(_:)),
+                cloudDownload: #selector(cloudDownloadFromContextMenu(_:)),
                 apply: #selector(applyFromContextMenu(_:)),
                 refresh: #selector(refreshFromContextMenu(_:)),
                 clear: #selector(clearFromContextMenu(_:)),
@@ -481,6 +490,12 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
     private func openFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty else { return }
         model.performFileAction(.openInDefaultApp, targetURLs: contextMenuTargetURLs)
+    }
+
+    @objc
+    private func cloudDownloadFromContextMenu(_: Any?) {
+        guard !contextMenuTargetURLs.isEmpty else { return }
+        model.performCloudContextMenuAction(for: contextMenuTargetURLs)
     }
 
     @objc
@@ -552,8 +567,10 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
             hasPendingEdits: model.hasPendingEdits(for: item.url),
             isPendingRename: model.pendingRenameByFile[item.url] != nil,
             tileSide: max(layout.tileSide, 40),
-            preferredAspectRatio: preferredAspectRatio(for: item.url)
+            preferredAspectRatio: preferredAspectRatio(for: item.url),
+            cloudState: item.cloudState
         )
+        cell.onCloudBadgeTapped = { [weak model] in model?.requestCloudDownload(for: item.url) }
         requestThumbnail(for: item, in: cell, tileSide: max(layout.tileSide, 40))
         return cell
     }
@@ -684,6 +701,8 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
     let thumbnailImageView = NSImageView(frame: .zero)
     private let thumbnailContainer = NSView(frame: .zero)
     private var pendingDot: NSImageView?
+    private let cloudBadge = CloudBadgeControl(frame: .zero)
+    var onCloudBadgeTapped: (() -> Void)?
     private let titleField = NSTextField(labelWithString: "")
     private var preferredAspectRatio: CGFloat?
     private var currentTileSide: CGFloat = 40
@@ -715,6 +734,8 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         super.prepareForReuse()
         cancelThumbnailRequest()
         representedURL = nil
+        onCloudBadgeTapped = nil
+        cloudBadge.configure(state: .local)
     }
 
     private func configureViewHierarchy() {
@@ -747,6 +768,22 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
             inset: UIMetrics.Gallery.pendingDotInset
         )
         pendingDot?.isHidden = true
+
+        cloudBadge.translatesAutoresizingMaskIntoConstraints = false
+        cloudBadge.setIconTintColor(.white)
+        cloudBadge.wantsLayer = true
+        cloudBadge.layer?.shadowColor = NSColor.black.cgColor
+        cloudBadge.layer?.shadowOpacity = 0.5
+        cloudBadge.layer?.shadowRadius = 1.5
+        cloudBadge.layer?.shadowOffset = CGSize(width: 0, height: -0.5)
+        cloudBadge.onTap = { [weak self] in self?.onCloudBadgeTapped?() }
+        thumbnailImageView.addSubview(cloudBadge)
+        NSLayoutConstraint.activate([
+            cloudBadge.trailingAnchor.constraint(equalTo: thumbnailImageView.trailingAnchor, constant: -UIMetrics.Gallery.cloudBadgeInset),
+            cloudBadge.topAnchor.constraint(equalTo: thumbnailImageView.topAnchor, constant: UIMetrics.Gallery.cloudBadgeInset),
+            cloudBadge.widthAnchor.constraint(equalToConstant: UIMetrics.Gallery.cloudBadgeSize),
+            cloudBadge.heightAnchor.constraint(equalToConstant: UIMetrics.Gallery.cloudBadgeSize)
+        ])
 
         titleField.translatesAutoresizingMaskIntoConstraints = false
         titleField.alignment = .center
@@ -792,7 +829,8 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         hasPendingEdits: Bool,
         isPendingRename: Bool = false,
         tileSide: CGFloat,
-        preferredAspectRatio: CGFloat?
+        preferredAspectRatio: CGFloat?,
+        cloudState: CloudFileState = .local
     ) {
         titleField.stringValue = name
         self.hasPendingRename = isPendingRename
@@ -800,6 +838,7 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
         setImage(image, animated: false)
         applySelection(isSelected: isSelected)
         applyPending(hasPendingEdits: hasPendingEdits)
+        applyCloudState(cloudState)
         updateTileSide(tileSide, animated: false)
     }
 
@@ -866,6 +905,10 @@ private final class AppKitGalleryItem: NSCollectionViewItem {
 
     func applyPending(hasPendingEdits: Bool) {
         pendingDot?.isHidden = !hasPendingEdits
+    }
+
+    func applyCloudState(_ cloudState: CloudFileState) {
+        cloudBadge.configure(state: cloudState)
     }
 
     func setImage(_ image: NSImage?, animated: Bool = true) {

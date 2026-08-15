@@ -593,7 +593,24 @@ extension AppModel {
             return
         }
 
-        pendingBatchRenameMetadata = metadataByFile.filter { files.contains($0.key) }
+        let downloadedFiles = files.filter { cloudStateByURL[$0]?.isPlaceholder != true }
+        let skippedCount = files.count - downloadedFiles.count
+        guard !downloadedFiles.isEmpty else {
+            let n = files.count
+            setStatusMessage(
+                "\(n == 1 ? "This file hasn\u{2019}t" : "These \(n) files haven\u{2019}t") downloaded from iCloud yet — rename unavailable.",
+                autoClearAfterSuccess: false
+            )
+            return
+        }
+        if skippedCount > 0 {
+            setStatusMessage(
+                "Skipping \(skippedCount) \(skippedCount == 1 ? "file" : "files") not downloaded from iCloud; renaming the rest.",
+                autoClearAfterSuccess: true
+            )
+        }
+
+        pendingBatchRenameMetadata = metadataByFile.filter { downloadedFiles.contains($0.key) }
         pendingBatchRenameScope = scope
     }
 
@@ -679,19 +696,20 @@ extension AppModel {
     }
 
     func renameFilesForBatchRename(_ scope: BatchRenameScope) -> [URL] {
+        let files: [URL]
         switch scope {
         case .selection:
-            return Array(selectedFileURLs).sorted {
-                let cmp = $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent)
-                if cmp != .orderedSame { return cmp == .orderedAscending }
-                return $0.path < $1.path
-            }
+            files = Array(selectedFileURLs)
         case .folder:
-            return browserItems.map(\.url).sorted {
+            files = browserItems.map(\.url)
+        }
+        // iCloud placeholders aren't on disk yet — renaming one would fail or force a download.
+        return files
+            .filter { cloudStateByURL[$0]?.isPlaceholder != true }
+            .sorted {
                 let cmp = $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent)
                 if cmp != .orderedSame { return cmp == .orderedAscending }
                 return $0.path < $1.path
             }
-        }
     }
 }

@@ -94,6 +94,13 @@ extension AppModel {
         var writableFiles: [URL] = []
         var preflightFailed: [FileError] = []
         for fileURL in reachableFiles {
+            if cloudStateByURL[fileURL]?.isPlaceholder == true {
+                preflightFailed.append(FileError(
+                    fileURL: fileURL,
+                    message: "This file hasn\u{2019}t downloaded from iCloud yet."
+                ))
+                continue
+            }
             let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
             if attrs?[.immutable] as? Bool == true {
                 preflightFailed.append(FileError(

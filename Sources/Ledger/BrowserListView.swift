@@ -7,6 +7,7 @@ enum BrowserContextMenuBuilder {
     struct Actions {
         let open: Selector
         let revealInFinder: Selector
+        let cloudDownload: Selector
         let apply: Selector
         let refresh: Selector
         let clear: Selector
@@ -42,6 +43,16 @@ enum BrowserContextMenuBuilder {
             symbolName: "folder",
             isEnabled: !targetURLs.isEmpty
         ))
+        if let cloudAction = model.cloudContextMenuAction(for: targetURLs) {
+            let isDownload = cloudAction == .download
+            menu.addItem(ContextMenuSupport.makeMenuItem(
+                title: isDownload ? "Download Now" : "Remove Download",
+                action: actions.cloudDownload,
+                target: target,
+                symbolName: isDownload ? "icloud.and.arrow.down" : "icloud.slash",
+                isEnabled: true
+            ))
+        }
         menu.addItem(.separator())
         menu.addItem(ContextMenuSupport.makeMenuItem(
             title: applyTitle,
@@ -125,7 +136,8 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
             layoutConfig: SharedListLayoutConfig(
                 primaryColumnID: ListColumnDefinition.idName,
                 rowHeight: UIMetrics.List.rowHeight,
-                hasHorizontalScroller: true
+                hasHorizontalScroller: true,
+                lockedColumnIDs: [ListColumnDefinition.idCloudStatus]
             )
         )
         super.init(nibName: nil, bundle: nil)
@@ -407,7 +419,7 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
                 minWidth: definition.minWidth,
                 defaultIsVisible: definition.defaultIsVisible,
                 isSortable: definition.isSortable,
-                isToggleable: definition.id != ListColumnDefinition.idName,
+                isToggleable: definition.id != ListColumnDefinition.idName && definition.id != ListColumnDefinition.idCloudStatus,
                 group: builtInIDs.contains(definition.id) ? .builtIn : .metadata
             )
         }
@@ -433,6 +445,14 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
             let cell = (tableView.makeView(withIdentifier: cellID, owner: nil) as? BrowserListNameCellView)
                 ?? BrowserListNameCellView(reuseIdentifier: cellID)
             configureNameCell(cell, for: item)
+            return cell
+        } else if columnID == ListColumnDefinition.idCloudStatus {
+            let cellID = NSUserInterfaceItemIdentifier("cell-cloud-status")
+            let cell = (tableView.makeView(withIdentifier: cellID, owner: nil) as? BrowserListCloudStatusCellView)
+                ?? BrowserListCloudStatusCellView(reuseIdentifier: cellID)
+            cell.configure(state: item.cloudState) { [weak model] in
+                model?.requestCloudDownload(for: item.url)
+            }
             return cell
         } else {
             let cellID = NSUserInterfaceItemIdentifier("cell-\(columnID)")
@@ -536,6 +556,7 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
             actions: .init(
                 open: #selector(openFromContextMenu(_:)),
                 revealInFinder: #selector(revealInFinderFromContextMenu(_:)),
+                cloudDownload: #selector(cloudDownloadFromContextMenu(_:)),
                 apply: #selector(applyFromContextMenu(_:)),
                 refresh: #selector(refreshFromContextMenu(_:)),
                 clear: #selector(clearFromContextMenu(_:)),
@@ -554,6 +575,12 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
     private func revealInFinderFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty else { return }
         model.revealInFinder(contextMenuTargetURLs)
+    }
+
+    @objc
+    private func cloudDownloadFromContextMenu(_: Any?) {
+        guard !contextMenuTargetURLs.isEmpty else { return }
+        model.performCloudContextMenuAction(for: contextMenuTargetURLs)
     }
 
     @objc
@@ -609,7 +636,12 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
         RowDetailSignature(
             url: item.url,
             values: detailColumnIDs.map { columnID in
-                model.listColumnValue(for: item.url, columnID: columnID, fallbackItem: item)
+                // The cloud-status column renders a CloudBadgeControl, not a listColumnValue
+                // text value, so its signature has to be driven from cloudState directly —
+                // otherwise a hydration-only cloud-state update never marks the row as dirty.
+                columnID == ListColumnDefinition.idCloudStatus
+                    ? String(describing: item.cloudState)
+                    : model.listColumnValue(for: item.url, columnID: columnID, fallbackItem: item)
             }
         )
     }
@@ -752,6 +784,33 @@ private final class BrowserListNameCellView: NSTableCellView {
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -UIMetrics.List.cellHorizontalInset),
             label.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
+    }
+}
+
+private final class BrowserListCloudStatusCellView: NSTableCellView {
+    private let badge = CloudBadgeControl(frame: .zero)
+
+    init(reuseIdentifier: NSUserInterfaceItemIdentifier) {
+        super.init(frame: .zero)
+        identifier = reuseIdentifier
+        badge.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(badge)
+        NSLayoutConstraint.activate([
+            badge.centerXAnchor.constraint(equalTo: centerXAnchor),
+            badge.centerYAnchor.constraint(equalTo: centerYAnchor),
+            badge.widthAnchor.constraint(equalToConstant: UIMetrics.List.cloudBadgeSize),
+            badge.heightAnchor.constraint(equalToConstant: UIMetrics.List.cloudBadgeSize)
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(state: CloudFileState, onTap: @escaping () -> Void) {
+        badge.configure(state: state)
+        badge.onTap = onTap
     }
 }
 

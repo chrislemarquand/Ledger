@@ -295,6 +295,7 @@ final class AppModel: ObservableObject {
         let createdAt: Date?
         let sizeBytes: Int?
         let kind: String?
+        var cloudState: CloudFileState = .local
     }
 
     struct EditableTag: Hashable, Identifiable {
@@ -570,6 +571,8 @@ final class AppModel: ObservableObject {
     var folderMetadataLoadID = UUID()
     var browserItemHydrationTask: Task<Void, Never>?
     var browserItemHydrationID = UUID()
+    let cloudDownloadTracker = CloudDownloadTracker()
+    @Published var cloudStateByURL: [URL: CloudFileState] = [:]
     var selectionMetadataLoadTask: Task<Void, Never>?
     var previewPreloadTask: Task<Void, Never>?
     var deferredFolderMetadataPrefetchTask: Task<Void, Never>?

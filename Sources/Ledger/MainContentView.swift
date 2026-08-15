@@ -1480,12 +1480,22 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     }
 
     private func toolbarSubtitleText() -> String {
+        // ExifTool reads (and therefore folderMetadataLoadCompleted) skip iCloud placeholders,
+        // so "Loading X of Y…" can never reach Y while any are present — reads as permanently
+        // stuck. Surface the iCloud count instead whenever placeholders exist.
+        let placeholderCount = model.browserItems.filter { $0.cloudState.isPlaceholder }.count
+
         if model.isApplyingMetadata {
             let total = max(model.applyMetadataTotal, 0)
             let done = min(max(model.applyMetadataCompleted, 0), total)
             return "Applying \(done) of \(total)…"
         }
         if model.isFolderMetadataLoading {
+            if placeholderCount > 0 {
+                return placeholderCount == 1
+                    ? "Loading… (1 image not downloaded from iCloud)"
+                    : "Loading… (\(placeholderCount) images not downloaded from iCloud)"
+            }
             let total = max(model.folderMetadataLoadTotal, 0)
             let done = min(max(model.folderMetadataLoadCompleted, 0), total)
             return total > 0 ? "Loading \(done) of \(total)…" : "Loading…"
@@ -1497,10 +1507,13 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         let total = model.browserItems.count
         guard total > 0 else { return "" }
         let selected = model.selectedFileURLs.count
-        if selected > 0, selected < total {
-            return "\(selected) of \(total) images"
-        }
-        return total == 1 ? "1 image" : "\(total) images"
+        let baseText = selected > 0 && selected < total
+            ? "\(selected) of \(total) images"
+            : (total == 1 ? "1 image" : "\(total) images")
+        guard placeholderCount > 0 else { return baseText }
+        return placeholderCount == 1
+            ? "\(baseText) · 1 not downloaded"
+            : "\(baseText) · \(placeholderCount) not downloaded"
     }
 
     @objc

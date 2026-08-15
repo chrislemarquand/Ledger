@@ -28,6 +28,7 @@ enum UIMetrics {
         static let iconSize: CGFloat = 16
         static let iconGap: CGFloat = 6
         static let pendingDotSize: CGFloat = 6
+        static let cloudBadgeSize: CGFloat = 13
     }
 
     enum Gallery {
@@ -35,5 +36,7 @@ enum UIMetrics {
         static let pendingDotSize: CGFloat = 8
         static let pendingDotInset: CGFloat = 6
         static let titleGap: CGFloat = 6
+        static let cloudBadgeSize: CGFloat = 14
+        static let cloudBadgeInset: CGFloat = 6
     }
 }

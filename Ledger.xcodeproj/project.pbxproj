@@ -30,6 +30,9 @@
 		A10001480000000000000001 /* InspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001470000000000000001 /* InspectorView.swift */; };
 		A100014C0000000000000001 /* PresetSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014B0000000000000001 /* PresetSheets.swift */; };
 		A100014E0000000000000001 /* ThumbnailService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014D0000000000000001 /* ThumbnailService.swift */; };
+		A10001810000000000000001 /* CloudFileState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001800000000000000001 /* CloudFileState.swift */; };
+		A10001830000000000000001 /* CloudDownloadTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001820000000000000001 /* CloudDownloadTracker.swift */; };
+		A10001850000000000000001 /* CloudBadgeControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001840000000000000001 /* CloudBadgeControl.swift */; };
 		A10001500000000000000001 /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014F0000000000000001 /* SettingsWindowController.swift */; };
 		A10001510000000000000001 /* AppModel+Sidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001530000000000000001 /* AppModel+Sidebar.swift */; };
 		A10001520000000000000001 /* AppModel+Preview.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001540000000000000001 /* AppModel+Preview.swift */; };
@@ -130,6 +133,9 @@
 		A10001470000000000000001 /* InspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorView.swift; sourceTree = "<group>"; };
 		A100014B0000000000000001 /* PresetSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetSheets.swift; sourceTree = "<group>"; };
 		A100014D0000000000000001 /* ThumbnailService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailService.swift; sourceTree = "<group>"; };
+		A10001800000000000000001 /* CloudFileState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudFileState.swift; sourceTree = "<group>"; };
+		A10001820000000000000001 /* CloudDownloadTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudDownloadTracker.swift; sourceTree = "<group>"; };
+		A10001840000000000000001 /* CloudBadgeControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBadgeControl.swift; sourceTree = "<group>"; };
 		A100014F0000000000000001 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
 		A10001530000000000000001 /* AppModel+Sidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Sidebar.swift"; sourceTree = "<group>"; };
 		A10001540000000000000001 /* AppModel+Preview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Preview.swift"; sourceTree = "<group>"; };
@@ -326,6 +332,9 @@
 				A100014D0000000000000001 /* ThumbnailService.swift */,
 				A100014F0000000000000001 /* SettingsWindowController.swift */,
 				F10000020000000000000001 /* UpdateService.swift */,
+				A10001800000000000000001 /* CloudFileState.swift */,
+				A10001820000000000000001 /* CloudDownloadTracker.swift */,
+				A10001840000000000000001 /* CloudBadgeControl.swift */,
 			);
 			path = Ledger;
 			sourceTree = "<group>";
@@ -573,6 +582,9 @@
 				DD0001010000000000000001 /* LedgerSidebarTypes.swift in Sources */,
 				A100014C0000000000000001 /* PresetSheets.swift in Sources */,
 				A100014E0000000000000001 /* ThumbnailService.swift in Sources */,
+				A10001810000000000000001 /* CloudFileState.swift in Sources */,
+				A10001830000000000000001 /* CloudDownloadTracker.swift in Sources */,
+				A10001850000000000000001 /* CloudBadgeControl.swift in Sources */,
 				A10001500000000000000001 /* SettingsWindowController.swift in Sources */,
 				F10000030000000000000001 /* UpdateService.swift in Sources */,
 				C20002010000000000000001 /* CSVImportAdapter.swift in Sources */,

@@ -228,10 +228,14 @@ extension AppModel {
     }
 
     func readMetadataBatchResilient(_ files: [URL]) async -> [FileMetadataSnapshot] {
-        guard !files.isEmpty else { return [] }
+        // iCloud placeholders aren't on disk yet — running ExifTool against one forces
+        // fileproviderd to materialise the whole file, which reads as a silent hang on large
+        // scans. Skip them entirely; the inspector shows a "Not Downloaded" state instead.
+        let readableFiles = files.filter { cloudStateByURL[$0]?.isPlaceholder != true }
+        guard !readableFiles.isEmpty else { return [] }
         do {
             return try await readMetadataWithTimeout(
-                files,
+                readableFiles,
                 timeoutNanoseconds: Self.metadataReadTimeoutNanoseconds
             )
         } catch is MetadataReadTimeoutError {
@@ -240,7 +244,7 @@ extension AppModel {
             return []
         } catch {
             var partial: [FileMetadataSnapshot] = []
-            for file in files {
+            for file in readableFiles {
                 if Task.isCancelled { break }
                 if let one = try? await readMetadataWithTimeout(
                     [file],

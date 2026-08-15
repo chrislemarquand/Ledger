@@ -43,6 +43,32 @@ private struct InspectorPreviewActionButtonStyle: ButtonStyle {
     }
 }
 
+private struct CloudPlaceholderInspectorView: View {
+    let isDownloading: Bool
+    let onDownload: () -> Void
+
+    var body: some View {
+        Group {
+            if isDownloading {
+                PlaceholderView(
+                    symbolName: "icloud.and.arrow.down",
+                    title: "Downloading\u{2026}",
+                    description: "Fetching this file from iCloud."
+                )
+            } else {
+                PlaceholderView(
+                    symbolName: "icloud.and.arrow.down",
+                    title: "Not Downloaded",
+                    description: "This file hasn\u{2019}t been downloaded from iCloud yet.",
+                    actionTitle: "Download Now",
+                    action: onDownload
+                )
+            }
+        }
+        .foregroundStyle(.secondary)
+    }
+}
+
 private struct InspectorPreviewActionLabel: View {
     let symbolName: String
     let title: String
@@ -81,6 +107,13 @@ struct InspectorView: View {
                         symbolName: "slider.horizontal.3",
                         title: "No Selection",
                         description: "Select one or more images to view and edit their metadata."
+                    )
+                    .frame(maxWidth: .infinity)
+                    .containerRelativeFrame(.vertical, alignment: .center)
+                } else if let first = singleSelectedPlaceholderURL {
+                    CloudPlaceholderInspectorView(
+                        isDownloading: model.cloudStateByURL[first] == .downloading,
+                        onDownload: { model.requestCloudDownload(for: first) }
                     )
                     .frame(maxWidth: .infinity)
                     .containerRelativeFrame(.vertical, alignment: .center)
@@ -340,6 +373,11 @@ struct InspectorView: View {
 
     private var primarySelectedFileURL: URL? {
         model.selectedFileURLs.sorted { $0.path < $1.path }.first
+    }
+
+    private var singleSelectedPlaceholderURL: URL? {
+        guard model.selectedFileURLs.count == 1, let first = model.selectedFileURLs.first else { return nil }
+        return model.cloudStateByURL[first]?.isPlaceholder == true ? first : nil
     }
 
     private func inspectorTitle(for fileURL: URL) -> String {

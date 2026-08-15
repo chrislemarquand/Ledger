@@ -218,7 +218,14 @@ enum ThumbnailService {
 
         // Cold path — generate fresh.
         let image: NSImage?
-        if ThumbnailGenerator.isLikelyImageFile(fileURL) {
+        if CloudFileStateResolver.resolve(for: fileURL).isPlaceholder {
+            // Placeholder files aren't on disk yet. generateOrientedThumbnail and
+            // generateDownsampledFallback both read raw file bytes via CGImageSource, which
+            // forces fileproviderd to materialise the whole file — not native Finder behaviour.
+            // QLThumbnailGenerator can preview a placeholder without downloading it; if that
+            // fails too, fall straight to the generic icon rather than forcing a download.
+            image = await ThumbnailGenerator.generateQuickLookThumbnail(fileURL: fileURL, maxPixelSize: maxPixelSize)
+        } else if ThumbnailGenerator.isLikelyImageFile(fileURL) {
             if let oriented = ThumbnailGenerator.generateOrientedThumbnail(fileURL: fileURL, maxPixelSize: maxPixelSize) {
                 image = oriented
             } else if let ql = await ThumbnailGenerator.generateQuickLookThumbnail(fileURL: fileURL, maxPixelSize: maxPixelSize) {

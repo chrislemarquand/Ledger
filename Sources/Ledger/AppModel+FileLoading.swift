@@ -91,6 +91,7 @@ extension AppModel {
         deferredPreviewPreloadTask?.cancel()
         deferredPreviewPreloadTask = nil
         previewPreloadID = UUID()
+        cloudStateByURL = [:]
 
         let urls: [URL]
         var enumerationError: Error?
@@ -166,6 +167,7 @@ extension AppModel {
         if shouldPublishHydratedOnly {
             let attributesByURL = await readBrowserFileAttributes(for: urls)
             guard !Task.isCancelled, activeFolderLoadID == loadID else { return }
+            mergeCloudStates(from: attributesByURL)
             prehydratedItems = urls.map { url in
                 let attrs = attributesByURL[url]
                 return BrowserItem(
@@ -174,7 +176,8 @@ extension AppModel {
                     modifiedAt: attrs?.modifiedAt,
                     createdAt: attrs?.createdAt,
                     sizeBytes: attrs?.sizeBytes,
-                    kind: attrs?.kind
+                    kind: attrs?.kind,
+                    cloudState: attrs?.cloudState ?? .local
                 )
             }
         } else {
@@ -200,7 +203,8 @@ extension AppModel {
                     modifiedAt: nil,
                     createdAt: nil,
                     sizeBytes: nil,
-                    kind: nil
+                    kind: nil,
+                    cloudState: .local
                 )
             }
             startBrowserItemHydration(for: urls, hydrationID: hydrationID)
@@ -212,6 +216,101 @@ extension AppModel {
             batchSize: metadataBatchSize(for: kind),
             loadID: loadID
         )
+
+        cloudDownloadTracker.start(for: urls) { [weak self] states in
+            self?.applyCloudStateUpdates(states)
+        }
+    }
+
+    func requestCloudDownload(for url: URL) {
+        cloudDownloadTracker.requestDownload(for: url)
+    }
+
+    /// Whether `url` is backed by iCloud at all — distinct from `cloudState`, which only
+    /// distinguishes local-vs-placeholder and folds "genuinely local file" and "fully-downloaded
+    /// iCloud file" into the same `.local` case. Context-menu visibility needs this finer check:
+    /// a plain local folder shouldn't show any iCloud menu item, downloaded or not.
+    func isUbiquitousItem(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isUbiquitousItemKey]))?.isUbiquitousItem == true
+    }
+
+    enum CloudContextMenuAction {
+        case download
+        case removeDownload
+    }
+
+    /// Returns nil when none of `urls` are iCloud-backed, so the caller can omit the menu item
+    /// entirely rather than show it disabled — matching Finder's own behaviour for local folders.
+    func cloudContextMenuAction(for urls: [URL]) -> CloudContextMenuAction? {
+        let cloudURLs = urls.filter { isUbiquitousItem($0) }
+        guard !cloudURLs.isEmpty else { return nil }
+        let anyPlaceholder = cloudURLs.contains { cloudStateByURL[$0]?.isPlaceholder == true }
+        return anyPlaceholder ? .download : .removeDownload
+    }
+
+    func performCloudContextMenuAction(for urls: [URL]) {
+        guard let action = cloudContextMenuAction(for: urls) else { return }
+        let cloudURLs = urls.filter { isUbiquitousItem($0) }
+        switch action {
+        case .download:
+            for url in cloudURLs where cloudStateByURL[url]?.isPlaceholder == true {
+                requestCloudDownload(for: url)
+            }
+        case .removeDownload:
+            for url in cloudURLs {
+                do {
+                    try FileManager.default.evictUbiquitousItem(at: url)
+                    // Don't wait on the tracker/query to notice — apply the badge/inspector
+                    // state change immediately, matching the download path's instant feedback.
+                    applyCloudStateUpdates([url: .notDownloaded])
+                } catch {
+                    setStatusMessage(
+                        "Couldn\u{2019}t remove download for \u{201C}\(url.lastPathComponent)\u{201D}: \(error.localizedDescription)",
+                        autoClearAfterSuccess: false
+                    )
+                }
+            }
+        }
+    }
+
+    /// Seeds `cloudStateByURL` from a freshly-read attributes batch (hydration or prehydration).
+    /// The live `CloudDownloadTracker` only reports state *changes* after a query round-trip —
+    /// without this, `cloudStateByURL` stays empty (nil looks like "not a placeholder") until the
+    /// first live update arrives, which is too late for the inspector's initial placeholder check.
+    private func mergeCloudStates(from attributesByURL: [URL: BrowserFileAttributes]) {
+        for (url, attrs) in attributesByURL {
+            cloudStateByURL[url] = attrs.cloudState
+        }
+    }
+
+    private func applyCloudStateUpdates(_ updates: [URL: CloudFileState]) {
+        guard !updates.isEmpty else { return }
+        var didChange = false
+        var newlyDownloaded: [URL] = []
+        for (url, state) in updates where cloudStateByURL[url] != state {
+            let wasPlaceholder = cloudStateByURL[url]?.isPlaceholder ?? true
+            cloudStateByURL[url] = state
+            didChange = true
+            if wasPlaceholder, !state.isPlaceholder {
+                newlyDownloaded.append(url)
+            }
+        }
+        guard didChange else { return }
+        browserItems = browserItems.map { item in
+            guard let newState = updates[item.url], item.cloudState != newState else { return item }
+            var updated = item
+            updated.cloudState = newState
+            return updated
+        }
+
+        // ExifTool reads are skipped while a file is a placeholder, so metadataByFile never gets
+        // an entry for it. Now that it's actually on disk, force a reload so the inspector doesn't
+        // keep showing an empty field list once the placeholder view steps aside.
+        guard !newlyDownloaded.isEmpty else { return }
+        staleMetadataFiles.formUnion(newlyDownloaded)
+        if !selectedFileURLs.isDisjoint(with: Set(newlyDownloaded)) {
+            Task { await loadMetadataForSelection() }
+        }
     }
 
     func clearLoadedContentState(
@@ -221,6 +320,7 @@ extension AppModel {
         // Folder switches should prioritize the newly selected folder; cancel stale
         // shared thumbnail work that would otherwise keep occupying the broker queue.
         Task { await ThumbnailService.cancelAllRequests() }
+        cloudDownloadTracker.stop()
 
         folderMetadataLoadTask?.cancel()
         folderMetadataLoadTask = nil
@@ -311,6 +411,7 @@ extension AppModel {
             let attributesByURL = await self.readBrowserFileAttributes(for: files)
 
             guard !Task.isCancelled, self.browserItemHydrationID == hydrationID else { return }
+            self.mergeCloudStates(from: attributesByURL)
             if !self.browserItems.isEmpty {
                 // Apply hydrated attributes in one pass to avoid repeated resort/reload
                 // churn while folder loads under non-name sort modes.
@@ -322,7 +423,8 @@ extension AppModel {
                         modifiedAt: attrs.modifiedAt,
                         createdAt: attrs.createdAt,
                         sizeBytes: attrs.sizeBytes,
-                        kind: attrs.kind
+                        kind: attrs.kind,
+                        cloudState: attrs.cloudState
                     )
                 }
             }
@@ -330,7 +432,13 @@ extension AppModel {
         }
     }
 
-    typealias BrowserFileAttributes = (modifiedAt: Date?, createdAt: Date?, sizeBytes: Int?, kind: String?)
+    typealias BrowserFileAttributes = (
+        modifiedAt: Date?,
+        createdAt: Date?,
+        sizeBytes: Int?,
+        kind: String?,
+        cloudState: CloudFileState
+    )
 
     private func readBrowserFileAttributes(for files: [URL]) async -> [URL: BrowserFileAttributes] {
         await Task.detached(priority: .utility) { () -> [URL: BrowserFileAttributes] in
@@ -354,7 +462,8 @@ extension AppModel {
                         resourceValues?.contentModificationDate,
                         resourceValues?.creationDate,
                         resourceValues?.fileSize,
-                        resourceValues?.localizedTypeDescription
+                        resourceValues?.localizedTypeDescription,
+                        CloudFileStateResolver.resolve(for: fileURL)
                     )
                 }
             }
