@@ -93,29 +93,38 @@ Deferred: HDR-aware previews (moved to v2.0 — belongs with the in-app viewer a
 
 ---
 
-## v1.3 (Pre-2.0 Foundations)
+## v1.3 — Import Maturity + Polish
 
-- [ ] **Performance streamlining Phase 4 (carried over from v1.2)**: architecture guardrails from `docs/v1.2-performance-streamlining-plan.md` — split `MainContentView.swift` into feature-focused files (menu wiring, split-view shell, observers, context menu actions); continue decomposing large `AppModel` extensions where natural boundaries exist; audit `AppModel` `@Published` properties to isolate hot-path/transient state from broad UI observation. Pairs with the `@Observable` migration below.
+### Import
+- [ ] **Import conflict-resolution UI**: dedicated conflict workspace for unresolved/ambiguous import rows with per-row target choice, side-by-side field diff, and bulk resolve actions.
+- [ ] **EOS-1V lens-tag policy system**: merges resolver enhancements and policy controls into one mature feature. Policy modes (`Do not write lens` / `Single lens for import` / `Focal-length mapping table`), unknown focal length behaviour, named lens profiles, import-sheet override selector.
+
+### Browse
 - [ ] **iCloud Drive file-state UI**: make it obvious in list/gallery/inspector when a file is a cloud placeholder rather than downloaded locally (evicted/dataless items currently look like a thumbnail/metadata loading failure — exiftool reads time out silently and previews stall while fileproviderd materialises multi-hundred-MB scans). Detect via `URLResourceValues` (`isUbiquitousItem` / `ubiquitousItemDownloadingStatus`) and badge undownloaded items with an iCloud symbol using SharedUI's `makeGalleryOverlaySymbol` (`Gallery/GalleryOverlay.swift`), in the style of Librarian's shared-library `person.2.fill` grid badge. Consider a download affordance/progress and skipping exiftool reads until files are materialised.
-- [ ] Bump bundled ExifTool from 13.50 to latest (13.59 as of 2026-07-25). Includes three security updates (13.53, 13.54, 13.59), Exif 3.1 spec tags (13.56), and Canon/Nikon/Sony lens improvements.
-- [ ] No-op batch rename: suppress the staged/applied state when a rename pattern produces no changes (filenames unchanged).
-- [ ] Explicit Home/End/Page Up/Page Down keyboard nav in list/gallery.
 - [ ] Gallery metadata lines/subtitle customisation.
+- [ ] Explicit Home/End/Page Up/Page Down keyboard nav in list/gallery.
+- [ ] Window/list-column resize fix: window frame, split dividers, and table column widths are restored via three independent absolute-pixel autosave systems with no reconciliation against current available width, causing inconsistent window size and columns/scrollbar overflow. Root-cause diagnosis and fix plan in `docs/window-list-resize-diagnosis-2026-07.md`.
+
+### Metadata
 - [ ] Metadata copy/paste:
   - [ ] Field-level copy/paste.
   - [ ] Metadata-set copy/paste.
 - [ ] ExifTool console: live readout of ExifTool commands and output as operations run, mirroring what would appear if running ExifTool directly in the terminal.
-- [ ] AppKit/UI + performance/memory/disk audit follow-ups: see `docs/appkit-ui-performance-audit-2026-07.md`. Notably batching `exiftool` metadata writes into a single invocation instead of one process per file, and adding eviction to the thumbnail disk cache.
-- [ ] **`@Observable` migration + Combine retirement**: move `AppModel` (and remaining `ObservableObject` types) from `@Published`/`objectWillChange` (~58 properties) to the `@Observable` macro for per-property view invalidation — the largest available SwiftUI performance lever for the inspector/browser, and best done before v2.0 rebuilds views on top. Fold in removal of the four remaining `import Combine` sites (per project guideline preferring async/await). Watch interactions with `inspectorRefreshRevision` and other manual-notify patterns that exist to work around whole-object invalidation.
-- [ ] **macOS 26 chrome-workaround audit on Golden Gate**: re-test and retire the Liquid Glass-era workarounds (sidebar inset machinery, window-config timing flashes). Inventory and method tracked in SharedUI `docs/Roadmap.md` ("macOS 26 chrome-workaround audit"); Ledger's stake is `MainContentView.viewWillAppear` window-config timing.
-- [ ] Window/list-column resize fix: window frame, split dividers, and table column widths are restored via three independent absolute-pixel autosave systems with no reconciliation against current available width, causing inconsistent window size and columns/scrollbar overflow. Root-cause diagnosis and fix plan in `docs/window-list-resize-diagnosis-2026-07.md`.
+
+### Maintenance
+- [ ] Bump bundled ExifTool from 13.50 to latest (13.59 as of 2026-07-25). Includes three security updates (13.53, 13.54, 13.59), Exif 3.1 spec tags (13.56), and Canon/Nikon/Sony lens improvements.
+- [ ] No-op batch rename: suppress the staged/applied state when a rename pattern produces no changes (filenames unchanged).
 
 ---
 
-## v1.4 (Pre-2.0 Foundations)
+## v1.4 — Architecture Foundations (Pre-2.0)
 
-- [ ] **Import conflict-resolution UI**: dedicated conflict workspace for unresolved/ambiguous import rows with per-row target choice, side-by-side field diff, and bulk resolve actions.
-- [ ] **EOS-1V lens-tag policy system**: merges resolver enhancements and policy controls into one mature feature. Policy modes (`Do not write lens` / `Single lens for import` / `Focal-length mapping table`), unknown focal length behaviour, named lens profiles, import-sheet override selector.
+No new user-facing features — isolated architecture/perf work ahead of the v2.0 gallery rewrite, so a regression pass only has to account for the refactor, not new surface area.
+
+- [ ] **`@Observable` migration + Combine retirement**: move `AppModel` (and remaining `ObservableObject` types) from `@Published`/`objectWillChange` (~58 properties) to the `@Observable` macro for per-property view invalidation — the largest available SwiftUI performance lever for the inspector/browser, and best done before v2.0 rebuilds views on top. Fold in removal of the four remaining `import Combine` sites (per project guideline preferring async/await). Watch interactions with `inspectorRefreshRevision` and other manual-notify patterns that exist to work around whole-object invalidation.
+- [ ] **Performance streamlining Phase 4 (carried over from v1.2)**: architecture guardrails from `docs/v1.2-performance-streamlining-plan.md` — split `MainContentView.swift` into feature-focused files (menu wiring, split-view shell, observers, context menu actions); continue decomposing large `AppModel` extensions where natural boundaries exist; audit `AppModel` `@Published` properties to isolate hot-path/transient state from broad UI observation. Pairs with the `@Observable` migration above.
+- [ ] **macOS 26 chrome-workaround audit on Golden Gate**: re-test and retire the Liquid Glass-era workarounds (sidebar inset machinery, window-config timing flashes). Inventory and method tracked in SharedUI `docs/Roadmap.md` ("macOS 26 chrome-workaround audit"); Ledger's stake is `MainContentView.viewWillAppear` window-config timing.
+- [ ] AppKit/UI + performance/memory/disk audit follow-ups: see `docs/appkit-ui-performance-audit-2026-07.md`. Notably batching `exiftool` metadata writes into a single invocation instead of one process per file, and adding eviction to the thumbnail disk cache.
 
 ---
 
