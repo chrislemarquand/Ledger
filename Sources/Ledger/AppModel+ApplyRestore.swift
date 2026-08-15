@@ -407,16 +407,15 @@ extension AppModel {
             applyMetadataCompleted = applyMetadataTotal
             clearMetadataUndoHistory()
 
-            Task { @MainActor [weak self] in
-                guard let self else { return }
+            Task { @MainActor in
                 if !didReloadFiles {
-                    if self.autoRefreshMetadataAfterApply {
-                        await self.loadMetadataForSelection()
+                    if autoRefreshMetadataAfterApply {
+                        await loadMetadataForSelection()
                     } else {
-                        self.recalculateInspectorState(forceNotify: true)
+                        recalculateInspectorState(forceNotify: true)
                     }
                 }
-                self.isApplyingMetadata = false
+                isApplyingMetadata = false
             }
         }
     }
