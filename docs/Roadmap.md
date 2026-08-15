@@ -1,6 +1,6 @@
 # ROADMAP
 
-Current baseline: **v1.1**.
+Current baseline: **v1.2.3**.
 
 This file is the active forward roadmap.
 Historical pre-v1 detail remains in `ROADMAPOLD.MD`.
@@ -77,8 +77,8 @@ Released: **2026-03-10**.
 - [x] Inspector preview cache size cap (currently trimmed by URL list only; large folders cache all previews with no memory ceiling).
 - [x] Date/Time adjust workflow in Inspector + Image menu: AppKit-backed date controls, `Set…` launch flow, Shift/Time Zone/Specific/File modes, Apply-to (`Original` / `Digitised` / `Modified`) targeting, and effective-change preview/apply gating.
 - [x] Workflow sheet parity pass across Import / Batch Rename / Date-Time: shared `WorkflowSheetContainer` rhythm, `WorkflowFormRow` adoption, and aligned section/footer spacing.
-- [ ] Location adjust workflow (MapKit): workflow sheet + Inspector/Image-menu entry points, search + map interaction, latitude/longitude preview line, preview popover, and staged GPS lat/lon writes.
-- [ ] Performance streamlining pass (no feature cuts): implement phased payload/runtime/CPU reductions tracked in `docs/v1.2-performance-streamlining-plan.md`.
+- [x] Location adjust workflow (MapKit): workflow sheet + Inspector/Image-menu entry points, search + map interaction, latitude/longitude preview line, preview popover, and staged GPS lat/lon writes.
+- [x] Performance streamlining pass, Phases 1-3 (no feature cuts): payload/runtime/CPU reductions tracked in `docs/v1.2-performance-streamlining-plan.md`. Phase 4 (architecture guardrails) carried forward to v1.3.
 
 ---
 
@@ -95,6 +95,7 @@ Deferred: HDR-aware previews (moved to v2.0 — belongs with the in-app viewer a
 
 ## v1.3 (Pre-2.0 Foundations)
 
+- [ ] **Performance streamlining Phase 4 (carried over from v1.2)**: architecture guardrails from `docs/v1.2-performance-streamlining-plan.md` — split `MainContentView.swift` into feature-focused files (menu wiring, split-view shell, observers, context menu actions); continue decomposing large `AppModel` extensions where natural boundaries exist; audit `AppModel` `@Published` properties to isolate hot-path/transient state from broad UI observation. Pairs with the `@Observable` migration below.
 - [ ] **iCloud Drive file-state UI**: make it obvious in list/gallery/inspector when a file is a cloud placeholder rather than downloaded locally (evicted/dataless items currently look like a thumbnail/metadata loading failure — exiftool reads time out silently and previews stall while fileproviderd materialises multi-hundred-MB scans). Detect via `URLResourceValues` (`isUbiquitousItem` / `ubiquitousItemDownloadingStatus`) and badge undownloaded items with an iCloud symbol using SharedUI's `makeGalleryOverlaySymbol` (`Gallery/GalleryOverlay.swift`), in the style of Librarian's shared-library `person.2.fill` grid badge. Consider a download affordance/progress and skipping exiftool reads until files are materialised.
 - [ ] Bump bundled ExifTool from 13.50 to latest (13.59 as of 2026-07-25). Includes three security updates (13.53, 13.54, 13.59), Exif 3.1 spec tags (13.56), and Canon/Nikon/Sony lens improvements.
 - [ ] No-op batch rename: suppress the staged/applied state when a rename pattern produces no changes (filenames unchanged).
