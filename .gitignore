@@ -6,7 +6,7 @@ DerivedData/
 .swiftpm/configuration/registries.json
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
 .netrc
-build/
+/build/
 build_artifacts/
 build_derived/
 build_derived_*/
