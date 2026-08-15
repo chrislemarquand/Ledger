@@ -97,6 +97,13 @@ Ledger is built on the shoulders of several excellent open source projects:
 
 - [ExifTool](https://exiftool.org) — © Phil Harvey (Artistic/GPL)
 - [Sparkle](https://sparkle-project.org) — © 2006 Andy Matuschak et al. (MIT)
+- [WhatsNewKit](https://github.com/SvenTiigi/WhatsNewKit) — © Sven Tiigi (MIT)
+
+---
+
+## License
+
+Ledger is released under the [MIT License](LICENSE).
 
 ---
 

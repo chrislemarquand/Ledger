@@ -24,3 +24,8 @@ docs/fixtures/
 
 # Sparkle private key — never commit this
 *sparkle_private_key*
+
+# Local-only scratch/vendor content, not part of the project
+/Vendor/
+/1vdriver/
+.claude/
