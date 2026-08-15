@@ -246,24 +246,6 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
         isRenderingState = true
         defer { isRenderingState = false }
 
-        if lastThumbnailInvalidationToken != model.browserThumbnailInvalidationToken {
-            lastThumbnailInvalidationToken = model.browserThumbnailInvalidationToken
-            let invalidated = model.browserThumbnailInvalidatedURLs
-            if invalidated.isEmpty {
-                ThumbnailPipeline.invalidateAllCachedImages()
-                pendingThumbnailRefreshURLs.removeAll()
-                collectionView.reloadData()
-            } else {
-                pendingThumbnailRefreshURLs.formUnion(invalidated)
-                let indexPaths = Set(items.enumerated().compactMap { index, item -> IndexPath? in
-                    invalidated.contains(item.url) ? IndexPath(item: index, section: 0) : nil
-                })
-                if !indexPaths.isEmpty {
-                    collectionView.reloadItems(at: indexPaths)
-                }
-            }
-        }
-
         let currentURLs = items.map(\.url)
         let selectedURLs = model.selectedFileURLs.intersection(Set(currentURLs))
         let pendingURLs = Set(currentURLs.filter { model.hasPendingEdits(for: $0) })
@@ -281,9 +263,38 @@ final class BrowserGalleryViewController: NSViewController, NSCollectionViewData
             applyColumnCount(targetColumnCount, animated: true)
         }
 
+        // Must run before the thumbnail-invalidation block below: reloadData() is what
+        // tells the collection view about a new item count. Computing index paths for a
+        // targeted reloadItems(at:) against the already-updated `items` array while the
+        // collection view still holds the old count hands AppKit out-of-range index paths,
+        // which aborts inside _NSCollectionViewCore's item-animation bookkeeping.
         if listChanged {
             collectionView.reloadData()
             lastRenderedURLs = currentURLs
+        }
+
+        if lastThumbnailInvalidationToken != model.browserThumbnailInvalidationToken {
+            lastThumbnailInvalidationToken = model.browserThumbnailInvalidationToken
+            let invalidated = model.browserThumbnailInvalidatedURLs
+            if invalidated.isEmpty {
+                ThumbnailPipeline.invalidateAllCachedImages()
+                pendingThumbnailRefreshURLs.removeAll()
+                if !listChanged {
+                    collectionView.reloadData()
+                }
+            } else if !listChanged {
+                // If the list also changed this pass, reloadData() above already
+                // picked up the latest thumbnails; a targeted reload is redundant.
+                pendingThumbnailRefreshURLs.formUnion(invalidated)
+                let indexPaths = Set(items.enumerated().compactMap { index, item -> IndexPath? in
+                    invalidated.contains(item.url) ? IndexPath(item: index, section: 0) : nil
+                })
+                if !indexPaths.isEmpty {
+                    collectionView.reloadItems(at: indexPaths)
+                }
+            } else {
+                pendingThumbnailRefreshURLs.formUnion(invalidated)
+            }
         }
 
         // Compute before syncSelection so we can suppress the synchronous scrollToItems
