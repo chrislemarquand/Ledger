@@ -217,8 +217,8 @@ extension AppModel {
             loadID: loadID
         )
 
-        cloudDownloadTracker.start(for: urls) { [weak self] states in
-            self?.applyCloudStateUpdates(states)
+        cloudDownloadTracker.start(for: urls) { [weak self] states, progress in
+            self?.applyCloudStateUpdates(states, progress: progress)
         }
     }
 
@@ -283,8 +283,7 @@ extension AppModel {
         }
     }
 
-    private func applyCloudStateUpdates(_ updates: [URL: CloudFileState]) {
-        guard !updates.isEmpty else { return }
+    private func applyCloudStateUpdates(_ updates: [URL: CloudFileState], progress: [URL: Double?] = [:]) {
         var didChange = false
         var newlyDownloaded: [URL] = []
         for (url, state) in updates where cloudStateByURL[url] != state {
@@ -293,6 +292,17 @@ extension AppModel {
             didChange = true
             if wasPlaceholder, !state.isPlaceholder {
                 newlyDownloaded.append(url)
+            }
+            // Progress is only meaningful while a download is actually in flight; clear any
+            // stale reading the moment a file leaves that state (completed, evicted, or a fresh
+            // .downloading restart that hasn't reported a percentage yet).
+            if state != .downloading {
+                cloudDownloadProgressByURL.removeValue(forKey: url)
+            }
+        }
+        for (url, fraction) in progress {
+            if let fraction {
+                cloudDownloadProgressByURL[url] = fraction
             }
         }
         guard didChange else { return }

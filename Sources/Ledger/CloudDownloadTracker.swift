@@ -12,7 +12,7 @@ import Foundation
 final class CloudDownloadTracker {
     private var query: NSMetadataQuery?
     private var observers: [NSObjectProtocol] = []
-    private var onUpdate: (([URL: CloudFileState]) -> Void)?
+    private var onUpdate: (([URL: CloudFileState], [URL: Double?]) -> Void)?
     /// Matching on `NSMetadataItemURLKey` via an `IN` predicate is unreliable — Spotlight's
     /// reported URL for an item doesn't always compare equal to a `FileManager`-enumerated URL
     /// for the same file (trailing slash / standardisation differences). Match on path string
@@ -23,7 +23,7 @@ final class CloudDownloadTracker {
     /// Begin watching `urls` for download-state changes. Replaces any existing watch.
     /// `onUpdate` is called with the full state for every URL the query currently knows about,
     /// each time results change.
-    func start(for urls: [URL], onUpdate: @escaping ([URL: CloudFileState]) -> Void) {
+    func start(for urls: [URL], onUpdate: @escaping ([URL: CloudFileState], [URL: Double?]) -> Void) {
         stop()
         guard !urls.isEmpty else { return }
         self.onUpdate = onUpdate
@@ -62,7 +62,7 @@ final class CloudDownloadTracker {
     func requestDownload(for url: URL) {
         guard !pendingDownloads.contains(url) else { return }
         pendingDownloads.insert(url)
-        onUpdate?([url: .downloading])
+        onUpdate?([url: .downloading], [url: nil])
         try? FileManager.default.startDownloadingUbiquitousItem(at: url)
         pollForCompletion(of: url)
     }
@@ -79,7 +79,7 @@ final class CloudDownloadTracker {
                 guard let self, self.pendingDownloads.contains(url) else { return }
                 guard CloudFileStateResolver.resolve(for: url) == .local else { continue }
                 self.pendingDownloads.remove(url)
-                self.onUpdate?([url: .local])
+                self.onUpdate?([url: .local], [url: nil])
                 return
             }
         }
@@ -91,6 +91,7 @@ final class CloudDownloadTracker {
         defer { query.enableUpdates() }
 
         var states: [URL: CloudFileState] = [:]
+        var progress: [URL: Double?] = [:]
         for case let item as NSMetadataItem in query.results {
             guard let path = item.value(forAttribute: NSMetadataItemPathKey) as? String,
                   let url = urlsByPath[path]
@@ -103,8 +104,15 @@ final class CloudDownloadTracker {
                 pendingDownloads.remove(url)
             } else {
                 states[url] = pendingDownloads.contains(url) ? .downloading : .notDownloaded
+                if pendingDownloads.contains(url) {
+                    // Deprecated, but still the only live percent-complete signal iCloud Drive
+                    // exposes for a plain file download outside a File Provider extension. Report
+                    // it when the OS bothers to populate it; callers treat a nil as indeterminate.
+                    let percent = item.value(forAttribute: NSMetadataUbiquitousItemPercentDownloadedKey) as? Double
+                    progress[url] = percent.map { $0 / 100 }
+                }
             }
         }
-        onUpdate?(states)
+        onUpdate?(states, progress)
     }
 }

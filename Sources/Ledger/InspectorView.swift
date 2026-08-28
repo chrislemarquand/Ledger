@@ -45,6 +45,7 @@ private struct InspectorPreviewActionButtonStyle: ButtonStyle {
 
 private struct CloudPlaceholderInspectorView: View {
     let isDownloading: Bool
+    let downloadProgress: Double?
     let onDownload: () -> Void
 
     var body: some View {
@@ -53,7 +54,9 @@ private struct CloudPlaceholderInspectorView: View {
                 PlaceholderView(
                     symbolName: "icloud.and.arrow.down",
                     title: "Downloading\u{2026}",
-                    description: "Fetching this file from iCloud."
+                    description: "Fetching this file from iCloud.",
+                    isPerformingAction: true,
+                    actionProgress: downloadProgress
                 )
             } else {
                 PlaceholderView(
@@ -113,6 +116,7 @@ struct InspectorView: View {
                 } else if let first = singleSelectedPlaceholderURL {
                     CloudPlaceholderInspectorView(
                         isDownloading: model.cloudStateByURL[first] == .downloading,
+                        downloadProgress: model.cloudDownloadProgressByURL[first],
                         onDownload: { model.requestCloudDownload(for: first) }
                     )
                     .frame(maxWidth: .infinity)

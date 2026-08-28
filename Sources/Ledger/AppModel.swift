@@ -573,6 +573,10 @@ final class AppModel: ObservableObject {
     var browserItemHydrationID = UUID()
     let cloudDownloadTracker = CloudDownloadTracker()
     @Published var cloudStateByURL: [URL: CloudFileState] = [:]
+    /// Fraction (0...1) of an in-flight requested download's completion, when the OS reports one.
+    /// No entry means indeterminate — either no download is in flight for that URL, or the OS
+    /// hasn't supplied a percentage yet.
+    @Published var cloudDownloadProgressByURL: [URL: Double] = [:]
     var selectionMetadataLoadTask: Task<Void, Never>?
     var previewPreloadTask: Task<Void, Never>?
     var deferredFolderMetadataPrefetchTask: Task<Void, Never>?
