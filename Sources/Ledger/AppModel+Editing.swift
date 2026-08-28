@@ -859,7 +859,7 @@ extension AppModel {
         }
     }
 
-    func moveSelectionInGallery(direction: SharedUI.MoveCommandDirection, extendingSelection: Bool = false) {
+    func moveSelectionInIconGrid(direction: SharedUI.MoveCommandDirection, extendingSelection: Bool = false) {
         let items = filteredBrowserItems
         guard !items.isEmpty else { return }
 
@@ -873,6 +873,29 @@ extension AppModel {
             delta = -galleryColumnCount
         case .down:
             delta = galleryColumnCount
+        }
+
+        if extendingSelection {
+            moveRangeSelection(in: items, delta: delta)
+        } else {
+            moveSingleSelection(in: items, delta: delta)
+        }
+    }
+
+    /// The filmstrip is a single row, so up/down are no-ops — matches Finder's own Gallery
+    /// View, which doesn't repurpose up/down arrows in a flat file list either.
+    func moveSelectionInFilmstrip(direction: SharedUI.MoveCommandDirection, extendingSelection: Bool = false) {
+        let items = filteredBrowserItems
+        guard !items.isEmpty else { return }
+
+        let delta: Int
+        switch direction {
+        case .left:
+            delta = -1
+        case .right:
+            delta = 1
+        case .up, .down:
+            return
         }
 
         if extendingSelection {

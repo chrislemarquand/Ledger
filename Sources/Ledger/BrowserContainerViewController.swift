@@ -15,8 +15,9 @@ final class BrowserContainerViewController: NSViewController {
     }
 
     private let model: AppModel
-    private let galleryController: BrowserGalleryViewController
+    private let iconController: BrowserIconViewController
     private let listController: BrowserListViewController
+    private let filmstripController: BrowserFilmstripViewController
     private var overlayView: NSView?
     private var renderObservers: [AnyCancellable] = []
     private var lastOverlayState: OverlayState = .none
@@ -25,8 +26,9 @@ final class BrowserContainerViewController: NSViewController {
 
     // Path bar
     private var pathBarVC: PathBarViewController?
-    private var galleryBottomConstraint: NSLayoutConstraint?
+    private var iconBottomConstraint: NSLayoutConstraint?
     private var listBottomConstraint: NSLayoutConstraint?
+    private var filmstripBottomConstraint: NSLayoutConstraint?
     private let pathBarDefaultsKey = "\(AppBrand.identifierPrefix).pathBarVisible"
 
     var isPathBarVisible: Bool {
@@ -35,8 +37,9 @@ final class BrowserContainerViewController: NSViewController {
 
     init(model: AppModel) {
         self.model = model
-        galleryController = BrowserGalleryViewController(model: model, items: model.filteredBrowserItems)
+        iconController = BrowserIconViewController(model: model, items: model.filteredBrowserItems)
         listController = BrowserListViewController(model: model, items: model.filteredBrowserItems)
+        filmstripController = BrowserFilmstripViewController(model: model, items: model.filteredBrowserItems)
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -51,8 +54,9 @@ final class BrowserContainerViewController: NSViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        galleryBottomConstraint = installChild(galleryController)
+        iconBottomConstraint = installChild(iconController)
         listBottomConstraint = installChild(listController)
+        filmstripBottomConstraint = installChild(filmstripController)
         if isPathBarVisible {
             installPathBarIfNeeded()
             adjustContentBottomConstraints(toPathBar: true)
@@ -90,16 +94,18 @@ final class BrowserContainerViewController: NSViewController {
     }
 
     private func adjustContentBottomConstraints(toPathBar: Bool) {
-        guard let galleryBottomConstraint, let listBottomConstraint else { return }
-        NSLayoutConstraint.deactivate([galleryBottomConstraint, listBottomConstraint])
+        guard let iconBottomConstraint, let listBottomConstraint, let filmstripBottomConstraint else { return }
+        NSLayoutConstraint.deactivate([iconBottomConstraint, listBottomConstraint, filmstripBottomConstraint])
         if toPathBar, let pathBarVC {
-            self.galleryBottomConstraint = galleryController.view.bottomAnchor.constraint(equalTo: pathBarVC.view.topAnchor)
+            self.iconBottomConstraint = iconController.view.bottomAnchor.constraint(equalTo: pathBarVC.view.topAnchor)
             self.listBottomConstraint = listController.view.bottomAnchor.constraint(equalTo: pathBarVC.view.topAnchor)
+            self.filmstripBottomConstraint = filmstripController.view.bottomAnchor.constraint(equalTo: pathBarVC.view.topAnchor)
         } else {
-            self.galleryBottomConstraint = galleryController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+            self.iconBottomConstraint = iconController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
             self.listBottomConstraint = listController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+            self.filmstripBottomConstraint = filmstripController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         }
-        NSLayoutConstraint.activate([self.galleryBottomConstraint!, self.listBottomConstraint!])
+        NSLayoutConstraint.activate([self.iconBottomConstraint!, self.listBottomConstraint!, self.filmstripBottomConstraint!])
     }
 
     private func updatePathBarURL() {
@@ -131,6 +137,7 @@ final class BrowserContainerViewController: NSViewController {
         observe(model.$browserSort)
         observe(model.$browserSortAscending)
         observe(model.$galleryGridLevel)
+        observe(model.$iconSubtitleColumnID)
     }
 
     private func scheduleRender() {
@@ -183,8 +190,9 @@ final class BrowserContainerViewController: NSViewController {
         updatePathBarURL()
         applyBrowserModeIfNeeded(force: false)
         let items = model.filteredBrowserItems
-        galleryController.update(model: model, items: items)
+        iconController.update(model: model, items: items)
         listController.update(model: model, items: items)
+        filmstripController.update(model: model, items: items)
 
         let nextOverlayState = currentOverlayState()
         if nextOverlayState == lastOverlayState, nextOverlayState != .loading {
@@ -196,10 +204,12 @@ final class BrowserContainerViewController: NSViewController {
 
     func clearActiveBrowserSelectionUI() {
         switch model.browserViewMode {
-        case .gallery:
-            galleryController.clearVisualSelection()
+        case .icon:
+            iconController.clearVisualSelection()
         case .list:
             listController.clearVisualSelection()
+        case .gallery:
+            filmstripController.clearVisualSelection()
         }
     }
 
@@ -208,12 +218,19 @@ final class BrowserContainerViewController: NSViewController {
         if !force, mode == lastRenderedMode { return }
         lastRenderedMode = mode
 
-        if mode == .gallery {
-            galleryController.view.isHidden = false
+        switch mode {
+        case .icon:
+            iconController.view.isHidden = false
             listController.view.isHidden = true
-        } else {
+            filmstripController.view.isHidden = true
+        case .list:
+            iconController.view.isHidden = true
             listController.view.isHidden = false
-            galleryController.view.isHidden = true
+            filmstripController.view.isHidden = true
+        case .gallery:
+            iconController.view.isHidden = true
+            listController.view.isHidden = true
+            filmstripController.view.isHidden = false
         }
     }
 

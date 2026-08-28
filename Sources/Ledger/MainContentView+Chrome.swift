@@ -38,5 +38,7 @@ enum UIMetrics {
         static let titleGap: CGFloat = 6
         static let cloudBadgeSize: CGFloat = 14
         static let cloudBadgeInset: CGFloat = 6
+        static let subtitleGap: CGFloat = 2
+        static let subtitleHeight: CGFloat = 14
     }
 }

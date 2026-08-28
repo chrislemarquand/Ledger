@@ -433,7 +433,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                KeyboardShortcutSupport.canHandleWindowShortcuts(in: window) {
                 if event.keyCode == KeyCode.equal || event.keyCode == KeyCode.numpadPlus {
                     guard modifiers == [.command] || modifiers == [.command, .shift] else { return event }
-                    guard model.browserViewMode == .gallery else { return nil }
+                    guard model.browserViewMode == .icon else { return nil }
                     guard model.canIncreaseGalleryZoom else { return nil }
                     model.increaseGalleryZoom()
                     refreshToolbarState()
@@ -441,7 +441,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                 }
                 if event.keyCode == KeyCode.minus || event.keyCode == KeyCode.numpadMinus {
                     guard modifiers == [.command] || modifiers == [.command, .shift] else { return event }
-                    guard model.browserViewMode == .gallery else { return nil }
+                    guard model.browserViewMode == .icon else { return nil }
                     guard model.canDecreaseGalleryZoom else { return nil }
                     model.decreaseGalleryZoom()
                     refreshToolbarState()
@@ -481,20 +481,28 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             case KeyCode.leftArrow, KeyCode.rightArrow, KeyCode.downArrow, KeyCode.upArrow:
                 guard let direction = moveDirection(forKeyCode: event.keyCode) else { return event }
                 if modifiers.isEmpty {
-                    if model.browserViewMode == .gallery {
-                        model.moveSelectionInGallery(direction: direction, extendingSelection: false)
+                    switch model.browserViewMode {
+                    case .icon:
+                        model.moveSelectionInIconGrid(direction: direction, extendingSelection: false)
                         return nil
-                    }
-                    if direction == .up || direction == .down {
-                        model.moveSelectionInList(direction: direction, extendingSelection: false)
+                    case .gallery:
+                        model.moveSelectionInFilmstrip(direction: direction, extendingSelection: false)
                         return nil
+                    case .list:
+                        if direction == .up || direction == .down {
+                            model.moveSelectionInList(direction: direction, extendingSelection: false)
+                            return nil
+                        }
+                        return event
                     }
-                    return event
                 }
                 guard modifiers == [.shift] else { return event }
-                if model.browserViewMode == .gallery {
-                    model.moveSelectionInGallery(direction: direction, extendingSelection: true)
-                } else {
+                switch model.browserViewMode {
+                case .icon:
+                    model.moveSelectionInIconGrid(direction: direction, extendingSelection: true)
+                case .gallery:
+                    model.moveSelectionInFilmstrip(direction: direction, extendingSelection: true)
+                case .list:
                     model.moveSelectionInList(direction: direction, extendingSelection: true)
                 }
                 return nil
@@ -722,6 +730,30 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         return item
     }
 
+    /// Icon-view-only: a single-select subtitle field shown below each thumbnail's filename.
+    /// Reuses `ListColumnDefinition`'s existing field list and `AppModel.listColumnValue` so
+    /// this can never disagree with List view's column picker about how a field is formatted.
+    private func makeSubtitleMenuItem() -> NSMenuItem {
+        let subtitleMenu = NSMenu(title: "Subtitle")
+
+        let noneItem = NSMenuItem(title: "None", action: #selector(setIconSubtitleAction(_:)), keyEquivalent: "")
+        noneItem.target = self
+        subtitleMenu.addItem(noneItem)
+        subtitleMenu.addItem(.separator())
+
+        for column in ListColumnDefinition.toggleable {
+            let columnItem = NSMenuItem(title: column.label, action: #selector(setIconSubtitleAction(_:)), keyEquivalent: "")
+            columnItem.representedObject = column.id
+            columnItem.target = self
+            subtitleMenu.addItem(columnItem)
+        }
+
+        let item = NSMenuItem(title: "Subtitle", action: nil, keyEquivalent: "")
+        item.image = NSImage(systemSymbolName: "text.below.photo", accessibilityDescription: nil)
+        item.submenu = subtitleMenu
+        return item
+    }
+
     /// Rebuilds the View menu in the desired order with SF Symbol images.
     /// Collects SwiftUI-managed items (Toggle Sidebar, Toggle Inspector) and any
     /// unrecognised AppKit items (Enter Full Screen), clears the menu, then re-adds
@@ -729,13 +761,13 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     /// Toggle Sidebar, Toggle Inspector, other (Enter Full Screen).
     private func rebuildViewMenu(_ menu: NSMenu) {
         // Early exit if already in the correct order.
-        guard menu.items.first?.title.lowercased() != "as gallery" else { return }
+        guard menu.items.first?.title.lowercased() != "as icons" else { return }
 
         // Collect items we don't own so we can keep them.
         var sidebarMenuItem: NSMenuItem?
         var inspectorMenuItem: NSMenuItem?
         var extraItems: [NSMenuItem] = []
-        let ownedTitles: Set<String> = ["as gallery", "as list", "sort by", "zoom in", "zoom out", "show path bar", "hide path bar"]
+        let ownedTitles: Set<String> = ["as icons", "as gallery", "as list", "sort by", "zoom in", "zoom out", "show path bar", "hide path bar"]
 
         for item in menu.items where !item.isSeparatorItem {
             let normalizedTitle = item.title.lowercased()
@@ -748,13 +780,29 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         }
 
         // Build fresh injected items with images.
-        let galleryItem = NSMenuItem(title: "as Gallery", action: #selector(switchToGalleryAction(_:)), keyEquivalent: "1")
-        galleryItem.keyEquivalentModifierMask = .command
-        galleryItem.image = NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: nil)
+        // macOS 27 has AppKit hide menu-item SF Symbol images by default; opt these three back
+        // in explicitly via `preferredImageVisibility` (API_AVAILABLE(macos(27.0))) so they
+        // render the same on 27 as they already do on 26. `.image` alone isn't enough there.
+        let iconItem = NSMenuItem(title: "as Icons", action: #selector(switchToIconAction(_:)), keyEquivalent: "1")
+        iconItem.keyEquivalentModifierMask = .command
+        iconItem.image = NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: nil)
+        if #available(macOS 27.0, *) {
+            iconItem.preferredImageVisibility = .visible
+        }
 
         let listItem = NSMenuItem(title: "as List", action: #selector(switchToListAction(_:)), keyEquivalent: "2")
         listItem.keyEquivalentModifierMask = .command
         listItem.image = NSImage(systemSymbolName: "list.bullet", accessibilityDescription: nil)
+        if #available(macOS 27.0, *) {
+            listItem.preferredImageVisibility = .visible
+        }
+
+        let galleryItem = NSMenuItem(title: "as Gallery", action: #selector(switchToGalleryAction(_:)), keyEquivalent: "3")
+        galleryItem.keyEquivalentModifierMask = .command
+        galleryItem.image = NSImage(systemSymbolName: "squares.below.rectangle", accessibilityDescription: nil)
+        if #available(macOS 27.0, *) {
+            galleryItem.preferredImageVisibility = .visible
+        }
 
         let zoomInItem = NSMenuItem(title: "Zoom In", action: #selector(zoomInAction(_:)), keyEquivalent: "+")
         zoomInItem.keyEquivalentModifierMask = .command
@@ -779,8 +827,11 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
 
         // Rebuild in desired order.
         menu.removeAllItems()
-        menu.addItem(galleryItem)
+        menu.addItem(iconItem)
         menu.addItem(listItem)
+        menu.addItem(galleryItem)
+        menu.addItem(.separator())
+        menu.addItem(makeSubtitleMenuItem())
         menu.addItem(.separator())
         menu.addItem(makeSortByMenuItem())
         menu.addItem(.separator())
@@ -1113,6 +1164,9 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         rotateAnticlockwiseItem.image = NSImage(systemSymbolName: "rotate.left", accessibilityDescription: nil)
         rotateAnticlockwiseItem.tag = MenuTag.imageRotateAnticlockwise
         rotateAnticlockwiseItem.target = self
+        if #available(macOS 27.0, *) {
+            rotateAnticlockwiseItem.preferredImageVisibility = .visible
+        }
         menu.addItem(rotateAnticlockwiseItem)
 
         let rotateClockwiseItem = NSMenuItem(
@@ -1123,6 +1177,9 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         rotateClockwiseItem.image = NSImage(systemSymbolName: "rotate.right", accessibilityDescription: nil)
         rotateClockwiseItem.tag = MenuTag.imageRotateClockwise
         rotateClockwiseItem.target = self
+        if #available(macOS 27.0, *) {
+            rotateClockwiseItem.preferredImageVisibility = .visible
+        }
         menu.addItem(rotateClockwiseItem)
 
         let flipHorizontalItem = NSMenuItem(
@@ -1133,6 +1190,9 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         flipHorizontalItem.image = NSImage(systemSymbolName: "flip.horizontal", accessibilityDescription: nil)
         flipHorizontalItem.tag = MenuTag.imageFlipHorizontal
         flipHorizontalItem.target = self
+        if #available(macOS 27.0, *) {
+            flipHorizontalItem.preferredImageVisibility = .visible
+        }
         menu.addItem(flipHorizontalItem)
 
         let flipVerticalItem = NSMenuItem(
@@ -1146,6 +1206,9 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         )
         flipVerticalItem.tag = MenuTag.imageFlipVertical
         flipVerticalItem.target = self
+        if #available(macOS 27.0, *) {
+            flipVerticalItem.preferredImageVisibility = .visible
+        }
         menu.addItem(flipVerticalItem)
         menu.addItem(.separator())
 
@@ -1412,10 +1475,15 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             menuItem.title = isInspectorCollapsed ? "Show Inspector" : "Hide Inspector"
         } else if menuItem.action == #selector(togglePathBarAction(_:)) {
             menuItem.title = browserController.isPathBarVisible ? "Hide Path Bar" : "Show Path Bar"
-        } else if menuItem.action == #selector(switchToGalleryAction(_:)) {
-            menuItem.state = model.browserViewMode == .gallery ? .on : .off
+        } else if menuItem.action == #selector(switchToIconAction(_:)) {
+            menuItem.state = model.browserViewMode == .icon ? .on : .off
         } else if menuItem.action == #selector(switchToListAction(_:)) {
             menuItem.state = model.browserViewMode == .list ? .on : .off
+        } else if menuItem.action == #selector(switchToGalleryAction(_:)) {
+            menuItem.state = model.browserViewMode == .gallery ? .on : .off
+        } else if menuItem.action == #selector(setIconSubtitleAction(_:)) {
+            menuItem.state = model.iconSubtitleColumnID == menuItem.representedObject as? String ? .on : .off
+            return model.browserViewMode == .icon
         } else if menuItem.action == #selector(applySelectionAction(_:)) {
             return model.fileActionState(for: .applyMetadataChanges, targetURLs: selection).isEnabled
         } else if menuItem.action == #selector(applyFolderAction(_:)) {
@@ -1446,9 +1514,9 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         } else if menuItem.action == #selector(batchRenameFolderAction(_:)) {
             return model.fileActionState(for: .batchRenameFolder, targetURLs: model.browserItems.map(\.url)).isEnabled
         } else if menuItem.action == #selector(zoomInAction(_:)) {
-            return model.browserViewMode == .gallery && model.canIncreaseGalleryZoom
+            return model.browserViewMode == .icon && model.canIncreaseGalleryZoom
         } else if menuItem.action == #selector(zoomOutAction(_:)) {
-            return model.browserViewMode == .gallery && model.canDecreaseGalleryZoom
+            return model.browserViewMode == .icon && model.canDecreaseGalleryZoom
         } else if menuItem.action == #selector(sortByNameAction(_:)) {
             menuItem.state = model.browserSort == .name ? .on : .off
         } else if menuItem.action == #selector(sortByCreatedAction(_:)) {
@@ -1840,16 +1908,30 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
 
     @objc
     func zoomOutAction(_: Any?) {
-        guard model.browserViewMode == .gallery else { return }
+        guard model.browserViewMode == .icon else { return }
         model.decreaseGalleryZoom()
         refreshToolbarState()
     }
 
     @objc
     func zoomInAction(_: Any?) {
-        guard model.browserViewMode == .gallery else { return }
+        guard model.browserViewMode == .icon else { return }
         model.increaseGalleryZoom()
         refreshToolbarState()
+    }
+
+    @objc
+    func switchToIconAction(_: Any?) {
+        model.browserViewMode = .icon
+        refreshToolbarState()
+        NotificationCenter.default.post(name: .browserDidSwitchViewMode, object: nil)
+    }
+
+    @objc
+    func switchToListAction(_: Any?) {
+        model.browserViewMode = .list
+        refreshToolbarState()
+        NotificationCenter.default.post(name: .browserDidSwitchViewMode, object: nil)
     }
 
     @objc
@@ -1860,10 +1942,9 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     }
 
     @objc
-    func switchToListAction(_: Any?) {
-        model.browserViewMode = .list
-        refreshToolbarState()
-        NotificationCenter.default.post(name: .browserDidSwitchViewMode, object: nil)
+    func setIconSubtitleAction(_ sender: Any?) {
+        guard let item = sender as? NSMenuItem else { return }
+        model.iconSubtitleColumnID = item.representedObject as? String
     }
 
     @objc
@@ -1953,7 +2034,11 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
 
     @objc
     private func viewModeChanged(_ sender: NSToolbarItemGroup) {
-        model.browserViewMode = sender.selectedIndex == 1 ? .list : .gallery
+        switch sender.selectedIndex {
+        case 1: model.browserViewMode = .list
+        case 2: model.browserViewMode = .gallery
+        default: model.browserViewMode = .icon
+        }
         refreshToolbarState()
         NotificationCenter.default.post(name: .browserDidSwitchViewMode, object: nil)
         DispatchQueue.main.async { [weak self] in
@@ -2087,15 +2172,16 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                     dividerIndex: 0
                 )
             case .viewMode:
-                let galleryImage = NSImage(systemSymbolName: "square.grid.3x2", accessibilityDescription: "Gallery")
-                    ?? NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: "Gallery")
+                let iconImage = NSImage(systemSymbolName: "square.grid.3x2", accessibilityDescription: "Icon")
+                    ?? NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: "Icon")
                     ?? NSImage()
                 let listImage = NSImage(systemSymbolName: "list.bullet", accessibilityDescription: "List") ?? NSImage()
+                let galleryImage = NSImage(systemSymbolName: "squares.below.rectangle", accessibilityDescription: "Gallery") ?? NSImage()
                 let item = NSToolbarItemGroup(
                     itemIdentifier: itemIdentifier,
-                    images: [galleryImage, listImage],
+                    images: [iconImage, listImage, galleryImage],
                     selectionMode: .selectOne,
-                    labels: ["Gallery", "List"],
+                    labels: ["Icons", "List", "Gallery"],
                     target: controller,
                     action: #selector(NativeThreePaneSplitViewController.viewModeChanged(_:))
                 )
@@ -2220,13 +2306,17 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         }
 
         private func updateViewMode(with model: AppModel) {
-            viewModeGroupItem?.selectedIndex = model.browserViewMode == .gallery ? 0 : 1
+            switch model.browserViewMode {
+            case .icon: viewModeGroupItem?.selectedIndex = 0
+            case .list: viewModeGroupItem?.selectedIndex = 1
+            case .gallery: viewModeGroupItem?.selectedIndex = 2
+            }
         }
 
         private func updateZoomItems(with model: AppModel) {
-            let inGallery = model.browserViewMode == .gallery
-            zoomOutItem?.isEnabled = inGallery && model.canDecreaseGalleryZoom
-            zoomInItem?.isEnabled = inGallery && model.canIncreaseGalleryZoom
+            let inIconGrid = model.browserViewMode == .icon
+            zoomOutItem?.isEnabled = inIconGrid && model.canDecreaseGalleryZoom
+            zoomInItem?.isEnabled = inIconGrid && model.canIncreaseGalleryZoom
         }
 
         private func updateSortMenu(with model: AppModel) {
@@ -2273,10 +2363,10 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             switch item.itemIdentifier {
             case .zoomOut:
                 updateZoomItems(with: model)
-                return model.browserViewMode == .gallery && model.canDecreaseGalleryZoom
+                return model.browserViewMode == .icon && model.canDecreaseGalleryZoom
             case .zoomIn:
                 updateZoomItems(with: model)
-                return model.browserViewMode == .gallery && model.canIncreaseGalleryZoom
+                return model.browserViewMode == .icon && model.canIncreaseGalleryZoom
             case .applyChanges:
                 updateApplyStyle(with: model)
                 return model.canApplyMetadataChanges

@@ -235,8 +235,13 @@ final class AppModel: ObservableObject {
     static let galleryColumnRange = 2 ... 9
 
     enum BrowserViewMode: String, CaseIterable, Identifiable {
-        case gallery
+        // rawValue intentionally preserved across the icon-grid rename (was `case gallery`
+        // with an implicit "gallery" rawValue) — do not "fix" this to match the case name,
+        // it exists so an existing user's persisted UserDefaults value keeps decoding to
+        // this (renamed) mode rather than the new, differently-behaving `.gallery` case below.
+        case icon = "gallery"
         case list
+        case gallery = "filmstripGallery"
 
         var id: String { rawValue }
     }
@@ -468,6 +473,13 @@ final class AppModel: ObservableObject {
     @Published var galleryGridLevel: Int {
         didSet { UserDefaults.standard.set(galleryGridLevel, forKey: Self.galleryGridLevelKey) }
     }
+    /// One of `ListColumnDefinition`'s existing column IDs, or `nil` for "None" — reuses the
+    /// same field vocabulary and formatting (`listColumnValue(for:columnID:fallbackItem:)`) as
+    /// List view's column picker, so Icon view's subtitle can never disagree with List about how
+    /// a field is displayed. Icon-view-only; meaningless in List/Gallery mode.
+    @Published var iconSubtitleColumnID: String? {
+        didSet { UserDefaults.standard.set(iconSubtitleColumnID, forKey: Self.iconSubtitleColumnIDKey) }
+    }
     @Published var metadataByFile: [URL: FileMetadataSnapshot] = [:]
     @Published var activeInspectorFieldCatalog: [FieldCatalogEntry] = AppModel.defaultFieldCatalogEntries()
     @Published var confirmBeforeApply = true {
@@ -614,6 +626,7 @@ final class AppModel: ObservableObject {
     private static let browserSortKey = "ui.browser.sort"
     private static let browserSortAscendingKey = "ui.browser.sort.ascending"
     private static let galleryGridLevelKey = "ui.gallery.grid.level"
+    private static let iconSubtitleColumnIDKey = "ui.icon.subtitle.column"
     private static let galleryZoomKey = "ui.gallery.zoom"
     private static let collapsedInspectorSectionsKey = "ui.inspector.collapsed.sections"
     private static let selectedPresetIDKey = "ui.presets.selected.id"
@@ -692,7 +705,7 @@ final class AppModel: ObservableObject {
         let defaults = UserDefaults.standard
         browserViewMode = BrowserViewMode(
             rawValue: Self.firstUserDefaultsValue(for: Self.browserViewModeKey, defaults: defaults, as: String.self) ?? ""
-        ) ?? .gallery
+        ) ?? .icon
         browserSort = BrowserSort(
             rawValue: Self.firstUserDefaultsValue(for: Self.browserSortKey, defaults: defaults, as: String.self) ?? ""
         ) ?? .name
@@ -709,6 +722,7 @@ final class AppModel: ObservableObject {
         } else {
             galleryGridLevel = min(max(storedLevel, Self.galleryColumnRange.lowerBound), Self.galleryColumnRange.upperBound)
         }
+        iconSubtitleColumnID = Self.firstUserDefaultsValue(for: Self.iconSubtitleColumnIDKey, defaults: defaults, as: String.self)
 
         let service: ExifToolServiceProtocol
         if let exifToolService {

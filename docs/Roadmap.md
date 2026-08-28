@@ -100,8 +100,9 @@ Deferred: HDR-aware previews (moved to v2.0 — belongs with the in-app viewer a
 - [ ] **EOS-1V lens-tag policy system**: merges resolver enhancements and policy controls into one mature feature. Policy modes (`Do not write lens` / `Single lens for import` / `Focal-length mapping table`), unknown focal length behaviour, named lens profiles, import-sheet override selector.
 
 ### Browse
-- [ ] **iCloud Drive file-state UI**: make it obvious in list/gallery/inspector when a file is a cloud placeholder rather than downloaded locally (evicted/dataless items currently look like a thumbnail/metadata loading failure — exiftool reads time out silently and previews stall while fileproviderd materialises multi-hundred-MB scans). Detect via `URLResourceValues` (`isUbiquitousItem` / `ubiquitousItemDownloadingStatus`) and badge undownloaded items with an iCloud symbol using SharedUI's `makeGalleryOverlaySymbol` (`Gallery/GalleryOverlay.swift`), in the style of Librarian's shared-library `person.2.fill` grid badge. Consider a download affordance/progress and skipping exiftool reads until files are materialised.
-- [ ] Gallery metadata lines/subtitle customisation.
+- [x] **iCloud Drive file-state UI**: make it obvious in list/gallery/inspector when a file is a cloud placeholder rather than downloaded locally (evicted/dataless items currently look like a thumbnail/metadata loading failure — exiftool reads time out silently and previews stall while fileproviderd materialises multi-hundred-MB scans). Detect via `URLResourceValues` (`isUbiquitousItem` / `ubiquitousItemDownloadingStatus`) and badge undownloaded items with an iCloud symbol using SharedUI's `makeGalleryOverlaySymbol` (`Gallery/GalleryOverlay.swift`), in the style of Librarian's shared-library `person.2.fill` grid badge. Consider a download affordance/progress and skipping exiftool reads until files are materialised.
+- [x] **Finder-style gallery view**: filmstrip along bottom, large preview at top — third browser mode alongside list and grid.
+- [x] Gallery metadata lines/subtitle customisation.
 - [ ] Explicit Home/End/Page Up/Page Down keyboard nav in list/gallery.
 - [ ] Window/list-column resize fix: window frame, split dividers, and table column widths are restored via three independent absolute-pixel autosave systems with no reconciliation against current available width, causing inconsistent window size and columns/scrollbar overflow. Root-cause diagnosis and fix plan in `docs/window-list-resize-diagnosis-2026-07.md`.
 
@@ -134,7 +135,6 @@ No new user-facing features — isolated architecture/perf work ahead of the v2.
 - [ ] Finder-style hierarchical browsing as the core file-browser model.
 - [ ] In-app image viewing as a core workflow for Ledger-supported image formats.
 - [ ] **HDR-aware rendering** (moved from v1.2.3, 2026-08-15): decode HDR/gain-map images via ImageIO `kCGImageSourceDecodeToHDR` (+ `kCGComputeHDRStats`); render inspector/grid previews with `NSImage.DynamicRange.constrainedHigh` (`NSImageView.preferredImageDynamicRange` / SwiftUI `allowedDynamicRange`) and the in-app viewer with `.high` on EDR displays. SDR files are unaffected (decode option is a no-op). Keep the JPEG thumbnail disk cache SDR; HDR applies to live decodes only. Benefits iPhone HEICs, gain-map JPEGs, and HDR DNGs — not classic film-scan TIFFs.
-- [ ] **Finder-style gallery view**: filmstrip along bottom, large preview at top — third browser mode alongside list and grid.
 
 ---
 

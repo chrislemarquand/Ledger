@@ -27,8 +27,10 @@ final class QuickLookPreviewController: NSObject {
             moveSelection: { [weak model] direction in
                 guard let model else { return nil }
                 switch model.browserViewMode {
+                case .icon:
+                    model.moveSelectionInIconGrid(direction: direction, extendingSelection: false)
                 case .gallery:
-                    model.moveSelectionInGallery(direction: direction, extendingSelection: false)
+                    model.moveSelectionInFilmstrip(direction: direction, extendingSelection: false)
                 case .list:
                     switch direction {
                     case .up, .down:

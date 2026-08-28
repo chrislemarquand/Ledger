@@ -43,7 +43,7 @@ private struct InspectorPreviewActionButtonStyle: ButtonStyle {
     }
 }
 
-private struct CloudPlaceholderInspectorView: View {
+struct CloudPlaceholderInspectorView: View {
     let isDownloading: Bool
     let downloadProgress: Double?
     let onDownload: () -> Void
