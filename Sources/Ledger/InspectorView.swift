@@ -54,7 +54,7 @@ private struct CloudPlaceholderInspectorView: View {
                 PlaceholderView(
                     symbolName: "icloud.and.arrow.down",
                     title: "Downloading\u{2026}",
-                    description: "Fetching this file from iCloud.",
+                    description: "Fetching this file from iCloud",
                     isPerformingAction: true,
                     actionProgress: downloadProgress
                 )
@@ -62,7 +62,7 @@ private struct CloudPlaceholderInspectorView: View {
                 PlaceholderView(
                     symbolName: "icloud.and.arrow.down",
                     title: "Not Downloaded",
-                    description: "This file hasn\u{2019}t been downloaded from iCloud yet.",
+                    description: "This file hasn\u{2019}t been downloaded from iCloud yet",
                     actionTitle: "Download Now",
                     action: onDownload
                 )
@@ -109,7 +109,7 @@ struct InspectorView: View {
                     PlaceholderView(
                         symbolName: "slider.horizontal.3",
                         title: "No Selection",
-                        description: "Select one or more images to view and edit their metadata."
+                        description: "Select one or more images to view and edit their metadata"
                     )
                     .frame(maxWidth: .infinity)
                     .containerRelativeFrame(.vertical, alignment: .center)
