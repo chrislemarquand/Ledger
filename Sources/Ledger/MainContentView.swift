@@ -767,7 +767,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         var sidebarMenuItem: NSMenuItem?
         var inspectorMenuItem: NSMenuItem?
         var extraItems: [NSMenuItem] = []
-        let ownedTitles: Set<String> = ["as icons", "as gallery", "as list", "sort by", "zoom in", "zoom out", "show path bar", "hide path bar"]
+        let ownedTitles: Set<String> = ["as icons", "as gallery", "as list", "sort by", "zoom in", "zoom out", "show path bar", "hide path bar", "show exiftool console"]
 
         for item in menu.items where !item.isSeparatorItem {
             let normalizedTitle = item.title.lowercased()
@@ -848,6 +848,13 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         pathBarItem.keyEquivalentModifierMask = [.command, .option]
         pathBarItem.image = NSImage(systemSymbolName: "square.bottomhalf.filled", accessibilityDescription: nil)
         menu.addItem(pathBarItem)
+        let exifToolConsoleItem = NSMenuItem(
+            title: "Show ExifTool Console",
+            action: #selector(AppDelegate.showExifToolConsoleAction(_:)),
+            keyEquivalent: ""
+        )
+        exifToolConsoleItem.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: nil)
+        menu.addItem(exifToolConsoleItem)
         if !extraItems.isEmpty {
             menu.addItem(.separator())
             extraItems.forEach { menu.addItem($0) }

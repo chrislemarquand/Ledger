@@ -20,6 +20,7 @@ enum LedgerMain {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindowController: MainWindowController?
     private var settingsWindowController: SettingsWindowController?
+    private var exifToolConsoleWindowController: ExifToolConsoleWindowController?
     private var updateService: UpdateService?
     private var isShowingTerminateConfirmation = false
     private var allowImmediateTermination = false
@@ -74,6 +75,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     func showSettingsWindowAction(_: Any?) {
         settingsWindowController?.showWindowAndActivate()
+    }
+
+    @objc
+    func showExifToolConsoleAction(_: Any?) {
+        exifToolConsoleWindowController?.showWindowAndActivate()
     }
 
     @objc
@@ -149,6 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             SettingsTabDescriptor(symbolName: "slider.horizontal.3", label: "Inspector",
                 viewController: InspectorSettingsViewController(model: model), preferredHeight: 660),
         ])
+        exifToolConsoleWindowController = ExifToolConsoleWindowController(model: model)
         let windowController = MainWindowController(model: model)
         mainWindowController = windowController
         windowController.showWindow(nil)

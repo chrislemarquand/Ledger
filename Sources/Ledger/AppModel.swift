@@ -548,6 +548,12 @@ final class AppModel: ObservableObject {
     @Published var applyMetadataCompleted = 0
     @Published var applyMetadataTotal = 0
     @Published var isPreviewPreloading = false
+    /// Every ExifTool invocation this session, newest last, fed by `ExifToolService`'s own
+    /// `.exifToolInvocationDidFinish` notification (posted after every read and every per-file
+    /// write) — this is pre-existing instrumentation nothing in the app has consumed until now.
+    @Published var exifToolConsoleEntries: [ExifToolInvocationTrace] = []
+    private static let exifToolConsoleEntryLimit = 500
+    private var exifToolInvocationObserver: NSObjectProtocol?
     @Published var collapsedInspectorSections: Set<String> {
         didSet {
             UserDefaults.standard.set(Array(collapsedInspectorSections), forKey: Self.collapsedInspectorSectionsKey)
@@ -790,6 +796,7 @@ final class AppModel: ObservableObject {
         reconcileAndLoadRecentLocations()
         sidebarItems = composedSidebarItems()
         installWorkspaceVolumeObservers()
+        installExifToolConsoleObserver()
         if let selectedPresetRaw = Self.firstUserDefaultsValue(for: Self.selectedPresetIDKey, defaults: defaults, as: String.self),
            let selectedPresetUUID = UUID(uuidString: selectedPresetRaw) {
             selectedPresetID = selectedPresetUUID
@@ -808,6 +815,29 @@ final class AppModel: ObservableObject {
             .store(in: &badgeObservers)
     }
 
+    private func installExifToolConsoleObserver() {
+        exifToolInvocationObserver = NotificationCenter.default.addObserver(
+            forName: .exifToolInvocationDidFinish,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let trace = notification.userInfo?["trace"] as? ExifToolInvocationTrace else { return }
+            Task { @MainActor [weak self] in
+                self?.appendExifToolConsoleEntry(trace)
+            }
+        }
+    }
+
+    private func appendExifToolConsoleEntry(_ trace: ExifToolInvocationTrace) {
+        exifToolConsoleEntries.append(trace)
+        if exifToolConsoleEntries.count > Self.exifToolConsoleEntryLimit {
+            exifToolConsoleEntries.removeFirst(exifToolConsoleEntries.count - Self.exifToolConsoleEntryLimit)
+        }
+    }
+
+    func clearExifToolConsole() {
+        exifToolConsoleEntries.removeAll()
+    }
 
     static func columnCount(forLegacyZoom zoom: CGFloat) -> Int {
         let legacyZoomMin = CGFloat(0.55)
