@@ -23,6 +23,13 @@ enum CloudFileStateResolver {
     /// reserved for `CloudDownloadTracker`, which only reports it for a download the user actually
     /// requested.
     static func resolve(for url: URL) -> CloudFileState {
+        // `URL.resourceValues(forKeys:)` caches its answer on the URL's underlying `NSURL`
+        // the first time it's read. `CloudDownloadTracker.pollForCompletion` calls this
+        // repeatedly on the same `URL` value while waiting for a download to finish, so
+        // without clearing the cache every call after the first would keep returning the
+        // stale pre-download status forever, regardless of the file's real on-disk state.
+        var url = url
+        url.removeAllCachedResourceValues()
         guard let values = try? url.resourceValues(forKeys: [
             .isUbiquitousItemKey,
             .ubiquitousItemDownloadingStatusKey
