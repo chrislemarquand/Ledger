@@ -122,11 +122,24 @@ enum ThumbnailService {
 
     /// Returns a cached image if one exists and is at least `minRenderedSide` points on its longest edge.
     /// Pass `minRenderedSide: 1` to accept any cached image regardless of size.
+    ///
+    /// Falls back to a synchronous on-disk cache read on a memory-cache miss (a small local JPEG
+    /// read/decode, cheap enough to do inline on the calling thread) so cells configured
+    /// synchronously — e.g. on folder switch, before the async `request` path has a chance to
+    /// run — don't paint the generic fallback icon for a frame when a perfectly good thumbnail
+    /// is already sitting on disk from a previous visit.
     static func cachedImage(for fileURL: URL, minRenderedSide: CGFloat) -> NSImage? {
-        guard let image = memoryCache.object(forKey: fileURL as NSURL) else { return nil }
-        guard minRenderedSide > 1 else { return image }
-        let cachedSide = max(image.size.width, image.size.height)
-        return cachedSide >= minRenderedSide * 0.9 ? image : nil
+        if let image = memoryCache.object(forKey: fileURL as NSURL) {
+            guard minRenderedSide > 1 else { return image }
+            let cachedSide = max(image.size.width, image.size.height)
+            return cachedSide >= minRenderedSide * 0.9 ? image : nil
+        }
+
+        guard let disk = readDiskCache(sourceURL: fileURL, at: diskURL(for: fileURL)) else { return nil }
+        memoryCache.setObject(disk, forKey: fileURL as NSURL, cost: costBytes(for: disk))
+        guard minRenderedSide > 1 else { return disk }
+        let diskSide = max(disk.size.width, disk.size.height)
+        return diskSide >= minRenderedSide * 0.9 ? disk : nil
     }
 
     static func storeCachedImage(_ image: NSImage, for fileURL: URL, renderedSide: CGFloat) {
