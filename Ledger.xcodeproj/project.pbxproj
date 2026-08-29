@@ -81,6 +81,9 @@
 		C200020E0000000000000001 /* ImportSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010E0000000000000001 /* ImportSheetView.swift */; };
 		A10001960000000000000001 /* EOSLensChoiceSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001970000000000000001 /* EOSLensChoiceSheetView.swift */; };
 		A10001980000000000000001 /* EOS1VToolRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001990000000000000001 /* EOS1VToolRunner.swift */; };
+		A10001A20000000000000001 /* EOS1VRawDump.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001A30000000000000001 /* EOS1VRawDump.swift */; };
+		A10001A40000000000000001 /* EOS1VOpcode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001A50000000000000001 /* EOS1VOpcode.swift */; };
+		A10001A60000000000000001 /* EOS1VFrameDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001A70000000000000001 /* EOS1VFrameDecoder.swift */; };
 		A100019A0000000000000001 /* EOS1VConsoleWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100019B0000000000000001 /* EOS1VConsoleWindowController.swift */; };
 		A100019C0000000000000001 /* EOS1VConsoleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100019D0000000000000001 /* EOS1VConsoleView.swift */; };
 		C200020F0000000000000001 /* ExifToolCSVExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010F0000000000000001 /* ExifToolCSVExportService.swift */; };
@@ -195,6 +198,9 @@
 		C200010E0000000000000001 /* ImportSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportSheetView.swift; sourceTree = "<group>"; };
 		A10001970000000000000001 /* EOSLensChoiceSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOSLensChoiceSheetView.swift; sourceTree = "<group>"; };
 		A10001990000000000000001 /* EOS1VToolRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VToolRunner.swift; sourceTree = "<group>"; };
+		A10001A30000000000000001 /* EOS1VRawDump.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VRawDump.swift; sourceTree = "<group>"; };
+		A10001A50000000000000001 /* EOS1VOpcode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VOpcode.swift; sourceTree = "<group>"; };
+		A10001A70000000000000001 /* EOS1VFrameDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VFrameDecoder.swift; sourceTree = "<group>"; };
 		A100019B0000000000000001 /* EOS1VConsoleWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VConsoleWindowController.swift; sourceTree = "<group>"; };
 		A100019D0000000000000001 /* EOS1VConsoleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VConsoleView.swift; sourceTree = "<group>"; };
 		C200010F0000000000000001 /* ExifToolCSVExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifToolCSVExportService.swift; sourceTree = "<group>"; };
@@ -404,9 +410,20 @@
 			path = Import;
 			sourceTree = "<group>";
 		};
+		A10001B00000000000000001 /* Decode */ = {
+			isa = PBXGroup;
+			children = (
+				A10001A30000000000000001 /* EOS1VRawDump.swift */,
+				A10001A50000000000000001 /* EOS1VOpcode.swift */,
+				A10001A70000000000000001 /* EOS1VFrameDecoder.swift */,
+			);
+			path = Decode;
+			sourceTree = "<group>";
+		};
 		A10001A00000000000000001 /* EOS1V */ = {
 			isa = PBXGroup;
 			children = (
+				A10001B00000000000000001 /* Decode */,
 				A10001990000000000000001 /* EOS1VToolRunner.swift */,
 				A100019B0000000000000001 /* EOS1VConsoleWindowController.swift */,
 				A100019D0000000000000001 /* EOS1VConsoleView.swift */,
@@ -652,6 +669,9 @@
 				C200020E0000000000000001 /* ImportSheetView.swift in Sources */,
 				A10001960000000000000001 /* EOSLensChoiceSheetView.swift in Sources */,
 				A10001980000000000000001 /* EOS1VToolRunner.swift in Sources */,
+				A10001A20000000000000001 /* EOS1VRawDump.swift in Sources */,
+				A10001A40000000000000001 /* EOS1VOpcode.swift in Sources */,
+				A10001A60000000000000001 /* EOS1VFrameDecoder.swift in Sources */,
 				A100019A0000000000000001 /* EOS1VConsoleWindowController.swift in Sources */,
 				A100019C0000000000000001 /* EOS1VConsoleView.swift in Sources */,
 			);
