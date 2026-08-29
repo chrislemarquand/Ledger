@@ -33,6 +33,7 @@ final class BrowserIconViewController: NSViewController, NSCollectionViewDataSou
     private var lastRenderedViewMode: AppModel.BrowserViewMode?
     private var lastRenderedSubtitleColumnID: String?
     private var lastRenderedMetadataCount = 0
+    private var lastRenderedItemsForSubtitle: [AppModel.BrowserItem] = []
 
     init(model: AppModel, items: [AppModel.BrowserItem]) {
         self.model = model
@@ -264,14 +265,20 @@ final class BrowserIconViewController: NSViewController, NSCollectionViewDataSou
         let stagedOpsChanged = lastStagedOpsDisplayToken != model.stagedOpsDisplayToken
         if stagedOpsChanged { lastStagedOpsDisplayToken = model.stagedOpsDisplayToken }
         let subtitleColumnID = model.iconSubtitleColumnID
-        // Subtitle text depends on metadata that loads lazily via the deferred batch prefetch —
-        // none of the other change flags above fire when a batch completes for already-visible
-        // items, so without this a cell stuck showing "—" only ever refreshes if some unrelated
-        // flag (selection, pending, etc.) also happens to change. Only relevant while a subtitle
-        // is actually shown; still keep the tracker current either way.
+        // Subtitle text depends on data that loads lazily and asynchronously after the items
+        // list is first published: exiftool fields arrive via the deferred batch prefetch
+        // (tracked by metadataByFile's count), while file-system fields — size, created/modified
+        // dates, kind — arrive via BrowserItem hydration, which republishes `items` with the
+        // same URLs (so `listChanged` never fires) but different attribute values. Neither is
+        // covered by the other change flags above, so without this a cell stuck showing "—"
+        // only ever refreshes if some unrelated flag (selection, pending, etc.) also happens to
+        // change. Only relevant while a subtitle is actually shown; still keep trackers current
+        // either way.
         let metadataCount = model.metadataByFile.count
-        let metadataChanged = subtitleColumnID != nil && metadataCount != lastRenderedMetadataCount
+        let itemsContentChanged = items != lastRenderedItemsForSubtitle
+        let metadataChanged = subtitleColumnID != nil && (metadataCount != lastRenderedMetadataCount || itemsContentChanged)
         lastRenderedMetadataCount = metadataCount
+        lastRenderedItemsForSubtitle = items
         let subtitleChanged = subtitleColumnID != lastRenderedSubtitleColumnID
         if subtitleChanged {
             lastRenderedSubtitleColumnID = subtitleColumnID
