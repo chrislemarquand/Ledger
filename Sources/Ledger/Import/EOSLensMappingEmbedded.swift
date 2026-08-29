@@ -1,5 +1,10 @@
 import Foundation
 
+// No longer read at runtime — ImportSession.applyEOSLensPolicy now sources lens data from
+// AppModel.lensProfiles (Settings > Lenses; see LensProfiles.swift). Only ImportSystemTests'
+// eosLensMappingURL override still exercises CSV-shaped data, and that's fixture data, not this.
+// A copy of this table was written to ~/Desktop/eos-lens-mapping-reference.csv for manual
+// re-entry into the new Lenses list. Safe to delete this file once that's confirmed done.
 enum EOSLensMappingEmbedded {
     static let csv: String = """
 Focal length (mm),Lens 1,Max aperture 1,Lens 2,Max aperture 2,Lens 3,Max aperture 3

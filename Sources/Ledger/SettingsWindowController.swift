@@ -1,5 +1,6 @@
 import AppKit
 import SharedUI
+import SwiftUI
 
 @MainActor
 final class GeneralSettingsViewController: SettingsGridViewController {
@@ -115,6 +116,49 @@ final class GeneralSettingsViewController: SettingsGridViewController {
         }
 
         alert.runSheetOrModal(for: view.window, completion: handleResponse)
+    }
+}
+
+@MainActor
+final class LensSettingsViewController: SettingsGridViewController {
+    private unowned let model: AppModel
+
+    private lazy var manageLensesButton = makeActionButton(
+        title: "Manage Lenses…",
+        action: #selector(manageLensesClicked(_:))
+    )
+
+    init(model: AppModel) {
+        self.model = model
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func makeRows() -> [[NSView]] {
+        [
+            [makeCategoryLabel(title: "Lenses:"), manageLensesButton],
+        ]
+    }
+
+    @objc private func manageLensesClicked(_ sender: Any?) {
+        // Not `[weak hostingController]`: that would weakly capture the local `var` while
+        // it's still nil (the closure is built as part of the same expression that assigns
+        // it), so the weak reference would never see the real object. Routing through
+        // `self` — a stable, already-initialized object — and asking it to dismiss whichever
+        // child it's currently presenting avoids that trap entirely.
+        let hostingController = NSHostingController(
+            rootView: LensProfileManagerSheet(model: model, onDone: { [weak self] in
+                self?.dismissPresentedLensSheet()
+            })
+        )
+        presentAsSheet(hostingController)
+    }
+
+    private func dismissPresentedLensSheet() {
+        guard let presented = presentedViewControllers?.first else { return }
+        dismiss(presented)
     }
 }
 

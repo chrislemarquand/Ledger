@@ -498,6 +498,7 @@ final class AppModel: ObservableObject {
     @Published var draftValues: [EditableTag: String] = [:]
     @Published var baselineValues: [EditableTag: String?] = [:]
     @Published var presets: [MetadataPreset] = []
+    @Published var lensProfiles: [LensProfile] = []
     @Published var selectedPresetID: UUID? {
         didSet {
             UserDefaults.standard.set(selectedPresetID?.uuidString, forKey: Self.selectedPresetIDKey)
@@ -614,6 +615,7 @@ final class AppModel: ObservableObject {
 
     let engine: ExifEditEngine
     let presetStore: PresetStoreProtocol
+    let lensProfileStore: LensProfileStoreProtocol
     let favoritesStore: SidebarFavoritesStoreProtocol
     let recentLocationsStore: RecentLocationsStoreProtocol
     var lastOperationIDs: [UUID] = []
@@ -705,6 +707,7 @@ final class AppModel: ObservableObject {
     init(
         exifToolService: ExifToolServiceProtocol? = nil,
         presetStore: PresetStoreProtocol = FilePresetStore(),
+        lensProfileStore: LensProfileStoreProtocol = FileLensProfileStore(),
         favoritesStore: SidebarFavoritesStoreProtocol = SidebarFavoritesStore(),
         recentLocationsStore: RecentLocationsStoreProtocol = RecentLocationsStore()
     ) {
@@ -754,6 +757,7 @@ final class AppModel: ObservableObject {
         let backupDirectory = AppBrand.currentSupportDirectoryURL().appendingPathComponent("Backups", isDirectory: true)
         engine = ExifEditEngine(exifToolService: service, backupManager: BackupManager(baseDirectory: backupDirectory))
         self.presetStore = presetStore
+        self.lensProfileStore = lensProfileStore
         self.favoritesStore = favoritesStore
         self.recentLocationsStore = recentLocationsStore
 
@@ -803,6 +807,7 @@ final class AppModel: ObservableObject {
             selectedPresetID = selectedPresetUUID
         }
         loadPresets()
+        loadLensProfiles()
         let retentionCount = backupRetentionCount
         Task.detached(priority: .background) { [backupDirectory, retentionCount] in
             try? BackupManager(baseDirectory: backupDirectory).pruneOperations(keepLast: retentionCount)

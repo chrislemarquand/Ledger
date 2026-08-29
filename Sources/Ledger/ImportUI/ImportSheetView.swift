@@ -176,6 +176,8 @@ final class ImportSession: ObservableObject {
         let resolve = coordinator.resolveAssignments(preparedRun: run, resolutions: conflictResolutions)
         if !resolve.unresolvedConflicts.isEmpty {
             pendingConflicts = resolve.unresolvedConflicts
+            importReport = makeImportReport(run: run, resolve: resolve, stageSummary: nil)
+            shouldEnterPostImportReview = shouldReview(report: importReport)
             return false
         }
         pendingConflicts = nil
@@ -525,15 +527,19 @@ final class ImportSession: ObservableObject {
         if let cached = eosLensMappingCache {
             return cached
         }
-        let data: Data
-        if let overrideURL = eosLensMappingURLOverride,
-           let overrideData = try? Data(contentsOf: overrideURL) {
-            data = overrideData
-        } else {
-            data = Data(EOSLensMappingEmbedded.csv.utf8)
+
+        // Test-only override: a hand-authored CSV, parsed the same way the old embedded
+        // mapping was. Production (no override) instead reads the user's Settings-managed
+        // lens registry — see LensProfiles.swift / Settings > Lenses.
+        guard let overrideURL = eosLensMappingURLOverride,
+              let overrideData = try? Data(contentsOf: overrideURL)
+        else {
+            let map = Self.lensMapping(fromProfiles: model.lensProfiles)
+            eosLensMappingCache = map
+            return map
         }
 
-        guard let rows = try? CSVSupport.parseRows(from: data),
+        guard let rows = try? CSVSupport.parseRows(from: overrideData),
               let header = rows.first
         else {
             eosLensMappingCache = [:]
@@ -587,6 +593,29 @@ final class ImportSession: ObservableObject {
 
         eosLensMappingCache = map
         return map
+    }
+
+    private static func lensMapping(fromProfiles profiles: [LensProfile]) -> [Int: [(lens: String, maxAperture: Double?)]] {
+        var map: [Int: [(lens: String, maxAperture: Double?)]] = [:]
+        for profile in profiles where profile.minFocalLengthMM <= profile.maxFocalLengthMM {
+            for mm in profile.minFocalLengthMM...profile.maxFocalLengthMM {
+                let entry = (lens: profile.name, maxAperture: aperture(of: profile, atFocalLengthMM: mm))
+                map[mm, default: []].append(entry)
+            }
+        }
+        return map
+    }
+
+    private static func aperture(of profile: LensProfile, atFocalLengthMM focalMM: Int) -> Double? {
+        guard profile.kind == .zoom,
+              let nearAperture = profile.widestApertureAtMinFocal,
+              let farAperture = profile.widestApertureAtMaxFocal,
+              profile.maxFocalLengthMM != profile.minFocalLengthMM
+        else {
+            return profile.widestApertureAtMinFocal
+        }
+        let t = Double(focalMM - profile.minFocalLengthMM) / Double(profile.maxFocalLengthMM - profile.minFocalLengthMM)
+        return nearAperture + t * (farAperture - nearAperture)
     }
 
     private func focalLengthMillimeters(from raw: String) -> Int? {

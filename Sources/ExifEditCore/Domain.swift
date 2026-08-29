@@ -369,6 +369,7 @@ public enum ExifEditError: Error, LocalizedError {
     case backupNotFound
     case invalidOperation(String)
     case presetSchemaVersionTooNew
+    case lensProfileSchemaVersionTooNew
 
     public var errorDescription: String? {
         switch self {
@@ -384,6 +385,8 @@ public enum ExifEditError: Error, LocalizedError {
             return reason
         case .presetSchemaVersionTooNew:
             return "Your presets were saved by a newer version of the app and can't be read. Update the app to access them."
+        case .lensProfileSchemaVersionTooNew:
+            return "Your lens list was saved by a newer version of the app and can't be read. Update the app to access it."
         }
     }
 }
