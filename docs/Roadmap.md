@@ -110,7 +110,7 @@ Deferred: HDR-aware previews (moved to v2.0 — belongs with the in-app viewer a
 - [ ] Metadata copy/paste:
   - [ ] Field-level copy/paste.
   - [ ] Metadata-set copy/paste.
-- [ ] ExifTool console: live readout of ExifTool commands and output as operations run, mirroring what would appear if running ExifTool directly in the terminal.
+- [x] ExifTool console: live readout of ExifTool commands and output as operations run, mirroring what would appear if running ExifTool directly in the terminal.
 
 ### Maintenance
 - [ ] Bump bundled ExifTool from 13.50 to latest (13.59 as of 2026-07-25). Includes three security updates (13.53, 13.54, 13.59), Exif 3.1 spec tags (13.56), and Canon/Nikon/Sony lens improvements.
