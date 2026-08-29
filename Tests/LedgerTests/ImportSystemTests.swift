@@ -1576,23 +1576,20 @@ final class ImportSystemTests: XCTestCase {
             )
         )
 
-        var prompts: [ImportSession.EOSLensChoiceRequest] = []
-        let session = ImportSession(
-            model: model,
-            sourceKind: .eos1v,
-            eosLensMappingURL: mappingCSV,
-            lensChoiceProvider: { request in
-                prompts.append(request)
-                if request.sourceLine == 2 {
-                    return "EF24-105mm f4L IS USM"
-                }
-                return "EF40mm f2.8 STM"
-            }
-        )
+        let session = ImportSession(model: model, sourceKind: .eos1v, eosLensMappingURL: mappingCSV)
         session.preparedRun = preparedRun
+        let firstAttempt = await session.performImport(model: model)
+        XCTAssertFalse(firstAttempt)
+        let pending = try XCTUnwrap(session.pendingLensChoices)
+        XCTAssertEqual(pending.count, 2)
+        XCTAssertEqual(Set(pending.map(\.sourceLine)), [2, 3])
+        for row in pending {
+            session.lensChoiceResolutions[row.targetURL] = row.sourceLine == 2
+                ? "EF24-105mm f4L IS USM"
+                : "EF40mm f2.8 STM"
+        }
         let success = await session.performImport(model: model)
         XCTAssertTrue(success)
-        XCTAssertEqual(prompts.count, 2)
 
         let snapshots = await model.importMetadataSnapshots(for: [fileA, fileB])
         let lensA = snapshots[fileA]?.fields.first(where: { $0.namespace == .exif && $0.key == "LensModel" })?.value
@@ -1601,7 +1598,7 @@ final class ImportSystemTests: XCTestCase {
         XCTAssertEqual(lensB, "EF40mm f2.8 STM")
     }
 
-    func testImportSessionEOSApplyToRemainingAtFocalPromptsOnce() async throws {
+    func testImportSessionEOSAmbiguousRowsShareBulkAppliedLensChoice() async throws {
         let temp = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: temp) }
 
@@ -1669,24 +1666,21 @@ final class ImportSystemTests: XCTestCase {
             )
         )
 
-        var prompts: [ImportSession.EOSLensChoiceRequest] = []
-        let session = ImportSession(
-            model: model,
-            sourceKind: .eos1v,
-            eosLensMappingURL: mappingCSV,
-            lensChoiceDecisionProvider: { request in
-                prompts.append(request)
-                return ImportSession.EOSLensChoiceDecision(
-                    lens: "EF24-105mm f4L IS USM",
-                    applyToRemainingAtFocal: true
-                )
-            }
-        )
+        let session = ImportSession(model: model, sourceKind: .eos1v, eosLensMappingURL: mappingCSV)
         session.preparedRun = preparedRun
+        let firstAttempt = await session.performImport(model: model)
+        XCTAssertFalse(firstAttempt)
+        // All three rows share one focal length and appear together in one pass — this is
+        // what the sheet's "apply to remaining at this focal length" bulk action operates
+        // over, rather than prompting once per row.
+        let pending = try XCTUnwrap(session.pendingLensChoices)
+        XCTAssertEqual(pending.count, 3)
+        XCTAssertTrue(pending.allSatisfy { $0.focalMillimeters == 40 })
+        for row in pending {
+            session.lensChoiceResolutions[row.targetURL] = "EF24-105mm f4L IS USM"
+        }
         let success = await session.performImport(model: model)
         XCTAssertTrue(success)
-        XCTAssertEqual(prompts.count, 1)
-        XCTAssertEqual(prompts.first?.remainingRowsAtFocal, 2)
 
         let snapshots = await model.importMetadataSnapshots(for: [fileA, fileB, fileC])
         let lenses = [fileA, fileB, fileC].map { file in
@@ -1695,7 +1689,7 @@ final class ImportSystemTests: XCTestCase {
         XCTAssertEqual(lenses, ["EF24-105mm f4L IS USM", "EF24-105mm f4L IS USM", "EF24-105mm f4L IS USM"])
     }
 
-    func testImportSessionEOSAmbiguousLensChoiceCancelAbortsImport() async throws {
+    func testImportSessionEOSLeaveBlankSkipsLensButStagesOtherFields() async throws {
         let temp = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: temp) }
 
@@ -1747,22 +1741,25 @@ final class ImportSystemTests: XCTestCase {
             )
         )
 
-        let session = ImportSession(
-            model: model,
-            sourceKind: .eos1v,
-            eosLensMappingURL: mappingCSV,
-            lensChoiceProvider: { _ in nil }
-        )
+        let session = ImportSession(model: model, sourceKind: .eos1v, eosLensMappingURL: mappingCSV)
         session.preparedRun = preparedRun
+        let firstAttempt = await session.performImport(model: model)
+        XCTAssertFalse(firstAttempt)
+        let pending = try XCTUnwrap(session.pendingLensChoices)
+        XCTAssertEqual(pending.count, 1)
+        // "" is what the sheet's "Leave Blank" option resolves to — an explicit decision,
+        // not just an absent dict entry (an absent entry would re-flag the row as pending
+        // forever, since the detection pass can't tell "not yet decided" from "decided:
+        // blank").
+        session.lensChoiceResolutions[pending[0].targetURL] = ""
         let success = await session.performImport(model: model)
-        XCTAssertFalse(success)
-        XCTAssertEqual(session.previewError, "Import was cancelled while choosing EOS lens values.")
+        XCTAssertTrue(success, "The rest of the batch should still stage even with an unresolved lens choice.")
 
         let snapshots = await model.importMetadataSnapshots(for: [file])
         let lens = snapshots[file]?.fields.first(where: { $0.namespace == .exif && $0.key == "LensModel" })?.value
         let title = snapshots[file]?.fields.first(where: { $0.namespace == .xmp && $0.key == "Title" })?.value
-        XCTAssertNil(lens)
-        XCTAssertNil(title)
+        XCTAssertNil(lens, "Lens should stay unset when left blank.")
+        XCTAssertEqual(title, "Should Not Stage", "Other fields on the same row should still stage.")
     }
 
     func testImportSessionEOSDoesNotPromptForLensWhenFocalFieldExcluded() async throws {
@@ -1814,22 +1811,13 @@ final class ImportSystemTests: XCTestCase {
             )
         )
 
-        var promptCount = 0
-        let session = ImportSession(
-            model: model,
-            sourceKind: .eos1v,
-            eosLensMappingURL: mappingCSV,
-            lensChoiceProvider: { _ in
-                promptCount += 1
-                return "EF40mm f2.8 STM"
-            }
-        )
+        let session = ImportSession(model: model, sourceKind: .eos1v, eosLensMappingURL: mappingCSV)
         session.preparedRun = preparedRun
         session.options.selectedTagIDs = ["xmp-title"]
 
         let success = await session.performImport(model: model)
         XCTAssertTrue(success)
-        XCTAssertEqual(promptCount, 0, "Lens prompt should not appear when focal length is excluded.")
+        XCTAssertNil(session.pendingLensChoices, "Lens prompt should not appear when focal length is excluded.")
 
         let snapshots = await model.importMetadataSnapshots(for: [file])
         let title = snapshots[file]?.fields.first(where: { $0.namespace == .xmp && $0.key == "Title" })?.value
@@ -1978,22 +1966,13 @@ final class ImportSystemTests: XCTestCase {
             )
         )
 
-        var promptCount = 0
-        let session = ImportSession(
-            model: model,
-            sourceKind: .eos1v,
-            eosLensMappingURL: mappingCSV,
-            lensChoiceProvider: { _ in
-                promptCount += 1
-                return "EF40mm f2.8 STM"
-            }
-        )
+        let session = ImportSession(model: model, sourceKind: .eos1v, eosLensMappingURL: mappingCSV)
         session.preparedRun = preparedRun
         session.options.selectedTagIDs = ["exif-focal", "xmp-title"]
 
         let success = await session.performImport(model: model)
         XCTAssertTrue(success)
-        XCTAssertEqual(promptCount, 0, "Lens prompt should not appear when Lens Model is deselected.")
+        XCTAssertNil(session.pendingLensChoices, "Lens prompt should not appear when Lens Model is deselected.")
 
         let snapshots = await model.importMetadataSnapshots(for: [file])
         let focal = snapshots[file]?.fields.first(where: { $0.namespace == .exif && $0.key == "FocalLength" })?.value

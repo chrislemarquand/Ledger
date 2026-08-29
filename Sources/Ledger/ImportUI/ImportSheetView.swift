@@ -16,24 +16,19 @@ final class ImportSession: ObservableObject {
             NSClassFromString("XCTestCase") != nil
     }()
 
-    struct EOSLensChoiceDecision {
-        let lens: String
-        let applyToRemainingAtFocal: Bool
-    }
-
-    struct EOSLensChoiceRequest {
+    struct EOSLensAmbiguousRow: Identifiable {
+        var id: URL { targetURL }
+        let targetURL: URL
         let sourceLine: Int
         let sourceIdentifier: String
         let targetFileName: String
         let focalMillimeters: Int
+        let frameMaxAperture: Double?
         let candidates: [String]
-        let remainingRowsAtFocal: Int
     }
 
     private let coordinator = ImportCoordinator()
     private let eosLensMappingURLOverride: URL?
-    private let lensChoiceProvider: ((EOSLensChoiceRequest) -> String?)?
-    private let lensChoiceDecisionProvider: ((EOSLensChoiceRequest) -> EOSLensChoiceDecision?)?
     private var eosLensMappingCache: [Int: [(lens: String, maxAperture: Double?)]]?
     @Published var options: ImportRunOptions
     @Published var preparedRun: ImportPreparedRun?
@@ -43,21 +38,19 @@ final class ImportSession: ObservableObject {
     @Published var previewError: String?
     @Published var pendingConflicts: [ImportConflict]?
     var conflictResolutions: [UUID: ImportConflictResolutionChoice] = [:]
+    @Published var pendingLensChoices: [EOSLensAmbiguousRow]?
+    var lensChoiceResolutions: [URL: String] = [:]
     private var previewTask: Task<Void, Never>?
     private unowned let model: AppModel
 
     init(
         model: AppModel,
         sourceKind: ImportSourceKind,
-        eosLensMappingURL: URL? = nil,
-        lensChoiceProvider: ((EOSLensChoiceRequest) -> String?)? = nil,
-        lensChoiceDecisionProvider: ((EOSLensChoiceRequest) -> EOSLensChoiceDecision?)? = nil
+        eosLensMappingURL: URL? = nil
     ) {
         self.model = model
         var opts = coordinator.loadPersistedOptions(for: sourceKind)
         self.eosLensMappingURLOverride = eosLensMappingURL
-        self.lensChoiceProvider = lensChoiceProvider
-        self.lensChoiceDecisionProvider = lensChoiceDecisionProvider
         opts.sourceKind = sourceKind
         if sourceKind == .csv {
             // CSV matching is now automatic (filename when uniquely safe, else row-order fallback).
@@ -185,10 +178,14 @@ final class ImportSession: ObservableObject {
 
         let activeTagIDs = effectiveActiveTagIDSet(model: model)
         let eosLensResult = applyEOSLensPolicy(assignments: resolve.assignments, run: run, activeTagIDs: activeTagIDs)
-        if eosLensResult.cancelled {
-            previewError = "Import was cancelled while choosing EOS lens values."
+        if !eosLensResult.pendingChoices.isEmpty {
+            pendingLensChoices = eosLensResult.pendingChoices
+            importReport = makeImportReport(run: run, resolve: resolve, stageSummary: nil)
+            shouldEnterPostImportReview = shouldReview(report: importReport)
             return false
         }
+        pendingLensChoices = nil
+        lensChoiceResolutions = [:]
 
         let policyAppliedAssignments = applyMissingFieldPolicy(
             assignments: eosLensResult.assignments,
@@ -389,16 +386,16 @@ final class ImportSession: ObservableObject {
         assignments: [ImportAssignment],
         run: ImportPreparedRun,
         activeTagIDs: Set<String>
-    ) -> (assignments: [ImportAssignment], cancelled: Bool) {
+    ) -> (assignments: [ImportAssignment], pendingChoices: [EOSLensAmbiguousRow]) {
         guard run.options.sourceKind == .eos1v else {
-            return (assignments, false)
+            return (assignments, [])
         }
         guard activeTagIDs.contains("exif-lens") else {
-            return (assignments, false)
+            return (assignments, [])
         }
         let mapping = loadEOSLensMapping()
         guard !mapping.isEmpty else {
-            return (assignments, false)
+            return (assignments, [])
         }
 
         // Defensive: matching should provide unique target URLs, but avoid
@@ -407,10 +404,10 @@ final class ImportSession: ObservableObject {
         for match in run.matchResult.matched where rowByTargetURL[match.targetURL] == nil {
             rowByTargetURL[match.targetURL] = match.row
         }
-        var updatedAssignments = assignments
-        var applyLensChoiceToRemainingByFocal: [Int: String] = [:]
-        var remainingAmbiguousRowsByFocal: [Int: Int] = [:]
 
+        // Pass 1: find every row that's genuinely ambiguous and doesn't already have a
+        // resolution from a previous round through this sheet.
+        var ambiguousRows: [EOSLensAmbiguousRow] = []
         for assignment in assignments {
             guard let row = rowByTargetURL[assignment.targetURL] else { continue }
             let hasLens = assignment.fields.contains {
@@ -423,11 +420,27 @@ final class ImportSession: ObservableObject {
             else { continue }
             let frameMaxAperture = maxApertureFromRow(row)
             let filtered = apertureFilteredCandidates(candidates, frameMaxAperture: frameMaxAperture)
-            if filtered.count > 1 {
-                remainingAmbiguousRowsByFocal[focalMM, default: 0] += 1
-            }
+            guard filtered.count > 1, lensChoiceResolutions[assignment.targetURL] == nil else { continue }
+            ambiguousRows.append(
+                EOSLensAmbiguousRow(
+                    targetURL: assignment.targetURL,
+                    sourceLine: row.sourceLine,
+                    sourceIdentifier: row.sourceIdentifier,
+                    targetFileName: assignment.targetURL.lastPathComponent,
+                    focalMillimeters: focalMM,
+                    frameMaxAperture: frameMaxAperture,
+                    candidates: filtered
+                )
+            )
+        }
+        guard ambiguousRows.isEmpty else {
+            return (assignments, ambiguousRows)
         }
 
+        // Pass 2: every row is now either unambiguous (auto-resolve) or has a resolution
+        // from the sheet. A row left on "leave blank" simply skips the exif-lens field —
+        // it no longer aborts the whole import the way the old NSAlert cancel path did.
+        var updatedAssignments = assignments
         for index in updatedAssignments.indices {
             let assignment = updatedAssignments[index]
             guard let row = rowByTargetURL[assignment.targetURL] else { continue }
@@ -456,38 +469,10 @@ final class ImportSession: ObservableObject {
             if filtered.count == 1 {
                 chosenLens = filtered[0]
             } else {
-                defer {
-                    if let current = remainingAmbiguousRowsByFocal[focalMM], current > 0 {
-                        remainingAmbiguousRowsByFocal[focalMM] = current - 1
-                    }
-                }
-
-                if let remembered = applyLensChoiceToRemainingByFocal[focalMM],
-                   filtered.contains(remembered)
-                {
-                    chosenLens = remembered
-                } else {
-                    let request = EOSLensChoiceRequest(
-                        sourceLine: row.sourceLine,
-                        sourceIdentifier: row.sourceIdentifier,
-                        targetFileName: assignment.targetURL.lastPathComponent,
-                        focalMillimeters: focalMM,
-                        candidates: filtered,
-                        remainingRowsAtFocal: max(remainingAmbiguousRowsByFocal[focalMM, default: 0] - 1, 0)
-                    )
-                    guard let decision = chooseLens(for: request) else {
-                        return (assignments, true)
-                    }
-                    chosenLens = decision.lens
-                    if decision.applyToRemainingAtFocal {
-                        applyLensChoiceToRemainingByFocal[focalMM] = decision.lens
-                    }
-                }
+                chosenLens = lensChoiceResolutions[assignment.targetURL]
             }
 
-            guard let chosenLens, !CSVSupport.trim(chosenLens).isEmpty else {
-                return (assignments, true)
-            }
+            guard let chosenLens, !CSVSupport.trim(chosenLens).isEmpty else { continue }
 
             if valueByTagID["exif-lens"] == nil {
                 orderedTagIDs.append("exif-lens")
@@ -499,7 +484,7 @@ final class ImportSession: ObservableObject {
             )
         }
 
-        return (updatedAssignments, false)
+        return (updatedAssignments, [])
     }
 
     private func maxApertureFromRow(_ row: ImportRow) -> Double? {
@@ -623,61 +608,6 @@ final class ImportSession: ObservableObject {
         guard !trimmed.isEmpty else { return nil }
         guard let range = trimmed.range(of: #"\d+"#, options: .regularExpression) else { return nil }
         return Int(trimmed[range])
-    }
-
-    private func chooseLens(for request: EOSLensChoiceRequest) -> EOSLensChoiceDecision? {
-        if let provider = lensChoiceDecisionProvider {
-            return provider(request)
-        }
-        if let provider = lensChoiceProvider {
-            guard let lens = provider(request), !CSVSupport.trim(lens).isEmpty else { return nil }
-            return EOSLensChoiceDecision(lens: lens, applyToRemainingAtFocal: false)
-        }
-
-        let alert = NSAlert()
-        alert.alertStyle = .informational
-        alert.messageText = "Multiple Lenses Matched"
-        alert.informativeText = "\(request.targetFileName) matched more than one lens at \(request.focalMillimeters) mm. Choose which lens to assign."
-
-        let popup = NSPopUpButton(frame: .zero, pullsDown: false)
-        popup.addItems(withTitles: request.candidates)
-        popup.sizeToFit()
-
-        let accessory = NSStackView()
-        accessory.orientation = .vertical
-        accessory.alignment = .leading
-        accessory.spacing = 12
-        accessory.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 4, right: 0)
-        accessory.addArrangedSubview(popup)
-
-        let applyToRemainingCheckbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
-        if request.remainingRowsAtFocal > 0 {
-            let suffix = request.remainingRowsAtFocal == 1 ? "image" : "images"
-            applyToRemainingCheckbox.title = "Apply to \(request.remainingRowsAtFocal) more \(suffix)"
-            accessory.addArrangedSubview(applyToRemainingCheckbox)
-        }
-
-        // Let the accessory size to its content — NSAlert will widen itself if needed.
-        accessory.layoutSubtreeIfNeeded()
-        accessory.frame = NSRect(origin: .zero, size: accessory.fittingSize)
-
-        alert.accessoryView = accessory
-        alert.addButton(withTitle: "Use Lens")
-        alert.addButton(withTitle: "Cancel")
-
-        var response: NSApplication.ModalResponse = .abort
-        alert.runSheetOrModal(for: nil) { response = $0 }
-        guard response == .alertFirstButtonReturn,
-              let selectedLens = popup.titleOfSelectedItem,
-              !CSVSupport.trim(selectedLens).isEmpty
-        else {
-            return nil
-        }
-
-        return EOSLensChoiceDecision(
-            lens: selectedLens,
-            applyToRemainingAtFocal: applyToRemainingCheckbox.state == .on
-        )
     }
 
     private func applyMissingFieldPolicy(
@@ -907,6 +837,7 @@ struct ImportSheetView: View {
     @State private var importProgress: Double?
     @State private var isPostImportReviewMode = false
     @State private var showConflictSheet = false
+    @State private var showLensChoiceSheet = false
 
     private static let sectionSpacing = WorkflowSheetSectionSpacing.uniform(20)
 
@@ -1040,6 +971,20 @@ struct ImportSheetView: View {
                     session.conflictResolutions = resolutions
                     session.pendingConflicts = nil
                     showConflictSheet = false
+                    performImport()
+                }
+            )
+        }
+        .sheet(isPresented: $showLensChoiceSheet) {
+            EOSLensChoiceSheetView(
+                rows: session.pendingLensChoices ?? [],
+                onCancel: {
+                    showLensChoiceSheet = false
+                },
+                onContinue: { resolutions in
+                    session.lensChoiceResolutions = resolutions
+                    session.pendingLensChoices = nil
+                    showLensChoiceSheet = false
                     performImport()
                 }
             )
@@ -1332,6 +1277,8 @@ struct ImportSheetView: View {
                 importProgress = nil
                 if let conflicts = session.pendingConflicts, !conflicts.isEmpty {
                     showConflictSheet = true
+                } else if let lensChoices = session.pendingLensChoices, !lensChoices.isEmpty {
+                    showLensChoiceSheet = true
                 } else if session.shouldEnterPostImportReview {
                     isPostImportReviewMode = true
                 }

@@ -80,6 +80,7 @@
 		C200020D0000000000000001 /* ReferenceImportSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010D0000000000000001 /* ReferenceImportSupport.swift */; };
 		C200020E0000000000000001 /* ImportSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010E0000000000000001 /* ImportSheetView.swift */; };
 		A100018E0000000000000001 /* ImportConflictResolutionSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100018F0000000000000001 /* ImportConflictResolutionSheetView.swift */; };
+		A10001960000000000000001 /* EOSLensChoiceSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001970000000000000001 /* EOSLensChoiceSheetView.swift */; };
 		C200020F0000000000000001 /* ExifToolCSVExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010F0000000000000001 /* ExifToolCSVExportService.swift */; };
 		D100000300000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */; };
 		DD0001010000000000000001 /* LedgerSidebarTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0001000000000000000001 /* LedgerSidebarTypes.swift */; };
@@ -191,6 +192,7 @@
 		C200010D0000000000000001 /* ReferenceImportSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceImportSupport.swift; sourceTree = "<group>"; };
 		C200010E0000000000000001 /* ImportSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportSheetView.swift; sourceTree = "<group>"; };
 		A100018F0000000000000001 /* ImportConflictResolutionSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportConflictResolutionSheetView.swift; sourceTree = "<group>"; };
+		A10001970000000000000001 /* EOSLensChoiceSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOSLensChoiceSheetView.swift; sourceTree = "<group>"; };
 		C200010F0000000000000001 /* ExifToolCSVExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifToolCSVExportService.swift; sourceTree = "<group>"; };
 		D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/BatchRenameSheetView.swift; sourceTree = SOURCE_ROOT; };
 		DD0001000000000000000001 /* LedgerSidebarTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerSidebarTypes.swift; sourceTree = "<group>"; };
@@ -402,6 +404,7 @@
 			children = (
 				C200010E0000000000000001 /* ImportSheetView.swift */,
 				A100018F0000000000000001 /* ImportConflictResolutionSheetView.swift */,
+				A10001970000000000000001 /* EOSLensChoiceSheetView.swift */,
 			);
 			path = ImportUI;
 			sourceTree = "<group>";
@@ -634,6 +637,7 @@
 				C200020F0000000000000001 /* ExifToolCSVExportService.swift in Sources */,
 				C200020E0000000000000001 /* ImportSheetView.swift in Sources */,
 				A100018E0000000000000001 /* ImportConflictResolutionSheetView.swift in Sources */,
+				A10001960000000000000001 /* EOSLensChoiceSheetView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
