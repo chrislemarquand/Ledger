@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindowController: MainWindowController?
     private var settingsWindowController: SettingsWindowController?
     private var exifToolConsoleWindowController: ExifToolConsoleWindowController?
+    private var eos1vConsoleWindowController: EOS1VConsoleWindowController?
     private var updateService: UpdateService?
     private var isShowingTerminateConfirmation = false
     private var allowImmediateTermination = false
@@ -80,6 +81,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc
     func showExifToolConsoleAction(_: Any?) {
         exifToolConsoleWindowController?.showWindowAndActivate()
+    }
+
+    @objc
+    func showEOS1VConsoleAction(_: Any?) {
+        eos1vConsoleWindowController?.showWindowAndActivate()
     }
 
     @objc
@@ -156,6 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 viewController: InspectorSettingsViewController(model: model), preferredHeight: 660),
         ])
         exifToolConsoleWindowController = ExifToolConsoleWindowController(model: model)
+        eos1vConsoleWindowController = EOS1VConsoleWindowController()
         let windowController = MainWindowController(model: model)
         mainWindowController = windowController
         windowController.showWindow(nil)
