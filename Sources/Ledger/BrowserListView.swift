@@ -13,6 +13,8 @@ enum BrowserContextMenuBuilder {
         let clear: Selector
         let restore: Selector
         let pasteField: Selector
+        let copyAllMetadata: Selector
+        let pasteAllMetadata: Selector
     }
 
     static func makeMenu(
@@ -55,6 +57,15 @@ enum BrowserContextMenuBuilder {
             ))
         }
         menu.addItem(.separator())
+        if targetURLs.count == 1 {
+            menu.addItem(ContextMenuSupport.makeMenuItem(
+                title: "Copy All Metadata",
+                action: actions.copyAllMetadata,
+                target: target,
+                symbolName: "doc.on.doc",
+                isEnabled: model.hasCopyableMetadata
+            ))
+        }
         if let preview = model.pasteboardSingleFieldPreview() {
             let title = targetURLs.count > 1
                 ? "Paste \(preview.tag.label) to \(targetURLs.count) Items"
@@ -62,6 +73,18 @@ enum BrowserContextMenuBuilder {
             menu.addItem(ContextMenuSupport.makeMenuItem(
                 title: title,
                 action: actions.pasteField,
+                target: target,
+                symbolName: "doc.on.clipboard",
+                isEnabled: !targetURLs.isEmpty
+            ))
+        }
+        if model.pasteboardAllMetadataPreview() != nil {
+            let title = targetURLs.count > 1
+                ? "Paste All Metadata to \(targetURLs.count) Items"
+                : "Paste All Metadata"
+            menu.addItem(ContextMenuSupport.makeMenuItem(
+                title: title,
+                action: actions.pasteAllMetadata,
                 target: target,
                 symbolName: "doc.on.clipboard",
                 isEnabled: !targetURLs.isEmpty
@@ -574,7 +597,9 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
                 refresh: #selector(refreshFromContextMenu(_:)),
                 clear: #selector(clearFromContextMenu(_:)),
                 restore: #selector(restoreFromContextMenu(_:)),
-                pasteField: #selector(pasteFieldFromContextMenu(_:))
+                pasteField: #selector(pasteFieldFromContextMenu(_:)),
+                copyAllMetadata: #selector(copyAllMetadataFromContextMenu(_:)),
+                pasteAllMetadata: #selector(pasteAllMetadataFromContextMenu(_:))
             )
         )
     }
@@ -589,6 +614,17 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
     private func pasteFieldFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty, let tag = model.pasteboardSingleFieldPreview()?.tag else { return }
         model.pasteField(tag, fileURLs: contextMenuTargetURLs)
+    }
+
+    @objc
+    private func copyAllMetadataFromContextMenu(_: Any?) {
+        model.copyAllMetadataToPasteboard()
+    }
+
+    @objc
+    private func pasteAllMetadataFromContextMenu(_: Any?) {
+        guard !contextMenuTargetURLs.isEmpty else { return }
+        model.pasteAllMetadata(fileURLs: contextMenuTargetURLs)
     }
 
     @objc

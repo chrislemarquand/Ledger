@@ -389,7 +389,9 @@ final class BrowserFilmstripViewController: NSViewController, NSCollectionViewDa
                 refresh: #selector(refreshFromContextMenu(_:)),
                 clear: #selector(clearFromContextMenu(_:)),
                 restore: #selector(restoreFromContextMenu(_:)),
-                pasteField: #selector(pasteFieldFromContextMenu(_:))
+                pasteField: #selector(pasteFieldFromContextMenu(_:)),
+                copyAllMetadata: #selector(copyAllMetadataFromContextMenu(_:)),
+                pasteAllMetadata: #selector(pasteAllMetadataFromContextMenu(_:))
             )
         )
     }
@@ -404,6 +406,17 @@ final class BrowserFilmstripViewController: NSViewController, NSCollectionViewDa
     private func pasteFieldFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty, let tag = model.pasteboardSingleFieldPreview()?.tag else { return }
         model.pasteField(tag, fileURLs: contextMenuTargetURLs)
+    }
+
+    @objc
+    private func copyAllMetadataFromContextMenu(_: Any?) {
+        model.copyAllMetadataToPasteboard()
+    }
+
+    @objc
+    private func pasteAllMetadataFromContextMenu(_: Any?) {
+        guard !contextMenuTargetURLs.isEmpty else { return }
+        model.pasteAllMetadata(fileURLs: contextMenuTargetURLs)
     }
 
     @objc
