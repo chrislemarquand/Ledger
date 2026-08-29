@@ -96,14 +96,14 @@ Deferred: HDR-aware previews (moved to v2.0 — belongs with the in-app viewer a
 ## v1.3 — Import Maturity + Polish
 
 ### Import
-- [ ] **Import conflict-resolution UI**: dedicated conflict workspace for unresolved/ambiguous import rows with per-row target choice, side-by-side field diff, and bulk resolve actions.
+- [x] **Import conflict-resolution UI**: `ImportConflictResolutionSheetView`, presented as a second sheet when Import is clicked and unresolved conflicts exist, replacing the old blocking "future update" alert. Per-row control adapts to candidate count (plain text when unresolvable, checkbox for one candidate, dropdown for multiple), a details popover shows the row's field diff, and "Skip All Remaining" bulk-resolves. Note: CSV import's own uniqueness precheck (`CSVImportAdapter.effectiveMatchingStrategy`) currently falls back to row-order matching for the whole file the moment any row's filename is ambiguous, so `.multipleTargets`/`.duplicateSourceIdentifier` (the multi-candidate cases) can't currently be triggered by any real import path — only `.missingTarget` is reachable today. Worth revisiting when the EOS-1V lens policy item's NSAlert-loop is replaced with the same sheet pattern.
 - [ ] **EOS-1V lens-tag policy system**: merges resolver enhancements and policy controls into one mature feature. Policy modes (`Do not write lens` / `Single lens for import` / `Focal-length mapping table`), unknown focal length behaviour, named lens profiles, import-sheet override selector.
 
 ### Browse
 - [x] **iCloud Drive file-state UI**: make it obvious in list/gallery/inspector when a file is a cloud placeholder rather than downloaded locally (evicted/dataless items currently look like a thumbnail/metadata loading failure — exiftool reads time out silently and previews stall while fileproviderd materialises multi-hundred-MB scans). Detect via `URLResourceValues` (`isUbiquitousItem` / `ubiquitousItemDownloadingStatus`) and badge undownloaded items with an iCloud symbol using SharedUI's `makeGalleryOverlaySymbol` (`Gallery/GalleryOverlay.swift`), in the style of Librarian's shared-library `person.2.fill` grid badge. Consider a download affordance/progress and skipping exiftool reads until files are materialised.
 - [x] **Finder-style gallery view**: filmstrip along bottom, large preview at top — third browser mode alongside list and grid.
 - [x] Gallery metadata lines/subtitle customisation.
-- [ ] Explicit Home/End/Page Up/Page Down keyboard nav in list/gallery.
+- [x] Explicit Home/End/Page Up/Page Down keyboard nav in list/gallery.
 
 ### Metadata
 - [x] Metadata copy/paste:
