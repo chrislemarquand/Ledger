@@ -29,17 +29,17 @@ extension AppModel {
         )
     }
 
-    /// Copies every currently visible, populated, non-mixed field to the general pasteboard —
-    /// "visible" meaning whatever `activeEditableTags` surfaces, i.e. respecting the Settings
-    /// field-visibility filter, same convention `beginCreatePresetFromCurrent()` uses. No plain
-    /// `.string` fallback: a whole record has no sensible single-string representation.
+    /// Copies every currently visible, non-mixed field to the general pasteboard — "visible"
+    /// meaning whatever `activeEditableTags` surfaces, i.e. respecting the Settings
+    /// field-visibility filter, same convention `beginCreatePresetFromCurrent()` uses. Empty
+    /// fields are copied too (not skipped): this is a whole-record clone, so pasting it should
+    /// clear a field on the target that's blank on the source, not just leave it untouched. No
+    /// plain `.string` fallback: a whole record has no sensible single-string representation.
     func copyAllMetadataToPasteboard() {
         var fields: [PresetFieldValue] = []
         for tag in activeEditableTags {
             guard !isMixedValue(for: tag) else { continue }
-            let value = valueForTag(tag)
-            guard !value.isEmpty else { continue }
-            fields.append(PresetFieldValue(tagID: tag.id, value: value))
+            fields.append(PresetFieldValue(tagID: tag.id, value: valueForTag(tag)))
         }
         guard !fields.isEmpty else { return }
         writeToPasteboard(MetadataClipboardPayload(kind: .allMetadata, fields: fields), plainText: nil)
@@ -116,8 +116,9 @@ extension AppModel {
     }
 
     /// Whether `copyAllMetadataToPasteboard()` would currently produce a non-empty payload —
-    /// used to enable/disable the browser context menu's "Copy All Metadata" item.
+    /// used to enable/disable the browser context menu's "Copy All Metadata" item. Matches
+    /// that function's own criterion: any non-mixed active field, empty or not.
     var hasCopyableMetadata: Bool {
-        activeEditableTags.contains { !isMixedValue(for: $0) && !valueForTag($0).isEmpty }
+        activeEditableTags.contains { !isMixedValue(for: $0) }
     }
 }

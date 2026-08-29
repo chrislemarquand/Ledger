@@ -566,9 +566,9 @@ extension AppModel {
         }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if tag.id == "xmp-rating", trimmed == "0" {
-            // An explicit Rating=0 is semantically identical to an absent tag.
-            // Normalise to "" so clearing the rating on a file that stores an
+        if (tag.id == "xmp-rating" || tag.id == "xmp-pick"), trimmed == "0" {
+            // An explicit Rating=0 or Pick=0 is semantically identical to an absent tag.
+            // Normalise to "" so clearing the rating/flag on a file that stores an
             // explicit 0 (Lightroom, Capture One etc.) doesn't produce a false
             // pending edit — the comparison in trackPendingEdit sees "" == "" and
             // cancels rather than staging a redundant delete-tag patch.
