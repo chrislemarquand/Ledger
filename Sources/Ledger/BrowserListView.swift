@@ -12,6 +12,7 @@ enum BrowserContextMenuBuilder {
         let refresh: Selector
         let clear: Selector
         let restore: Selector
+        let pasteField: Selector
     }
 
     static func makeMenu(
@@ -54,6 +55,18 @@ enum BrowserContextMenuBuilder {
             ))
         }
         menu.addItem(.separator())
+        if let preview = model.pasteboardSingleFieldPreview() {
+            let title = targetURLs.count > 1
+                ? "Paste \(preview.tag.label) to \(targetURLs.count) Items"
+                : "Paste \(preview.tag.label)"
+            menu.addItem(ContextMenuSupport.makeMenuItem(
+                title: title,
+                action: actions.pasteField,
+                target: target,
+                symbolName: "doc.on.clipboard",
+                isEnabled: !targetURLs.isEmpty
+            ))
+        }
         menu.addItem(ContextMenuSupport.makeMenuItem(
             title: applyTitle,
             action: actions.apply,
@@ -560,7 +573,8 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
                 apply: #selector(applyFromContextMenu(_:)),
                 refresh: #selector(refreshFromContextMenu(_:)),
                 clear: #selector(clearFromContextMenu(_:)),
-                restore: #selector(restoreFromContextMenu(_:))
+                restore: #selector(restoreFromContextMenu(_:)),
+                pasteField: #selector(pasteFieldFromContextMenu(_:))
             )
         )
     }
@@ -569,6 +583,12 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
     private func openFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty else { return }
         model.performFileAction(.openInDefaultApp, targetURLs: contextMenuTargetURLs)
+    }
+
+    @objc
+    private func pasteFieldFromContextMenu(_: Any?) {
+        guard !contextMenuTargetURLs.isEmpty, let tag = model.pasteboardSingleFieldPreview()?.tag else { return }
+        model.pasteField(tag, fileURLs: contextMenuTargetURLs)
     }
 
     @objc

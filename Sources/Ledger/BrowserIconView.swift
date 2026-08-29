@@ -508,7 +508,8 @@ final class BrowserIconViewController: NSViewController, NSCollectionViewDataSou
                 apply: #selector(applyFromContextMenu(_:)),
                 refresh: #selector(refreshFromContextMenu(_:)),
                 clear: #selector(clearFromContextMenu(_:)),
-                restore: #selector(restoreFromContextMenu(_:))
+                restore: #selector(restoreFromContextMenu(_:)),
+                pasteField: #selector(pasteFieldFromContextMenu(_:))
             )
         )
     }
@@ -517,6 +518,12 @@ final class BrowserIconViewController: NSViewController, NSCollectionViewDataSou
     private func openFromContextMenu(_: Any?) {
         guard !contextMenuTargetURLs.isEmpty else { return }
         model.performFileAction(.openInDefaultApp, targetURLs: contextMenuTargetURLs)
+    }
+
+    @objc
+    private func pasteFieldFromContextMenu(_: Any?) {
+        guard !contextMenuTargetURLs.isEmpty, let tag = model.pasteboardSingleFieldPreview()?.tag else { return }
+        model.pasteField(tag, fileURLs: contextMenuTargetURLs)
     }
 
     @objc

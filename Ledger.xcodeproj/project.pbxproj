@@ -28,6 +28,7 @@
 		A10001440000000000000001 /* BrowserIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001430000000000000001 /* BrowserIconView.swift */; };
 		A10001870000000000000001 /* BrowserFilmstripViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001860000000000000001 /* BrowserFilmstripViewController.swift */; };
 		A100018B0000000000000001 /* ExifToolConsoleWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100018A0000000000000001 /* ExifToolConsoleWindowController.swift */; };
+		A100018C0000000000000001 /* AppModel+MetadataClipboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100018D0000000000000001 /* AppModel+MetadataClipboard.swift */; };
 		A10001890000000000000001 /* LargePreviewCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001880000000000000001 /* LargePreviewCard.swift */; };
 		A10001460000000000000001 /* BrowserListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001450000000000000001 /* BrowserListView.swift */; };
 		A10001480000000000000001 /* InspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001470000000000000001 /* InspectorView.swift */; };
@@ -134,6 +135,7 @@
 		A10001430000000000000001 /* BrowserIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserIconView.swift; sourceTree = "<group>"; };
 		A10001860000000000000001 /* BrowserFilmstripViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserFilmstripViewController.swift; sourceTree = "<group>"; };
 		A100018A0000000000000001 /* ExifToolConsoleWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifToolConsoleWindowController.swift; sourceTree = "<group>"; };
+		A100018D0000000000000001 /* AppModel+MetadataClipboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+MetadataClipboard.swift"; sourceTree = "<group>"; };
 		A10001880000000000000001 /* LargePreviewCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LargePreviewCard.swift; sourceTree = "<group>"; };
 		A10001450000000000000001 /* BrowserListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserListView.swift; sourceTree = "<group>"; };
 		A10001470000000000000001 /* InspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorView.swift; sourceTree = "<group>"; };
@@ -329,6 +331,7 @@
 				A10001430000000000000001 /* BrowserIconView.swift */,
 				A10001860000000000000001 /* BrowserFilmstripViewController.swift */,
 				A100018A0000000000000001 /* ExifToolConsoleWindowController.swift */,
+				A100018D0000000000000001 /* AppModel+MetadataClipboard.swift */,
 				A10001880000000000000001 /* LargePreviewCard.swift */,
 				A10001450000000000000001 /* BrowserListView.swift */,
 				A10001710000000000000001 /* ListColumnDefinition.swift */,
@@ -584,6 +587,7 @@
 				A10001440000000000000001 /* BrowserIconView.swift in Sources */,
 				A10001870000000000000001 /* BrowserFilmstripViewController.swift in Sources */,
 				A100018B0000000000000001 /* ExifToolConsoleWindowController.swift in Sources */,
+				A100018C0000000000000001 /* AppModel+MetadataClipboard.swift in Sources */,
 				A10001890000000000000001 /* LargePreviewCard.swift in Sources */,
 				A10001460000000000000001 /* BrowserListView.swift in Sources */,
 				A10001720000000000000001 /* ListColumnDefinition.swift in Sources */,

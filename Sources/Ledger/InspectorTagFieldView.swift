@@ -82,7 +82,8 @@ struct InspectorTagFieldView: View {
                             object: nil,
                             userInfo: ["backward": true]
                         )
-                    }
+                    },
+                    onCopy: { model.copyFieldToPasteboard(tag) }
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if isLocationCoordinateTag {

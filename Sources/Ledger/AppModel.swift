@@ -393,6 +393,7 @@ final class AppModel: ObservableObject {
         case manual
         case preset(UUID)
         case importSource(ImportSourceKind)
+        case metadataPaste
     }
 
     struct StagedEditRecord: Hashable {
