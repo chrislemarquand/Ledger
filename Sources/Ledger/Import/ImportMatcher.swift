@@ -108,8 +108,6 @@ struct ImportMatcher {
 
             case let .rowNumber(number):
                 if (rowSourceCounts[number] ?? 0) > 1 {
-                    let index = number - 1
-                    let candidateTarget = (index >= 0 && index < rowOrderedTargets.count) ? [rowOrderedTargets[index]] : []
                     conflicts.append(
                         ImportConflict(
                             id: UUID(),
@@ -117,7 +115,7 @@ struct ImportMatcher {
                             sourceLine: row.sourceLine,
                             sourceIdentifier: row.sourceIdentifier,
                             rowFields: row.fields,
-                            candidateTargets: candidateTarget,
+                            candidateTargets: [],
                             message: "Multiple source rows target row \(number)."
                         )
                     )

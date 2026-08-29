@@ -36,8 +36,6 @@ final class ImportSession: ObservableObject {
     @Published var shouldEnterPostImportReview = false
     @Published var isBusy = false
     @Published var previewError: String?
-    @Published var pendingConflicts: [ImportConflict]?
-    var conflictResolutions: [UUID: ImportConflictResolutionChoice] = [:]
     @Published var pendingLensChoices: [EOSLensAmbiguousRow]?
     var lensChoiceResolutions: [URL: String] = [:]
     private var previewTask: Task<Void, Never>?
@@ -166,15 +164,24 @@ final class ImportSession: ObservableObject {
             }
         }
 
-        let resolve = coordinator.resolveAssignments(preparedRun: run, resolutions: conflictResolutions)
+        let resolve = coordinator.resolveAssignments(preparedRun: run, resolutions: [:])
         if !resolve.unresolvedConflicts.isEmpty {
-            pendingConflicts = resolve.unresolvedConflicts
-            importReport = makeImportReport(run: run, resolve: resolve, stageSummary: nil)
+            let conflictCount = resolve.unresolvedConflicts.count
+            let conflicts = conflictCount == 1 ? "1 conflict needs" : "\(conflictCount) conflicts need"
+            let message = "\(conflicts) resolution. Conflict resolution will be available in a future update."
+            previewError = message
+            importReport = makeImportReport(
+                run: run,
+                resolve: resolve,
+                stageSummary: nil
+            )
             shouldEnterPostImportReview = shouldReview(report: importReport)
+            presentBlockingImportAlert(
+                title: "Import needs conflict resolution.",
+                message: message
+            )
             return false
         }
-        pendingConflicts = nil
-        conflictResolutions = [:]
 
         let activeTagIDs = effectiveActiveTagIDSet(model: model)
         let eosLensResult = applyEOSLensPolicy(assignments: resolve.assignments, run: run, activeTagIDs: activeTagIDs)
@@ -836,7 +843,6 @@ struct ImportSheetView: View {
     @State private var showPreview = false
     @State private var importProgress: Double?
     @State private var isPostImportReviewMode = false
-    @State private var showConflictSheet = false
     @State private var showLensChoiceSheet = false
 
     private static let sectionSpacing = WorkflowSheetSectionSpacing.uniform(20)
@@ -960,20 +966,6 @@ struct ImportSheetView: View {
             if newCount == 0, session.options.scope == .selection {
                 session.options.scope = .folder
             }
-        }
-        .sheet(isPresented: $showConflictSheet) {
-            ImportConflictResolutionSheetView(
-                conflicts: session.pendingConflicts ?? [],
-                onCancel: {
-                    showConflictSheet = false
-                },
-                onResolve: { resolutions in
-                    session.conflictResolutions = resolutions
-                    session.pendingConflicts = nil
-                    showConflictSheet = false
-                    performImport()
-                }
-            )
         }
         .sheet(isPresented: $showLensChoiceSheet) {
             EOSLensChoiceSheetView(
@@ -1275,9 +1267,7 @@ struct ImportSheetView: View {
                 }
             } else {
                 importProgress = nil
-                if let conflicts = session.pendingConflicts, !conflicts.isEmpty {
-                    showConflictSheet = true
-                } else if let lensChoices = session.pendingLensChoices, !lensChoices.isEmpty {
+                if let lensChoices = session.pendingLensChoices, !lensChoices.isEmpty {
                     showLensChoiceSheet = true
                 } else if session.shouldEnterPostImportReview {
                     isPostImportReviewMode = true
