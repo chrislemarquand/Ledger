@@ -31,6 +31,10 @@ final class GeneralSettingsViewController: SettingsGridViewController {
         title: "Clear backups...",
         action: #selector(clearBackupsAction(_:))
     )
+    private lazy var manageLensesButton = makeActionButton(
+        title: "Manage Lenses…",
+        action: #selector(manageLensesClicked(_:))
+    )
 
     init(model: AppModel) {
         self.model = model
@@ -52,6 +56,7 @@ final class GeneralSettingsViewController: SettingsGridViewController {
             [makeCategoryLabel(title: "Backups:"),  keepBackupsButton],
             [makeCategoryLabel(title: ""),          makeRetentionRow()],
             [makeCategoryLabel(title: ""),          clearBackupsButton],
+            [makeCategoryLabel(title: "Lenses:"),   manageLensesButton],
         ]
     }
 
@@ -116,30 +121,6 @@ final class GeneralSettingsViewController: SettingsGridViewController {
         }
 
         alert.runSheetOrModal(for: view.window, completion: handleResponse)
-    }
-}
-
-@MainActor
-final class LensSettingsViewController: SettingsGridViewController {
-    private unowned let model: AppModel
-
-    private lazy var manageLensesButton = makeActionButton(
-        title: "Manage Lenses…",
-        action: #selector(manageLensesClicked(_:))
-    )
-
-    init(model: AppModel) {
-        self.model = model
-        super.init(nibName: nil, bundle: nil)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func makeRows() -> [[NSView]] {
-        [
-            [makeCategoryLabel(title: "Lenses:"), manageLensesButton],
-        ]
     }
 
     @objc private func manageLensesClicked(_ sender: Any?) {

@@ -154,8 +154,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 viewController: GeneralSettingsViewController(model: model)),
             SettingsTabDescriptor(symbolName: "slider.horizontal.3", label: "Inspector",
                 viewController: InspectorSettingsViewController(model: model), preferredHeight: 660),
-            SettingsTabDescriptor(symbolName: "camera.aperture", label: "Lenses",
-                viewController: LensSettingsViewController(model: model)),
         ])
         exifToolConsoleWindowController = ExifToolConsoleWindowController(model: model)
         let windowController = MainWindowController(model: model)

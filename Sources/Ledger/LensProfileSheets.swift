@@ -138,6 +138,8 @@ struct LensProfileEditorSheet: View {
     @State private var widestApertureAtMaxFocal: Double?
 
     private static let sectionSpacing = WorkflowSheetSectionSpacing.uniform(14)
+    private static let labelColumnWidth: CGFloat = 132
+    private static let formRowSpacing: CGFloat = 10
 
     init(model: AppModel, target: LensProfileEditorTarget) {
         self.model = model
@@ -157,16 +159,16 @@ struct LensProfileEditorSheet: View {
     var body: some View {
         WorkflowSheetContainer(
             title: isEditing ? "Edit Lens" : "New Lens",
-            width: 420,
             sectionSpacing: Self.sectionSpacing
         ) {
-            VStack(alignment: .leading, spacing: 12) {
-                WorkflowFormRow("Name") {
+            VStack(alignment: .leading, spacing: Self.formRowSpacing) {
+                row("Name:") {
                     TextField("e.g. EF50mm f1.8 STM", text: $name)
                         .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: .infinity)
                 }
 
-                WorkflowOptionGroup("Kind:") {
+                row("Kind:") {
                     Picker("", selection: $kind) {
                         Text("Prime").tag(LensKind.prime)
                         Text("Zoom").tag(LensKind.zoom)
@@ -176,23 +178,23 @@ struct LensProfileEditorSheet: View {
                 }
 
                 if kind == .prime {
-                    WorkflowFormRow("Focal Length") {
+                    row("Focal Length:") {
                         focalLengthField(value: $minFocalLengthMM, suffix: "mm")
                     }
-                    WorkflowFormRow("Maximum Aperture") {
+                    row("Maximum Aperture:") {
                         apertureField(value: $widestApertureAtMinFocal)
                     }
                 } else {
-                    WorkflowFormRow("Widest Focal Length") {
-                        focalLengthField(value: $minFocalLengthMM, suffix: "mm")
-                    }
-                    WorkflowFormRow("Narrowest Focal Length") {
+                    row("Narrowest Focal Length:") {
                         focalLengthField(value: $maxFocalLengthMM, suffix: "mm")
                     }
-                    WorkflowFormRow("Aperture at Wide End") {
+                    row("Widest Focal Length:") {
+                        focalLengthField(value: $minFocalLengthMM, suffix: "mm")
+                    }
+                    row("Aperture at Wide End:") {
                         apertureField(value: $widestApertureAtMinFocal)
                     }
-                    WorkflowFormRow("Aperture at Tele End") {
+                    row("Aperture at Tele End:") {
                         HStack(spacing: 6) {
                             apertureField(value: $widestApertureAtMaxFocal)
                             Text("(blank = constant)")
@@ -224,17 +226,21 @@ struct LensProfileEditorSheet: View {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Every row in this sheet shares one left-aligned label column, so labels line up
+    /// down the left edge and fields all start at the same x and stretch to the trailing
+    /// edge — matching the Figma "Adjust Date and Time" reference rather than
+    /// WorkflowFormRow's default right-aligned label.
     @ViewBuilder
-    private func focalLengthField(value: Binding<Int>) -> some View {
-        TextField("", value: value, format: .number)
-            .textFieldStyle(.roundedBorder)
-            .frame(width: 70)
+    private func row<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
+        WorkflowFormRow(label, labelWidth: Self.labelColumnWidth, labelAlignment: .leading, content: content)
     }
 
     @ViewBuilder
     private func focalLengthField(value: Binding<Int>, suffix: String) -> some View {
         HStack(spacing: 6) {
-            focalLengthField(value: value)
+            TextField("", value: value, format: .number)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: .infinity)
             Text(suffix).foregroundStyle(.secondary)
         }
     }
@@ -245,7 +251,7 @@ struct LensProfileEditorSheet: View {
             Text("f/").foregroundStyle(.secondary)
             TextField("", value: value, format: .number)
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 70)
+                .frame(maxWidth: .infinity)
         }
     }
 
