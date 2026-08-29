@@ -12,6 +12,9 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     private let sidebarController: AppKitSidebarController<LedgerSidebarSection, LedgerSidebarItem>
     private let browserController: BrowserContainerViewController
     private let inspectorController: NSHostingController<AnyView>
+    private let eos1vSessionController: EOS1VSessionController
+    private let eos1vDeviceController: EOS1VDeviceViewController
+    private let eos1vDeviceMonitor = EOS1VDeviceMonitor()
 
     private var didConfigureWindow = false
     private var mainToolbarController: MainToolbarController?
@@ -32,6 +35,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     private let modelUIRefreshCoalescer = MainActorCoalescer()
     private let sidebarReloadCoalescer = MainActorCoalescer()
     private let sidebarSelectionSyncCoalescer = MainActorCoalescer()
+    private var inspectorStateBeforeDeviceSelection: Bool?
     init(model: AppModel) {
         self.model = model
 
@@ -44,10 +48,14 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         let ic = NSHostingController(rootView: AnyView(InspectorView(model: model).tint(AppTheme.accentColor)))
         // Prevent inspector content from forcing pane expansion during SwiftUI view updates.
         ic.sizingOptions = []
+        let eosSession = EOS1VSessionController()
+        let eosController = EOS1VDeviceViewController(session: eosSession)
 
         self.sidebarController = sc
         self.browserController = bc
         self.inspectorController = ic
+        self.eos1vSessionController = eosSession
+        self.eos1vDeviceController = eosController
 
         super.init(
             sidebar: sc,
@@ -73,7 +81,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             switch targetSection {
             case .pinned:   self.model.pinSidebarItem(sidebarItem)
             case .recents:  self.model.unpinSidebarItem(sidebarItem)
-            case .sources:  break
+            case .sources, .devices: break
             }
         }
 
@@ -91,6 +99,13 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         }
 
         installUIRefreshObservers()
+        eos1vDeviceMonitor.onPresenceChanged = { [weak self] connected in
+            guard let self else { return }
+            self.model.setEOS1VCableConnected(connected)
+            if !connected {
+                self.eos1vSessionController.cableDidDisconnect()
+            }
+        }
     }
 
     @available(*, unavailable)
@@ -100,6 +115,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
 
     override func viewWillAppear() {
         super.viewWillAppear()
+        eos1vDeviceMonitor.start()
         // Configure the window before it becomes visible so the macOS 26
         // compositor can apply the correct floating-sidebar shadow from the
         // first frame. Calling this in viewDidAppear causes a brief flash of
@@ -109,6 +125,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
 
     override func viewWillDisappear() {
         super.viewWillDisappear()
+        eos1vDeviceMonitor.stop()
         teardownObserversAndMonitors()
     }
 
@@ -154,6 +171,14 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         observe(model.$inspectorRefreshRevision)
         observe(model.$stagedOpsDisplayToken)
 
+        eos1vSessionController.objectWillChange
+            .sink { [weak self] _ in
+                DispatchQueue.main.async {
+                    self?.scheduleModelDrivenUIRefresh()
+                }
+            }
+            .store(in: &uiRefreshObservers)
+
         // Sidebar data — rebuild and reload when the item list or image counts change.
         observeEquatable(model.$sidebarItems, storeIn: &uiRefreshObservers) { [weak self] in
             self?.scheduleSidebarReload()
@@ -173,6 +198,32 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             guard let self else { return }
             self.refreshToolbarState()
             self.refreshWindowTitleSubtitleIfNeeded()
+            self.updateEOS1VVisibilityIfNeeded()
+        }
+    }
+
+    private var isEOS1VSelected: Bool {
+        model.selectedSidebarItem?.kind == .eos1vDevice
+    }
+
+    /// The only thing that ever changes here is `eos1vDeviceController.view.isHidden`.
+    /// `browserController.view` is never touched — see `installEOS1VDeviceOverlay()`.
+    private func updateEOS1VVisibilityIfNeeded() {
+        eos1vDeviceController.view.isHidden = !isEOS1VSelected
+        if isEOS1VSelected {
+            if inspectorStateBeforeDeviceSelection == nil {
+                inspectorStateBeforeDeviceSelection = isInspectorCollapsed
+            }
+            if !isInspectorCollapsed {
+                isInspectorCollapsed = true
+                schedulePaneStateSync()
+            }
+        } else if let prior = inspectorStateBeforeDeviceSelection {
+            inspectorStateBeforeDeviceSelection = nil
+            if isInspectorCollapsed != prior {
+                isInspectorCollapsed = prior
+                schedulePaneStateSync()
+            }
         }
     }
 
@@ -282,6 +333,43 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     override func viewDidLoad() {
         super.viewDidLoad()
         resetSplitAutosaveStateIfNeeded()
+        installEOS1VDeviceOverlay()
+    }
+
+    /// Mounts the EOS-1V device screen as a plain sibling of the browser's view, drawn
+    /// above it — never as a child of it (the browser's own "No Supported Images"/"No
+    /// Selection" overlay paints unconditionally inside its own view whenever
+    /// `browserItems` is empty, which it always is while the device is selected; a child
+    /// view would get painted over) and never by reparenting or hiding the browser's view
+    /// itself (AppKit sends viewWillAppear/viewWillDisappear on any such change, and
+    /// BrowserContainerViewController tears down its render subscriptions on
+    /// viewWillDisappear with no reinstall path — that combination is what caused the
+    /// stale-browser regression previously). BrowserContainerViewController is not
+    /// touched by this at all: its parentage and lifecycle stay exactly as they are for
+    /// every other sidebar kind.
+    ///
+    /// Done here in viewDidLoad, not init — browserController.view.superview must
+    /// already exist, which is only guaranteed once the normal AppKit view-loading
+    /// bootstrap (triggered by NSWindow(contentViewController:)) has run.
+    ///
+    /// addChild is called on browserController (a plain NSViewController), never on
+    /// `self` — self is an NSSplitViewController subclass, and addChild there
+    /// implicitly creates an extra, empty arranged subview in the split.
+    private func installEOS1VDeviceOverlay() {
+        guard let browserSuperview = browserController.view.superview else {
+            assertionFailure("browserController.view has no superview yet")
+            return
+        }
+        browserController.addChild(eos1vDeviceController)
+        eos1vDeviceController.view.translatesAutoresizingMaskIntoConstraints = false
+        eos1vDeviceController.view.isHidden = true
+        browserSuperview.addSubview(eos1vDeviceController.view, positioned: .above, relativeTo: browserController.view)
+        NSLayoutConstraint.activate([
+            eos1vDeviceController.view.leadingAnchor.constraint(equalTo: browserController.view.leadingAnchor),
+            eos1vDeviceController.view.trailingAnchor.constraint(equalTo: browserController.view.trailingAnchor),
+            eos1vDeviceController.view.topAnchor.constraint(equalTo: browserController.view.topAnchor),
+            eos1vDeviceController.view.bottomAnchor.constraint(equalTo: browserController.view.bottomAnchor),
+        ])
     }
 
     private func resetSplitAutosaveStateIfNeeded() {
@@ -575,7 +663,10 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     func isSidebarCollapsedForMenu() -> Bool { isSidebarCollapsed }
     func isInspectorCollapsedForMenu() -> Bool { isInspectorCollapsed }
 
-    @objc func toggleInspectorAction(_ sender: Any?) { toggleInspector(sender) }
+    @objc func toggleInspectorAction(_ sender: Any?) {
+        guard !isEOS1VSelected else { return }
+        toggleInspector(sender)
+    }
     @objc func togglePathBarAction(_ sender: Any?) { browserController.setPathBarVisible(!browserController.isPathBarVisible) }
 
     private enum MenuTag {
@@ -1510,6 +1601,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             return !selection.isEmpty
         } else if menuItem.action == #selector(toggleInspectorAction(_:)) {
             menuItem.title = isInspectorCollapsed ? "Show Inspector" : "Hide Inspector"
+            return !isEOS1VSelected
         } else if menuItem.action == #selector(togglePathBarAction(_:)) {
             menuItem.title = browserController.isPathBarVisible ? "Hide Path Bar" : "Show Path Bar"
         } else if menuItem.action == #selector(switchToIconAction(_:)) {
@@ -1579,12 +1671,23 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         switch item.kind {
         case .pictures, .desktop, .downloads, .mountedVolume, .favorite:
             return item.title
+        case .eos1vDevice:
+            return "Canon EOS-1V"
         case let .folder(url):
             return url.lastPathComponent
         }
     }
 
     private func toolbarSubtitleText() -> String {
+        if isEOS1VSelected {
+            switch eos1vSessionController.state {
+            case .cableConnected: return "ES-E1 cable connected"
+            case .searching: return "Searching…"
+            case .notFound: return "Camera not found"
+            case .connected, .downloading, .loaded: return "Connected"
+            case .failed: return "Read failed"
+            }
+        }
         // ExifTool reads (and therefore folderMetadataLoadCompleted) skip iCloud placeholders,
         // so "Loading X of Y…" can never reach Y while any are present — reads as permanently
         // stuck. Surface the iCloud count instead whenever placeholders exist.
@@ -2396,6 +2499,8 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
             guard let controller else { return false }
             let model = controller.model
+
+            if controller.isEOS1VSelected { return false }
 
             switch item.itemIdentifier {
             case .zoomOut:

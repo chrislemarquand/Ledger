@@ -142,6 +142,13 @@ extension AppModel {
         }
         guard let itemToLoad = selectedSidebarItem else { return }
 
+        guard itemToLoad.kind != .eos1vDevice else {
+            // No filesystem content for the device — nothing to load or show loading for.
+            isFolderContentLoading = false
+            return
+        }
+        lastNonDeviceSidebarID = itemToLoad.id
+
         // Avoid touching protected locations on app launch; compute counts only after explicit selection.
         ensureSidebarImageCount(for: itemToLoad)
 

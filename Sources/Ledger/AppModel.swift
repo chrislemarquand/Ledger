@@ -250,6 +250,7 @@ final class AppModel: ObservableObject {
         case pictures
         case desktop
         case downloads
+        case eos1vDevice
         case mountedVolume(URL)
         case favorite(URL)
         case folder(URL)
@@ -450,6 +451,7 @@ final class AppModel: ObservableObject {
     @Published var sidebarItems: [SidebarItem] = []
     @Published var sidebarImageCounts: [String: Int] = [:]
     @Published var selectedSidebarID: String?
+    @Published var isEOS1VCableConnected = false
     @Published var isSidebarCollapsed = false
     @Published var isInspectorCollapsed = false
     @Published var browserItems: [BrowserItem] = [] {
@@ -630,6 +632,7 @@ final class AppModel: ObservableObject {
     var sidebarImageCountTasks: [String: Task<Void, Never>] = [:]
     var backgroundWarmTasksBySelectionID: [String: Task<Void, Never>] = [:]
     var photosImportStagingDirectory: URL?
+    var lastNonDeviceSidebarID: String?
 
     private static let browserViewModeKey = "ui.browser.view.mode"
     private static let browserSortKey = "ui.browser.sort"

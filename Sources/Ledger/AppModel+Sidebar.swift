@@ -4,7 +4,7 @@ import ExifEditCore
 @MainActor
 extension AppModel {
     var sidebarSectionOrder: [String] {
-        ["Sources", "Pinned", "Recents"]
+        ["Sources", "Devices", "Pinned", "Recents"]
     }
 
     func noteRecentLocation(
@@ -77,7 +77,7 @@ extension AppModel {
         switch selectedSidebarItem.kind {
         case .pictures, .desktop, .downloads, .mountedVolume, .folder:
             return true
-        case .favorite:
+        case .favorite, .eos1vDevice:
             return false
         }
     }
@@ -129,7 +129,7 @@ extension AppModel {
             pinFavorite(url: url, title: selectedSidebarItem.title)
         case let .folder(url):
             pinFavorite(url: url, title: selectedSidebarItem.title)
-        case .favorite:
+        case .favorite, .eos1vDevice:
             return
         }
     }
@@ -163,7 +163,7 @@ extension AppModel {
         switch item.kind {
         case .pictures, .desktop, .downloads, .mountedVolume, .folder:
             return true
-        case .favorite:
+        case .favorite, .eos1vDevice:
             return false
         }
     }
@@ -247,7 +247,7 @@ extension AppModel {
             pinFavorite(url: url, title: item.title)
         case let .folder(url):
             pinFavorite(url: url, title: item.title)
-        case .favorite:
+        case .favorite, .eos1vDevice:
             return
         }
     }
@@ -320,7 +320,34 @@ extension AppModel {
     }
 
     func composedSidebarItems() -> [SidebarItem] {
-        baseSidebarItems() + favoriteItems + locationItems
+        var items = baseSidebarItems()
+        if isEOS1VCableConnected {
+            items.append(
+                SidebarItem(
+                    id: "device-eos1v-es-e1",
+                    title: "Canon EOS-1V",
+                    section: "Devices",
+                    kind: .eos1vDevice
+                )
+            )
+        }
+        return items + favoriteItems + locationItems
+    }
+
+    /// Called by the cable presence monitor. Refreshes sidebar composition, and if the
+    /// device was selected when the cable disappears, falls back to the last real
+    /// (non-device) sidebar selection rather than leaving a dangling selection.
+    func setEOS1VCableConnected(_ connected: Bool) {
+        guard connected != isEOS1VCableConnected else { return }
+        let deviceWasSelected = selectedSidebarItem?.kind == .eos1vDevice
+        isEOS1VCableConnected = connected
+        refreshSidebarItems(selectFirstWhenMissing: false)
+
+        guard !connected, deviceWasSelected else { return }
+        let fallbackID = lastNonDeviceSidebarID.flatMap { id in
+            sidebarItems.contains(where: { $0.id == id }) ? id : nil
+        } ?? sidebarItems.first?.id
+        selectSidebar(id: fallbackID)
     }
 
     func refreshSidebarItems(selectFirstWhenMissing: Bool = true, preferredSelectionID: String? = nil) {
@@ -366,7 +393,7 @@ extension AppModel {
             return true
         case let .favorite(url), let .folder(url), let .mountedVolume(url):
             return isPrivacySensitiveFileSystemURL(url)
-        case .pictures:
+        case .pictures, .eos1vDevice:
             return false
         }
     }

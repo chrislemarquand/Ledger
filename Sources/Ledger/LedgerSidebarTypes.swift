@@ -4,6 +4,7 @@ import SharedUI
 
 enum LedgerSidebarSection: String, CaseIterable, AppKitSidebarSectionType {
     case sources = "Sources"
+    case devices = "Devices"
     case pinned  = "Pinned"
     case recents = "Recents"
 
@@ -54,6 +55,7 @@ struct LedgerSidebarItem: AppKitSidebarItemType {
         case .mountedVolume: return "externaldrive"
         case .favorite:      return "pin"
         case .folder:        return "folder"
+        case .eos1vDevice:   return "camera"
         }
     }
 }

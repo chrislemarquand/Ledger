@@ -104,6 +104,8 @@ extension AppModel {
                 urls = try enumerateImages(in: desktopDirectoryURL())
             case .downloads:
                 urls = try enumerateImages(in: downloadsDirectoryURL())
+            case .eos1vDevice:
+                urls = []
             case let .mountedVolume(volumeURL):
                 urls = try enumerateImages(in: volumeURL)
             case let .favorite(favoriteURL):
@@ -537,7 +539,7 @@ extension AppModel {
             return 1
         case let .favorite(url), let .folder(url):
             return isLikelyExternalLocation(url) ? 1 : Self.folderMetadataBatchSize
-        case .pictures, .desktop, .downloads:
+        case .pictures, .desktop, .downloads, .eos1vDevice:
             return Self.folderMetadataBatchSize
         }
     }
@@ -609,7 +611,7 @@ extension AppModel {
             return url
         case let .folder(url):
             return url
-        case .pictures, .desktop, .downloads:
+        case .pictures, .desktop, .downloads, .eos1vDevice:
             return nil
         }
     }
@@ -622,6 +624,8 @@ extension AppModel {
             return desktopDirectoryURL()
         case .downloads:
             return downloadsDirectoryURL()
+        case .eos1vDevice:
+            return nil
         case let .mountedVolume(url), let .favorite(url), let .folder(url):
             return url
         }
@@ -711,6 +715,8 @@ extension AppModel {
             return desktopDirectoryURL()
         case .downloads:
             return downloadsDirectoryURL()
+        case .eos1vDevice:
+            return nil
         case let .mountedVolume(url), let .favorite(url), let .folder(url):
             return url
         }
