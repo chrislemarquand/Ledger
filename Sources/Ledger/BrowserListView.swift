@@ -57,6 +57,7 @@ enum BrowserContextMenuBuilder {
             ))
         }
         menu.addItem(.separator())
+        var addedClipboardItem = false
         if targetURLs.count == 1 {
             menu.addItem(ContextMenuSupport.makeMenuItem(
                 title: "Copy All Metadata",
@@ -65,6 +66,7 @@ enum BrowserContextMenuBuilder {
                 symbolName: "doc.on.doc",
                 isEnabled: model.hasCopyableMetadata
             ))
+            addedClipboardItem = true
         }
         if let preview = model.pasteboardSingleFieldPreview() {
             let title = targetURLs.count > 1
@@ -77,6 +79,7 @@ enum BrowserContextMenuBuilder {
                 symbolName: "doc.on.clipboard",
                 isEnabled: !targetURLs.isEmpty
             ))
+            addedClipboardItem = true
         }
         if model.pasteboardAllMetadataPreview() != nil {
             let title = targetURLs.count > 1
@@ -89,6 +92,10 @@ enum BrowserContextMenuBuilder {
                 symbolName: "doc.on.clipboard",
                 isEnabled: !targetURLs.isEmpty
             ))
+            addedClipboardItem = true
+        }
+        if addedClipboardItem {
+            menu.addItem(.separator())
         }
         menu.addItem(ContextMenuSupport.makeMenuItem(
             title: applyTitle,
@@ -104,6 +111,7 @@ enum BrowserContextMenuBuilder {
             symbolName: refreshState.symbolName,
             isEnabled: refreshState.isEnabled
         ))
+        menu.addItem(.separator())
         menu.addItem(ContextMenuSupport.makeMenuItem(
             title: clearState.title,
             action: actions.clear,
