@@ -2464,36 +2464,47 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             sortMenu = menu
             sortItem?.menu = menu
             applySortState(model.browserSort, to: menu)
+            // NSMenuToolbarItem doesn't reliably grey itself out from the
+            // NSToolbarItemValidation return value alone — see updateZoomItems,
+            // which has always driven zoom's enabled state directly for the same
+            // reason. Mirror that proven approach here rather than relying solely
+            // on validateToolbarItem for this item.
+            sortItem?.isEnabled = controller?.isEOS1VSelected != true && !model.browserItems.isEmpty
         }
 
         private func updatePresetsMenu(with model: AppModel) {
             let menu = makePresetsMenu(model: model)
             presetsMenu = menu
             presetsItem?.menu = menu
+            presetsItem?.isEnabled = controller?.isEOS1VSelected != true
         }
 
         private func updateImportMenu(with model: AppModel) {
             let menu = makeImportMenu(model: model)
             importMenu = menu
             importItem?.menu = menu
+            importItem?.isEnabled = controller?.isEOS1VSelected != true && !model.browserItems.isEmpty
         }
 
         private func updateExportMenu(with model: AppModel) {
             let menu = makeExportMenu(model: model)
             exportMenu = menu
             exportItem?.menu = menu
+            exportItem?.isEnabled = controller?.isEOS1VSelected != true && !model.browserItems.isEmpty
         }
 
         private func updateApplyStyle(with model: AppModel) {
             if #available(macOS 26.0, *) {
                 applyChangesItem?.style = model.canApplyMetadataChanges ? .prominent : .plain
             }
+            applyChangesItem?.isEnabled = controller?.isEOS1VSelected != true && model.canApplyMetadataChanges
         }
 
         private func updateInspectorLabels(with model: AppModel) {
             let label = model.isInspectorCollapsed ? "Show Inspector" : "Hide Inspector"
             inspectorToggleItem?.label = label
             inspectorToggleItem?.toolTip = label
+            inspectorToggleItem?.isEnabled = controller?.isEOS1VSelected != true
         }
 
         func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
