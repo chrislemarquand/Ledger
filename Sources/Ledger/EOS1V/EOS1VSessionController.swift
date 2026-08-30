@@ -18,6 +18,11 @@ struct EOS1VToolAccessPolicy: Sendable {
     }
 
     static let readOnly = EOS1VToolAccessPolicy(allowed: [.read])
+    // The one deliberate exception: EOS1VToolClient.Operation.setClock is
+    // the only case anywhere in that enum classified `.write` — adding
+    // `.write` here only unlocks that single operation, not a general
+    // loosening. See docs on EOS1VSessionController's client init.
+    static let readAndClockWrite = EOS1VToolAccessPolicy(allowed: [.read, .write])
 
     func permits(_ level: EOS1VToolAccessLevel) -> Bool {
         switch level {
@@ -66,12 +71,24 @@ struct EOS1VMachineResult: Decodable, Sendable {
         let items: [EOS1VRecordedItem]
     }
 
+    struct ClockSnapshot: Decodable, Sendable {
+        let date: String?
+        let time: String?
+    }
+
     let camera: Camera?
     let recordedItems: RecordedItems?
     let status: [String: String]?
     let custom: [EOS1VSetting]?
     let personal: [EOS1VSetting]?
     let warnings: [String]?
+    // set-clock's result shape: {"before", "written", "after", "verified"}
+    // (see _machine_set_clock in eos1v_tool.py) — field names match its JSON
+    // keys directly, same convention every other field here already follows.
+    let before: ClockSnapshot?
+    let written: ClockSnapshot?
+    let after: ClockSnapshot?
+    let verified: Bool?
     let filmCount: Int?
     let frameCount: Int?
     let csvPath: String?
@@ -97,10 +114,17 @@ final class EOS1VToolClient {
         case inspect
         case settings
         case download(csv: URL, raw: URL)
+        // The only `.write`-classified case in this enum. Writes the
+        // camera's clock via eos1v-serial's `set-clock`, which wraps its
+        // existing, unmodified EOS1V.set_clock() (see docs/eos1v-set-clock-review-2026-08.md
+        // for the independent review confirming no new camera-facing
+        // protocol behavior).
+        case setClock(Date)
 
         var accessLevel: EOS1VToolAccessLevel {
             switch self {
             case .inspect, .settings, .download: .read
+            case .setClock: .write
             }
         }
 
@@ -109,8 +133,21 @@ final class EOS1VToolClient {
             case .inspect: ["machine", "inspect"]
             case .settings: ["machine", "settings"]
             case let .download(csv, raw): ["machine", "download", csv.path, raw.path]
+            case let .setClock(date): ["machine", "set-clock", Self.isoFormatter.string(from: date)]
             }
         }
+
+        // Naive local wall-clock string (no "Z"/offset) — matches how
+        // eos1v-serial's clock_bcd() packs dt.year/month/day/hour/minute/second
+        // verbatim with no timezone conversion, and how Python's
+        // datetime.fromisoformat() parses without a "Z" suffix.
+        private static let isoFormatter: DateFormatter = {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = .current
+            formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+            return formatter
+        }()
     }
 
     enum ClientError: LocalizedError {
@@ -309,7 +346,7 @@ final class EOS1VSessionController: ObservableObject {
     private let client: EOS1VToolClient
     private let deletedRollsStore: EOS1VDeletedRollsStore
 
-    init(client: EOS1VToolClient = EOS1VToolClient()) {
+    init(client: EOS1VToolClient = EOS1VToolClient(policy: .readAndClockWrite)) {
         self.client = client
         // Stable location regardless of the user-configurable capture output
         // directory (see captureDirectory()) — this is Ledger-internal
@@ -363,6 +400,47 @@ final class EOS1VSessionController: ObservableObject {
                     : .notFound("The camera did not respond.")
             case let .failure(error):
                 state = .notFound(error.localizedDescription)
+            }
+        }
+    }
+
+    /// Writes the camera clock, then refreshes just the clock/settings fields
+    /// via a cheap re-inspect — never a full roll download. Deliberately does
+    /// NOT call `search()` (which would flip `state` through `.searching` ->
+    /// `.connected`, dropping `tabsEnabled` and kicking the Date and Time tab
+    /// back to Connect mid-flow, since tabs are only enabled while
+    /// `state == .loaded`): `refreshCameraClock` updates the same published
+    /// fields `search()` does, minus the state transition.
+    func writeClock(_ date: Date, completion: @escaping (Result<Void, Error>) -> Void) {
+        guard !client.isRunning else {
+            completion(.failure(EOS1VToolClient.ClientError.command("Another EOS-1V operation is already running.")))
+            return
+        }
+        client.run(.setClock(date)) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success:
+                refreshCameraClock(completion: completion)
+            case let .failure(error):
+                completion(.failure(error))
+            }
+        }
+    }
+
+    private func refreshCameraClock(completion: @escaping (Result<Void, Error>) -> Void) {
+        client.run(.inspect) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case let .success(payload):
+                camera = payload.camera
+                cameraClockSnapshotDate = payload.camera?.clockDate != nil ? Date() : nil
+                recordedItems = payload.recordedItems
+                rawStatus = payload.status ?? [:]
+                customSettings = payload.custom ?? []
+                personalSettings = payload.personal ?? []
+                completion(.success(()))
+            case let .failure(error):
+                completion(.failure(error))
             }
         }
     }

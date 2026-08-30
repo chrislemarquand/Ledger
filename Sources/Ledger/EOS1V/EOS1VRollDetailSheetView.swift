@@ -62,29 +62,29 @@ struct EOS1VRollDetailSheetView: View {
 
     @TableColumnBuilder<EOS1VFrameRecord, Never>
     private var firstColumns: some TableColumnContent<EOS1VFrameRecord, Never> {
-        TableColumn("Frame No.") { Text($0.frameNumber) }
-        TableColumn("Focal length") { Text($0.focalLength) }
-        TableColumn("Max. aperture") { Text($0.maxAperture) }
-        TableColumn("Tv") { Text($0.tv) }
-        TableColumn("Av") { Text($0.av) }
-        TableColumn("ISO (M)") { Text($0.isoM) }
-        TableColumn("Exp. comp.") { Text($0.exposureCompensation) }
-        TableColumn("Flash exp. comp.") { Text($0.flashExposureCompensation) }
-        TableColumn("Flash mode") { Text($0.flashMode) }
-        TableColumn("Metering mode") { Text($0.meteringMode) }
+        TableColumn("Frame No.") { Text($0.frameNumber) }.width(ideal: 60)
+        TableColumn("Focal length") { Text($0.focalLength) }.width(ideal: 90)
+        TableColumn("Max. aperture") { Text($0.maxAperture) }.width(ideal: 95)
+        TableColumn("Tv") { Text($0.tv) }.width(ideal: 55)
+        TableColumn("Av") { Text($0.av) }.width(ideal: 45)
+        TableColumn("ISO (M)") { Text($0.isoM) }.width(ideal: 60)
+        TableColumn("Exp. comp.") { Text($0.exposureCompensation) }.width(ideal: 75)
+        TableColumn("Flash exp. comp.") { Text($0.flashExposureCompensation) }.width(ideal: 110)
+        TableColumn("Flash mode") { Text($0.flashMode) }.width(ideal: 85)
+        TableColumn("Metering mode") { Text($0.meteringMode) }.width(ideal: 105)
     }
 
     @TableColumnBuilder<EOS1VFrameRecord, Never>
     private var secondColumns: some TableColumnContent<EOS1VFrameRecord, Never> {
-        TableColumn("Shooting mode") { Text($0.shootingMode) }
-        TableColumn("Film advance") { Text($0.filmAdvance) }
-        TableColumn("AF mode") { Text($0.afMode) }
-        TableColumn("AF pt. focus") { Text($0.afPointAchievingFocus) }
-        TableColumn("AF pt. select") { Text($0.afPointSelection) }
-        TableColumn("Multiple exp.") { Text($0.multipleExposure) }
-        TableColumn("Date") { Text($0.date) }
-        TableColumn("Time") { Text($0.time) }
-        TableColumn("Battery date") { Text($0.batteryDate) }
-        TableColumn("Battery time") { Text($0.batteryTime) }
+        TableColumn("Shooting mode") { Text($0.shootingMode) }.width(ideal: 150)
+        TableColumn("Film advance") { Text($0.filmAdvance) }.width(ideal: 105)
+        TableColumn("AF mode") { Text($0.afMode) }.width(ideal: 95)
+        TableColumn("AF pt. focus") { Text($0.afPointAchievingFocus) }.width(ideal: 90)
+        TableColumn("AF pt. select") { Text($0.afPointSelection) }.width(ideal: 90)
+        TableColumn("Multiple exp.") { Text($0.multipleExposure) }.width(ideal: 95)
+        TableColumn("Date") { Text($0.date) }.width(ideal: 90)
+        TableColumn("Time") { Text($0.time) }.width(ideal: 75)
+        TableColumn("Battery date") { Text($0.batteryDate) }.width(ideal: 100)
+        TableColumn("Battery time") { Text($0.batteryTime) }.width(ideal: 90)
     }
 }

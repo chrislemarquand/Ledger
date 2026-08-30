@@ -1,15 +1,25 @@
 import AppKit
+import SwiftUI
 
 /// Date and Time tab: a frozen snapshot of the camera's clock against the
 /// macOS clock, both as of the moment the camera was last read (see
 /// `EOS1VSessionController.cameraClockSnapshotDate`) — not a live comparison.
 /// The camera's clock doesn't change between visits to this tab, so neither
 /// should the macOS time or difference shown against it; both stay fixed
-/// until the next successful connect. Read-only display for now — the
-/// "Change Date and Time…" button is real UI, laid out and ready, but
-/// disabled until camera clock writes are implemented. The comparison here
-/// will also back a future feature to correct exported CSV timestamps
-/// against the camera/computer clock drift, but for now it's display only.
+/// until the next successful connect. The comparison here will also back a
+/// future feature to correct exported CSV timestamps against the
+/// camera/computer clock drift, but for now it's display only.
+///
+/// "Change Date and Time…" (`EOS1VSetClockSheetView`,
+/// `EOS1VSessionController.writeClock(_:completion:)`, and the `set-clock`
+/// addition to eos1v-serial's `machine` interface) is built and wired below
+/// but deliberately DISABLED again, 2026-08-30: real-hardware testing hit
+/// "camera did not answer the wake" even with the camera freshly in PC
+/// mode, and the root cause (Ledger-side timing vs. an eos1v-serial/camera
+/// issue vs. a real PC-mode window shorter than the 12-second wake retry)
+/// hasn't been isolated yet. All the code is left in place, ready to
+/// re-enable (`changeButton.isEnabled = true`, already wired below) once
+/// that's diagnosed — see docs/eos1v-set-clock-review-2026-08.md.
 @MainActor
 final class EOS1VPropertiesViewController: NSViewController {
     private let session: EOS1VSessionController
@@ -62,6 +72,12 @@ final class EOS1VPropertiesViewController: NSViewController {
         rows.translatesAutoresizingMaskIntoConstraints = false
 
         changeButton.translatesAutoresizingMaskIntoConstraints = false
+        // Disabled again, 2026-08-30 (see class doc comment) — target/action
+        // stay wired so re-enabling is a one-line change once the real-
+        // hardware wake failure is diagnosed.
+        changeButton.isEnabled = false
+        changeButton.target = self
+        changeButton.action = #selector(changeDateAndTimeClicked)
 
         // NSBox.contentView sizes content via the legacy autoresizing-mask
         // model, which clashes with Auto Layout content — added as plain
@@ -104,6 +120,20 @@ final class EOS1VPropertiesViewController: NSViewController {
         cameraValue.stringValue = Self.clockFormatter.string(from: cameraDate)
         systemValue.stringValue = Self.clockFormatter.string(from: snapshotAt)
         differenceValue.stringValue = Self.differenceDescription(from: cameraDate, to: snapshotAt)
+    }
+
+    @objc private func changeDateAndTimeClicked() {
+        let hostingController = NSHostingController(
+            rootView: EOS1VSetClockSheetView(session: session, onDone: { [weak self] in
+                self?.dismissSetClockSheet()
+            })
+        )
+        presentAsSheet(hostingController)
+    }
+
+    private func dismissSetClockSheet() {
+        guard let presented = presentedViewControllers?.first else { return }
+        dismiss(presented)
     }
 
     private func makeRow(title: String, valueField: NSTextField) -> NSView {

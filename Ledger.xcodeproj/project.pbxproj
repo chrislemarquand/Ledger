@@ -98,6 +98,7 @@
 		A10001DD0000000000000001 /* EOS1VShootingViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001DC0000000000000001 /* EOS1VShootingViewController.swift */; };
 		A10001DF0000000000000001 /* EOS1VDeletedRollsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001DE0000000000000001 /* EOS1VDeletedRollsStore.swift */; };
 		A10001E10000000000000001 /* EOS1VRollDetailSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E00000000000000001 /* EOS1VRollDetailSheetView.swift */; };
+		A10001E30000000000000001 /* EOS1VSetClockSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E20000000000000001 /* EOS1VSetClockSheetView.swift */; };
 		C200020F0000000000000001 /* ExifToolCSVExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010F0000000000000001 /* ExifToolCSVExportService.swift */; };
 		D100000300000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */; };
 		DD0001010000000000000001 /* LedgerSidebarTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0001000000000000000001 /* LedgerSidebarTypes.swift */; };
@@ -227,6 +228,7 @@
 		A10001DC0000000000000001 /* EOS1VShootingViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VShootingViewController.swift; sourceTree = "<group>"; };
 		A10001DE0000000000000001 /* EOS1VDeletedRollsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VDeletedRollsStore.swift; sourceTree = "<group>"; };
 		A10001E00000000000000001 /* EOS1VRollDetailSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VRollDetailSheetView.swift; sourceTree = "<group>"; };
+		A10001E20000000000000001 /* EOS1VSetClockSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VSetClockSheetView.swift; sourceTree = "<group>"; };
 		C200010F0000000000000001 /* ExifToolCSVExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifToolCSVExportService.swift; sourceTree = "<group>"; };
 		D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/BatchRenameSheetView.swift; sourceTree = SOURCE_ROOT; };
 		DD0001000000000000000001 /* LedgerSidebarTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerSidebarTypes.swift; sourceTree = "<group>"; };
@@ -463,6 +465,7 @@
 				A10001DC0000000000000001 /* EOS1VShootingViewController.swift */,
 				A10001DE0000000000000001 /* EOS1VDeletedRollsStore.swift */,
 				A10001E00000000000000001 /* EOS1VRollDetailSheetView.swift */,
+				A10001E20000000000000001 /* EOS1VSetClockSheetView.swift */,
 			);
 			path = EOS1V;
 			sourceTree = "<group>";
@@ -722,6 +725,7 @@
 				A10001DD0000000000000001 /* EOS1VShootingViewController.swift in Sources */,
 				A10001DF0000000000000001 /* EOS1VDeletedRollsStore.swift in Sources */,
 				A10001E10000000000000001 /* EOS1VRollDetailSheetView.swift in Sources */,
+				A10001E30000000000000001 /* EOS1VSetClockSheetView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

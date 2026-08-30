@@ -12,6 +12,7 @@ final class EOS1VDeviceViewController: NSViewController {
     private let shootingController: EOS1VShootingViewController
     private let propertiesController: EOS1VPropertiesViewController
     private var observations: Set<AnyCancellable> = []
+    private var didConfigureSegmentWidth = false
 
     init(session: EOS1VSessionController) {
         self.session = session
@@ -100,6 +101,19 @@ final class EOS1VDeviceViewController: NSViewController {
         guard let control = Self.segmentedControl(in: tabViewController.view) else { return }
         for index in 0..<control.segmentCount {
             control.setEnabled(index == 0 || session.tabsEnabled, forSegment: index)
+        }
+
+        // One-time layout tweak: default .fit distribution sizes each segment
+        // to its own label ("Connect" much narrower than "Shooting Data"),
+        // giving a lopsided-looking bar. Explicit equal segment widths (summing
+        // to a 480pt target) give all three tabs the same, comfortable width
+        // instead — via the control's own intrinsic sizing, not an Auto Layout
+        // constraint, since NSTabViewController manages this control's
+        // positioning internally and a foreign width constraint could fight it.
+        guard !didConfigureSegmentWidth else { return }
+        didConfigureSegmentWidth = true
+        for index in 0..<control.segmentCount {
+            control.setWidth(400 / CGFloat(control.segmentCount), forSegment: index)
         }
     }
 

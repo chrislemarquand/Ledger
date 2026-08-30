@@ -1679,14 +1679,11 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     }
 
     private func toolbarSubtitleText() -> String {
+        // The Connect tab's own status card already shows this same state
+        // ("ES-E1 cable connected", "Searching…", etc.) — the toolbar
+        // subtitle was just duplicating it.
         if isEOS1VSelected {
-            switch eos1vSessionController.state {
-            case .cableConnected: return "ES-E1 cable connected"
-            case .searching: return "Searching…"
-            case .notFound: return "Camera not found"
-            case .connected, .downloading, .loaded: return "Connected"
-            case .failed: return "Read failed"
-            }
+            return ""
         }
         // ExifTool reads (and therefore folderMetadataLoadCompleted) skip iCloud placeholders,
         // so "Loading X of Y…" can never reach Y while any are present — reads as permanently
