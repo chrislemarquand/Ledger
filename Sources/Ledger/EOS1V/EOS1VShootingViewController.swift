@@ -12,7 +12,7 @@ final class EOS1VShootingViewController: NSViewController, NSTableViewDataSource
     private var rollTable: NSTableView!
     private let showDeletedCheckbox = NSButton(checkboxWithTitle: "Show Deleted", target: nil, action: nil)
     private let previewButton = NSButton(title: "Preview…", target: nil, action: nil)
-    private let deleteButton = NSButton(title: "Delete…", target: nil, action: nil)
+    private let deleteButton = NSButton(title: "Delete", target: nil, action: nil)
     private let exportButton = NSButton(title: "Export…", target: nil, action: nil)
     private var visibleRolls: [EOS1VFilmRoll] = []
 
@@ -138,7 +138,7 @@ final class EOS1VShootingViewController: NSViewController, NSTableViewDataSource
         default: text = ""
         }
         let cell = NSTableCellView()
-        let label = NSTextField(labelWithString: isDeleted ? "\(text) (deleted)" : text)
+        let label = NSTextField(labelWithString: text)
         label.textColor = isDeleted ? .disabledControlTextColor : .labelColor
         label.translatesAutoresizingMaskIntoConstraints = false
         cell.addSubview(label)
@@ -165,7 +165,7 @@ final class EOS1VShootingViewController: NSViewController, NSTableViewDataSource
         exportButton.isEnabled = !selected.isEmpty
         deleteButton.isEnabled = !selected.isEmpty
         deleteButton.title = selected.allSatisfy { session.deletedRollIDs.contains($0.id) } && !selected.isEmpty
-            ? "Restore" : "Delete…"
+            ? "Restore" : "Delete"
     }
 
     private var selectedRolls: [EOS1VFilmRoll] {
