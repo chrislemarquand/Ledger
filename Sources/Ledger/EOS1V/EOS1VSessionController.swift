@@ -293,6 +293,12 @@ final class EOS1VSessionController: ObservableObject {
     @Published private(set) var personalSettings: [EOS1VSetting] = []
     @Published private(set) var recordedItems: EOS1VMachineResult.RecordedItems?
     @Published private(set) var camera: EOS1VMachineResult.Camera?
+    // The system clock at the exact moment `camera.clockDate/clockTime` was
+    // read — paired with it so the Date and Time tab can show a frozen
+    // snapshot of the two clocks, rather than comparing a fixed camera
+    // reading against whatever the system clock says whenever the tab is
+    // later reopened.
+    @Published private(set) var cameraClockSnapshotDate: Date?
     @Published private(set) var rawStatus: [String: String] = [:]
     @Published private(set) var shootingRows: [EOS1VShootingRow] = []
     @Published private(set) var filmRolls: [EOS1VFilmRoll] = []
@@ -347,6 +353,7 @@ final class EOS1VSessionController: ObservableObject {
             switch result {
             case let .success(payload):
                 camera = payload.camera
+                cameraClockSnapshotDate = payload.camera?.clockDate != nil ? Date() : nil
                 recordedItems = payload.recordedItems
                 rawStatus = payload.status ?? [:]
                 customSettings = payload.custom ?? []

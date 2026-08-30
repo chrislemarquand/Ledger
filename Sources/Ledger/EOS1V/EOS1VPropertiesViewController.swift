@@ -1,7 +1,11 @@
 import AppKit
 
-/// Date and Time tab: compares the camera's clock (as of the last download or
-/// inspect) against the current macOS clock. Read-only display for now — the
+/// Date and Time tab: a frozen snapshot of the camera's clock against the
+/// macOS clock, both as of the moment the camera was last read (see
+/// `EOS1VSessionController.cameraClockSnapshotDate`) — not a live comparison.
+/// The camera's clock doesn't change between visits to this tab, so neither
+/// should the macOS time or difference shown against it; both stay fixed
+/// until the next successful connect. Read-only display for now — the
 /// "Change Date and Time…" button is real UI, laid out and ready, but
 /// disabled until camera clock writes are implemented. The comparison here
 /// will also back a future feature to correct exported CSV timestamps
@@ -67,7 +71,7 @@ final class EOS1VPropertiesViewController: NSViewController {
         root.addSubview(card)
 
         NSLayoutConstraint.activate([
-            card.topAnchor.constraint(equalTo: root.topAnchor),
+            card.topAnchor.constraint(equalTo: root.topAnchor, constant: 24),
             card.centerXAnchor.constraint(equalTo: root.centerXAnchor),
             card.widthAnchor.constraint(equalToConstant: 620),
             card.heightAnchor.constraint(equalToConstant: 196),
@@ -84,23 +88,22 @@ final class EOS1VPropertiesViewController: NSViewController {
 
     override func viewWillAppear() {
         super.viewWillAppear()
-        // Recompute on appearance (e.g. switching back to this tab) rather
-        // than live-ticking — the macOS clock display doesn't need
-        // second-by-second accuracy, and nothing else on this screen ticks.
+        // Re-render on appearance (e.g. switching back to this tab), but
+        // this only re-displays the frozen snapshot below — it never reads
+        // Date() itself, so revisiting this tab can't advance the display.
         refresh()
     }
 
     func refresh() {
-        let now = Date()
-        systemValue.stringValue = Self.clockFormatter.string(from: now)
-
-        guard let cameraDate = parsedCameraDate() else {
+        guard let cameraDate = parsedCameraDate(), let snapshotAt = session.cameraClockSnapshotDate else {
             cameraValue.stringValue = "—"
+            systemValue.stringValue = "—"
             differenceValue.stringValue = "—"
             return
         }
         cameraValue.stringValue = Self.clockFormatter.string(from: cameraDate)
-        differenceValue.stringValue = Self.differenceDescription(from: cameraDate, to: now)
+        systemValue.stringValue = Self.clockFormatter.string(from: snapshotAt)
+        differenceValue.stringValue = Self.differenceDescription(from: cameraDate, to: snapshotAt)
     }
 
     private func makeRow(title: String, valueField: NSTextField) -> NSView {

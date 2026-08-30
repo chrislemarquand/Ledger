@@ -67,6 +67,7 @@ final class EOS1VDeviceViewController: NSViewController {
             tabView.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -32),
         ])
         view = root
+        updateTabAvailability()
     }
 
     override func viewDidLoad() {
@@ -89,14 +90,33 @@ final class EOS1VDeviceViewController: NSViewController {
         if !session.tabsEnabled, tabViewController.selectedTabViewItemIndex != 0 {
             tabViewController.selectedTabViewItemIndex = 0
         }
+        updateTabAvailability()
+    }
+
+    // isSwitchingAllowed above already vetoes clicks into unavailable tabs,
+    // but .segmentedControlOnTop's built-in segmented control doesn't grey
+    // those segments out on its own — it has to be told per segment.
+    private func updateTabAvailability() {
+        guard let control = Self.segmentedControl(in: tabViewController.view) else { return }
+        for index in 0..<control.segmentCount {
+            control.setEnabled(index == 0 || session.tabsEnabled, forSegment: index)
+        }
+    }
+
+    private static func segmentedControl(in view: NSView) -> NSSegmentedControl? {
+        for subview in view.subviews {
+            if let control = subview as? NSSegmentedControl { return control }
+            if let found = segmentedControl(in: subview) { return found }
+        }
+        return nil
     }
 }
 
 /// NSTabViewController's built-in `.segmentedControlOnTop` style doesn't
-/// expose a way to grey out an individual segment, so unavailable tabs are
-/// vetoed (silently refuse to switch) rather than shown disabled — a real,
-/// known visual trade-off versus the old hand-built segmented control, which
-/// could grey those segments out directly.
+/// expose per-segment enabled state through any public API, but the
+/// segmented control it creates is a plain NSSegmentedControl subview —
+/// `EOS1VDeviceViewController.updateTabAvailability()` finds it and calls
+/// `setEnabled(_:forSegment:)` directly, on top of the veto below.
 @MainActor
 private final class EOS1VTabViewController: NSTabViewController {
     var isSwitchingAllowed: ((Int) -> Bool)?
@@ -187,7 +207,7 @@ private final class EOS1VConnectViewController: NSViewController {
         root.addSubview(card)
 
         NSLayoutConstraint.activate([
-            card.topAnchor.constraint(equalTo: root.topAnchor),
+            card.topAnchor.constraint(equalTo: root.topAnchor, constant: 24),
             card.centerXAnchor.constraint(equalTo: root.centerXAnchor),
             card.widthAnchor.constraint(equalToConstant: 620),
             card.heightAnchor.constraint(equalToConstant: 196),
