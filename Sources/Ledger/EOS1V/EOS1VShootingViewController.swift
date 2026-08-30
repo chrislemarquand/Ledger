@@ -45,6 +45,8 @@ final class EOS1VShootingViewController: NSViewController, NSTableViewDataSource
         table.allowsMultipleSelection = true
         table.dataSource = self
         table.delegate = self
+        table.target = self
+        table.doubleAction = #selector(previewSelectedRoll)
         for column in Self.columns {
             let tableColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(column.identifier))
             tableColumn.title = column.title
