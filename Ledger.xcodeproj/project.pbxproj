@@ -89,6 +89,15 @@
 		A10001C10000000000000001 /* EOS1VDeviceMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001C00000000000000001 /* EOS1VDeviceMonitor.swift */; };
 		A10001C30000000000000001 /* EOS1VDeviceViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001C20000000000000001 /* EOS1VDeviceViewController.swift */; };
 		A10001C50000000000000001 /* EOS1VSessionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001C40000000000000001 /* EOS1VSessionController.swift */; };
+		A10001D10000000000000001 /* EOS1VPersonalFunctionParsing.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001D00000000000000001 /* EOS1VPersonalFunctionParsing.swift */; };
+		A10001D30000000000000001 /* EOS1VRollCSVExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001D20000000000000001 /* EOS1VRollCSVExporter.swift */; };
+		A10001D50000000000000001 /* EOS1VSettingsControlFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001D40000000000000001 /* EOS1VSettingsControlFactory.swift */; };
+		A10001D70000000000000001 /* EOS1VCustomFunctionsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001D60000000000000001 /* EOS1VCustomFunctionsViewController.swift */; };
+		A10001D90000000000000001 /* EOS1VPersonalFunctionsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001D80000000000000001 /* EOS1VPersonalFunctionsViewController.swift */; };
+		A10001DB0000000000000001 /* EOS1VPropertiesViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001DA0000000000000001 /* EOS1VPropertiesViewController.swift */; };
+		A10001DD0000000000000001 /* EOS1VShootingViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001DC0000000000000001 /* EOS1VShootingViewController.swift */; };
+		A10001DF0000000000000001 /* EOS1VDeletedRollsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001DE0000000000000001 /* EOS1VDeletedRollsStore.swift */; };
+		A10001E10000000000000001 /* EOS1VFramePreviewViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E00000000000000001 /* EOS1VFramePreviewViewController.swift */; };
 		C200020F0000000000000001 /* ExifToolCSVExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010F0000000000000001 /* ExifToolCSVExportService.swift */; };
 		D100000300000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */; };
 		DD0001010000000000000001 /* LedgerSidebarTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0001000000000000000001 /* LedgerSidebarTypes.swift */; };
@@ -209,6 +218,15 @@
 		A10001C00000000000000001 /* EOS1VDeviceMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VDeviceMonitor.swift; sourceTree = "<group>"; };
 		A10001C20000000000000001 /* EOS1VDeviceViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VDeviceViewController.swift; sourceTree = "<group>"; };
 		A10001C40000000000000001 /* EOS1VSessionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VSessionController.swift; sourceTree = "<group>"; };
+		A10001D00000000000000001 /* EOS1VPersonalFunctionParsing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VPersonalFunctionParsing.swift; sourceTree = "<group>"; };
+		A10001D20000000000000001 /* EOS1VRollCSVExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VRollCSVExporter.swift; sourceTree = "<group>"; };
+		A10001D40000000000000001 /* EOS1VSettingsControlFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VSettingsControlFactory.swift; sourceTree = "<group>"; };
+		A10001D60000000000000001 /* EOS1VCustomFunctionsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VCustomFunctionsViewController.swift; sourceTree = "<group>"; };
+		A10001D80000000000000001 /* EOS1VPersonalFunctionsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VPersonalFunctionsViewController.swift; sourceTree = "<group>"; };
+		A10001DA0000000000000001 /* EOS1VPropertiesViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VPropertiesViewController.swift; sourceTree = "<group>"; };
+		A10001DC0000000000000001 /* EOS1VShootingViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VShootingViewController.swift; sourceTree = "<group>"; };
+		A10001DE0000000000000001 /* EOS1VDeletedRollsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VDeletedRollsStore.swift; sourceTree = "<group>"; };
+		A10001E00000000000000001 /* EOS1VFramePreviewViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VFramePreviewViewController.swift; sourceTree = "<group>"; };
 		C200010F0000000000000001 /* ExifToolCSVExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifToolCSVExportService.swift; sourceTree = "<group>"; };
 		D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/BatchRenameSheetView.swift; sourceTree = SOURCE_ROOT; };
 		DD0001000000000000000001 /* LedgerSidebarTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerSidebarTypes.swift; sourceTree = "<group>"; };
@@ -436,6 +454,15 @@
 				A10001C00000000000000001 /* EOS1VDeviceMonitor.swift */,
 				A10001C20000000000000001 /* EOS1VDeviceViewController.swift */,
 				A10001C40000000000000001 /* EOS1VSessionController.swift */,
+				A10001D00000000000000001 /* EOS1VPersonalFunctionParsing.swift */,
+				A10001D20000000000000001 /* EOS1VRollCSVExporter.swift */,
+				A10001D40000000000000001 /* EOS1VSettingsControlFactory.swift */,
+				A10001D60000000000000001 /* EOS1VCustomFunctionsViewController.swift */,
+				A10001D80000000000000001 /* EOS1VPersonalFunctionsViewController.swift */,
+				A10001DA0000000000000001 /* EOS1VPropertiesViewController.swift */,
+				A10001DC0000000000000001 /* EOS1VShootingViewController.swift */,
+				A10001DE0000000000000001 /* EOS1VDeletedRollsStore.swift */,
+				A10001E00000000000000001 /* EOS1VFramePreviewViewController.swift */,
 			);
 			path = EOS1V;
 			sourceTree = "<group>";
@@ -686,6 +713,15 @@
 				A10001C10000000000000001 /* EOS1VDeviceMonitor.swift in Sources */,
 				A10001C30000000000000001 /* EOS1VDeviceViewController.swift in Sources */,
 				A10001C50000000000000001 /* EOS1VSessionController.swift in Sources */,
+				A10001D10000000000000001 /* EOS1VPersonalFunctionParsing.swift in Sources */,
+				A10001D30000000000000001 /* EOS1VRollCSVExporter.swift in Sources */,
+				A10001D50000000000000001 /* EOS1VSettingsControlFactory.swift in Sources */,
+				A10001D70000000000000001 /* EOS1VCustomFunctionsViewController.swift in Sources */,
+				A10001D90000000000000001 /* EOS1VPersonalFunctionsViewController.swift in Sources */,
+				A10001DB0000000000000001 /* EOS1VPropertiesViewController.swift in Sources */,
+				A10001DD0000000000000001 /* EOS1VShootingViewController.swift in Sources */,
+				A10001DF0000000000000001 /* EOS1VDeletedRollsStore.swift in Sources */,
+				A10001E10000000000000001 /* EOS1VFramePreviewViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

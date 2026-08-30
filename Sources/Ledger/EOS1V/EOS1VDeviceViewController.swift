@@ -5,24 +5,21 @@ import Combine
 final class EOS1VDeviceViewController: NSViewController {
     let session: EOS1VSessionController
 
-    private let segmentedControl = NSSegmentedControl(
-        labels: ["Connect", "Personal", "Custom", "Shooting", "Properties"],
-        trackingMode: .selectOne,
-        target: nil,
-        action: nil
-    )
-    private let contentContainer = NSView()
+    private let tabViewController = EOS1VTabViewController()
     private let connectController: EOS1VConnectViewController
-    private let personalController = EOS1VRowsViewController()
-    private let customController = EOS1VRowsViewController()
-    private let shootingController = EOS1VRowsViewController()
-    private let propertiesController = EOS1VRowsViewController()
-    private var displayedController: NSViewController?
+    private let personalController: EOS1VPersonalFunctionsViewController
+    private let customController: EOS1VCustomFunctionsViewController
+    private let shootingController: EOS1VShootingViewController
+    private let propertiesController: EOS1VPropertiesViewController
     private var observations: Set<AnyCancellable> = []
 
     init(session: EOS1VSessionController) {
         self.session = session
         connectController = EOS1VConnectViewController(session: session)
+        personalController = EOS1VPersonalFunctionsViewController(session: session)
+        customController = EOS1VCustomFunctionsViewController(session: session)
+        shootingController = EOS1VShootingViewController(session: session)
+        propertiesController = EOS1VPropertiesViewController(session: session)
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -33,31 +30,47 @@ final class EOS1VDeviceViewController: NSViewController {
         let root = EOS1VBackgroundView()
         root.translatesAutoresizingMaskIntoConstraints = false
 
-        segmentedControl.translatesAutoresizingMaskIntoConstraints = false
-        segmentedControl.segmentStyle = .automatic
-        segmentedControl.selectedSegment = 0
-        segmentedControl.target = self
-        segmentedControl.action = #selector(segmentChanged(_:))
-        segmentedControl.setAccessibilityLabel("EOS-1V sections")
+        // NSTabViewController owns child-view loading/lifecycle/appearance
+        // transitions natively — this replaces the hand-written show()/
+        // removeFromSuperview()/removeFromParent() dance (and the bugs that
+        // came with getting that lifecycle management right by hand).
+        tabViewController.tabStyle = .segmentedControlOnTop
+        tabViewController.isSwitchingAllowed = { [weak self] index in
+            guard let self else { return true }
+            return index == 0 || self.session.tabsEnabled
+        }
+        // Personal/Custom Functions are hidden for now — Ledger's own use is
+        // reading shooting data and the camera clock, not the P.Fn/C.Fn
+        // settings screens. The controllers themselves are untouched and
+        // still kept up to date via refresh() below, so re-adding these two
+        // tab items is all reactivating them later takes.
+        for (title, controller) in [
+            ("Connect", connectController as NSViewController),
+            // ("Personal", personalController),
+            // ("Custom", customController),
+            ("Shooting", shootingController),
+            ("Properties", propertiesController),
+        ] {
+            let item = NSTabViewItem(viewController: controller)
+            item.label = title
+            tabViewController.addTabViewItem(item)
+        }
+        addChild(tabViewController)
 
-        contentContainer.translatesAutoresizingMaskIntoConstraints = false
-        root.addSubview(segmentedControl)
-        root.addSubview(contentContainer)
+        let tabView = tabViewController.view
+        tabView.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(tabView)
         NSLayoutConstraint.activate([
-            segmentedControl.topAnchor.constraint(equalTo: root.safeAreaLayoutGuide.topAnchor, constant: 24),
-            segmentedControl.centerXAnchor.constraint(equalTo: root.centerXAnchor),
-            segmentedControl.widthAnchor.constraint(equalToConstant: 620),
-            contentContainer.topAnchor.constraint(equalTo: segmentedControl.bottomAnchor, constant: 24),
-            contentContainer.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 48),
-            contentContainer.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -48),
-            contentContainer.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -32),
+            tabView.topAnchor.constraint(equalTo: root.safeAreaLayoutGuide.topAnchor, constant: 24),
+            tabView.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 48),
+            tabView.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -48),
+            tabView.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -32),
         ])
         view = root
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        show(connectController)
         session.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
@@ -68,69 +81,29 @@ final class EOS1VDeviceViewController: NSViewController {
     }
 
     private func refresh() {
-        for segment in 1 ..< segmentedControl.segmentCount {
-            segmentedControl.setEnabled(session.tabsEnabled, forSegment: segment)
-        }
+        personalController.refresh()
+        customController.refresh()
+        shootingController.refresh()
+        propertiesController.refresh()
 
-        personalController.rows = session.personalSettings.map { ($0.id + "  " + $0.name, $0.value) }
-        customController.rows = session.customSettings.map { ($0.id + "  " + $0.name, $0.value) }
-        shootingController.rows = session.shootingRows.map {
-            ("Film \($0.film) · Frame \($0.frame)", $0.details)
-        }
-
-        var properties: [(String, String)] = []
-        if let camera = session.camera {
-            properties.append(("Camera", camera.model))
-            properties.append(("Stored rolls", camera.storedRollCount.map(String.init) ?? "Unknown"))
-            let clock = [camera.clockDate, camera.clockTime].compactMap { $0 }.joined(separator: " ")
-            properties.append(("Camera clock", clock.isEmpty ? "Unknown" : clock))
-        }
-        if let items = session.recordedItems {
-            properties.append(("Recorded-items mask", items.mask ?? "Unreadable"))
-            properties.append(("Frame record length", items.recordLength.map { "\($0) bytes" } ?? "Unknown"))
-            for item in items.items where item.enabled {
-                properties.append((item.name, item.mandatory ? "Recorded · mandatory" : "Recorded"))
-            }
-        }
-        for key in session.rawStatus.keys.sorted() {
-            properties.append(("Status \(key)", session.rawStatus[key] ?? ""))
-        }
-        propertiesController.rows = properties
-
-        if !session.tabsEnabled, segmentedControl.selectedSegment != 0 {
-            segmentedControl.selectedSegment = 0
-            show(connectController)
+        if !session.tabsEnabled, tabViewController.selectedTabViewItemIndex != 0 {
+            tabViewController.selectedTabViewItemIndex = 0
         }
     }
+}
 
-    @objc private func segmentChanged(_ sender: NSSegmentedControl) {
-        let controller: NSViewController
-        switch sender.selectedSegment {
-        case 1: controller = personalController
-        case 2: controller = customController
-        case 3: controller = shootingController
-        case 4: controller = propertiesController
-        default: controller = connectController
-        }
-        show(controller)
-    }
+/// NSTabViewController's built-in `.segmentedControlOnTop` style doesn't
+/// expose a way to grey out an individual segment, so unavailable tabs are
+/// vetoed (silently refuse to switch) rather than shown disabled — a real,
+/// known visual trade-off versus the old hand-built segmented control, which
+/// could grey those segments out directly.
+@MainActor
+private final class EOS1VTabViewController: NSTabViewController {
+    var isSwitchingAllowed: ((Int) -> Bool)?
 
-    private func show(_ controller: NSViewController) {
-        guard displayedController !== controller else { return }
-        if let displayedController {
-            displayedController.view.removeFromSuperview()
-            displayedController.removeFromParent()
-        }
-        addChild(controller)
-        controller.view.translatesAutoresizingMaskIntoConstraints = false
-        contentContainer.addSubview(controller.view)
-        NSLayoutConstraint.activate([
-            controller.view.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor),
-            controller.view.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor),
-            controller.view.topAnchor.constraint(equalTo: contentContainer.topAnchor),
-            controller.view.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor),
-        ])
-        displayedController = controller
+    override func tabView(_ tabView: NSTabView, shouldSelect tabViewItem: NSTabViewItem?) -> Bool {
+        guard let tabViewItem, let index = tabViewItems.firstIndex(of: tabViewItem) else { return true }
+        return isSwitchingAllowed?(index) ?? true
     }
 }
 
@@ -166,8 +139,15 @@ private final class EOS1VConnectViewController: NSViewController {
         let root = NSView()
         card.boxType = .custom
         card.cornerRadius = 12
-        card.fillColor = .controlBackgroundColor
+        // .controlBackgroundColor is plain white in light mode — indistinguishable
+        // from the white canvas behind it, which is why no card was visible at
+        // all regardless of the contentView/border fixes below. quaternarySystemFill
+        // is AppKit's actual semantic color for "a subtle tinted fill with no
+        // border", designed for exactly this card-on-canvas pattern.
+        card.fillColor = .quaternarySystemFill
+        card.borderWidth = 0
         card.borderColor = .clear
+        card.titlePosition = .noTitle
         card.translatesAutoresizingMaskIntoConstraints = false
 
         let camera = NSImageView()
@@ -195,8 +175,14 @@ private final class EOS1VConnectViewController: NSViewController {
         progress.controlSize = .small
         progress.translatesAutoresizingMaskIntoConstraints = false
 
+        // NSBox.contentView sizes its content via the legacy autoresizing-mask
+        // model, which clashes with Auto-Layout-based content — this is the
+        // same bug that made the Personal Functions cards render garbled
+        // earlier in this session (see EOS1VSettingsControlFactory's
+        // groupBoxCard). Adding children directly to `card` instead keeps
+        // everything on one layout system.
         for child in [camera, statusTitle, statusDot, instructions, progress, actionButton] {
-            card.contentView?.addSubview(child)
+            card.addSubview(child)
         }
         root.addSubview(card)
 
@@ -302,7 +288,7 @@ private final class EOS1VConnectViewController: NSViewController {
 }
 
 @MainActor
-private final class EOS1VRowsViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
+final class EOS1VRowsViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
     var rows: [(String, String)] = [] {
         didSet { tableView?.reloadData() }
     }

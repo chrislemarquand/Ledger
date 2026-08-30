@@ -238,6 +238,44 @@ struct EOS1VShootingRow: Identifiable, Sendable {
     let details: String
 }
 
+/// One frame record, retaining every field from eos1v-serial's own CSV
+/// (`films_to_csv`) verbatim — enough to rebuild Canon's exact export format
+/// without re-invoking eos1v-serial or touching its code.
+struct EOS1VFrameRecord: Identifiable, Sendable {
+    let id: Int
+    let frameNumber: String
+    let focalLength: String
+    let maxAperture: String
+    let tv: String
+    let av: String
+    let isoDX: String
+    let isoM: String
+    let exposureCompensation: String
+    let flashExposureCompensation: String
+    let shootingMode: String
+    let meteringMode: String
+    let flashMode: String
+    let filmAdvance: String
+    let afMode: String
+    let afPointAchievingFocus: String
+    let afPointSelection: String
+    let multipleExposure: String
+    let date: String
+    let time: String
+    let batteryDate: String
+    let batteryTime: String
+}
+
+/// One roll (film), grouping its frames — mirrors eos1v-serial's `Film`
+/// column (e.g. "00-13"), re-padded to Canon's own "00-024" convention when
+/// exporting (see EOS1VRollCSVExporter).
+struct EOS1VFilmRoll: Identifiable, Sendable {
+    let id: String
+    let loadedDate: String
+    let loadedTime: String
+    let frames: [EOS1VFrameRecord]
+}
+
 @MainActor
 final class EOS1VSessionController: ObservableObject {
     enum State: Equatable {
@@ -257,13 +295,38 @@ final class EOS1VSessionController: ObservableObject {
     @Published private(set) var camera: EOS1VMachineResult.Camera?
     @Published private(set) var rawStatus: [String: String] = [:]
     @Published private(set) var shootingRows: [EOS1VShootingRow] = []
+    @Published private(set) var filmRolls: [EOS1VFilmRoll] = []
     @Published private(set) var lastCSVURL: URL?
     @Published private(set) var lastRawURL: URL?
+    @Published private(set) var deletedRollIDs: Set<String>
 
     private let client: EOS1VToolClient
+    private let deletedRollsStore: EOS1VDeletedRollsStore
 
     init(client: EOS1VToolClient = EOS1VToolClient()) {
         self.client = client
+        // Stable location regardless of the user-configurable capture output
+        // directory (see captureDirectory()) — this is Ledger-internal
+        // bookkeeping, not a capture the user chose an export location for.
+        let store = EOS1VDeletedRollsStore(
+            directory: AppBrand.currentSupportDirectoryURL().appendingPathComponent("EOS-1V Captures", isDirectory: true)
+        )
+        deletedRollsStore = store
+        deletedRollIDs = store.load()
+    }
+
+    /// Hides a roll from the default Shooting Data list. Never touches the
+    /// camera or the downloaded CSV/raw files — eos1v-serial re-downloads
+    /// whatever's currently on the camera every time, so this tombstone is
+    /// what keeps a locally-deleted roll from reappearing.
+    func markRollDeleted(_ id: String) {
+        guard deletedRollIDs.insert(id).inserted else { return }
+        deletedRollsStore.save(deletedRollIDs)
+    }
+
+    func restoreRoll(_ id: String) {
+        guard deletedRollIDs.remove(id) != nil else { return }
+        deletedRollsStore.save(deletedRollIDs)
     }
 
     var tabsEnabled: Bool {
@@ -314,6 +377,7 @@ final class EOS1VSessionController: ObservableObject {
                     lastCSVURL = csv
                     lastRawURL = raw
                     shootingRows = Self.loadShootingRows(from: csv)
+                    filmRolls = Self.loadFilmRolls(from: csv)
                     state = .loaded(
                         films: payload.filmCount ?? 0,
                         frames: payload.frameCount ?? shootingRows.count
@@ -355,6 +419,67 @@ final class EOS1VSessionController: ObservableObject {
                 .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
             return EOS1VShootingRow(id: index, film: film, frame: frame,
                                     details: [dateTime, exposure].filter { !$0.isEmpty }.joined(separator: " — "))
+        }
+    }
+
+    /// Parses eos1v-serial's own CSV (`Film,Film loaded date,Film loaded
+    /// time,Frame,Focal length,Max aperture,Tv,Av,ISO (DX),ISO (M),Exposure
+    /// compensation,Flash exposure compensation,Shooting mode,Metering mode,
+    /// Flash mode,Film advance,AF mode,AF point achieving focus,AF point
+    /// selection,Multiple exposure,Date,Time,Battery date,Battery time`)
+    /// into rolls, retaining every field for EOS1VRollCSVExporter to
+    /// reformat into Canon's own export layout. Never re-invokes or reshapes
+    /// eos1v-serial's own output.
+    private static func loadFilmRolls(from url: URL) -> [EOS1VFilmRoll] {
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
+        let lines = text.split(whereSeparator: \.isNewline).map(String.init)
+        guard let headerLine = lines.first else { return [] }
+        let header = csvFields(headerLine)
+        func field(_ values: [String: String], _ name: String) -> String {
+            values[name] ?? ""
+        }
+
+        var framesByFilm: [String: (loadedDate: String, loadedTime: String, frames: [EOS1VFrameRecord])] = [:]
+        var order: [String] = []
+        for (index, line) in lines.dropFirst().enumerated() {
+            let fields = csvFields(line)
+            guard fields.count >= header.count else { continue }
+            let values = Dictionary(uniqueKeysWithValues: zip(header, fields))
+            let film = field(values, "Film")
+            guard !film.isEmpty else { continue }
+            let record = EOS1VFrameRecord(
+                id: index,
+                frameNumber: field(values, "Frame"),
+                focalLength: field(values, "Focal length"),
+                maxAperture: field(values, "Max aperture"),
+                tv: field(values, "Tv"),
+                av: field(values, "Av"),
+                isoDX: field(values, "ISO (DX)"),
+                isoM: field(values, "ISO (M)"),
+                exposureCompensation: field(values, "Exposure compensation"),
+                flashExposureCompensation: field(values, "Flash exposure compensation"),
+                shootingMode: field(values, "Shooting mode"),
+                meteringMode: field(values, "Metering mode"),
+                flashMode: field(values, "Flash mode"),
+                filmAdvance: field(values, "Film advance"),
+                afMode: field(values, "AF mode"),
+                afPointAchievingFocus: field(values, "AF point achieving focus"),
+                afPointSelection: field(values, "AF point selection"),
+                multipleExposure: field(values, "Multiple exposure"),
+                date: field(values, "Date"),
+                time: field(values, "Time"),
+                batteryDate: field(values, "Battery date"),
+                batteryTime: field(values, "Battery time")
+            )
+            if framesByFilm[film] == nil {
+                framesByFilm[film] = (field(values, "Film loaded date"), field(values, "Film loaded time"), [])
+                order.append(film)
+            }
+            framesByFilm[film]?.frames.append(record)
+        }
+        return order.compactMap { film in
+            guard let entry = framesByFilm[film] else { return nil }
+            return EOS1VFilmRoll(id: film, loadedDate: entry.loadedDate, loadedTime: entry.loadedTime, frames: entry.frames)
         }
     }
 
