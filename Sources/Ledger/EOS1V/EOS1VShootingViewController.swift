@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import UniformTypeIdentifiers
 
 /// Shooting tab: a flat, multi-select roll table (matching the Figma design)
@@ -35,7 +36,12 @@ final class EOS1VShootingViewController: NSViewController, NSTableViewDataSource
         let root = NSView()
 
         let table = NSTableView()
-        table.usesAlternatingRowBackgroundColors = true
+        // Not using usesAlternatingRowBackgroundColors: that flag stripes the
+        // table view's entire frame/clip height, including empty space below
+        // the last real row, rather than stopping at the actual row count.
+        // Striping colors are applied manually per real row in
+        // tableView(_:didAdd:forRow:) instead, so the banding stops exactly
+        // where the data does.
         table.allowsMultipleSelection = true
         table.dataSource = self
         table.delegate = self
@@ -69,23 +75,32 @@ final class EOS1VShootingViewController: NSViewController, NSTableViewDataSource
         exportButton.target = self
         exportButton.action = #selector(exportSelectedRolls)
 
-        let buttonRow = NSStackView(views: [previewButton, deleteButton, exportButton])
-        buttonRow.orientation = .horizontal
-        buttonRow.spacing = 8
-        buttonRow.translatesAutoresizingMaskIntoConstraints = false
+        // Preview…/Show Deleted form a left-aligned leading cluster; Delete…/
+        // Export… form a right-aligned trailing cluster, both on one row.
+        let leadingRow = NSStackView(views: [previewButton, showDeletedCheckbox])
+        leadingRow.orientation = .horizontal
+        leadingRow.alignment = .centerY
+        leadingRow.spacing = 12
+        leadingRow.translatesAutoresizingMaskIntoConstraints = false
 
-        root.addSubview(showDeletedCheckbox)
+        let trailingRow = NSStackView(views: [deleteButton, exportButton])
+        trailingRow.orientation = .horizontal
+        trailingRow.alignment = .centerY
+        trailingRow.spacing = 8
+        trailingRow.translatesAutoresizingMaskIntoConstraints = false
+
         root.addSubview(scroll)
-        root.addSubview(buttonRow)
+        root.addSubview(leadingRow)
+        root.addSubview(trailingRow)
         NSLayoutConstraint.activate([
-            showDeletedCheckbox.topAnchor.constraint(equalTo: root.topAnchor),
-            showDeletedCheckbox.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            scroll.topAnchor.constraint(equalTo: showDeletedCheckbox.bottomAnchor, constant: 8),
+            scroll.topAnchor.constraint(equalTo: root.topAnchor, constant: 24),
             scroll.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: buttonRow.topAnchor, constant: -12),
-            buttonRow.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            buttonRow.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            scroll.bottomAnchor.constraint(equalTo: leadingRow.topAnchor, constant: -12),
+            leadingRow.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            leadingRow.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            trailingRow.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            trailingRow.centerYAnchor.constraint(equalTo: leadingRow.centerYAnchor),
         ])
         view = root
     }
@@ -133,6 +148,11 @@ final class EOS1VShootingViewController: NSViewController, NSTableViewDataSource
         return cell
     }
 
+    func tableView(_ tableView: NSTableView, didAdd rowView: NSTableRowView, forRow row: Int) {
+        let colors = NSColor.alternatingContentBackgroundColors
+        rowView.backgroundColor = colors[row % colors.count]
+    }
+
     func tableViewSelectionDidChange(_: Notification) {
         updateButtonStates()
     }
@@ -156,7 +176,17 @@ final class EOS1VShootingViewController: NSViewController, NSTableViewDataSource
 
     @objc private func previewSelectedRoll() {
         guard let roll = selectedRolls.first else { return }
-        presentAsSheet(EOS1VFramePreviewViewController(roll: roll))
+        let hostingController = NSHostingController(
+            rootView: EOS1VRollDetailSheetView(roll: roll, onDone: { [weak self] in
+                self?.dismissRollDetailSheet()
+            })
+        )
+        presentAsSheet(hostingController)
+    }
+
+    private func dismissRollDetailSheet() {
+        guard let presented = presentedViewControllers?.first else { return }
+        dismiss(presented)
     }
 
     @objc private func deleteOrRestoreSelectedRolls() {

@@ -166,6 +166,7 @@ No new user-facing features — isolated architecture/perf work ahead of the v2.
 - [ ] Batch output: PDF contact sheets.
 - [ ] Copy/paste field selector (using same UI/plumbing as preset sheets) - 'copy selected fields..'pops up a window to select your fields and then paste only those
 - [ ] **Import conflict-resolution, revisited**: a real UI for unresolved/ambiguous import rows, designed against how matching actually behaves rather than assumed. Full context, the structural finding from the 2026-08-29 attempt (no current adapter path can produce `.multipleTargets` or a multi-candidate `.duplicateSourceIdentifier`), and a recommended approach are in `docs/import-conflict-resolution-plan-2026-08.md`.
+- [ ] **EOS-1V roll metadata database**: a Ledger-owned overlay of user-editable info (starting with Title/Remarks, extensible to any field via per-roll/per-frame overrides) layered on top of the camera's immutable downloaded data, plus a second "Ledger-enriched" CSV export alongside the existing untouched-camera-data export. Full data model, file-by-file plan, and rationale (including why this isn't a database engine) in `docs/eos1v-roll-metadata-plan-2026-08.md`.
 
 ---
 
