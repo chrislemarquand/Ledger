@@ -5,12 +5,6 @@ import AppKit
 /// just `isEnabled = false` — so enabling writes later only means flipping
 /// that flag, not redesigning the screen.
 enum EOS1VControlFactory {
-    static func sectionLabel(_ text: String) -> NSTextField {
-        let label = NSTextField(labelWithString: text)
-        label.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
-        return label
-    }
-
     static func bodyLabel(_ text: String) -> NSTextField {
         let label = NSTextField(wrappingLabelWithString: text)
         label.font = .systemFont(ofSize: NSFont.smallSystemFontSize)

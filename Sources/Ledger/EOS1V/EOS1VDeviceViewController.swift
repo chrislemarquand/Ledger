@@ -48,8 +48,8 @@ final class EOS1VDeviceViewController: NSViewController {
             ("Connect", connectController as NSViewController),
             // ("Personal", personalController),
             // ("Custom", customController),
-            ("Shooting", shootingController),
-            ("Properties", propertiesController),
+            ("Shooting Data", shootingController),
+            ("Date and Time", propertiesController),
         ] {
             let item = NSTabViewItem(viewController: controller)
             item.label = title

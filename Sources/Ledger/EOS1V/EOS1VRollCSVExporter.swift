@@ -11,17 +11,25 @@ import Foundation
 ///   compensation sign convention) is a best-effort match against the single
 ///   sample available when this was written.
 /// - Canon's own export omits optional columns entirely when a roll's
-///   recorded-items mask didn't include them. eos1v-serial's CSV doesn't
-///   carry that per-roll mask, so this approximates it by omitting a column
-///   only when it is blank across every frame in the roll — not a precise
-///   match to Canon's mask-driven behavior.
+///   recorded-items mask didn't include them. Column inclusion here is
+///   decided from `recordedItemNames` — the names of currently-enabled
+///   recorded items reported by `eos1v-serial`'s `machine inspect`
+///   (`EOS1VRecordedItem.name`, e.g. "Focusing point achieving focus") — not
+///   from whether the roll's own decoded values happen to be blank. This is
+///   still only a proxy: it reflects the *currently connected* camera's
+///   configuration, which may not match whatever was configured when an
+///   older roll was actually shot.
 /// - "Custom Function settings" and "Focusing point selection" have no
 ///   corresponding data in eos1v-serial's CSV at all, so are never emitted.
 /// - "Bulb exposure time" has no corresponding data source either; the
 ///   column is always included but always blank, matching Canon's own
 ///   behavior for non-bulb frames (bulb frames can't currently be detected).
+/// - Canon's own generator does not apply RFC4180 quote-escaping to any
+///   field (verified against real exports, including the Tv field's own
+///   embedded `"` characters in `="1/60"`), so fields are joined raw here
+///   too, rather than quoted/escaped.
 enum EOS1VRollCSVExporter {
-    static func canonCSV(for roll: EOS1VFilmRoll) -> Data {
+    static func canonCSV(for roll: EOS1VFilmRoll, recordedItemNames: Set<String>) -> Data {
         var lines: [String] = []
 
         let (loadedDate, loadedTime) = reformattedDateTime(date: roll.loadedDate, time: roll.loadedTime)
@@ -34,9 +42,10 @@ enum EOS1VRollCSVExporter {
         lines.append(csvRow(["", "Remarks", ""]))
         lines.append("")
 
-        let includeAFPoint = roll.frames.contains { !$0.afPointAchievingFocus.isEmpty }
-        let includeAFSelection = roll.frames.contains { !$0.afPointSelection.isEmpty }
-        let includeBattery = roll.frames.contains { !$0.batteryDate.isEmpty || !$0.batteryTime.isEmpty }
+        let includeAFPoint = recordedItemNames.contains("Focusing point achieving focus")
+        let includeAFSelection = recordedItemNames.contains("Focusing point selection")
+        let includeBattery = recordedItemNames.contains("Battery-loaded date")
+            || recordedItemNames.contains("Battery-loaded time")
 
         var header = ["", "Frame No.", "Focal length", "Max. aperture", "Tv", "Av", "ISO (M)",
                       "Exposure compensation", "Flash exposure compensation", "Flash mode",
@@ -109,11 +118,6 @@ enum EOS1VRollCSVExporter {
     }
 
     private static func csvRow(_ fields: [String]) -> String {
-        fields.map(csvEscaped).joined(separator: ",")
-    }
-
-    private static func csvEscaped(_ field: String) -> String {
-        guard field.contains(",") || field.contains("\"") || field.contains("\n") else { return field }
-        return "\"\(field.replacingOccurrences(of: "\"", with: "\"\""))\""
+        fields.joined(separator: ",")
     }
 }

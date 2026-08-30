@@ -1,29 +1,31 @@
 import AppKit
 
-/// Properties tab: Information (Camera ID), Recorded Items (the "Shooting
-/// Data Items to be Recorded" checkbox list from the manual), and Date and
-/// Time — matching the manual's Properties window (pages 87-92). Every
-/// control is disabled — Ledger is read-only for now — but laid out and
-/// populated exactly as the writable UI would be.
+/// Date and Time tab: compares the camera's clock (as of the last download or
+/// inspect) against the current macOS clock. Read-only display for now — the
+/// "Change Date and Time…" button is real UI, laid out and ready, but
+/// disabled until camera clock writes are implemented. The comparison here
+/// will also back a future feature to correct exported CSV timestamps
+/// against the camera/computer clock drift, but for now it's display only.
 @MainActor
 final class EOS1VPropertiesViewController: NSViewController {
     private let session: EOS1VSessionController
-    private let tabs: NSSegmentedControl
-    private let scroll: NSScrollView
-    private let stack: NSStackView
+    private let card = NSBox()
+    private let cameraValue = NSTextField(labelWithString: "")
+    private let systemValue = NSTextField(labelWithString: "")
+    private let differenceValue = NSTextField(labelWithString: "")
+    private let changeButton = EOS1VControlFactory.button(title: "Change Date and Time…")
 
-    private static let tabTitles = ["Information", "Recorded Items", "Date and Time"]
-
-    /// Item names whose next-listed sibling is a nested sub-item in the
-    /// manual's layout (AF mode → Focusing point achieving focus; Shutter
-    /// speed → Bulb exposure time). Presentation-only grouping — the data
-    /// itself (`EOS1VRecordedItem`) is a flat list.
-    private static let nestingParents: Set<String> = ["AF mode", "Shutter speed"]
+    // Matches eos1v-serial's bcd6()-produced "YYYY-MM-DD"/"HH:MM:SS" strings
+    // (EOS1VSessionController.camera?.clockDate/clockTime), combined here.
+    private static let clockFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter
+    }()
 
     init(session: EOS1VSessionController) {
         self.session = session
-        tabs = NSSegmentedControl(labels: Self.tabTitles, trackingMode: .selectOne, target: nil, action: nil)
-        (scroll, stack) = EOS1VControlFactory.scrollableForm(rows: [])
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -32,118 +34,117 @@ final class EOS1VPropertiesViewController: NSViewController {
 
     override func loadView() {
         let root = NSView()
-        tabs.selectedSegment = 0
-        tabs.target = self
-        tabs.action = #selector(tabChanged)
-        tabs.translatesAutoresizingMaskIntoConstraints = false
 
-        // One persistent scroll view whose content is swapped when the tab
-        // changes, rather than prebuilding one per tab and hiding all but
-        // one — the hidden ones were never laid out until revealed, which is
-        // what forced the earlier viewWillAppear/layoutSubtreeIfNeeded
-        // workarounds. There's nothing to work around when there's only
-        // ever one view.
-        scroll.translatesAutoresizingMaskIntoConstraints = false
+        // Same card styling/position/width as the Connect screen's card —
+        // .quaternarySystemFill is AppKit's semantic "subtle tinted fill, no
+        // border" color, chosen there after .controlBackgroundColor proved
+        // invisible against the white canvas.
+        card.boxType = .custom
+        card.cornerRadius = 12
+        card.fillColor = .quaternarySystemFill
+        card.borderWidth = 0
+        card.borderColor = .clear
+        card.titlePosition = .noTitle
+        card.translatesAutoresizingMaskIntoConstraints = false
 
-        let okRow = EOS1VControlFactory.buttonRow(["OK", "Cancel", "Apply"])
-        okRow.translatesAutoresizingMaskIntoConstraints = false
+        let rows = NSStackView(views: [
+            makeRow(title: "EOS-1V:", valueField: cameraValue),
+            makeRow(title: "macOS:", valueField: systemValue),
+            makeRow(title: "Difference:", valueField: differenceValue),
+        ])
+        rows.orientation = .vertical
+        rows.alignment = .leading
+        rows.spacing = 14
+        rows.translatesAutoresizingMaskIntoConstraints = false
 
-        root.addSubview(tabs)
-        root.addSubview(scroll)
-        root.addSubview(okRow)
+        changeButton.translatesAutoresizingMaskIntoConstraints = false
+
+        // NSBox.contentView sizes content via the legacy autoresizing-mask
+        // model, which clashes with Auto Layout content — added as plain
+        // subviews instead, matching the fix already applied elsewhere.
+        card.addSubview(rows)
+        card.addSubview(changeButton)
+        root.addSubview(card)
+
         NSLayoutConstraint.activate([
-            tabs.topAnchor.constraint(equalTo: root.topAnchor),
-            tabs.centerXAnchor.constraint(equalTo: root.centerXAnchor),
-            scroll.topAnchor.constraint(equalTo: tabs.bottomAnchor, constant: 12),
-            scroll.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: okRow.topAnchor, constant: -12),
-            okRow.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            okRow.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            card.topAnchor.constraint(equalTo: root.topAnchor),
+            card.centerXAnchor.constraint(equalTo: root.centerXAnchor),
+            card.widthAnchor.constraint(equalToConstant: 620),
+            card.heightAnchor.constraint(equalToConstant: 196),
+
+            rows.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 24),
+            rows.topAnchor.constraint(equalTo: card.topAnchor, constant: 24),
+            rows.trailingAnchor.constraint(lessThanOrEqualTo: card.trailingAnchor, constant: -24),
+
+            changeButton.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -18),
+            changeButton.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -18),
         ])
         view = root
     }
 
+    override func viewWillAppear() {
+        super.viewWillAppear()
+        // Recompute on appearance (e.g. switching back to this tab) rather
+        // than live-ticking — the macOS clock display doesn't need
+        // second-by-second accuracy, and nothing else on this screen ticks.
+        refresh()
+    }
+
     func refresh() {
-        showTab(tabs.selectedSegment)
-    }
+        let now = Date()
+        systemValue.stringValue = Self.clockFormatter.string(from: now)
 
-    private func informationRows() -> [NSView] {
-        let modelRow = labeledRow("Model name:", EOS1VControlFactory.disabledField(session.camera?.model ?? "—"))
-        let numberRow = labeledRow("User-settable No.:", EOS1VControlFactory.disabledField("—"))
-        return [EOS1VControlFactory.sectionLabel("Camera ID"), modelRow, numberRow]
-    }
-
-    private func recordedItemsRows() -> [NSView] {
-        guard let items = session.recordedItems?.items, !items.isEmpty else {
-            return [EOS1VControlFactory.bodyLabel("No recorded-items data available.")]
+        guard let cameraDate = parsedCameraDate() else {
+            cameraValue.stringValue = "—"
+            differenceValue.stringValue = "—"
+            return
         }
-
-        var rows: [NSView] = []
-        var index = 0
-        while index < items.count {
-            let item = items[index]
-            let title = item.mandatory ? "\(item.name) (mandatory)" : item.name
-            let checkbox = EOS1VControlFactory.checkbox(title: title, checked: item.enabled)
-            if Self.nestingParents.contains(item.name), index + 1 < items.count {
-                let child = items[index + 1]
-                let childCheckbox = EOS1VControlFactory.checkbox(title: child.name, checked: child.enabled)
-                let stack = NSStackView(views: [checkbox, EOS1VControlFactory.indented(childCheckbox)])
-                stack.orientation = .vertical
-                stack.alignment = .leading
-                stack.spacing = 4
-                rows.append(stack)
-                index += 2
-            } else {
-                rows.append(checkbox)
-                index += 1
-            }
-        }
-        return rows
+        cameraValue.stringValue = Self.clockFormatter.string(from: cameraDate)
+        differenceValue.stringValue = Self.differenceDescription(from: cameraDate, to: now)
     }
 
-    private func dateTimeRows() -> [NSView] {
-        let clock = [session.camera?.clockDate, session.camera?.clockTime].compactMap { $0 }.joined(separator: " ")
-        let dateField = EOS1VControlFactory.disabledField(session.camera?.clockDate ?? "—")
-        let timeField = EOS1VControlFactory.disabledField(session.camera?.clockTime ?? "—")
-        let fieldsRow = NSStackView(views: [dateField, timeField])
-        fieldsRow.orientation = .horizontal
-        fieldsRow.spacing = 8
+    private func makeRow(title: String, valueField: NSTextField) -> NSView {
+        let label = NSTextField(labelWithString: title)
+        label.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
 
-        return [
-            EOS1VControlFactory.bodyLabel(clock.isEmpty ? "Camera clock unknown." : "Current camera clock: \(clock)"),
-            EOS1VControlFactory.radio(title: "Do not change camera date and time settings", selected: true),
-            EOS1VControlFactory.radio(title: "Copy computer's date and time settings to camera", selected: false),
-            EOS1VControlFactory.radio(title: "Set date and time manually", selected: false),
-            EOS1VControlFactory.indented(fieldsRow),
-        ]
-    }
+        valueField.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
 
-    private func labeledRow(_ label: String, _ field: NSView) -> NSView {
-        let row = NSStackView(views: [EOS1VControlFactory.bodyLabel(label), field])
+        let row = NSStackView(views: [label, valueField])
         row.orientation = .horizontal
+        row.alignment = .firstBaseline
         row.spacing = 8
+        label.widthAnchor.constraint(equalToConstant: 90).isActive = true
         return row
     }
 
-    @objc private func tabChanged() {
-        showTab(tabs.selectedSegment)
+    private func parsedCameraDate() -> Date? {
+        guard let date = session.camera?.clockDate, let time = session.camera?.clockTime else { return nil }
+        return Self.clockFormatter.date(from: "\(date) \(time)")
     }
 
-    private func showTab(_ index: Int) {
-        for view in stack.arrangedSubviews {
-            stack.removeArrangedSubview(view)
-            view.removeFromSuperview()
-        }
-        let rows: [NSView]
-        switch index {
-        case 0: rows = informationRows()
-        case 1: rows = recordedItemsRows()
-        case 2: rows = dateTimeRows()
-        default: rows = []
-        }
-        for row in rows {
-            stack.addArrangedSubview(row)
-        }
+    private static func differenceDescription(from cameraDate: Date, to systemDate: Date) -> String {
+        let totalSeconds = Int(systemDate.timeIntervalSince(cameraDate).rounded())
+        if totalSeconds == 0 { return "No difference" }
+
+        let sign = totalSeconds > 0 ? "+" : "-"
+        var remaining = abs(totalSeconds)
+        let days = remaining / 86400
+        remaining %= 86400
+        let hours = remaining / 3600
+        remaining %= 3600
+        let minutes = remaining / 60
+        remaining %= 60
+        let seconds = remaining
+
+        var parts: [String] = []
+        if days > 0 { parts.append(pluralized(days, "day")) }
+        if hours > 0 { parts.append(pluralized(hours, "hour")) }
+        if minutes > 0 { parts.append(pluralized(minutes, "minute")) }
+        if seconds > 0 || parts.isEmpty { parts.append(pluralized(seconds, "second")) }
+        return "\(sign)\(parts.joined(separator: " "))"
+    }
+
+    private static func pluralized(_ value: Int, _ unit: String) -> String {
+        "\(value) \(unit)\(value == 1 ? "" : "s")"
     }
 }

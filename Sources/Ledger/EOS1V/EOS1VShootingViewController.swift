@@ -176,13 +176,16 @@ final class EOS1VShootingViewController: NSViewController, NSTableViewDataSource
     @objc private func exportSelectedRolls() {
         let selected = selectedRolls
         guard !selected.isEmpty, let window = view.window else { return }
+        let recordedItemNames = Set(
+            (session.recordedItems?.items ?? []).filter(\.enabled).map(\.name)
+        )
         if selected.count == 1, let roll = selected.first {
             let panel = NSSavePanel()
             panel.nameFieldStringValue = "\(roll.id).csv"
             panel.allowedContentTypes = [.commaSeparatedText]
             panel.beginSheetModal(for: window) { response in
                 guard response == .OK, let url = panel.url else { return }
-                try? EOS1VRollCSVExporter.canonCSV(for: roll).write(to: url)
+                try? EOS1VRollCSVExporter.canonCSV(for: roll, recordedItemNames: recordedItemNames).write(to: url)
             }
             return
         }
@@ -195,7 +198,7 @@ final class EOS1VShootingViewController: NSViewController, NSTableViewDataSource
             guard response == .OK, let directory = panel.url else { return }
             for roll in selected {
                 let url = directory.appendingPathComponent("\(roll.id).csv")
-                try? EOS1VRollCSVExporter.canonCSV(for: roll).write(to: url)
+                try? EOS1VRollCSVExporter.canonCSV(for: roll, recordedItemNames: recordedItemNames).write(to: url)
             }
         }
     }
