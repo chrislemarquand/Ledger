@@ -94,6 +94,12 @@ private enum ExternalPhotoAppTarget {
     }
 }
 
+enum BatchRenameStagingResult: Equatable {
+    case staged(Int)
+    case noChanges
+    case rejected
+}
+
 @MainActor
 extension AppModel {
     func increaseGalleryZoom() {
@@ -635,8 +641,8 @@ extension AppModel {
         return await service.assessPlan(files: files, pattern: pattern, metadata: metadata, assumeSorted: true)
     }
 
-    func stageBatchRename(operation: RenameOperation) async {
-        guard !operation.files.isEmpty else { return }
+    func stageBatchRename(operation: RenameOperation) async -> BatchRenameStagingResult {
+        guard !operation.files.isEmpty else { return .rejected }
         let files = operation.files.sorted {
             let cmp = $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent)
             if cmp != .orderedSame { return cmp == .orderedAscending }
@@ -652,9 +658,13 @@ extension AppModel {
         guard assessment.issues.isEmpty else {
             let firstMessage = assessment.issues.first?.message ?? "Rename pattern is invalid."
             statusMessage = "Couldn’t prepare name changes. \(firstMessage)"
-            return
+            return .rejected
         }
-        let plan = assessment.entries
+        let plan = assessment.entries.filter {
+            $0.sourceURL.lastPathComponent != $0.finalTargetURL.lastPathComponent
+        }
+        guard !plan.isEmpty else { return .noChanges }
+
         let previousState = currentPendingEditState()
         var didChangePendingRenames = false
         for entry in plan {
@@ -673,7 +683,8 @@ extension AppModel {
         let n = plan.count
         let filesLabel = n == 1 ? "1 file" : "\(n) files"
         setStatusMessage("Prepared name changes for \(filesLabel). Ready to apply.", autoClearAfterSuccess: true)
-        pendingBatchRenameScope = nil
+        dismissBatchRenameSheet()
+        return .staged(n)
     }
 
     func discardStagedRenames() {

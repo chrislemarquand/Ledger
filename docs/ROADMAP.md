@@ -52,7 +52,7 @@ Summary only — full item-by-item detail in `docs/ROADMAPOLD.MD` and `CHANGELOG
 
 ### Maintenance
 - [ ] Bump bundled ExifTool from 13.50 to latest (13.59 as of 2026-07-25). Includes three security updates (13.53, 13.54, 13.59), Exif 3.1 spec tags (13.56), and Canon/Nikon/Sony lens improvements.
-- [ ] No-op batch rename: suppress the staged/applied state when a rename pattern produces no changes (filenames unchanged).
+- [x] No-op batch rename: suppress the staged/applied state when a rename pattern produces no changes (filenames unchanged); keep the rename sheet open and explain that no names would change.
 
 ---
 

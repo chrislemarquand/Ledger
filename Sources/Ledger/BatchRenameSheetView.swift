@@ -25,6 +25,7 @@ struct BatchRenameSheetView: View {
     @State private var preview: [RenamePlanEntry] = []
     @State private var previewIssues: [RenameValidationIssue] = []
     @State private var isLoadingPreview = false
+    @State private var isShowingNoChangesAlert = false
 
     private var fileCount: Int {
         model.renameFilesForBatchRename(scope).count
@@ -82,7 +83,10 @@ struct BatchRenameSheetView: View {
                         let files = model.renameFilesForBatchRename(scope)
                         let operation = RenameOperation(files: files, pattern: pattern)
                         Task { @MainActor in
-                            await model.stageBatchRename(operation: operation)
+                            let result = await model.stageBatchRename(operation: operation)
+                            if result == .noChanges {
+                                isShowingNoChangesAlert = true
+                            }
                         }
                     }
                     .keyboardShortcut(.defaultAction)
@@ -93,6 +97,11 @@ struct BatchRenameSheetView: View {
         .task(id: pattern) {
             do { try await Task.sleep(nanoseconds: Self.previewDebounceNanoseconds) } catch { return }
             await refreshPreview()
+        }
+        .alert("No Names Would Change", isPresented: $isShowingNoChangesAlert) {
+            Button("OK") {}
+        } message: {
+            Text("The new filenames are the same as the current filenames. Change the rename pattern to prepare name changes.")
         }
     }
 

@@ -1455,7 +1455,7 @@ final class AppModelTests: XCTestCase {
         model.selectedFileURLs = Set(files)
         model.pendingBatchRenameScope = .selection
 
-        await model.stageBatchRename(
+        let result = await model.stageBatchRename(
             operation: RenameOperation(
                 files: files,
                 pattern: RenamePattern(tokens: [.sequence(start: 1, padding: .two)])
@@ -1466,6 +1466,70 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.pendingRenameByFile[URL(fileURLWithPath: "/tmp/b.jpg")], "02.jpg")
         XCTAssertNil(model.pendingBatchRenameScope)
         XCTAssertEqual(model.statusMessage, "Prepared name changes for 2 files. Ready to apply.")
+        XCTAssertEqual(result, .staged(2))
+    }
+
+    func testStageBatchRenameLeavesSheetOpenWhenNoNamesWouldChange() async {
+        let model = makeModel()
+        let files = [
+            URL(fileURLWithPath: "/tmp/a.jpg"),
+            URL(fileURLWithPath: "/tmp/b.jpg"),
+        ]
+        model.pendingBatchRenameScope = .selection
+        let initialDisplayToken = model.stagedOpsDisplayToken
+        let initialUndoCount = model.metadataUndoStack.count
+        let initialStatusMessage = model.statusMessage
+
+        let result = await model.stageBatchRename(
+            operation: RenameOperation(
+                files: files,
+                pattern: RenamePattern(tokens: [.originalName(component: .name, casing: .original)])
+            )
+        )
+
+        XCTAssertEqual(result, .noChanges)
+        XCTAssertTrue(model.pendingRenameByFile.isEmpty)
+        XCTAssertEqual(model.pendingBatchRenameScope, .selection)
+        XCTAssertEqual(model.stagedOpsDisplayToken, initialDisplayToken)
+        XCTAssertEqual(model.metadataUndoStack.count, initialUndoCount)
+        XCTAssertEqual(model.statusMessage, initialStatusMessage)
+    }
+
+    func testStageBatchRenameStagesOnlyNamesThatWouldChange() async {
+        let model = makeModel()
+        let unchanged = URL(fileURLWithPath: "/tmp/a.jpg")
+        let changed = URL(fileURLWithPath: "/tmp/z.jpg")
+        model.pendingBatchRenameScope = .selection
+
+        let result = await model.stageBatchRename(
+            operation: RenameOperation(
+                files: [unchanged, changed],
+                pattern: RenamePattern(tokens: [.sequenceLetter(uppercase: false)])
+            )
+        )
+
+        XCTAssertEqual(result, .staged(1))
+        XCTAssertNil(model.pendingRenameByFile[unchanged])
+        XCTAssertEqual(model.pendingRenameByFile[changed], "b.jpg")
+        XCTAssertNil(model.pendingBatchRenameScope)
+        XCTAssertEqual(model.statusMessage, "Prepared name changes for 1 file. Ready to apply.")
+    }
+
+    func testStageBatchRenameTreatsCaseOnlyRenameAsAChange() async {
+        let model = makeModel()
+        let file = URL(fileURLWithPath: "/tmp/photo.jpg")
+        model.pendingBatchRenameScope = .selection
+
+        let result = await model.stageBatchRename(
+            operation: RenameOperation(
+                files: [file],
+                pattern: RenamePattern(tokens: [.originalName(component: .name, casing: .uppercase)])
+            )
+        )
+
+        XCTAssertEqual(result, .staged(1))
+        XCTAssertEqual(model.pendingRenameByFile[file], "PHOTO.jpg")
+        XCTAssertNil(model.pendingBatchRenameScope)
     }
 
     func testListColumnValueUsesPendingRenameForNameColumn() {
