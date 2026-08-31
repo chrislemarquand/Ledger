@@ -297,6 +297,12 @@ public struct ExifToolService: ExifToolServiceProtocol {
             stderrAccumulator.append(data)
         }
 
+        let signpostID = ExifToolSignposts.process.makeSignpostID()
+        let signpostState = ExifToolSignposts.process.beginInterval(
+            "ExifToolProcess", id: signpostID, "\(kind.rawValue)"
+        )
+        defer { ExifToolSignposts.process.endInterval("ExifToolProcess", signpostState) }
+
         try process.run()
         let deadline = startedAt.addingTimeInterval(timeout(for: kind))
         var timedOut = false

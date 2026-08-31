@@ -9,6 +9,14 @@ import SwiftUI
 
 let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "ExifEdit", category: "AppModel")
 
+/// XCTestConfigurationFilePath is set by xcodebuild test but not by swift test --parallel.
+/// NSClassFromString covers both runners. Use this to skip blocking modal alerts during
+/// automated test runs, where there's no user available to dismiss them.
+let isRunningUnitTests: Bool = {
+    ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil ||
+        NSClassFromString("XCTestCase") != nil
+}()
+
 enum ThumbnailPipeline {
     static func cachedImage(for fileURL: URL, minRenderedSide: CGFloat) -> NSImage? {
         ThumbnailService.cachedImage(for: fileURL, minRenderedSide: minRenderedSide)

@@ -76,6 +76,10 @@ extension AppModel {
     }
 
     func loadFiles(for kind: SidebarKind) async {
+        let folderLoadSignpostID = Signposts.folderLoad.makeSignpostID()
+        let folderLoadState = Signposts.folderLoad.beginInterval("FolderLoad", id: folderLoadSignpostID)
+        defer { Signposts.folderLoad.endInterval("FolderLoad", folderLoadState) }
+
         deferredFolderMetadataPrefetchTask?.cancel()
         deferredFolderMetadataPrefetchTask = nil
         folderMetadataLoadTask?.cancel()
@@ -150,7 +154,7 @@ extension AppModel {
             }
             selectedSidebarID = nil
 
-            if !folderName.isEmpty {
+            if !folderName.isEmpty, !isRunningUnitTests {
                 let alert = NSAlert()
                 alert.alertStyle = .informational
                 alert.messageText = "\u{201c}\(folderName)\u{201d} No Longer Available"
@@ -420,6 +424,10 @@ extension AppModel {
 
         browserItemHydrationTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            let signpostID = Signposts.attributeHydration.makeSignpostID()
+            let state = Signposts.attributeHydration.beginInterval("AttributeHydration", id: signpostID)
+            defer { Signposts.attributeHydration.endInterval("AttributeHydration", state) }
+
             let attributesByURL = await self.readBrowserFileAttributes(for: files)
 
             guard !Task.isCancelled, self.browserItemHydrationID == hydrationID else { return }
@@ -484,6 +492,9 @@ extension AppModel {
     }
 
     func sortBrowserItems(_ items: [BrowserItem]) -> [BrowserItem] {
+        let sortState = Signposts.browserTransition.beginInterval("SortItems")
+        defer { Signposts.browserTransition.endInterval("SortItems", sortState) }
+
         let asc = browserSortAscending
         // cmp(before) returns true when lhs should precede rhs, flipping for descending.
         // Nil values are always sorted last regardless of direction.

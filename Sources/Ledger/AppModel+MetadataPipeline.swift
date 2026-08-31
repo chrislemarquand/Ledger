@@ -18,6 +18,10 @@ extension AppModel {
             return
         }
 
+        let signpostID = Signposts.metadata.makeSignpostID()
+        let state = Signposts.metadata.beginInterval("SelectionMetadataLoad", id: signpostID)
+        defer { Signposts.metadata.endInterval("SelectionMetadataLoad", state) }
+
         var map = metadataByFile
 
         for batchStart in stride(from: 0, to: filesToLoad.count, by: Self.selectionMetadataBatchSize) {
@@ -65,6 +69,10 @@ extension AppModel {
 
         folderMetadataLoadTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            let signpostID = Signposts.metadata.makeSignpostID()
+            let state = Signposts.metadata.beginInterval("FolderMetadataPrefetch", id: signpostID)
+            defer { Signposts.metadata.endInterval("FolderMetadataPrefetch", state) }
+
             var map = self.metadataByFile
 
             for batchStart in stride(from: 0, to: filesToLoad.count, by: effectiveBatchSize) {
@@ -465,6 +473,10 @@ extension AppModel {
     }
 
     private func warmCachesInBackground(files: [URL]) async {
+        let signpostID = Signposts.metadata.makeSignpostID()
+        let state = Signposts.metadata.beginInterval("BackgroundWarm", id: signpostID)
+        defer { Signposts.metadata.endInterval("BackgroundWarm", state) }
+
         // Never contend with active foreground work.
         guard !isFolderMetadataLoading, !isPreviewPreloading else { return }
         do { try await Task.sleep(nanoseconds: Self.previewBulkStartDelayNanoseconds) } catch { return }

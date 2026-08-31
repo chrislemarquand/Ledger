@@ -144,9 +144,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let launchState = Signposts.launch.beginInterval("Launch")
+        defer { Signposts.launch.endInterval("Launch", launchState) }
+
         NSWindow.allowsAutomaticWindowTabbing = false
         updateService = UpdateService()
         configureApplicationMenu()
+        Signposts.launch.emitEvent("MenuReady")
         updateService?.performBackgroundCheck()
         let model = AppModel()
         settingsWindowController = SettingsWindowController(tabs: [

@@ -175,6 +175,10 @@ enum ThumbnailService {
     /// If the cached image is smaller than requested, falls through to generate at full size —
     /// callers can use `cachedImage(for:minRenderedSide:1)` to show a placeholder while waiting.
     static func request(url: URL, requiredSide: CGFloat, forceRefresh: Bool) async -> NSImage? {
+        let signpostID = Signposts.thumbnail.makeSignpostID()
+        let state = Signposts.thumbnail.beginInterval("ThumbnailRequest", id: signpostID)
+        defer { Signposts.thumbnail.endInterval("ThumbnailRequest", state) }
+
         if forceRefresh {
             invalidateCachedImages(for: [url])
         } else if let cached = memoryCache.object(forKey: url as NSURL) {

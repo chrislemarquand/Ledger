@@ -195,6 +195,9 @@ final class BrowserContainerViewController: NSViewController {
         filmstripController.update(model: model, items: items)
 
         let nextOverlayState = currentOverlayState()
+        if lastOverlayState == .loading, nextOverlayState != .loading {
+            Signposts.folderLoad.emitEvent("FirstStablePaint")
+        }
         if nextOverlayState == lastOverlayState, nextOverlayState != .loading {
             return
         }
@@ -216,6 +219,8 @@ final class BrowserContainerViewController: NSViewController {
     private func applyBrowserModeIfNeeded(force: Bool) {
         let mode = model.browserViewMode
         if !force, mode == lastRenderedMode { return }
+        let state = Signposts.browserTransition.beginInterval("ViewModeSwitch")
+        defer { Signposts.browserTransition.endInterval("ViewModeSwitch", state) }
         lastRenderedMode = mode
 
         switch mode {

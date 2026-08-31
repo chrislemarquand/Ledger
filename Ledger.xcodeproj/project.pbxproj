@@ -16,6 +16,7 @@
 		A10000200000000000000001 /* ExifEditEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000130000000000000001 /* ExifEditEngine.swift */; };
 		A10000210000000000000001 /* ExifToolCommandBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000140000000000000001 /* ExifToolCommandBuilder.swift */; };
 		A10000220000000000000001 /* ExifToolService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000150000000000000001 /* ExifToolService.swift */; };
+		A19000020000000000000001 /* Signposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19000010000000000000001 /* Signposts.swift */; };
 		A10000230000000000000001 /* MetadataValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000160000000000000001 /* MetadataValidator.swift */; };
 		A10000240000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000180000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift */; };
 		A10000250000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000190000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift */; };
@@ -37,6 +38,7 @@
 		A10001480000000000000001 /* InspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001470000000000000001 /* InspectorView.swift */; };
 		A100014C0000000000000001 /* PresetSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014B0000000000000001 /* PresetSheets.swift */; };
 		A100014E0000000000000001 /* ThumbnailService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014D0000000000000001 /* ThumbnailService.swift */; };
+		A19000040000000000000001 /* Signposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19000030000000000000001 /* Signposts.swift */; };
 		A10001810000000000000001 /* CloudFileState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001800000000000000001 /* CloudFileState.swift */; };
 		A10001830000000000000001 /* CloudDownloadTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001820000000000000001 /* CloudDownloadTracker.swift */; };
 		A10001850000000000000001 /* CloudBadgeControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001840000000000000001 /* CloudBadgeControl.swift */; };
@@ -159,6 +161,7 @@
 		A10000130000000000000001 /* ExifEditEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifEditEngine.swift; sourceTree = "<group>"; };
 		A10000140000000000000001 /* ExifToolCommandBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifToolCommandBuilder.swift; sourceTree = "<group>"; };
 		A10000150000000000000001 /* ExifToolService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifToolService.swift; sourceTree = "<group>"; };
+		A19000010000000000000001 /* Signposts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signposts.swift; sourceTree = "<group>"; };
 		A10000160000000000000001 /* MetadataValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataValidator.swift; sourceTree = "<group>"; };
 		A10000180000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/BackupManagerTests.swift; sourceTree = SOURCE_ROOT; };
 		A10000190000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift; sourceTree = SOURCE_ROOT; };
@@ -179,6 +182,7 @@
 		A10001470000000000000001 /* InspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorView.swift; sourceTree = "<group>"; };
 		A100014B0000000000000001 /* PresetSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetSheets.swift; sourceTree = "<group>"; };
 		A100014D0000000000000001 /* ThumbnailService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailService.swift; sourceTree = "<group>"; };
+		A19000030000000000000001 /* Signposts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signposts.swift; sourceTree = "<group>"; };
 		A10001800000000000000001 /* CloudFileState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudFileState.swift; sourceTree = "<group>"; };
 		A10001820000000000000001 /* CloudDownloadTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudDownloadTracker.swift; sourceTree = "<group>"; };
 		A10001840000000000000001 /* CloudBadgeControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBadgeControl.swift; sourceTree = "<group>"; };
@@ -430,6 +434,7 @@
 				A10001800000000000000001 /* CloudFileState.swift */,
 				A10001820000000000000001 /* CloudDownloadTracker.swift */,
 				A10001840000000000000001 /* CloudBadgeControl.swift */,
+				A19000030000000000000001 /* Signposts.swift */,
 			);
 			path = Ledger;
 			sourceTree = "<group>";
@@ -444,6 +449,7 @@
 				A10000150000000000000001 /* ExifToolService.swift */,
 				A10000160000000000000001 /* MetadataValidator.swift */,
 				A10000B20000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift */,
+				A19000010000000000000001 /* Signposts.swift */,
 			);
 			path = ExifEditCore;
 			sourceTree = "<group>";
@@ -751,6 +757,7 @@
 				DD0001010000000000000001 /* LedgerSidebarTypes.swift in Sources */,
 				A100014C0000000000000001 /* PresetSheets.swift in Sources */,
 				A100014E0000000000000001 /* ThumbnailService.swift in Sources */,
+				A19000040000000000000001 /* Signposts.swift in Sources */,
 				A10001810000000000000001 /* CloudFileState.swift in Sources */,
 				A10001830000000000000001 /* CloudDownloadTracker.swift in Sources */,
 				A10001850000000000000001 /* CloudBadgeControl.swift in Sources */,
@@ -802,6 +809,7 @@
 				A10000220000000000000001 /* ExifToolService.swift in Sources */,
 				A10000230000000000000001 /* MetadataValidator.swift in Sources */,
 				A10000B10000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift in Sources */,
+				A19000020000000000000001 /* Signposts.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
