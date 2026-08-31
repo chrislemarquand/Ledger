@@ -120,26 +120,25 @@ enum ThumbnailService {
 
     // MARK: - Public cache API
 
-    /// Returns a cached image if one exists and is at least `minRenderedSide` points on its longest edge.
-    /// Pass `minRenderedSide: 1` to accept any cached image regardless of size.
+    /// Returns a cached image if one exists in memory and is at least `minRenderedSide` points on
+    /// its longest edge. Pass `minRenderedSide: 1` to accept any cached image regardless of size.
     ///
-    /// Falls back to a synchronous on-disk cache read on a memory-cache miss (a small local JPEG
-    /// read/decode, cheap enough to do inline on the calling thread) so cells configured
-    /// synchronously — e.g. on folder switch, before the async `request` path has a chance to
-    /// run — don't paint the generic fallback icon for a frame when a perfectly good thumbnail
-    /// is already sitting on disk from a previous visit.
+    /// Memory-only, deliberately — v1.4 Phase 1.1. This used to fall back to a synchronous on-disk
+    /// cache read (a `FileManager.fileExists`/mtime stat plus `NSImage(contentsOf:)` decode) on a
+    /// memory-cache miss, so cells configured synchronously wouldn't paint the generic fallback
+    /// icon for a frame when a thumbnail was already sitting on disk. That fallback ran inline on
+    /// every caller's thread, including genuine cell-configuration and selection hot paths
+    /// (`collectionView(_:itemForRepresentedObjectAt:)`, `didSelectItemsAt`, list row
+    /// configuration) — real disk I/O and image decode on the main thread during scrolling,
+    /// folder switching, and selection. Disk-cache reads still happen, just asynchronously, via
+    /// `request(url:requiredSide:forceRefresh:)` → `generate(fileURL:maxPixelSize:)`. The accepted
+    /// trade-off (per the plan): a cold-cache-in-memory-but-warm-on-disk thumbnail may show a
+    /// placeholder for one more render pass instead of appearing synchronously.
     static func cachedImage(for fileURL: URL, minRenderedSide: CGFloat) -> NSImage? {
-        if let image = memoryCache.object(forKey: fileURL as NSURL) {
-            guard minRenderedSide > 1 else { return image }
-            let cachedSide = max(image.size.width, image.size.height)
-            return cachedSide >= minRenderedSide * 0.9 ? image : nil
-        }
-
-        guard let disk = readDiskCache(sourceURL: fileURL, at: diskURL(for: fileURL)) else { return nil }
-        memoryCache.setObject(disk, forKey: fileURL as NSURL, cost: costBytes(for: disk))
-        guard minRenderedSide > 1 else { return disk }
-        let diskSide = max(disk.size.width, disk.size.height)
-        return diskSide >= minRenderedSide * 0.9 ? disk : nil
+        guard let image = memoryCache.object(forKey: fileURL as NSURL) else { return nil }
+        guard minRenderedSide > 1 else { return image }
+        let cachedSide = max(image.size.width, image.size.height)
+        return cachedSide >= minRenderedSide * 0.9 ? image : nil
     }
 
     static func storeCachedImage(_ image: NSImage, for fileURL: URL, renderedSide: CGFloat) {
