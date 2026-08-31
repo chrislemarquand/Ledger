@@ -102,6 +102,16 @@ Deferred: HDR-aware previews (moved to v2.0 — belongs with the in-app viewer a
   - [x] **Ambiguous-lens picker → one sheet**: `EOSLensChoiceSheetView` replaces the old loop of blocking `NSAlert`s (`ImportSession.chooseLens`, removed). One sheet lists every ambiguous frame at once (filename, focal length, frame aperture, a native grey `InspectorPopupField` dropdown per row), grouped by focal length with a live-linked "Apply to all at this focal length" checkbox per group. A frame left on "Leave Blank" now just skips that one field — the rest of the batch still stages, unlike the old alert's full-abort cancel.
   - [ ] Unknown focal length behaviour (no registered lens covers a row's focal length) — still undecided/open, smaller than the dropped policy-mode work.
 
+### EOS-1V Direct Connection
+- [x] **Direct EOS-1V connection over the ES-E1 cable** (unplanned addition, built 2026-08-29–31 — previously scoped and cancelled, see the removed Cancelled-section entries this superseded): a new sidebar device entry with Connect / Shooting Data / Date and Time tabs, backed by `eos1v-serial`'s versioned `machine` JSON subprocess interface (`EOS1VSessionController`, `EOS1VToolClient`).
+  - [x] Connect: wake/search/download flow with live status.
+  - [x] Shooting Data: flat multi-select roll table, roll detail sheet (SwiftUI `Table`, one column per frame field), local-only delete/restore (tombstone — never touches the camera or downloaded files, see `EOS1VDeletedRollsStore`).
+  - [x] Canon-format CSV export verified byte-for-byte against real Windows XP ES-E1 exports (`EOS1VRollCSVExporter`) — Tv-field escaping and recorded-items-mask column inclusion both fixed to match.
+  - [x] Date and Time tab: frozen camera-clock-vs-macOS-clock comparison snapshot (not live-ticking).
+  - Personal/Custom Functions screens were built (real controls, matching the ES-E1 Remote manual) but are hidden for now — not part of this release's scope; code and data plumbing stay intact for future reactivation.
+  - Camera clock **write** capability exists end-to-end (`eos1v-serial`'s reviewed `set-clock` operation, `EOS1VSessionController.writeClock`, `EOS1VSetClockSheetView`) but is disabled pending a real-hardware wake-failure diagnosis — see `docs/eos1v-set-clock-review-2026-08.md`.
+  - Future editable roll-metadata layer (Title/Remarks, per-field overrides, a second enriched CSV export) parked — see the v2.2+ entry and `docs/eos1v-roll-metadata-plan-2026-08.md`.
+
 ### Browse
 - [x] **iCloud Drive file-state UI**: make it obvious in list/gallery/inspector when a file is a cloud placeholder rather than downloaded locally (evicted/dataless items currently look like a thumbnail/metadata loading failure — exiftool reads time out silently and previews stall while fileproviderd materialises multi-hundred-MB scans). Detect via `URLResourceValues` (`isUbiquitousItem` / `ubiquitousItemDownloadingStatus`) and badge undownloaded items with an iCloud symbol using SharedUI's `makeGalleryOverlaySymbol` (`Gallery/GalleryOverlay.swift`), in the style of Librarian's shared-library `person.2.fill` grid badge. Consider a download affordance/progress and skipping exiftool reads until files are materialised.
 - [x] **Finder-style gallery view**: filmstrip along bottom, large preview at top — third browser mode alongside list and grid.
@@ -190,9 +200,3 @@ No new user-facing features — isolated architecture/perf work ahead of the v2.
 - [ ] Toolbar customisation.
 - [ ] Inspector clear-field control: optional trailing `x.circle.fill` action per field for staged-clear UX.
 - [ ] Large-folder performance pass (1000+ images).
-- [ ] Connect to EOS-1V and retrieve native shooting-data CSV directly.
-- [ ] Feed retrieved CSV into Ledger import pipeline for normal preview/match/apply.
-- [ ] Research-first reverse-engineering path:
-  - [ ] Prioritise macOS 9 driver analysis.
-  - [ ] Use Windows XP driver as validation/fallback.
-- [ ] Ship clean Swift behavioural reimplementation only.
