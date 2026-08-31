@@ -47,6 +47,24 @@ if [[ -z "$APP_PATH" || ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 
+# The "Bundle ExifTool" build phase only reruns when Xcode sees its declared inputs change
+# (Config/Base.xcconfig, for EXIFTOOL_REQUIRED_VERSION) — a stale incremental build from before
+# a version bump can otherwise silently ship an old exiftool with no build error. Verify the
+# actual binary in the produced archive, not just that the build succeeded.
+EXIFTOOL_BIN="$APP_PATH/Contents/Resources/exiftool/bin/exiftool"
+EXIFTOOL_REQUIRED_VERSION="$(awk -F'=' '/^EXIFTOOL_REQUIRED_VERSION[[:space:]]*=/{gsub(/[[:space:]]/, "", $2); print $2}' "$ROOT_DIR/Config/Base.xcconfig")"
+if [[ ! -x "$EXIFTOOL_BIN" ]]; then
+  echo "error: bundled exiftool not found at $EXIFTOOL_BIN" >&2
+  exit 1
+fi
+EXIFTOOL_BUNDLED_VERSION="$(PERL5LIB="$(dirname "$EXIFTOOL_BIN")/lib" "$EXIFTOOL_BIN" -ver 2>/dev/null || true)"
+if [[ "$EXIFTOOL_BUNDLED_VERSION" != "$EXIFTOOL_REQUIRED_VERSION" ]]; then
+  echo "error: archive bundles exiftool $EXIFTOOL_BUNDLED_VERSION but Config/Base.xcconfig requires $EXIFTOOL_REQUIRED_VERSION." >&2
+  echo "error: likely a stale incremental build reused an old copy. Run 'xcodebuild clean -project \"$PROJECT_PATH\" -scheme \"$SCHEME_NAME\"' (or delete this project's DerivedData) and re-run archive.sh." >&2
+  exit 1
+fi
+echo "Bundled ExifTool version verified: $EXIFTOOL_BUNDLED_VERSION" >&2
+
 # Sign all nested Mach-O binaries that xcodebuild didn't sign (bundled tools,
 # Perl XS extensions, etc.). Detect by file content, not extension, to catch
 # plain executables like osxphotos.

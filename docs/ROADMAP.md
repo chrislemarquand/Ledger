@@ -1,22 +1,26 @@
 # ROADMAP
 
-Current baseline: **v1.2.3**. Now: **v1.3**.
+Current baseline: **v1.3**. Now: **v1.4**.
 
 This file is the active forward roadmap.
 Full detail for shipped work (every pre-v1.0 backlog item, and every item in
 v1.0.1 through v1.2.3) has moved to `docs/ROADMAPOLD.MD` — also captured,
-release by release, in `CHANGELOG.md`.
+release by release, in `CHANGELOG.md`. v1.3's full item-by-item detail is still
+inline below (not yet migrated to `docs/ROADMAPOLD.MD`) — see `CHANGELOG.md` for the
+user-facing summary.
 
 ---
 
-## Shipped: v1.0.1 – v1.2.3
+## Shipped: v1.0.1 – v1.3
 
-Summary only — full item-by-item detail in `docs/ROADMAPOLD.MD` and `CHANGELOG.md`.
+Summary only — full item-by-item detail in `docs/ROADMAPOLD.MD` and `CHANGELOG.md`
+(v1.3 detail is still inline below, not yet migrated).
 
 - **v1.0.1** (Patch, 2026-03-04) — Stability + Trust: inspector map CPU fix, folder-switch render parity, locked-file preflight/reporting, misc cleanup.
 - **v1.1** (2026-03-10) — Import System Completion + Settings: unified import framework (CSV/GPX/Reference Folder/EOS-1V), reference-based metadata apply, inspector/settings groundwork, ExifTool CSV export, Photos/Lightroom Classic handoff.
 - **v1.2** — Batch Rename first release, expanded inspector metadata coverage, Finder-style breadcrumb bar, AppKit sidebar rewrite, full native QuickLook rewrite, thumbnail pipeline rewrite, Date/Time + Location adjust workflows, performance streamlining Phases 1-3.
 - **v1.2.3** (Patch) — macOS Golden Gate Readiness: macOS 27/Xcode 27 compatibility pass (geocoder migration, SharedUI concurrency fix, apply/restore capture-semantics fix).
+- **v1.3** (2026-08-31) — Import Maturity + Polish: EOS-1V lens-tag policy system (named lens profiles, ambiguous-lens picker, unknown-focal-length prompt), direct EOS-1V camera connection over the ES-E1 cable, iCloud Drive file-state UI, Finder-style Gallery view, gallery subtitle customisation, metadata copy/paste, ExifTool console, bundled ExifTool bumped to 13.55.
 
 ---
 

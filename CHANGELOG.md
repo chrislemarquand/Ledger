@@ -4,6 +4,30 @@ All notable changes to Ledger are documented here.
 
 ---
 
+## [1.3] — 2026-08-31
+
+### Added
+
+- **EOS-1V direct camera connection** over the ES-E1 cable: a new sidebar device entry with Connect, Shooting Data, and Date and Time tabs. Wake/search/download with live status, a shooting-data roll table with local delete/restore, and Canon-format CSV export verified byte-for-byte against real ES-E1 exports.
+- **Finder-style Gallery view**: a third browser mode alongside List and Icon — filmstrip along the bottom, large preview on top.
+- **iCloud Drive file-state indicators**: files that are cloud placeholders rather than downloaded locally are now clearly badged in list, gallery, and icon view, instead of looking like a broken thumbnail or metadata load failure.
+- **Gallery subtitle customisation**: pick any metadata field to show under thumbnails in icon view.
+- **Metadata copy/paste**: copy a single field or a file's whole metadata set and paste it onto other files.
+- **ExifTool console**: a live readout of every ExifTool command and its output as operations run, mirroring what running ExifTool directly in the terminal would show.
+- **Named lens profiles** for EOS-1V import: manage your own lens registry (Settings → General → Manage Lenses…) instead of a fixed built-in list.
+
+### Improved
+
+- **EOS-1V ambiguous-lens picker**: focal lengths matching more than one registered lens now surface in one sheet listing every affected frame at once, with a bulk "apply to all at this focal length" option — replacing the old alert-per-file loop.
+- **EOS-1V unknown focal length handling**: when no registered lens covers a frame's focal length at all, one aggregated alert lists every affected frame and focal length, with options to manage lenses and retry automatically, continue without lens tags, or cancel the import.
+- **No-op batch rename**: a rename pattern that wouldn't change any filenames now keeps the sheet open and explains why, instead of silently staging nothing.
+
+### Changed
+
+- Bundled ExifTool updated from 13.50 to 13.55, including the 13.53/13.54 security updates.
+
+---
+
 ## [1.2.3] — 2026-08-15
 
 ### Fixed

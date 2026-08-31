@@ -669,6 +669,7 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
+				"$(SRCROOT)/Config/Base.xcconfig",
 			);
 			name = "Bundle ExifTool";
 			outputFileListPaths = (
