@@ -216,10 +216,26 @@ final class BrowserContainerViewController: NSViewController {
     private func render() {
         updatePathBarURL()
         applyBrowserModeIfNeeded(force: false)
+        // v1.4 Phase 1.2: route the item/render update only to the active
+        // controller. All three used to be updated unconditionally on every
+        // render regardless of which one was visible — for Filmstrip this
+        // also meant its `previewHostingView.rootView` (a hosted SwiftUI
+        // root) got replaced on every render even while Gallery wasn't
+        // active, since that assignment ran before Filmstrip's own
+        // Gallery-active guard. Because `applyBrowserModeIfNeeded` above
+        // already swapped visibility for this same render pass,
+        // `model.browserViewMode` here is already current, so the
+        // newly-active controller (on a mode switch) still gets a correct,
+        // immediate update — no staleness window.
         let items = model.filteredBrowserItems
-        iconController.update(model: model, items: items)
-        listController.update(model: model, items: items)
-        filmstripController.update(model: model, items: items)
+        switch model.browserViewMode {
+        case .icon:
+            iconController.update(model: model, items: items)
+        case .list:
+            listController.update(model: model, items: items)
+        case .gallery:
+            filmstripController.update(model: model, items: items)
+        }
 
         renderPassesSinceSelection += 1
         let nextOverlayState = currentOverlayState()
