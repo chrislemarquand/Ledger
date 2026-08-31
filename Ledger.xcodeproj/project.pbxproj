@@ -105,6 +105,14 @@
 		E10001050000000000000001 /* DateTimeAdjustSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10001040000000000000001 /* DateTimeAdjustSheetView.swift */; };
 		F10000030000000000000001 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000020000000000000001 /* UpdateService.swift */; };
 		F10000050000000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = F10000040000000000000001 /* Sparkle */; };
+		E20000090000000000000001 /* Tests/LedgerTests/AppModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000020000000000000001 /* Tests/LedgerTests/AppModelTests.swift */; };
+		E200000A0000000000000001 /* Tests/LedgerTests/ImportSystemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000030000000000000001 /* Tests/LedgerTests/ImportSystemTests.swift */; };
+		E200000B0000000000000001 /* Tests/LedgerTests/ImportMatrixTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000040000000000000001 /* Tests/LedgerTests/ImportMatrixTests.swift */; };
+		E200000C0000000000000001 /* Tests/LedgerTests/EOS1VFrameDecoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000050000000000000001 /* Tests/LedgerTests/EOS1VFrameDecoderTests.swift */; };
+		E200000D0000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/session-expected.csv in Resources */ = {isa = PBXBuildFile; fileRef = E20000060000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/session-expected.csv */; };
+		E200000E0000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/ese1-roll-00-023.csv in Resources */ = {isa = PBXBuildFile; fileRef = E20000070000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/ese1-roll-00-023.csv */; };
+		E200000F0000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/session-raw.txt in Resources */ = {isa = PBXBuildFile; fileRef = E20000080000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/session-raw.txt */; };
+		E20000100000000000000001 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A100003A0000000000000001 /* XCTest.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -121,6 +129,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = A10000610000000000000001;
 			remoteInfo = ExifEditCore;
+		};
+		E20000150000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10001000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000600000000000000001;
+			remoteInfo = Ledger;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -230,6 +245,14 @@
 		E10001020000000000000001 /* AppModel+DateTimeAdjust.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+DateTimeAdjust.swift"; sourceTree = "<group>"; };
 		E10001040000000000000001 /* DateTimeAdjustSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateTimeAdjustSheetView.swift; sourceTree = "<group>"; };
 		F10000020000000000000001 /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
+		E20000010000000000000001 /* ExifEditMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ExifEditMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E20000020000000000000001 /* Tests/LedgerTests/AppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/AppModelTests.swift; sourceTree = SOURCE_ROOT; };
+		E20000030000000000000001 /* Tests/LedgerTests/ImportSystemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/ImportSystemTests.swift; sourceTree = SOURCE_ROOT; };
+		E20000040000000000000001 /* Tests/LedgerTests/ImportMatrixTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/ImportMatrixTests.swift; sourceTree = SOURCE_ROOT; };
+		E20000050000000000000001 /* Tests/LedgerTests/EOS1VFrameDecoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/EOS1VFrameDecoderTests.swift; sourceTree = SOURCE_ROOT; };
+		E20000060000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/session-expected.csv */ = {isa = PBXFileReference; lastKnownFileType = text.csv; path = Tests/LedgerTests/Fixtures/EOS1V/session-expected.csv; sourceTree = SOURCE_ROOT; };
+		E20000070000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/ese1-roll-00-023.csv */ = {isa = PBXFileReference; lastKnownFileType = text.csv; path = Tests/LedgerTests/Fixtures/EOS1V/ese1-roll-00-023.csv; sourceTree = SOURCE_ROOT; };
+		E20000080000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/session-raw.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = Tests/LedgerTests/Fixtures/EOS1V/session-raw.txt; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -259,6 +282,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E20000110000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E20000100000000000000001 /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -268,6 +299,7 @@
 				A10000010000000000000001 /* Ledger.app */,
 				A10000370000000000000001 /* libExifEditCore.a */,
 				A10000020000000000000001 /* ExifEditCoreTests.xctest */,
+				E20000010000000000000001 /* ExifEditMacTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -300,6 +332,13 @@
 				A10000180000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift */,
 				A10000190000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift */,
 				A100001A0000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift */,
+				E20000020000000000000001 /* Tests/LedgerTests/AppModelTests.swift */,
+				E20000030000000000000001 /* Tests/LedgerTests/ImportSystemTests.swift */,
+				E20000040000000000000001 /* Tests/LedgerTests/ImportMatrixTests.swift */,
+				E20000050000000000000001 /* Tests/LedgerTests/EOS1VFrameDecoderTests.swift */,
+				E20000060000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/session-expected.csv */,
+				E20000070000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/ese1-roll-00-023.csv */,
+				E20000080000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/session-raw.txt */,
 			);
 			path = Tests;
 			sourceTree = SOURCE_ROOT;
@@ -530,6 +569,24 @@
 			productReference = A10000020000000000000001 /* ExifEditCoreTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		E20000140000000000000001 /* ExifEditMacTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E20000190000000000000001 /* Build configuration list for PBXNativeTarget "ExifEditMacTests" */;
+			buildPhases = (
+				E20000130000000000000001 /* Sources */,
+				E20000110000000000000001 /* Frameworks */,
+				E20000120000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E20000160000000000000001 /* PBXTargetDependency */,
+			);
+			name = ExifEditMacTests;
+			productName = ExifEditMacTests;
+			productReference = E20000010000000000000001 /* ExifEditMacTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -547,6 +604,10 @@
 						CreatedOnToolsVersion = 16.2;
 					};
 					A10000620000000000000001 = {
+						CreatedOnToolsVersion = 16.2;
+						TestTargetID = A10000600000000000000001;
+					};
+					E20000140000000000000001 = {
 						CreatedOnToolsVersion = 16.2;
 						TestTargetID = A10000600000000000000001;
 					};
@@ -572,6 +633,7 @@
 				A10000600000000000000001 /* Ledger */,
 				A10000610000000000000001 /* ExifEditCore */,
 				A10000620000000000000001 /* ExifEditCoreTests */,
+				E20000140000000000000001 /* ExifEditMacTests */,
 			);
 		};
 /* End PBXProject section */
@@ -583,6 +645,16 @@
 			files = (
 				B100001D0000000000000001 /* Assets.xcassets in Resources */,
 				469CE1912F4B7DE400D51BC9 /* AppIcon.icon in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E20000120000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E200000D0000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/session-expected.csv in Resources */,
+				E200000E0000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/ese1-roll-00-023.csv in Resources */,
+				E200000F0000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/session-raw.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -742,6 +814,17 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E20000130000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E20000090000000000000001 /* Tests/LedgerTests/AppModelTests.swift in Sources */,
+				E200000A0000000000000001 /* Tests/LedgerTests/ImportSystemTests.swift in Sources */,
+				E200000B0000000000000001 /* Tests/LedgerTests/ImportMatrixTests.swift in Sources */,
+				E200000C0000000000000001 /* Tests/LedgerTests/EOS1VFrameDecoderTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -754,6 +837,11 @@
 			isa = PBXTargetDependency;
 			target = A10000610000000000000001 /* ExifEditCore */;
 			targetProxy = A10000930000000000000001 /* PBXContainerItemProxy */;
+		};
+		E20000160000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10000600000000000000001 /* Ledger */;
+			targetProxy = E20000150000000000000001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -861,6 +949,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
+				PRODUCT_MODULE_NAME = ExifEditMac;
 				PRODUCT_NAME = "$(APP_DISPLAY_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
@@ -884,6 +973,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
+				PRODUCT_MODULE_NAME = ExifEditMac;
 				PRODUCT_NAME = "$(APP_DISPLAY_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
@@ -944,6 +1034,36 @@
 			};
 			name = Release;
 		};
+		E20000170000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = A10000050000000000000001 /* Config/Debug.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).ExifEditMacTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/$(APP_DISPLAY_NAME).app/Contents/MacOS/$(APP_DISPLAY_NAME)";
+			};
+			name = Debug;
+		};
+		E20000180000000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = A10000060000000000000001 /* Config/Release.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).ExifEditMacTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/$(APP_DISPLAY_NAME).app/Contents/MacOS/$(APP_DISPLAY_NAME)";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -979,6 +1099,15 @@
 			buildConfigurations = (
 				A10001200000000000000001 /* Debug */,
 				A10001210000000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E20000190000000000000001 /* Build configuration list for PBXNativeTarget "ExifEditMacTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E20000170000000000000001 /* Debug */,
+				E20000180000000000000001 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

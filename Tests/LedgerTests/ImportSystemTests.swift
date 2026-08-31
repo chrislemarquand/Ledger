@@ -1981,6 +1981,291 @@ final class ImportSystemTests: XCTestCase {
         XCTAssertNil(lens)
     }
 
+    func testImportSessionEOSUnknownFocalLengthAggregatesFramesAtSameLength() async throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let mappingCSV = temp.appendingPathComponent("lensfocalength.csv")
+        try """
+        Focal length (mm),Lens 1,Lens 2,Lens 3
+        24,EF16-35mm f2.8L II USM,,
+        """.write(to: mappingCSV, atomically: true, encoding: .utf8)
+
+        let model = makeModel()
+        let fileA = URL(fileURLWithPath: "/tmp/\(UUID().uuidString)-a.jpg")
+        let fileB = URL(fileURLWithPath: "/tmp/\(UUID().uuidString)-b.jpg")
+        model.browserItems = [
+            AppModel.BrowserItem(url: fileA, name: fileA.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+            AppModel.BrowserItem(url: fileB, name: fileB.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+        ]
+        model.metadataByFile = [
+            fileA: FileMetadataSnapshot(fileURL: fileA, fields: []),
+            fileB: FileMetadataSnapshot(fileURL: fileB, fields: []),
+        ]
+
+        var options = ImportRunOptions.defaults(for: .eos1v)
+        options.scope = .folder
+        // 100mm has no registered lens at all — distinct from the ambiguous-lens case
+        // (multiple candidates), this is zero candidates.
+        let rowA = ImportRow(sourceLine: 2, sourceIdentifier: "001.jpg", targetSelector: .rowNumber(1), fields: [.init(tagID: "exif-focal", value: "100 mm")])
+        let rowB = ImportRow(sourceLine: 3, sourceIdentifier: "002.jpg", targetSelector: .rowNumber(2), fields: [.init(tagID: "exif-focal", value: "100 mm")])
+        let preparedRun = ImportPreparedRun(
+            options: options,
+            parsedAsSourceKind: .eos1v,
+            parseResult: ImportParseResult(rows: [rowA, rowB], warnings: []),
+            matchResult: ImportMatchResult(
+                matched: [
+                    ImportRowMatch(row: rowA, targetURL: fileA),
+                    ImportRowMatch(row: rowB, targetURL: fileB),
+                ],
+                conflicts: [],
+                warnings: []
+            ),
+            previewSummary: ImportPreviewSummary(sourceKind: .eos1v, parsedRows: 2, matchedRows: 2, conflictedRows: 0, warnings: 0, fieldWrites: 2)
+        )
+
+        let session = ImportSession(model: model, sourceKind: .eos1v, eosLensMappingURL: mappingCSV)
+        session.preparedRun = preparedRun
+        let success = await session.performImport(model: model)
+        XCTAssertFalse(success)
+        XCTAssertNil(session.pendingLensChoices, "A zero-candidate focal length is not the ambiguous-lens case.")
+        let pending = try XCTUnwrap(session.pendingUnknownFocalLengths)
+        XCTAssertEqual(pending.count, 1)
+        XCTAssertEqual(pending.first?.focalMillimeters, 100)
+        XCTAssertEqual(pending.first?.frameCount, 2)
+    }
+
+    func testImportSessionEOSUnknownFocalLengthReportsEachDistinctFocalLengthSeparately() async throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let mappingCSV = temp.appendingPathComponent("lensfocalength.csv")
+        try """
+        Focal length (mm),Lens 1,Lens 2,Lens 3
+        24,EF16-35mm f2.8L II USM,,
+        """.write(to: mappingCSV, atomically: true, encoding: .utf8)
+
+        let model = makeModel()
+        let fileA = URL(fileURLWithPath: "/tmp/\(UUID().uuidString)-a.jpg")
+        let fileB = URL(fileURLWithPath: "/tmp/\(UUID().uuidString)-b.jpg")
+        model.browserItems = [
+            AppModel.BrowserItem(url: fileA, name: fileA.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+            AppModel.BrowserItem(url: fileB, name: fileB.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+        ]
+        model.metadataByFile = [
+            fileA: FileMetadataSnapshot(fileURL: fileA, fields: []),
+            fileB: FileMetadataSnapshot(fileURL: fileB, fields: []),
+        ]
+
+        var options = ImportRunOptions.defaults(for: .eos1v)
+        options.scope = .folder
+        let rowA = ImportRow(sourceLine: 2, sourceIdentifier: "001.jpg", targetSelector: .rowNumber(1), fields: [.init(tagID: "exif-focal", value: "100 mm")])
+        let rowB = ImportRow(sourceLine: 3, sourceIdentifier: "002.jpg", targetSelector: .rowNumber(2), fields: [.init(tagID: "exif-focal", value: "200 mm")])
+        let preparedRun = ImportPreparedRun(
+            options: options,
+            parsedAsSourceKind: .eos1v,
+            parseResult: ImportParseResult(rows: [rowA, rowB], warnings: []),
+            matchResult: ImportMatchResult(
+                matched: [
+                    ImportRowMatch(row: rowA, targetURL: fileA),
+                    ImportRowMatch(row: rowB, targetURL: fileB),
+                ],
+                conflicts: [],
+                warnings: []
+            ),
+            previewSummary: ImportPreviewSummary(sourceKind: .eos1v, parsedRows: 2, matchedRows: 2, conflictedRows: 0, warnings: 0, fieldWrites: 2)
+        )
+
+        let session = ImportSession(model: model, sourceKind: .eos1v, eosLensMappingURL: mappingCSV)
+        session.preparedRun = preparedRun
+        let success = await session.performImport(model: model)
+        XCTAssertFalse(success)
+        let pending = try XCTUnwrap(session.pendingUnknownFocalLengths)
+        XCTAssertEqual(pending.map(\.focalMillimeters).sorted(), [100, 200])
+        XCTAssertTrue(pending.allSatisfy { $0.frameCount == 1 })
+    }
+
+    func testImportSessionEOSContinueWithoutLensTagsSkipsAcknowledgedFocalLengthOnRetry() async throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let mappingCSV = temp.appendingPathComponent("lensfocalength.csv")
+        try """
+        Focal length (mm),Lens 1,Lens 2,Lens 3
+        24,EF16-35mm f2.8L II USM,,
+        """.write(to: mappingCSV, atomically: true, encoding: .utf8)
+
+        let model = makeModel()
+        let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.browserItems = [
+            AppModel.BrowserItem(url: file, name: file.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+        ]
+        model.metadataByFile = [file: FileMetadataSnapshot(fileURL: file, fields: [])]
+
+        var options = ImportRunOptions.defaults(for: .eos1v)
+        options.scope = .folder
+        let row = ImportRow(
+            sourceLine: 2,
+            sourceIdentifier: "001.jpg",
+            targetSelector: .rowNumber(1),
+            fields: [
+                .init(tagID: "exif-focal", value: "100 mm"),
+                .init(tagID: "xmp-title", value: "Shot 1"),
+            ]
+        )
+        let preparedRun = ImportPreparedRun(
+            options: options,
+            parsedAsSourceKind: .eos1v,
+            parseResult: ImportParseResult(rows: [row], warnings: []),
+            matchResult: ImportMatchResult(matched: [ImportRowMatch(row: row, targetURL: file)], conflicts: [], warnings: []),
+            previewSummary: ImportPreviewSummary(sourceKind: .eos1v, parsedRows: 1, matchedRows: 1, conflictedRows: 0, warnings: 0, fieldWrites: 2)
+        )
+
+        let session = ImportSession(model: model, sourceKind: .eos1v, eosLensMappingURL: mappingCSV)
+        session.preparedRun = preparedRun
+        let firstAttempt = await session.performImport(model: model)
+        XCTAssertFalse(firstAttempt)
+        let pending = try XCTUnwrap(session.pendingUnknownFocalLengths)
+        XCTAssertEqual(pending.first?.focalMillimeters, 100)
+
+        // "Continue Without Lens Tags" — in-memory only, this import's scope, never persisted.
+        session.unknownFocalLengthsAcknowledged.insert(100)
+        let secondAttempt = await session.performImport(model: model)
+        XCTAssertTrue(secondAttempt)
+        XCTAssertNil(session.pendingUnknownFocalLengths)
+
+        let snapshots = await model.importMetadataSnapshots(for: [file])
+        let focal = snapshots[file]?.fields.first(where: { $0.namespace == .exif && $0.key == "FocalLength" })?.value
+        let lens = snapshots[file]?.fields.first(where: { $0.namespace == .exif && $0.key == "LensModel" })?.value
+        XCTAssertEqual(focal, "100")
+        XCTAssertNil(lens, "exif-lens is simply omitted, not written empty.")
+    }
+
+    func testImportSessionEOSInvalidateLensMappingCachePicksUpNewlyRegisteredLens() async throws {
+        let lensProfileStore = InMemoryLensProfileStore(profiles: [
+            LensProfile(
+                id: UUID(),
+                name: "EF16-35mm f2.8L II USM",
+                kind: .zoom,
+                minFocalLengthMM: 16,
+                maxFocalLengthMM: 35,
+                widestApertureAtMinFocal: 2.8,
+                widestApertureAtMaxFocal: nil,
+                notes: nil,
+                createdAt: Date(),
+                updatedAt: Date()
+            ),
+        ])
+        let model = makeModel(lensProfileStore: lensProfileStore)
+        let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.browserItems = [
+            AppModel.BrowserItem(url: file, name: file.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+        ]
+        model.metadataByFile = [file: FileMetadataSnapshot(fileURL: file, fields: [])]
+
+        var options = ImportRunOptions.defaults(for: .eos1v)
+        options.scope = .folder
+        let row = ImportRow(sourceLine: 2, sourceIdentifier: "001.jpg", targetSelector: .rowNumber(1), fields: [.init(tagID: "exif-focal", value: "100 mm")])
+        let preparedRun = ImportPreparedRun(
+            options: options,
+            parsedAsSourceKind: .eos1v,
+            parseResult: ImportParseResult(rows: [row], warnings: []),
+            matchResult: ImportMatchResult(matched: [ImportRowMatch(row: row, targetURL: file)], conflicts: [], warnings: []),
+            previewSummary: ImportPreviewSummary(sourceKind: .eos1v, parsedRows: 1, matchedRows: 1, conflictedRows: 0, warnings: 0, fieldWrites: 1)
+        )
+
+        // No eosLensMappingURL override — sources from AppModel.lensProfiles, same as production.
+        let session = ImportSession(model: model, sourceKind: .eos1v)
+        session.preparedRun = preparedRun
+        let firstAttempt = await session.performImport(model: model)
+        XCTAssertFalse(firstAttempt)
+        XCTAssertEqual(session.pendingUnknownFocalLengths?.first?.focalMillimeters, 100)
+
+        // "Manage Lenses…" registers a lens covering the row's focal length, then the UI
+        // invalidates the cache and retries automatically.
+        _ = model.createLensProfile(
+            LensProfile(
+                id: UUID(),
+                name: "EF75-300mm f4-5.6",
+                kind: .zoom,
+                minFocalLengthMM: 75,
+                maxFocalLengthMM: 300,
+                widestApertureAtMinFocal: 4,
+                widestApertureAtMaxFocal: 5.6,
+                notes: nil,
+                createdAt: Date(),
+                updatedAt: Date()
+            )
+        )
+        session.invalidateLensMappingCache()
+        let secondAttempt = await session.performImport(model: model)
+        XCTAssertTrue(secondAttempt)
+        XCTAssertNil(session.pendingUnknownFocalLengths)
+
+        let snapshots = await model.importMetadataSnapshots(for: [file])
+        let lens = snapshots[file]?.fields.first(where: { $0.namespace == .exif && $0.key == "LensModel" })?.value
+        XCTAssertEqual(lens, "EF75-300mm f4-5.6")
+    }
+
+    func testImportSessionEOSUnknownFocalLengthTakesPriorityOverAmbiguousLensInSameBatch() async throws {
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let mappingCSV = temp.appendingPathComponent("lensfocalength.csv")
+        try """
+        Focal length (mm),Lens 1,Lens 2,Lens 3
+        40,EF24-105mm f4L IS USM,EF40mm f2.8 STM,
+        """.write(to: mappingCSV, atomically: true, encoding: .utf8)
+
+        let model = makeModel()
+        let fileAmbiguous = URL(fileURLWithPath: "/tmp/\(UUID().uuidString)-ambiguous.jpg")
+        let fileUnknown = URL(fileURLWithPath: "/tmp/\(UUID().uuidString)-unknown.jpg")
+        model.browserItems = [
+            AppModel.BrowserItem(url: fileAmbiguous, name: fileAmbiguous.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+            AppModel.BrowserItem(url: fileUnknown, name: fileUnknown.lastPathComponent, modifiedAt: nil, createdAt: nil, sizeBytes: nil, kind: "jpg"),
+        ]
+        model.metadataByFile = [
+            fileAmbiguous: FileMetadataSnapshot(fileURL: fileAmbiguous, fields: []),
+            fileUnknown: FileMetadataSnapshot(fileURL: fileUnknown, fields: []),
+        ]
+
+        var options = ImportRunOptions.defaults(for: .eos1v)
+        options.scope = .folder
+        let rowAmbiguous = ImportRow(sourceLine: 2, sourceIdentifier: "001.jpg", targetSelector: .rowNumber(1), fields: [.init(tagID: "exif-focal", value: "40 mm")])
+        let rowUnknown = ImportRow(sourceLine: 3, sourceIdentifier: "002.jpg", targetSelector: .rowNumber(2), fields: [.init(tagID: "exif-focal", value: "100 mm")])
+        let preparedRun = ImportPreparedRun(
+            options: options,
+            parsedAsSourceKind: .eos1v,
+            parseResult: ImportParseResult(rows: [rowAmbiguous, rowUnknown], warnings: []),
+            matchResult: ImportMatchResult(
+                matched: [
+                    ImportRowMatch(row: rowAmbiguous, targetURL: fileAmbiguous),
+                    ImportRowMatch(row: rowUnknown, targetURL: fileUnknown),
+                ],
+                conflicts: [],
+                warnings: []
+            ),
+            previewSummary: ImportPreviewSummary(sourceKind: .eos1v, parsedRows: 2, matchedRows: 2, conflictedRows: 0, warnings: 0, fieldWrites: 2)
+        )
+
+        let session = ImportSession(model: model, sourceKind: .eos1v, eosLensMappingURL: mappingCSV)
+        session.preparedRun = preparedRun
+        let firstAttempt = await session.performImport(model: model)
+        XCTAssertFalse(firstAttempt)
+        // The unknown-focal-length prompt surfaces first — the ambiguous 40mm row isn't
+        // reported yet, even though it was found in the same pass.
+        XCTAssertEqual(session.pendingUnknownFocalLengths?.first?.focalMillimeters, 100)
+        XCTAssertNil(session.pendingLensChoices)
+
+        session.unknownFocalLengthsAcknowledged.insert(100)
+        let secondAttempt = await session.performImport(model: model)
+        XCTAssertFalse(secondAttempt)
+        XCTAssertNil(session.pendingUnknownFocalLengths)
+        let pending = try XCTUnwrap(session.pendingLensChoices)
+        XCTAssertEqual(pending.count, 1)
+        XCTAssertEqual(pending.first?.focalMillimeters, 40)
+    }
+
     func testImportSessionGeneratesStructuredReportOnSuccessfulImport() async throws {
         let model = makeModel()
         let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
@@ -2344,10 +2629,11 @@ final class ImportSystemTests: XCTestCase {
         XCTAssertEqual(Array(arguments.dropFirst(4)), files.map(\.path))
     }
 
-    private func makeModel() -> AppModel {
+    private func makeModel(lensProfileStore: LensProfileStoreProtocol = InMemoryLensProfileStore()) -> AppModel {
         AppModel(
             exifToolService: StubExifToolService(),
             presetStore: InMemoryPresetStore(),
+            lensProfileStore: lensProfileStore,
             favoritesStore: InMemoryFavoritesStore(),
             recentLocationsStore: InMemoryRecentLocationsStore()
         )
@@ -2380,4 +2666,18 @@ private final class InMemoryFavoritesStore: SidebarFavoritesStoreProtocol {
 private final class InMemoryRecentLocationsStore: RecentLocationsStoreProtocol {
     func loadRecentLocations() throws -> [RecentLocation] { [] }
     func saveRecentLocations(_: [RecentLocation]) throws {}
+}
+
+/// Avoids `FileLensProfileStore`'s real on-disk default, which would otherwise make every
+/// test that constructs an `AppModel` read (and, for lens-mutation tests, overwrite) the
+/// developer's actual `~/Library/Application Support/Ledger/lens-profiles.json`.
+private final class InMemoryLensProfileStore: LensProfileStoreProtocol {
+    var profiles: [LensProfile]
+
+    init(profiles: [LensProfile] = []) {
+        self.profiles = profiles
+    }
+
+    func loadLensProfiles() throws -> [LensProfile] { profiles }
+    func saveLensProfiles(_ profiles: [LensProfile]) throws { self.profiles = profiles }
 }

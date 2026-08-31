@@ -1,4 +1,4 @@
-import ExifEditCore
+@testable import ExifEditCore
 @testable import ExifEditMac
 import AppKit
 import Foundation
@@ -6,11 +6,14 @@ import XCTest
 
 @MainActor
 final class AppModelTests: XCTestCase {
-    func testImportTagCatalogMirrorsGroupedEditableTags() {
+    func testImportTagCatalogMirrorsGroupedEditableTagsPlusOffsetSystemTags() {
         let model = makeModel()
         let groupedIDs = model.orderedEditableTagSections.flatMap(\.tags).map(\.id)
         let catalogIDs = model.importTagCatalog.map(\.id)
-        XCTAssertEqual(groupedIDs, catalogIDs)
+        // Offset tags are stageable/CSV-passthrough-only (AppModel+FieldCatalog.swift) — always
+        // appended to the import catalog but deliberately excluded from the inspector-settings
+        // grouped list, so the two aren't a strict mirror.
+        XCTAssertEqual(groupedIDs + AppModel.offsetSystemTags.map(\.id), catalogIDs)
     }
 
     func testDefaultFieldCatalogStartsWithRatingPickAndLabel() {
@@ -113,7 +116,8 @@ final class AppModelTests: XCTestCase {
 
     func testSidebarSectionOrderMatchesV1Sidebar() {
         let model = makeModel()
-        XCTAssertEqual(model.sidebarSectionOrder, ["Sources", "Pinned", "Recents"])
+        // "Devices" was added alongside the EOS-1V Direct Connection sidebar entry (v1.3).
+        XCTAssertEqual(model.sidebarSectionOrder, ["Sources", "Devices", "Pinned", "Recents"])
     }
 
     func testSidebarStartsWithNoSelection() {
@@ -751,11 +755,13 @@ final class AppModelTests: XCTestCase {
     private func makeModel(
         exifToolService: ExifToolServiceProtocol = StubExifToolService(),
         favoritesStore: InMemoryFavoritesStore = InMemoryFavoritesStore(),
-        recentLocationsStore: InMemoryRecentLocationsStore = InMemoryRecentLocationsStore()
+        recentLocationsStore: InMemoryRecentLocationsStore = InMemoryRecentLocationsStore(),
+        lensProfileStore: LensProfileStoreProtocol = InMemoryLensProfileStore()
     ) -> AppModel {
         let model = AppModel(
             exifToolService: exifToolService,
             presetStore: InMemoryPresetStore(),
+            lensProfileStore: lensProfileStore,
             favoritesStore: favoritesStore,
             recentLocationsStore: recentLocationsStore
         )
@@ -768,6 +774,21 @@ final class AppModelTests: XCTestCase {
         let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString, isDirectory: true)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url.standardizedFileURL.resolvingSymlinksInPath()
+    }
+
+    private func makeExifToolInvocationTrace() -> ExifToolInvocationTrace {
+        ExifToolInvocationTrace(
+            id: UUID(),
+            timestamp: Date(),
+            kind: .read,
+            executablePath: "/opt/exiftool",
+            arguments: ["-j", "-G"],
+            filePath: "/tmp/test.jpg",
+            terminationStatus: 0,
+            duration: 0.01,
+            stdout: "[]",
+            stderr: ""
+        )
     }
 
     private func waitUntil(
@@ -1728,6 +1749,165 @@ final class AppModelTests: XCTestCase {
 
         XCTAssertEqual(String(decoding: try Data(contentsOf: original), as: UTF8.self), "original")
     }
+
+    // MARK: - Metadata Clipboard (copy/paste)
+
+    func testCopyFieldToPasteboardRoundTripsThroughPreview() throws {
+        let model = makeModel()
+        let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.selectedFileURLs = [file]
+        model.metadataByFile = [file: FileMetadataSnapshot(fileURL: file, fields: [.init(key: "Title", namespace: .xmp, value: "Copied Title")])]
+        model.recalculateInspectorState(forceNotify: true)
+
+        let tag = try XCTUnwrap(model.editableTag(forID: "xmp-title"))
+        model.copyFieldToPasteboard(tag)
+
+        let preview = try XCTUnwrap(model.pasteboardSingleFieldPreview())
+        XCTAssertEqual(preview.tag.id, tag.id)
+        XCTAssertEqual(preview.value, "Copied Title")
+        XCTAssertNil(model.pasteboardAllMetadataPreview(), "A field-level copy shouldn't also read back as a whole-record copy.")
+    }
+
+    func testCopyAllMetadataToPasteboardRoundTripsThroughPreview() throws {
+        let model = makeModel()
+        let file = URL(fileURLWithPath: "/tmp/\(UUID().uuidString).jpg")
+        model.selectedFileURLs = [file]
+        model.metadataByFile = [file: FileMetadataSnapshot(fileURL: file, fields: [.init(key: "Title", namespace: .xmp, value: "Whole Record")])]
+        model.recalculateInspectorState(forceNotify: true)
+
+        model.copyAllMetadataToPasteboard()
+
+        let preview = try XCTUnwrap(model.pasteboardAllMetadataPreview())
+        XCTAssertTrue(preview.contains { $0.tagID == "xmp-title" && $0.value == "Whole Record" })
+        XCTAssertNil(model.pasteboardSingleFieldPreview(), "A whole-record copy shouldn't also read back as a single-field copy.")
+    }
+
+    func testPasteboardPreviewsAreNilBeforeAnyCopy() {
+        NSPasteboard.general.clearContents()
+        let model = makeModel()
+        XCTAssertNil(model.pasteboardSingleFieldPreview())
+        XCTAssertNil(model.pasteboardAllMetadataPreview())
+    }
+
+    func testPasteFieldStagesCopiedValueOntoTargetFiles() throws {
+        let source = URL(fileURLWithPath: "/tmp/\(UUID().uuidString)-source.jpg")
+        let target = URL(fileURLWithPath: "/tmp/\(UUID().uuidString)-target.jpg")
+        let model = makeModel()
+        model.selectedFileURLs = [source]
+        model.metadataByFile = [
+            source: FileMetadataSnapshot(fileURL: source, fields: [.init(key: "Title", namespace: .xmp, value: "Source Title")]),
+            target: FileMetadataSnapshot(fileURL: target, fields: []),
+        ]
+        model.recalculateInspectorState(forceNotify: true)
+
+        let tag = try XCTUnwrap(model.editableTag(forID: "xmp-title"))
+        model.copyFieldToPasteboard(tag)
+        model.pasteField(tag, fileURLs: [target])
+
+        XCTAssertEqual(model.pendingEditsByFile[target]?[tag]?.value, "Source Title")
+        XCTAssertNil(model.pendingEditsByFile[source]?[tag], "Pasting onto target shouldn't stage an edit on the copy source.")
+    }
+
+    func testPasteAllMetadataStagesEveryCopiedFieldOntoTargetFiles() throws {
+        let source = URL(fileURLWithPath: "/tmp/\(UUID().uuidString)-source.jpg")
+        let target = URL(fileURLWithPath: "/tmp/\(UUID().uuidString)-target.jpg")
+        let model = makeModel()
+        model.selectedFileURLs = [source]
+        model.metadataByFile = [
+            source: FileMetadataSnapshot(fileURL: source, fields: [.init(key: "Title", namespace: .xmp, value: "Whole Record Title")]),
+            target: FileMetadataSnapshot(fileURL: target, fields: []),
+        ]
+        model.recalculateInspectorState(forceNotify: true)
+
+        model.copyAllMetadataToPasteboard()
+        model.pasteAllMetadata(fileURLs: [target])
+
+        let tag = try XCTUnwrap(model.editableTag(forID: "xmp-title"))
+        XCTAssertEqual(model.pendingEditsByFile[target]?[tag]?.value, "Whole Record Title")
+    }
+
+    // MARK: - ExifTool Console
+
+    func testExifToolConsoleAppendsEntryOnInvocationNotification() async throws {
+        let model = makeModel()
+        XCTAssertTrue(model.exifToolConsoleEntries.isEmpty)
+
+        let trace = makeExifToolInvocationTrace()
+        NotificationCenter.default.post(name: .exifToolInvocationDidFinish, object: nil, userInfo: ["trace": trace])
+
+        // installExifToolConsoleObserver's handler appends inside `Task { @MainActor in ... }`,
+        // so it runs asynchronously relative to the synchronous NotificationCenter post.
+        try await waitUntil("console entry appended") { model.exifToolConsoleEntries.map(\.id) == [trace.id] }
+    }
+
+    func testExifToolConsoleTrimsOldestEntriesBeyondLimit() async throws {
+        let model = makeModel()
+        // Matches AppModel's private `exifToolConsoleEntryLimit` (500).
+        let limit = 500
+        for _ in 0..<(limit + 5) {
+            NotificationCenter.default.post(name: .exifToolInvocationDidFinish, object: nil, userInfo: ["trace": makeExifToolInvocationTrace()])
+        }
+        let oneMore = makeExifToolInvocationTrace()
+        NotificationCenter.default.post(name: .exifToolInvocationDidFinish, object: nil, userInfo: ["trace": oneMore])
+
+        try await waitUntil("console entries trimmed to limit", timeoutNanoseconds: 5_000_000_000) {
+            model.exifToolConsoleEntries.count == limit
+        }
+        XCTAssertEqual(model.exifToolConsoleEntries.last?.id, oneMore.id, "Newest entry should survive trimming.")
+    }
+
+    func testClearExifToolConsoleEmptiesEntries() async throws {
+        let model = makeModel()
+        NotificationCenter.default.post(name: .exifToolInvocationDidFinish, object: nil, userInfo: ["trace": makeExifToolInvocationTrace()])
+        try await waitUntil("console entry appended") { !model.exifToolConsoleEntries.isEmpty }
+
+        model.clearExifToolConsole()
+        XCTAssertTrue(model.exifToolConsoleEntries.isEmpty)
+    }
+
+    // MARK: - Browse persistence (view mode, gallery subtitle)
+
+    // AppModel persists these two directly via UserDefaults.standard (no injectable store,
+    // unlike presets/favorites/lens profiles above) — these keys must stay in sync with the
+    // private ones in AppModel.swift. Save/restore the real value around the test so a run
+    // doesn't leave the developer's actual UI preference altered.
+    func testBrowserViewModePersistsAcrossModelInstancesForEveryCase() {
+        let key = "ui.browser.view.mode"
+        let original = UserDefaults.standard.string(forKey: key)
+        defer {
+            if let original { UserDefaults.standard.set(original, forKey: key) } else { UserDefaults.standard.removeObject(forKey: key) }
+        }
+
+        for mode in AppModel.BrowserViewMode.allCases {
+            let writer = makeModel()
+            writer.browserViewMode = mode
+            let reader = makeModel()
+            XCTAssertEqual(reader.browserViewMode, mode)
+        }
+    }
+
+    func testFinderStyleGalleryIsAValidBrowserViewModeCase() {
+        // The Finder-style gallery view (filmstrip + large preview) added this branch.
+        XCTAssertTrue(AppModel.BrowserViewMode.allCases.contains(.gallery))
+        XCTAssertEqual(AppModel.BrowserViewMode.gallery.rawValue, "filmstripGallery")
+    }
+
+    func testIconSubtitleColumnIDPersistsAcrossModelInstancesAndClearsToNil() {
+        let key = "ui.icon.subtitle.column"
+        let original = UserDefaults.standard.string(forKey: key)
+        defer {
+            if let original { UserDefaults.standard.set(original, forKey: key) } else { UserDefaults.standard.removeObject(forKey: key) }
+        }
+
+        let writer = makeModel()
+        writer.iconSubtitleColumnID = "xmp-rating"
+        let reader = makeModel()
+        XCTAssertEqual(reader.iconSubtitleColumnID, "xmp-rating")
+
+        writer.iconSubtitleColumnID = nil
+        let readerAfterClear = makeModel()
+        XCTAssertNil(readerAfterClear.iconSubtitleColumnID)
+    }
 }
 
 private func make1x1PNG() throws -> Data {
@@ -1783,6 +1963,20 @@ private actor RecordingExifToolService: ExifToolServiceProtocol {
 private struct InMemoryPresetStore: PresetStoreProtocol {
     func loadPresets() throws -> [MetadataPreset] { [] }
     func savePresets(_: [MetadataPreset]) throws {}
+}
+
+/// Avoids `FileLensProfileStore`'s real on-disk default, which would otherwise make every
+/// test that constructs an `AppModel` read (and, for lens-mutation tests, overwrite) the
+/// developer's actual `~/Library/Application Support/Ledger/lens-profiles.json`.
+private final class InMemoryLensProfileStore: LensProfileStoreProtocol {
+    var profiles: [LensProfile]
+
+    init(profiles: [LensProfile] = []) {
+        self.profiles = profiles
+    }
+
+    func loadLensProfiles() throws -> [LensProfile] { profiles }
+    func saveLensProfiles(_ profiles: [LensProfile]) throws { self.profiles = profiles }
 }
 
 private final class InMemoryFavoritesStore: SidebarFavoritesStoreProtocol {

@@ -694,6 +694,7 @@ final class ImportMatrixTests: XCTestCase {
         AppModel(
             exifToolService: StubExifToolService(),
             presetStore: InMemoryPresetStore(),
+            lensProfileStore: InMemoryLensProfileStore(),
             favoritesStore: InMemoryFavoritesStore(),
             recentLocationsStore: InMemoryRecentLocationsStore()
         )
@@ -778,4 +779,18 @@ private final class InMemoryFavoritesStore: SidebarFavoritesStoreProtocol {
 private final class InMemoryRecentLocationsStore: RecentLocationsStoreProtocol {
     func loadRecentLocations() throws -> [RecentLocation] { [] }
     func saveRecentLocations(_: [RecentLocation]) throws {}
+}
+
+/// Avoids `FileLensProfileStore`'s real on-disk default, which would otherwise make every
+/// test that constructs an `AppModel` read the developer's actual
+/// `~/Library/Application Support/Ledger/lens-profiles.json`.
+private final class InMemoryLensProfileStore: LensProfileStoreProtocol {
+    var profiles: [LensProfile]
+
+    init(profiles: [LensProfile] = []) {
+        self.profiles = profiles
+    }
+
+    func loadLensProfiles() throws -> [LensProfile] { profiles }
+    func saveLensProfiles(_ profiles: [LensProfile]) throws { self.profiles = profiles }
 }
