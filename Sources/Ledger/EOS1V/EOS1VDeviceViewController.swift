@@ -82,6 +82,16 @@ final class EOS1VDeviceViewController: NSViewController {
         refresh()
     }
 
+    // v1.4 Phase 1.4: every other AppKit controller in this codebase pairs a
+    // viewDidLoad subscription install with a viewWillDisappear teardown
+    // (BrowserIconViewController, BrowserListViewController,
+    // BrowserFilmstripViewController, NativeThreePaneSplitViewController) —
+    // this one didn't, breaking that convention.
+    override func viewWillDisappear() {
+        super.viewWillDisappear()
+        observations.removeAll()
+    }
+
     private func refresh() {
         personalController.refresh()
         customController.refresh()
@@ -258,6 +268,13 @@ private final class EOS1VConnectViewController: NSViewController {
             .sink { [weak self] _ in DispatchQueue.main.async { self?.refresh() } }
             .store(in: &observations)
         refresh()
+    }
+
+    // v1.4 Phase 1.4: see EOS1VDeviceViewController.viewWillDisappear — same
+    // missing-teardown gap, same fix, matching the convention used elsewhere.
+    override func viewWillDisappear() {
+        super.viewWillDisappear()
+        observations.removeAll()
     }
 
     private func refresh() {
