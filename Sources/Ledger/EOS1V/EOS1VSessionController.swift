@@ -238,15 +238,36 @@ final class EOS1VToolClient {
     private func resolvedConfiguration() -> (python: URL, script: URL) {
         let defaults = UserDefaults.standard
         let prefix = AppBrand.identifierPrefix
+        let fm = FileManager.default
         // eos1v-serial lives as a git submodule inside Ledger's own project
         // folder (External/eos1v-serial) rather than as a sibling directory.
-        let projectRoot = FileManager.default.homeDirectoryForCurrentUser
+        let projectRoot = fm.homeDirectoryForCurrentUser
             .appendingPathComponent("Xcode Projects/Ledger/External/eos1v-serial", isDirectory: true)
-        let toolDirectory = defaults.string(forKey: "\(prefix).eos1v.toolDirectory")
-            .map { URL(fileURLWithPath: $0, isDirectory: true) } ?? projectRoot
-        let python = defaults.string(forKey: "\(prefix).eos1v.pythonPath")
-            .map { URL(fileURLWithPath: $0) }
-            ?? toolDirectory.appendingPathComponent(".venv/bin/python")
+
+        // A persisted directory can outlive the location it was set for — e.g. this key
+        // predates eos1v-serial's move into External/, so on-disk installs still carry the
+        // old path. Trusting it blindly makes every EOS-1V operation fail preflight (wrong
+        // path, script "not found") before ever touching the camera, which looks identical
+        // to a real connection failure. Validate it still holds the script before trusting
+        // it; otherwise fall back to the current guessed location instead of staying stuck.
+        let persistedToolDirectory = defaults.string(forKey: "\(prefix).eos1v.toolDirectory")
+            .map { URL(fileURLWithPath: $0, isDirectory: true) }
+        let toolDirectory: URL
+        if let persistedToolDirectory,
+           fm.fileExists(atPath: persistedToolDirectory.appendingPathComponent("eos1v_tool.py").path) {
+            toolDirectory = persistedToolDirectory
+        } else {
+            toolDirectory = projectRoot
+        }
+
+        let persistedPython = defaults.string(forKey: "\(prefix).eos1v.pythonPath").map { URL(fileURLWithPath: $0) }
+        let python: URL
+        if let persistedPython, fm.isExecutableFile(atPath: persistedPython.path) {
+            python = persistedPython
+        } else {
+            python = toolDirectory.appendingPathComponent(".venv/bin/python")
+        }
+
         return (python, toolDirectory.appendingPathComponent("eos1v_tool.py"))
     }
 
