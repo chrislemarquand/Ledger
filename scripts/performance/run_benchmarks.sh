@@ -156,11 +156,6 @@ run_isolated_launch() {
   # Suppress the first-run welcome window (WelcomeCoordinator.swift) by
   # pre-seeding its seen-version marker in the isolated defaults domain only.
   HOME="$run_home" defaults write "$BUNDLE_ID" "${ID_PREFIX}.welcomeLastSeenVersion" -string "$MINOR_VERSION"
-  # Best-effort Sparkle background-check suppression via its documented
-  # SUEnableAutomaticChecks key. Not independently verified against this
-  # Sparkle version's exact internals — if launch logs ever show a Sparkle
-  # network hit during a measured run, revisit this.
-  HOME="$run_home" defaults write "$BUNDLE_ID" SUEnableAutomaticChecks -bool NO
 
   # Redirect the launched app's stdout/stderr away from this function's own
   # stdout. Without this, `pid=$(run_isolated_launch ...)` at the call site
@@ -170,7 +165,12 @@ run_isolated_launch() {
   # script appeared to hang with Ledger open and never getting killed,
   # because it was still stuck on this line, before ever reaching the code
   # that terminates the process.
-  HOME="$run_home" "$APP_PATH/Contents/MacOS/$EXECUTABLE_NAME" > /dev/null 2>&1 &
+  #
+  # -disableSparkleAutoupdate gates the background check in code
+  # (LedgerApp.swift) — the SUEnableAutomaticChecks default this used to seed
+  # here was not reliably honored; the update window was observed appearing
+  # during real runs regardless.
+  HOME="$run_home" "$APP_PATH/Contents/MacOS/$EXECUTABLE_NAME" -disableSparkleAutoupdate > /dev/null 2>&1 &
   echo $!
 }
 

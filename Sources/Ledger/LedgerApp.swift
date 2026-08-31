@@ -151,7 +151,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateService = UpdateService()
         configureApplicationMenu()
         Signposts.launch.emitEvent("MenuReady")
-        updateService?.performBackgroundCheck()
+        if !Self.isSparkleAutoupdateDisabled() {
+            updateService?.performBackgroundCheck()
+        }
         let model = AppModel()
         settingsWindowController = SettingsWindowController(tabs: [
             SettingsTabDescriptor(symbolName: "gearshape", label: "General",
@@ -163,6 +165,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let windowController = MainWindowController(model: model)
         mainWindowController = windowController
         windowController.showWindow(nil)
+        if let openFolderPath = Self.openFolderPathFromLaunchArguments() {
+            model.openFolder(at: URL(fileURLWithPath: openFolderPath))
+        }
         NSApp.activate(ignoringOtherApps: true)
         if WelcomeCoordinator.shouldShowOnLaunch {
             Task { @MainActor in self.showWelcomeScreen() }
@@ -171,6 +176,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    /// Non-interactive folder open for UI tests and benchmarks: `-openFolderPath <path>`
+    /// bypasses the NSOpenPanel in `AppModel.openFolder()`, which UI automation cannot
+    /// drive reliably. Inert unless the flag is explicitly passed.
+    private static func openFolderPathFromLaunchArguments() -> String? {
+        let args = CommandLine.arguments
+        guard let index = args.firstIndex(of: "-openFolderPath"), index + 1 < args.count else {
+            return nil
+        }
+        return args[index + 1]
+    }
+
+    /// `-disableSparkleAutoupdate` skips the background update check entirely for UI
+    /// tests and benchmarks. Seeding the `SUEnableAutomaticChecks` default was tried
+    /// first and does not reliably suppress it — the update window was observed
+    /// appearing during UI test runs regardless — so this gates the call in code
+    /// instead of hoping Sparkle honors a preference.
+    private static func isSparkleAutoupdateDisabled() -> Bool {
+        CommandLine.arguments.contains("-disableSparkleAutoupdate")
     }
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {

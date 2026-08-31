@@ -16,7 +16,6 @@
 		A10000200000000000000001 /* ExifEditEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000130000000000000001 /* ExifEditEngine.swift */; };
 		A10000210000000000000001 /* ExifToolCommandBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000140000000000000001 /* ExifToolCommandBuilder.swift */; };
 		A10000220000000000000001 /* ExifToolService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000150000000000000001 /* ExifToolService.swift */; };
-		A19000020000000000000001 /* Signposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19000010000000000000001 /* Signposts.swift */; };
 		A10000230000000000000001 /* MetadataValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000160000000000000001 /* MetadataValidator.swift */; };
 		A10000240000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000180000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift */; };
 		A10000250000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000190000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift */; };
@@ -27,21 +26,10 @@
 		A10000B10000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000B20000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift */; };
 		A10001420000000000000001 /* Presets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001410000000000000001 /* Presets.swift */; };
 		A10001440000000000000001 /* BrowserIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001430000000000000001 /* BrowserIconView.swift */; };
-		A10001870000000000000001 /* BrowserFilmstripViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001860000000000000001 /* BrowserFilmstripViewController.swift */; };
-		A100018B0000000000000001 /* ExifToolConsoleWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100018A0000000000000001 /* ExifToolConsoleWindowController.swift */; };
-		A100018C0000000000000001 /* AppModel+MetadataClipboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100018D0000000000000001 /* AppModel+MetadataClipboard.swift */; };
-		A10001900000000000000001 /* LensProfiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001910000000000000001 /* LensProfiles.swift */; };
-		A10001920000000000000001 /* AppModel+LensProfiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001930000000000000001 /* AppModel+LensProfiles.swift */; };
-		A10001940000000000000001 /* LensProfileSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001950000000000000001 /* LensProfileSheets.swift */; };
-		A10001890000000000000001 /* LargePreviewCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001880000000000000001 /* LargePreviewCard.swift */; };
 		A10001460000000000000001 /* BrowserListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001450000000000000001 /* BrowserListView.swift */; };
 		A10001480000000000000001 /* InspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001470000000000000001 /* InspectorView.swift */; };
 		A100014C0000000000000001 /* PresetSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014B0000000000000001 /* PresetSheets.swift */; };
 		A100014E0000000000000001 /* ThumbnailService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014D0000000000000001 /* ThumbnailService.swift */; };
-		A19000040000000000000001 /* Signposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19000030000000000000001 /* Signposts.swift */; };
-		A10001810000000000000001 /* CloudFileState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001800000000000000001 /* CloudFileState.swift */; };
-		A10001830000000000000001 /* CloudDownloadTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001820000000000000001 /* CloudDownloadTracker.swift */; };
-		A10001850000000000000001 /* CloudBadgeControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001840000000000000001 /* CloudBadgeControl.swift */; };
 		A10001500000000000000001 /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014F0000000000000001 /* SettingsWindowController.swift */; };
 		A10001510000000000000001 /* AppModel+Sidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001530000000000000001 /* AppModel+Sidebar.swift */; };
 		A10001520000000000000001 /* AppModel+Preview.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001540000000000000001 /* AppModel+Preview.swift */; };
@@ -66,21 +54,16 @@
 		A100017B0000000000000001 /* InspectorTagFieldView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100017A0000000000000001 /* InspectorTagFieldView.swift */; };
 		A100017D0000000000000001 /* InspectorDateTimeFieldView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100017C0000000000000001 /* InspectorDateTimeFieldView.swift */; };
 		A100017F0000000000000001 /* FieldDecoration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100017E0000000000000001 /* FieldDecoration.swift */; };
-		B100001D0000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000D0000000000000001 /* Assets.xcassets */; };
-		C20002010000000000000001 /* CSVImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001010000000000000001 /* CSVImportAdapter.swift */; };
-		C20002020000000000000001 /* CSVSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001020000000000000001 /* CSVSupport.swift */; };
-		C20002030000000000000001 /* EOS1VImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001030000000000000001 /* EOS1VImportAdapter.swift */; };
-		C20002040000000000000001 /* GPXImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001040000000000000001 /* GPXImportAdapter.swift */; };
-		C20002050000000000000001 /* ImportConflictResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001050000000000000001 /* ImportConflictResolver.swift */; };
-		C20002060000000000000001 /* ImportCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001060000000000000001 /* ImportCoordinator.swift */; };
-		C20002070000000000000001 /* ImportMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001070000000000000001 /* ImportMatcher.swift */; };
-		C20002080000000000000001 /* ImportModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001080000000000000001 /* ImportModels.swift */; };
-		C20002090000000000000001 /* EOSLensMappingEmbedded.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001090000000000000001 /* EOSLensMappingEmbedded.swift */; };
-		C200020A0000000000000001 /* ImportSourceAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010A0000000000000001 /* ImportSourceAdapter.swift */; };
-		C200020B0000000000000001 /* ReferenceFolderImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010B0000000000000001 /* ReferenceFolderImportAdapter.swift */; };
-		C200020C0000000000000001 /* ReferenceImageImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010C0000000000000001 /* ReferenceImageImportAdapter.swift */; };
-		C200020D0000000000000001 /* ReferenceImportSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010D0000000000000001 /* ReferenceImportSupport.swift */; };
-		C200020E0000000000000001 /* ImportSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010E0000000000000001 /* ImportSheetView.swift */; };
+		A10001810000000000000001 /* CloudFileState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001800000000000000001 /* CloudFileState.swift */; };
+		A10001830000000000000001 /* CloudDownloadTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001820000000000000001 /* CloudDownloadTracker.swift */; };
+		A10001850000000000000001 /* CloudBadgeControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001840000000000000001 /* CloudBadgeControl.swift */; };
+		A10001870000000000000001 /* BrowserFilmstripViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001860000000000000001 /* BrowserFilmstripViewController.swift */; };
+		A10001890000000000000001 /* LargePreviewCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001880000000000000001 /* LargePreviewCard.swift */; };
+		A100018B0000000000000001 /* ExifToolConsoleWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100018A0000000000000001 /* ExifToolConsoleWindowController.swift */; };
+		A100018C0000000000000001 /* AppModel+MetadataClipboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100018D0000000000000001 /* AppModel+MetadataClipboard.swift */; };
+		A10001900000000000000001 /* LensProfiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001910000000000000001 /* LensProfiles.swift */; };
+		A10001920000000000000001 /* AppModel+LensProfiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001930000000000000001 /* AppModel+LensProfiles.swift */; };
+		A10001940000000000000001 /* LensProfileSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001950000000000000001 /* LensProfileSheets.swift */; };
 		A10001960000000000000001 /* EOSLensChoiceSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001970000000000000001 /* EOSLensChoiceSheetView.swift */; };
 		A10001A20000000000000001 /* EOS1VRawDump.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001A30000000000000001 /* EOS1VRawDump.swift */; };
 		A10001A40000000000000001 /* EOS1VOpcode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001A50000000000000001 /* EOS1VOpcode.swift */; };
@@ -98,6 +81,23 @@
 		A10001DF0000000000000001 /* EOS1VDeletedRollsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001DE0000000000000001 /* EOS1VDeletedRollsStore.swift */; };
 		A10001E10000000000000001 /* EOS1VRollDetailSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E00000000000000001 /* EOS1VRollDetailSheetView.swift */; };
 		A10001E30000000000000001 /* EOS1VSetClockSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E20000000000000001 /* EOS1VSetClockSheetView.swift */; };
+		A19000020000000000000001 /* Signposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19000010000000000000001 /* Signposts.swift */; };
+		A19000040000000000000001 /* Signposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19000030000000000000001 /* Signposts.swift */; };
+		B100001D0000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000D0000000000000001 /* Assets.xcassets */; };
+		C20002010000000000000001 /* CSVImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001010000000000000001 /* CSVImportAdapter.swift */; };
+		C20002020000000000000001 /* CSVSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001020000000000000001 /* CSVSupport.swift */; };
+		C20002030000000000000001 /* EOS1VImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001030000000000000001 /* EOS1VImportAdapter.swift */; };
+		C20002040000000000000001 /* GPXImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001040000000000000001 /* GPXImportAdapter.swift */; };
+		C20002050000000000000001 /* ImportConflictResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001050000000000000001 /* ImportConflictResolver.swift */; };
+		C20002060000000000000001 /* ImportCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001060000000000000001 /* ImportCoordinator.swift */; };
+		C20002070000000000000001 /* ImportMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001070000000000000001 /* ImportMatcher.swift */; };
+		C20002080000000000000001 /* ImportModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001080000000000000001 /* ImportModels.swift */; };
+		C20002090000000000000001 /* EOSLensMappingEmbedded.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001090000000000000001 /* EOSLensMappingEmbedded.swift */; };
+		C200020A0000000000000001 /* ImportSourceAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010A0000000000000001 /* ImportSourceAdapter.swift */; };
+		C200020B0000000000000001 /* ReferenceFolderImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010B0000000000000001 /* ReferenceFolderImportAdapter.swift */; };
+		C200020C0000000000000001 /* ReferenceImageImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010C0000000000000001 /* ReferenceImageImportAdapter.swift */; };
+		C200020D0000000000000001 /* ReferenceImportSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010D0000000000000001 /* ReferenceImportSupport.swift */; };
+		C200020E0000000000000001 /* ImportSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010E0000000000000001 /* ImportSheetView.swift */; };
 		C200020F0000000000000001 /* ExifToolCSVExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010F0000000000000001 /* ExifToolCSVExportService.swift */; };
 		D100000300000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */; };
 		DD0001010000000000000001 /* LedgerSidebarTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0001000000000000000001 /* LedgerSidebarTypes.swift */; };
@@ -105,8 +105,6 @@
 		E10001010000000000000001 /* DateTimeAdjustModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10001000000000000000001 /* DateTimeAdjustModels.swift */; };
 		E10001030000000000000001 /* AppModel+DateTimeAdjust.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10001020000000000000001 /* AppModel+DateTimeAdjust.swift */; };
 		E10001050000000000000001 /* DateTimeAdjustSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10001040000000000000001 /* DateTimeAdjustSheetView.swift */; };
-		F10000030000000000000001 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000020000000000000001 /* UpdateService.swift */; };
-		F10000050000000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = F10000040000000000000001 /* Sparkle */; };
 		E20000090000000000000001 /* Tests/LedgerTests/AppModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000020000000000000001 /* Tests/LedgerTests/AppModelTests.swift */; };
 		E200000A0000000000000001 /* Tests/LedgerTests/ImportSystemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000030000000000000001 /* Tests/LedgerTests/ImportSystemTests.swift */; };
 		E200000B0000000000000001 /* Tests/LedgerTests/ImportMatrixTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000040000000000000001 /* Tests/LedgerTests/ImportMatrixTests.swift */; };
@@ -115,9 +113,18 @@
 		E200000E0000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/ese1-roll-00-023.csv in Resources */ = {isa = PBXBuildFile; fileRef = E20000070000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/ese1-roll-00-023.csv */; };
 		E200000F0000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/session-raw.txt in Resources */ = {isa = PBXBuildFile; fileRef = E20000080000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/session-raw.txt */; };
 		E20000100000000000000001 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A100003A0000000000000001 /* XCTest.framework */; };
+		F10000030000000000000001 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000020000000000000001 /* UpdateService.swift */; };
+		F10000050000000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = F10000040000000000000001 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		46E8AA5C3045F8E60033B66F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10001000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000600000000000000001;
+			remoteInfo = Ledger;
+		};
 		A10000920000000000000001 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = A10001000000000000000001 /* Project object */;
@@ -143,6 +150,7 @@
 
 /* Begin PBXFileReference section */
 		469CE1902F4B7DE400D51BC9 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
+		46E8AA583045F8E60033B66F /* LedgerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LedgerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000010000000000000001 /* Ledger.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Ledger.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000020000000000000001 /* ExifEditCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ExifEditCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000030000000000000001 /* Config/Ledger-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Config/Ledger-Info.plist"; sourceTree = SOURCE_ROOT; };
@@ -161,7 +169,6 @@
 		A10000130000000000000001 /* ExifEditEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifEditEngine.swift; sourceTree = "<group>"; };
 		A10000140000000000000001 /* ExifToolCommandBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifToolCommandBuilder.swift; sourceTree = "<group>"; };
 		A10000150000000000000001 /* ExifToolService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifToolService.swift; sourceTree = "<group>"; };
-		A19000010000000000000001 /* Signposts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signposts.swift; sourceTree = "<group>"; };
 		A10000160000000000000001 /* MetadataValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataValidator.swift; sourceTree = "<group>"; };
 		A10000180000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/BackupManagerTests.swift; sourceTree = SOURCE_ROOT; };
 		A10000190000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift; sourceTree = SOURCE_ROOT; };
@@ -171,21 +178,10 @@
 		A10000B20000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/BatchRenameService.swift; sourceTree = SOURCE_ROOT; };
 		A10001410000000000000001 /* Presets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Presets.swift; sourceTree = "<group>"; };
 		A10001430000000000000001 /* BrowserIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserIconView.swift; sourceTree = "<group>"; };
-		A10001860000000000000001 /* BrowserFilmstripViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserFilmstripViewController.swift; sourceTree = "<group>"; };
-		A100018A0000000000000001 /* ExifToolConsoleWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifToolConsoleWindowController.swift; sourceTree = "<group>"; };
-		A100018D0000000000000001 /* AppModel+MetadataClipboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+MetadataClipboard.swift"; sourceTree = "<group>"; };
-		A10001910000000000000001 /* LensProfiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LensProfiles.swift; sourceTree = "<group>"; };
-		A10001930000000000000001 /* AppModel+LensProfiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+LensProfiles.swift"; sourceTree = "<group>"; };
-		A10001950000000000000001 /* LensProfileSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LensProfileSheets.swift; sourceTree = "<group>"; };
-		A10001880000000000000001 /* LargePreviewCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LargePreviewCard.swift; sourceTree = "<group>"; };
 		A10001450000000000000001 /* BrowserListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserListView.swift; sourceTree = "<group>"; };
 		A10001470000000000000001 /* InspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorView.swift; sourceTree = "<group>"; };
 		A100014B0000000000000001 /* PresetSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetSheets.swift; sourceTree = "<group>"; };
 		A100014D0000000000000001 /* ThumbnailService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailService.swift; sourceTree = "<group>"; };
-		A19000030000000000000001 /* Signposts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signposts.swift; sourceTree = "<group>"; };
-		A10001800000000000000001 /* CloudFileState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudFileState.swift; sourceTree = "<group>"; };
-		A10001820000000000000001 /* CloudDownloadTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudDownloadTracker.swift; sourceTree = "<group>"; };
-		A10001840000000000000001 /* CloudBadgeControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBadgeControl.swift; sourceTree = "<group>"; };
 		A100014F0000000000000001 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
 		A10001530000000000000001 /* AppModel+Sidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Sidebar.swift"; sourceTree = "<group>"; };
 		A10001540000000000000001 /* AppModel+Preview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Preview.swift"; sourceTree = "<group>"; };
@@ -210,21 +206,16 @@
 		A100017A0000000000000001 /* InspectorTagFieldView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorTagFieldView.swift; sourceTree = "<group>"; };
 		A100017C0000000000000001 /* InspectorDateTimeFieldView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorDateTimeFieldView.swift; sourceTree = "<group>"; };
 		A100017E0000000000000001 /* FieldDecoration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldDecoration.swift; sourceTree = "<group>"; };
-		B100000D0000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		C20001010000000000000001 /* CSVImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSVImportAdapter.swift; sourceTree = "<group>"; };
-		C20001020000000000000001 /* CSVSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSVSupport.swift; sourceTree = "<group>"; };
-		C20001030000000000000001 /* EOS1VImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VImportAdapter.swift; sourceTree = "<group>"; };
-		C20001040000000000000001 /* GPXImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPXImportAdapter.swift; sourceTree = "<group>"; };
-		C20001050000000000000001 /* ImportConflictResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportConflictResolver.swift; sourceTree = "<group>"; };
-		C20001060000000000000001 /* ImportCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportCoordinator.swift; sourceTree = "<group>"; };
-		C20001070000000000000001 /* ImportMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportMatcher.swift; sourceTree = "<group>"; };
-		C20001080000000000000001 /* ImportModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportModels.swift; sourceTree = "<group>"; };
-		C20001090000000000000001 /* EOSLensMappingEmbedded.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOSLensMappingEmbedded.swift; sourceTree = "<group>"; };
-		C200010A0000000000000001 /* ImportSourceAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportSourceAdapter.swift; sourceTree = "<group>"; };
-		C200010B0000000000000001 /* ReferenceFolderImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceFolderImportAdapter.swift; sourceTree = "<group>"; };
-		C200010C0000000000000001 /* ReferenceImageImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceImageImportAdapter.swift; sourceTree = "<group>"; };
-		C200010D0000000000000001 /* ReferenceImportSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceImportSupport.swift; sourceTree = "<group>"; };
-		C200010E0000000000000001 /* ImportSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportSheetView.swift; sourceTree = "<group>"; };
+		A10001800000000000000001 /* CloudFileState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudFileState.swift; sourceTree = "<group>"; };
+		A10001820000000000000001 /* CloudDownloadTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudDownloadTracker.swift; sourceTree = "<group>"; };
+		A10001840000000000000001 /* CloudBadgeControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBadgeControl.swift; sourceTree = "<group>"; };
+		A10001860000000000000001 /* BrowserFilmstripViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserFilmstripViewController.swift; sourceTree = "<group>"; };
+		A10001880000000000000001 /* LargePreviewCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LargePreviewCard.swift; sourceTree = "<group>"; };
+		A100018A0000000000000001 /* ExifToolConsoleWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifToolConsoleWindowController.swift; sourceTree = "<group>"; };
+		A100018D0000000000000001 /* AppModel+MetadataClipboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+MetadataClipboard.swift"; sourceTree = "<group>"; };
+		A10001910000000000000001 /* LensProfiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LensProfiles.swift; sourceTree = "<group>"; };
+		A10001930000000000000001 /* AppModel+LensProfiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+LensProfiles.swift"; sourceTree = "<group>"; };
+		A10001950000000000000001 /* LensProfileSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LensProfileSheets.swift; sourceTree = "<group>"; };
 		A10001970000000000000001 /* EOSLensChoiceSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOSLensChoiceSheetView.swift; sourceTree = "<group>"; };
 		A10001A30000000000000001 /* EOS1VRawDump.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VRawDump.swift; sourceTree = "<group>"; };
 		A10001A50000000000000001 /* EOS1VOpcode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VOpcode.swift; sourceTree = "<group>"; };
@@ -242,24 +233,52 @@
 		A10001DE0000000000000001 /* EOS1VDeletedRollsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VDeletedRollsStore.swift; sourceTree = "<group>"; };
 		A10001E00000000000000001 /* EOS1VRollDetailSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VRollDetailSheetView.swift; sourceTree = "<group>"; };
 		A10001E20000000000000001 /* EOS1VSetClockSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VSetClockSheetView.swift; sourceTree = "<group>"; };
+		A19000010000000000000001 /* Signposts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signposts.swift; sourceTree = "<group>"; };
+		A19000030000000000000001 /* Signposts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signposts.swift; sourceTree = "<group>"; };
+		B100000D0000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		C20001010000000000000001 /* CSVImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSVImportAdapter.swift; sourceTree = "<group>"; };
+		C20001020000000000000001 /* CSVSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSVSupport.swift; sourceTree = "<group>"; };
+		C20001030000000000000001 /* EOS1VImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VImportAdapter.swift; sourceTree = "<group>"; };
+		C20001040000000000000001 /* GPXImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPXImportAdapter.swift; sourceTree = "<group>"; };
+		C20001050000000000000001 /* ImportConflictResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportConflictResolver.swift; sourceTree = "<group>"; };
+		C20001060000000000000001 /* ImportCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportCoordinator.swift; sourceTree = "<group>"; };
+		C20001070000000000000001 /* ImportMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportMatcher.swift; sourceTree = "<group>"; };
+		C20001080000000000000001 /* ImportModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportModels.swift; sourceTree = "<group>"; };
+		C20001090000000000000001 /* EOSLensMappingEmbedded.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOSLensMappingEmbedded.swift; sourceTree = "<group>"; };
+		C200010A0000000000000001 /* ImportSourceAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportSourceAdapter.swift; sourceTree = "<group>"; };
+		C200010B0000000000000001 /* ReferenceFolderImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceFolderImportAdapter.swift; sourceTree = "<group>"; };
+		C200010C0000000000000001 /* ReferenceImageImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceImageImportAdapter.swift; sourceTree = "<group>"; };
+		C200010D0000000000000001 /* ReferenceImportSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceImportSupport.swift; sourceTree = "<group>"; };
+		C200010E0000000000000001 /* ImportSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportSheetView.swift; sourceTree = "<group>"; };
 		C200010F0000000000000001 /* ExifToolCSVExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifToolCSVExportService.swift; sourceTree = "<group>"; };
 		D100000400000000000000001 /* Sources/Ledger/BatchRenameSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Ledger/BatchRenameSheetView.swift; sourceTree = SOURCE_ROOT; };
 		DD0001000000000000000001 /* LedgerSidebarTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerSidebarTypes.swift; sourceTree = "<group>"; };
 		E10001000000000000000001 /* DateTimeAdjustModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateTimeAdjustModels.swift; sourceTree = "<group>"; };
 		E10001020000000000000001 /* AppModel+DateTimeAdjust.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+DateTimeAdjust.swift"; sourceTree = "<group>"; };
 		E10001040000000000000001 /* DateTimeAdjustSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateTimeAdjustSheetView.swift; sourceTree = "<group>"; };
-		F10000020000000000000001 /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
 		E20000010000000000000001 /* ExifEditMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ExifEditMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E20000020000000000000001 /* Tests/LedgerTests/AppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/AppModelTests.swift; sourceTree = SOURCE_ROOT; };
 		E20000030000000000000001 /* Tests/LedgerTests/ImportSystemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/ImportSystemTests.swift; sourceTree = SOURCE_ROOT; };
 		E20000040000000000000001 /* Tests/LedgerTests/ImportMatrixTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/ImportMatrixTests.swift; sourceTree = SOURCE_ROOT; };
 		E20000050000000000000001 /* Tests/LedgerTests/EOS1VFrameDecoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/EOS1VFrameDecoderTests.swift; sourceTree = SOURCE_ROOT; };
-		E20000060000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/session-expected.csv */ = {isa = PBXFileReference; lastKnownFileType = text.csv; path = Tests/LedgerTests/Fixtures/EOS1V/session-expected.csv; sourceTree = SOURCE_ROOT; };
-		E20000070000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/ese1-roll-00-023.csv */ = {isa = PBXFileReference; lastKnownFileType = text.csv; path = Tests/LedgerTests/Fixtures/EOS1V/ese1-roll-00-023.csv; sourceTree = SOURCE_ROOT; };
-		E20000080000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/session-raw.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = Tests/LedgerTests/Fixtures/EOS1V/session-raw.txt; sourceTree = SOURCE_ROOT; };
+		E20000060000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/session-expected.csv */ = {isa = PBXFileReference; lastKnownFileType = text.csv; path = "Tests/LedgerTests/Fixtures/EOS1V/session-expected.csv"; sourceTree = SOURCE_ROOT; };
+		E20000070000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/ese1-roll-00-023.csv */ = {isa = PBXFileReference; lastKnownFileType = text.csv; path = "Tests/LedgerTests/Fixtures/EOS1V/ese1-roll-00-023.csv"; sourceTree = SOURCE_ROOT; };
+		E20000080000000000000001 /* Tests/LedgerTests/Fixtures/EOS1V/session-raw.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Tests/LedgerTests/Fixtures/EOS1V/session-raw.txt"; sourceTree = SOURCE_ROOT; };
+		F10000020000000000000001 /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		46E8AA593045F8E60033B66F /* LedgerUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = LedgerUITests; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
+
 /* Begin PBXFrameworksBuildPhase section */
+		46E8AA553045F8E60033B66F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A10000410000000000000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -304,6 +323,7 @@
 				A10000370000000000000001 /* libExifEditCore.a */,
 				A10000020000000000000001 /* ExifEditCoreTests.xctest */,
 				E20000010000000000000001 /* ExifEditMacTests.xctest */,
+				46E8AA583045F8E60033B66F /* LedgerUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -315,6 +335,7 @@
 				A10000520000000000000001 /* Tests */,
 				A10000530000000000000001 /* Config */,
 				A10000540000000000000001 /* scripts/release */,
+				46E8AA593045F8E60033B66F /* LedgerUITests */,
 				A10000550000000000000001 /* Frameworks */,
 				A10000360000000000000001 /* Products */,
 			);
@@ -454,37 +475,6 @@
 			path = ExifEditCore;
 			sourceTree = "<group>";
 		};
-		C20000F00000000000000001 /* Import */ = {
-			isa = PBXGroup;
-			children = (
-				C20001010000000000000001 /* CSVImportAdapter.swift */,
-				C20001020000000000000001 /* CSVSupport.swift */,
-				C20001030000000000000001 /* EOS1VImportAdapter.swift */,
-				C20001040000000000000001 /* GPXImportAdapter.swift */,
-				C20001050000000000000001 /* ImportConflictResolver.swift */,
-				C20001060000000000000001 /* ImportCoordinator.swift */,
-				C20001070000000000000001 /* ImportMatcher.swift */,
-				C20001080000000000000001 /* ImportModels.swift */,
-				C20001090000000000000001 /* EOSLensMappingEmbedded.swift */,
-				C200010A0000000000000001 /* ImportSourceAdapter.swift */,
-				C200010B0000000000000001 /* ReferenceFolderImportAdapter.swift */,
-				C200010C0000000000000001 /* ReferenceImageImportAdapter.swift */,
-				C200010D0000000000000001 /* ReferenceImportSupport.swift */,
-				C200010F0000000000000001 /* ExifToolCSVExportService.swift */,
-			);
-			path = Import;
-			sourceTree = "<group>";
-		};
-		A10001B00000000000000001 /* Decode */ = {
-			isa = PBXGroup;
-			children = (
-				A10001A30000000000000001 /* EOS1VRawDump.swift */,
-				A10001A50000000000000001 /* EOS1VOpcode.swift */,
-				A10001A70000000000000001 /* EOS1VFrameDecoder.swift */,
-			);
-			path = Decode;
-			sourceTree = "<group>";
-		};
 		A10001A00000000000000001 /* EOS1V */ = {
 			isa = PBXGroup;
 			children = (
@@ -506,6 +496,37 @@
 			path = EOS1V;
 			sourceTree = "<group>";
 		};
+		A10001B00000000000000001 /* Decode */ = {
+			isa = PBXGroup;
+			children = (
+				A10001A30000000000000001 /* EOS1VRawDump.swift */,
+				A10001A50000000000000001 /* EOS1VOpcode.swift */,
+				A10001A70000000000000001 /* EOS1VFrameDecoder.swift */,
+			);
+			path = Decode;
+			sourceTree = "<group>";
+		};
+		C20000F00000000000000001 /* Import */ = {
+			isa = PBXGroup;
+			children = (
+				C20001010000000000000001 /* CSVImportAdapter.swift */,
+				C20001020000000000000001 /* CSVSupport.swift */,
+				C20001030000000000000001 /* EOS1VImportAdapter.swift */,
+				C20001040000000000000001 /* GPXImportAdapter.swift */,
+				C20001050000000000000001 /* ImportConflictResolver.swift */,
+				C20001060000000000000001 /* ImportCoordinator.swift */,
+				C20001070000000000000001 /* ImportMatcher.swift */,
+				C20001080000000000000001 /* ImportModels.swift */,
+				C20001090000000000000001 /* EOSLensMappingEmbedded.swift */,
+				C200010A0000000000000001 /* ImportSourceAdapter.swift */,
+				C200010B0000000000000001 /* ReferenceFolderImportAdapter.swift */,
+				C200010C0000000000000001 /* ReferenceImageImportAdapter.swift */,
+				C200010D0000000000000001 /* ReferenceImportSupport.swift */,
+				C200010F0000000000000001 /* ExifToolCSVExportService.swift */,
+			);
+			path = Import;
+			sourceTree = "<group>";
+		};
 		C20000F10000000000000001 /* ImportUI */ = {
 			isa = PBXGroup;
 			children = (
@@ -518,6 +539,29 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		46E8AA573045F8E60033B66F /* LedgerUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 46E8AA603045F8E60033B66F /* Build configuration list for PBXNativeTarget "LedgerUITests" */;
+			buildPhases = (
+				46E8AA543045F8E60033B66F /* Sources */,
+				46E8AA553045F8E60033B66F /* Frameworks */,
+				46E8AA563045F8E60033B66F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				46E8AA5D3045F8E60033B66F /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				46E8AA593045F8E60033B66F /* LedgerUITests */,
+			);
+			name = LedgerUITests;
+			packageProductDependencies = (
+			);
+			productName = LedgerUITests;
+			productReference = 46E8AA583045F8E60033B66F /* LedgerUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		A10000600000000000000001 /* Ledger */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = A10000700000000000000001 /* Build configuration list for PBXNativeTarget "Ledger" */;
@@ -600,9 +644,13 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1620;
+				LastSwiftUpdateCheck = 2700;
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
+					46E8AA573045F8E60033B66F = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = A10000600000000000000001;
+					};
 					A10000600000000000000001 = {
 						CreatedOnToolsVersion = 16.2;
 					};
@@ -640,11 +688,19 @@
 				A10000610000000000000001 /* ExifEditCore */,
 				A10000620000000000000001 /* ExifEditCoreTests */,
 				E20000140000000000000001 /* ExifEditMacTests */,
+				46E8AA573045F8E60033B66F /* LedgerUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		46E8AA563045F8E60033B66F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A10000810000000000000001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -709,6 +765,13 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		46E8AA543045F8E60033B66F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A10000800000000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -837,6 +900,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		46E8AA5D3045F8E60033B66F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10000600000000000000001 /* Ledger */;
+			targetProxy = 46E8AA5C3045F8E60033B66F /* PBXContainerItemProxy */;
+		};
 		A10000900000000000000001 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = A10000610000000000000001 /* ExifEditCore */;
@@ -855,6 +923,91 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		46E8AA5E3045F8E60033B66F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = S4F3HUG3TQ;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GENERATE_INFOPLIST_FILE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.chrislemarquand.LedgerUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = Ledger;
+			};
+			name = Debug;
+		};
+		46E8AA5F3045F8E60033B66F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = S4F3HUG3TQ;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GENERATE_INFOPLIST_FILE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.chrislemarquand.LedgerUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = Ledger;
+			};
+			name = Release;
+		};
 		A10001200000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A10000050000000000000001 /* Config/Debug.xcconfig */;
@@ -1076,6 +1229,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		46E8AA603045F8E60033B66F /* Build configuration list for PBXNativeTarget "LedgerUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				46E8AA5E3045F8E60033B66F /* Debug */,
+				46E8AA5F3045F8E60033B66F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		A10000700000000000000001 /* Build configuration list for PBXNativeTarget "Ledger" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
