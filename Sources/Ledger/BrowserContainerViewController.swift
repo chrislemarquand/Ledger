@@ -22,6 +22,27 @@ final class BrowserContainerViewController: NSViewController {
     private var renderObservers: [AnyCancellable] = []
     private var lastOverlayState: OverlayState = .none
     private var lastRenderedMode: AppModel.BrowserViewMode?
+    /// Tracks whether `FirstStablePaint` has fired for the folder currently
+    /// selected. Reset on `selectedSidebarID` change, not on observing
+    /// `.loading` — a load fast enough to complete before the coalescer's
+    /// next `render()` pass never surfaces `.loading` as an intermediate
+    /// state at all, which silently starved the old "transitioned away from
+    /// .loading" check (verified directly: a benchmark run against a
+    /// 1000+ file corpus produced zero FirstStablePaint events because
+    /// enumeration alone — before per-item attribute hydration — is fast
+    /// enough to coalesce away).
+    private var hasPaintedCurrentLoad = false
+    /// `selectedSidebarID` changes synchronously, but the actual `loadFiles()`
+    /// call runs on a separately-scheduled `Task` — so the *first* `render()`
+    /// pass after a selection change can observe stale "nothing loading yet,
+    /// nothing loaded yet" state (`.emptyFolder`) before loading has even
+    /// started, which would otherwise satisfy the "settled state" check for
+    /// FirstStablePaint immediately and incorrectly. Verified directly: a
+    /// benchmark run showed FirstStablePaint firing for a `-openFolderPath`
+    /// launch before that folder's `FolderLoad` signpost had even begun.
+    /// Requiring more than one render pass since the selection changed skips
+    /// that premature first read.
+    private var renderPassesSinceSelection = 0
     private let renderCoalescer = MainActorCoalescer()
 
     // Path bar
@@ -125,6 +146,12 @@ final class BrowserContainerViewController: NSViewController {
         observe(model.$browserItems)
         observe(model.$selectedFileURLs)
         observe(model.$selectedSidebarID)
+        // Separate subscription purely to reset the FirstStablePaint tracker
+        // for the new folder — see hasPaintedCurrentLoad's doc comment.
+        observeEquatable(model.$selectedSidebarID, storeIn: &renderObservers) { [weak self] in
+            self?.hasPaintedCurrentLoad = false
+            self?.renderPassesSinceSelection = 0
+        }
         observe(model.$browserEnumerationError.map { $0?.localizedDescription ?? "" }.eraseToAnyPublisher())
         observe(model.$isFolderContentLoading)
         observe(model.$isFolderMetadataLoading)
@@ -194,8 +221,11 @@ final class BrowserContainerViewController: NSViewController {
         listController.update(model: model, items: items)
         filmstripController.update(model: model, items: items)
 
+        renderPassesSinceSelection += 1
         let nextOverlayState = currentOverlayState()
-        if lastOverlayState == .loading, nextOverlayState != .loading {
+        if !hasPaintedCurrentLoad, renderPassesSinceSelection > 1,
+           nextOverlayState != .loading, nextOverlayState != .noSelection {
+            hasPaintedCurrentLoad = true
             Signposts.folderLoad.emitEvent("FirstStablePaint")
         }
         if nextOverlayState == lastOverlayState, nextOverlayState != .loading {
