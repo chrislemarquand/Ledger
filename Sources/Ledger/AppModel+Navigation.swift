@@ -183,5 +183,11 @@ extension AppModel {
             scheduleBackgroundWarm(forSelectionID: oldID, files: browserItems.map(\.url))
         }
         selectSidebar(id: newID)
+        // Navigating (sidebar click, breadcrumb, Recents) commonly moves first responder onto
+        // whatever was clicked (e.g. the sidebar outline view itself). Without this, the
+        // browser pane loses keyboard focus on every folder change and arrow-key navigation
+        // stops working until the user clicks into it — matches the .browserDidRequestFocus
+        // posted at launch and on toolbar view-mode switches (see focusBrowserPane()).
+        NotificationCenter.default.post(name: .browserDidRequestFocus, object: nil)
     }
 }

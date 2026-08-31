@@ -251,6 +251,17 @@ final class BrowserFilmstripViewController: NSViewController, NSCollectionViewDa
         defer { isRenderingState = false }
 
         let currentURLs = items.map(\.url)
+
+        // Matches Finder's own Gallery/Column View: unlike Icon/List (which start with nothing
+        // selected), those two modes always land on the first item so there's an anchor to
+        // arrow-key from and something in the large preview. Covers both switching into Gallery
+        // mode and switching folders while already in it.
+        if model.browserViewMode == .gallery,
+           model.selectedFileURLs.intersection(Set(currentURLs)).isEmpty,
+           let firstURL = currentURLs.first {
+            model.setSelectionFromList([firstURL], focusedURL: firstURL)
+        }
+
         let selectedURLs = model.selectedFileURLs.intersection(Set(currentURLs))
         let pendingURLs = Set(currentURLs.filter { model.hasPendingEdits(for: $0) })
 

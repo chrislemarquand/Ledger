@@ -2020,6 +2020,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         model.browserViewMode = .icon
         refreshToolbarState()
         NotificationCenter.default.post(name: .browserDidSwitchViewMode, object: nil)
+        focusBrowserPane()
     }
 
     @objc
@@ -2027,6 +2028,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         model.browserViewMode = .list
         refreshToolbarState()
         NotificationCenter.default.post(name: .browserDidSwitchViewMode, object: nil)
+        focusBrowserPane()
     }
 
     @objc
@@ -2034,6 +2036,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         model.browserViewMode = .gallery
         refreshToolbarState()
         NotificationCenter.default.post(name: .browserDidSwitchViewMode, object: nil)
+        focusBrowserPane()
     }
 
     @objc
