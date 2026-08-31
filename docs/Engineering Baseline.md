@@ -16,9 +16,12 @@ This document defines the required engineering baseline for Librarian and Ledger
 
 ## Dependencies
 
-- Cross-repo shared dependencies (for example `SharedUI`) must use remote Git package references pinned to tags.
-- Do not use local path package references on release branches.
-- Commit `Package.resolved` for reproducible builds.
+- `SharedUI` is a local path package dependency (`.package(path: "../SharedUI")`),
+  not a remote pinned tag — a deliberate, enforced policy (see
+  `scripts/deps/verify_shared_ui_pin.sh`, which errors if a remote pin is
+  detected instead). Other remote dependencies (e.g. `WhatsNewKit`, `Sparkle`)
+  remain normal pinned Swift package references.
+- Commit `Package.resolved` for reproducible builds of the pinned remote dependencies.
 
 ## Release and Quality Gates
 
@@ -28,6 +31,7 @@ This document defines the required engineering baseline for Librarian and Ledger
 
 ## SharedUI Release Order
 
-1. Tag and release `SharedUI`.
-2. Update app repo to pinned SharedUI tag.
-3. Tag and release app repo.
+`SharedUI` is a local path dependency (see Dependencies above), so there is
+no separate SharedUI tag/release step — the app repo always builds against
+whatever is currently checked out at `../SharedUI`. Verify with
+`scripts/deps/verify_shared_ui_pin.sh` before releasing.
