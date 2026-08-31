@@ -120,7 +120,14 @@ extension AppModel {
         }
     }
 
-    private func scheduleDeferredPreviewPreload(for files: [URL]) {
+    // v1.4 Phase 2.1: was `private`; now called from AppModel+FileLoading.swift's
+    // loadFiles() too, when the whole-folder metadata prefetch is skipped
+    // (hasVisibleMetadataColumnDemand is false) — that prefetch used to be the
+    // only thing that chained into preview preload, including on its
+    // "nothing to load" early-return path, so skipping it entirely would have
+    // silently dropped preview preload for every folder with no metadata
+    // column/subtitle enabled.
+    func scheduleDeferredPreviewPreload(for files: [URL]) {
         deferredPreviewPreloadTask?.cancel()
         deferredPreviewPreloadTask = nil
         let filesSnapshot = files

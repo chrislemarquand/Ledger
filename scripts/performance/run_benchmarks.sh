@@ -78,7 +78,7 @@ if [[ "$SCENARIO" == "folder-load" && -z "$BROWSE_CORPUS" ]]; then
   exit 1
 fi
 
-mkdir -p "$OUTPUT_DIR/raw" "$OUTPUT_DIR/homes" "$REPORTS_DIR"
+mkdir -p "$OUTPUT_DIR/raw" "$REPORTS_DIR"
 
 RUN_ID="$(date +%Y%m%d-%H%M%S)"
 RUN_RAW_DIR="$OUTPUT_DIR/raw/$RUN_ID"
@@ -158,21 +158,28 @@ fi
 TOTAL_SIZE_BYTES=$(( TOTAL_SIZE_BYTES * 1024 ))
 echo "    Total: $(( TOTAL_SIZE_BYTES / 1024 / 1024 )) MB, executable: $(( EXECUTABLE_SIZE_BYTES / 1024 )) KB, exiftool: $(( EXIFTOOL_SIZE_BYTES / 1024 / 1024 )) MB"
 
-# Ledger is not sandboxed (Config/Ledger.entitlements: com.apple.security.app-sandbox = false),
-# so redirecting HOME for the launched process fully isolates
-# ~/Library/Preferences, ~/Library/Caches, and ~/Library/Application Support
-# without touching the real developer environment and without any app-code
-# changes. This is the mechanism the plan calls "isolated preferences/cache
-# roots."
+# CORRECTED 2026-08-31: this used to redirect HOME and call `defaults write`
+# against the real bundle ID, believing that isolated preferences/caches per
+# the plan's "isolated preferences/cache roots" requirement. Verified directly
+# that this NEVER worked: on this platform, `NSHomeDirectory()` resolves via
+# the real system passwd record (getpwuid), not the `HOME` environment
+# variable, for an unsandboxed GUI process — and `defaults`/NSUserDefaults
+# reads and writes go through cfprefsd, which is keyed the same way. Every
+# "isolated" launch before this fix was actually reading and writing the
+# real ~/Library/Preferences/com.chrislemarquand.Ledger.plist, the real
+# ~/Library/Caches thumbnail cache, and the real
+# ~/Library/Application Support/Ledger/recent_locations.json — confirmed by
+# finding real preference values (a user-configured Icon subtitle column)
+# leaking into what was assumed to be a fresh isolated run, and by finding
+# corpus/test paths polluting the real Recents list. See
+# feedback_macos_home_isolation_broken memory and docs/v1.4-progress.md.
+#
+# Actually-correct mechanism: NSUserDefaults' documented command-line
+# "argument domain" — passing `-KeyName Value` as launch arguments (not env
+# vars, not `defaults write`) creates a temporary, non-persisted, per-process
+# override that shadows the real value without ever touching a plist. No
+# HOME redirection, no mkdir, no real-preferences risk.
 run_isolated_launch() {
-  local run_home="$1"
-  shift
-  mkdir -p "$run_home"
-
-  # Suppress the first-run welcome window (WelcomeCoordinator.swift) by
-  # pre-seeding its seen-version marker in the isolated defaults domain only.
-  HOME="$run_home" defaults write "$BUNDLE_ID" "${ID_PREFIX}.welcomeLastSeenVersion" -string "$MINOR_VERSION"
-
   # Redirect the launched app's stdout/stderr away from this function's own
   # stdout. Without this, `pid=$(run_isolated_launch ...)` at the call site
   # blocks until the app *exits* — command substitution reads until EOF on
@@ -182,12 +189,15 @@ run_isolated_launch() {
   # because it was still stuck on this line, before ever reaching the code
   # that terminates the process.
   #
-  # -disableSparkleAutoupdate gates the background check in code
-  # (LedgerApp.swift) — the SUEnableAutomaticChecks default this used to seed
-  # here was not reliably honored; the update window was observed appearing
-  # during real runs regardless. Any additional args (e.g. -openFolderPath)
-  # are passed through by the caller.
-  HOME="$run_home" "$APP_PATH/Contents/MacOS/$EXECUTABLE_NAME" -disableSparkleAutoupdate "$@" > /dev/null 2>&1 &
+  # -disableSparkleAutoupdate and -skipRecentLocationPersistence gate their
+  # respective behaviors in code (LedgerApp.swift / AppModel+Sidebar.swift) —
+  # more reliable than hoping a UserDefaults value is honored. Any additional
+  # args (e.g. -openFolderPath) are passed through by the caller.
+  "$APP_PATH/Contents/MacOS/$EXECUTABLE_NAME" \
+    -disableSparkleAutoupdate \
+    -skipRecentLocationPersistence \
+    -"${ID_PREFIX}.welcomeLastSeenVersion" "$MINOR_VERSION" \
+    "$@" > /dev/null 2>&1 &
   echo $!
 }
 
@@ -278,17 +288,13 @@ fi
 
 echo "==> Warm-up ($WARMUP_ITERATIONS unmeasured iteration(s))"
 for ((i = 1; i <= WARMUP_ITERATIONS; i++)); do
-  run_home="$OUTPUT_DIR/homes/warmup-$i"
-  pid=$(run_isolated_launch "$run_home" "${SCENARIO_LAUNCH_ARGS[@]}")
+  pid=$(run_isolated_launch "${SCENARIO_LAUNCH_ARGS[@]}")
   sleep "$WARMUP_SETTLE_SECONDS"
   terminate_process "$pid"
 done
 
 if [[ "$CAPTURE_TRACE" -eq 1 ]]; then
   echo "==> Capturing one Time Profiler trace via xctrace (not counted in measured iterations)"
-  trace_home="$OUTPUT_DIR/homes/trace"
-  mkdir -p "$trace_home"
-  HOME="$trace_home" defaults write "$BUNDLE_ID" "${ID_PREFIX}.welcomeLastSeenVersion" -string "$MINOR_VERSION"
   TRACE_FILE="$RUN_RAW_DIR/$SCENARIO.trace"
   # xctrace exits non-zero when --time-limit forcibly ends the launched
   # process, even on a fully successful capture (verified directly: the log
@@ -299,9 +305,11 @@ if [[ "$CAPTURE_TRACE" -eq 1 ]]; then
     --template 'Time Profiler' \
     --time-limit 10s \
     --no-prompt \
-    --env "HOME=$trace_home" \
     --output "$TRACE_FILE" \
-    --launch -- "$APP_PATH/Contents/MacOS/$EXECUTABLE_NAME" -disableSparkleAutoupdate "${SCENARIO_LAUNCH_ARGS[@]}" \
+    --launch -- "$APP_PATH/Contents/MacOS/$EXECUTABLE_NAME" \
+      -disableSparkleAutoupdate -skipRecentLocationPersistence \
+      -"${ID_PREFIX}.welcomeLastSeenVersion" "$MINOR_VERSION" \
+      "${SCENARIO_LAUNCH_ARGS[@]}" \
     > "$RUN_RAW_DIR/xctrace.log" 2>&1 || true
   if [[ -d "$TRACE_FILE" ]]; then
     echo "    Trace: $TRACE_FILE (open in Instruments to inspect)"
@@ -315,14 +323,13 @@ declare -a WALL_TIMES_MS=()
 declare -a PEAK_RSS_KB=()
 
 for ((i = 1; i <= ITERATIONS; i++)); do
-  run_home="$OUTPUT_DIR/homes/run-$i"
   log_file="$RUN_RAW_DIR/$SCENARIO-$i.ndjson"
 
   log stream --style ndjson --signpost --predicate "subsystem == \"$BUNDLE_ID\"" > "$log_file" 2>/dev/null &
   log_stream_pid=$!
   sleep 0.4 # let log stream attach before the process we're measuring exists
 
-  pid=$(run_isolated_launch "$run_home" "${SCENARIO_LAUNCH_ARGS[@]}")
+  pid=$(run_isolated_launch "${SCENARIO_LAUNCH_ARGS[@]}")
 
   # Sample RSS while the app settles; report the peak. folder-load with a
   # 1000+ file corpus needs longer to reach FirstStablePaint than a bare
@@ -430,12 +437,10 @@ per the plan, these are reviewed manually in Instruments/Activity Monitor
 pays for itself. Subprocess count (ExifTool launches) is not yet tracked
 here; it matters once a metadata-loading scenario is added.
 
-Raw logs and per-iteration homes: \`scripts/performance/output/raw/$RUN_ID/\`
-(gitignored — not committed).
+Raw logs: \`scripts/performance/output/raw/$RUN_ID/\` (gitignored — not
+committed).
 EOF
 
 echo ""
 echo "==> Report written: $REPORT_FILE"
 cat "$REPORT_FILE"
-
-rm -rf "$OUTPUT_DIR/homes"

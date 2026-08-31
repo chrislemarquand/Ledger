@@ -633,6 +633,7 @@ extension AppModel {
     }
 
     func persistRecentLocations() {
+        guard !isRecentLocationPersistenceDisabled else { return }
         let records: [RecentLocation] = locationItems.enumerated().compactMap { index, item in
             guard case let .folder(url) = item.kind else { return nil }
             return RecentLocation(

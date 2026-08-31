@@ -217,11 +217,24 @@ extension AppModel {
         }
 
         startInitialThumbnailWarmup(for: urls, loadID: loadID)
-        scheduleDeferredFolderMetadataPrefetch(
-            for: urls,
-            batchSize: metadataBatchSize(for: kind),
-            loadID: loadID
-        )
+        // v1.4 Phase 2.1: don't eagerly read every file's metadata for the whole
+        // folder unless something visible actually needs it (see
+        // hasVisibleMetadataColumnDemand's doc comment for what was verified
+        // safe). Selected-file metadata still loads on demand via
+        // loadMetadataForSelection() regardless of this gate.
+        if hasVisibleMetadataColumnDemand {
+            scheduleDeferredFolderMetadataPrefetch(
+                for: urls,
+                batchSize: metadataBatchSize(for: kind),
+                loadID: loadID
+            )
+        } else {
+            // Folder metadata prefetch is what used to chain into preview
+            // preload once it finished (or immediately, on its "nothing to
+            // load" path) — preserve that side effect since we're skipping
+            // the prefetch itself.
+            scheduleDeferredPreviewPreload(for: urls)
+        }
 
         cloudDownloadTracker.start(for: urls) { [weak self] states, progress in
             self?.applyCloudStateUpdates(states, progress: progress)
@@ -404,6 +417,25 @@ extension AppModel {
                 )
             }
         }
+    }
+
+    /// v1.4 Phase 2.1: whether anything the user can currently see actually needs
+    /// whole-folder ExifTool metadata. Confirmed via a full-codebase audit before
+    /// writing this: no sort mode, the search/filter path, or any export/CSV/console
+    /// path reads `metadataByFile` for correctness — they're filesystem-attribute-only
+    /// or do their own fresh independent reads. The only genuine "visible requirement"
+    /// for metadata is a metadata-backed List column or Icon/Gallery subtitle the user
+    /// has explicitly enabled (all metadata columns default to hidden — see
+    /// `ListColumnDefinition.metadata`). Checked regardless of the currently active
+    /// browser view mode, since switching modes doesn't reset `metadataByFile` and a
+    /// persisted preference for a metadata column counts as an active requirement
+    /// even when a different mode happens to be showing right now.
+    private var hasVisibleMetadataColumnDemand: Bool {
+        if let iconSubtitleColumnID, ListColumnDefinition.metadata.contains(where: { $0.id == iconSubtitleColumnID }) {
+            return true
+        }
+        let columnStore = ListColumnStore(identifierPrefix: AppBrand.identifierPrefix)
+        return ListColumnDefinition.metadata.contains { columnStore.isVisible($0) }
     }
 
     private func scheduleDeferredFolderMetadataPrefetch(for files: [URL], batchSize: Int, loadID: UUID) {

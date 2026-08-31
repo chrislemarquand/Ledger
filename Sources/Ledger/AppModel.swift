@@ -17,6 +17,19 @@ let isRunningUnitTests: Bool = {
         NSClassFromString("XCTestCase") != nil
 }()
 
+/// `-skipRecentLocationPersistence`: gates the disk write in `persistRecentLocations()`
+/// only — in-memory Recents behavior within the run is unaffected. Added for
+/// scripts/performance/run_benchmarks.sh and any other CLI-launched instance after
+/// discovering (2026-08-31) that `HOME` environment variable redirection does NOT
+/// isolate NSUserDefaults/cfprefsd OR NSHomeDirectory()-based paths on this platform —
+/// every "isolated" benchmark launch this session was actually reading/writing the
+/// real ~/Library/Application Support/Ledger/recent_locations.json, polluting the
+/// real Recents list with corpus/test paths. See feedback_macos_home_isolation_broken
+/// memory and docs/v1.4-progress.md for the full incident writeup.
+let isRecentLocationPersistenceDisabled: Bool = {
+    CommandLine.arguments.contains("-skipRecentLocationPersistence")
+}()
+
 enum ThumbnailPipeline {
     static func cachedImage(for fileURL: URL, minRenderedSide: CGFloat) -> NSImage? {
         ThumbnailService.cachedImage(for: fileURL, minRenderedSide: minRenderedSide)
