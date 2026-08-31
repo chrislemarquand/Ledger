@@ -872,28 +872,24 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
 
         // Build fresh injected items with images.
         // macOS 27 has AppKit hide menu-item SF Symbol images by default; opt these three back
-        // in explicitly via `preferredImageVisibility` (API_AVAILABLE(macos(27.0))) so they
-        // render the same on 27 as they already do on 26. `.image` alone isn't enough there.
+        // in explicitly via `makeImagePreferredVisible()` (SharedUI's KVC-based wrapper around
+        // `preferredImageVisibility`, since that property's SDK declaration is macOS-27-only —
+        // see MenuBuilders.swift) so they render the same on 27 as they already do on 26.
+        // `.image` alone isn't enough there.
         let iconItem = NSMenuItem(title: "as Icons", action: #selector(switchToIconAction(_:)), keyEquivalent: "1")
         iconItem.keyEquivalentModifierMask = .command
         iconItem.image = NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: nil)
-        if #available(macOS 27.0, *) {
-            iconItem.preferredImageVisibility = .visible
-        }
+        iconItem.makeImagePreferredVisible()
 
         let listItem = NSMenuItem(title: "as List", action: #selector(switchToListAction(_:)), keyEquivalent: "2")
         listItem.keyEquivalentModifierMask = .command
         listItem.image = NSImage(systemSymbolName: "list.bullet", accessibilityDescription: nil)
-        if #available(macOS 27.0, *) {
-            listItem.preferredImageVisibility = .visible
-        }
+        listItem.makeImagePreferredVisible()
 
         let galleryItem = NSMenuItem(title: "as Gallery", action: #selector(switchToGalleryAction(_:)), keyEquivalent: "3")
         galleryItem.keyEquivalentModifierMask = .command
         galleryItem.image = NSImage(systemSymbolName: "squares.below.rectangle", accessibilityDescription: nil)
-        if #available(macOS 27.0, *) {
-            galleryItem.preferredImageVisibility = .visible
-        }
+        galleryItem.makeImagePreferredVisible()
 
         let zoomInItem = NSMenuItem(title: "Zoom In", action: #selector(zoomInAction(_:)), keyEquivalent: "+")
         zoomInItem.keyEquivalentModifierMask = .command
@@ -1262,9 +1258,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         rotateAnticlockwiseItem.image = NSImage(systemSymbolName: "rotate.left", accessibilityDescription: nil)
         rotateAnticlockwiseItem.tag = MenuTag.imageRotateAnticlockwise
         rotateAnticlockwiseItem.target = self
-        if #available(macOS 27.0, *) {
-            rotateAnticlockwiseItem.preferredImageVisibility = .visible
-        }
+        rotateAnticlockwiseItem.makeImagePreferredVisible()
         menu.addItem(rotateAnticlockwiseItem)
 
         let rotateClockwiseItem = NSMenuItem(
@@ -1275,9 +1269,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         rotateClockwiseItem.image = NSImage(systemSymbolName: "rotate.right", accessibilityDescription: nil)
         rotateClockwiseItem.tag = MenuTag.imageRotateClockwise
         rotateClockwiseItem.target = self
-        if #available(macOS 27.0, *) {
-            rotateClockwiseItem.preferredImageVisibility = .visible
-        }
+        rotateClockwiseItem.makeImagePreferredVisible()
         menu.addItem(rotateClockwiseItem)
 
         let flipHorizontalItem = NSMenuItem(
@@ -1288,9 +1280,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         flipHorizontalItem.image = NSImage(systemSymbolName: "flip.horizontal", accessibilityDescription: nil)
         flipHorizontalItem.tag = MenuTag.imageFlipHorizontal
         flipHorizontalItem.target = self
-        if #available(macOS 27.0, *) {
-            flipHorizontalItem.preferredImageVisibility = .visible
-        }
+        flipHorizontalItem.makeImagePreferredVisible()
         menu.addItem(flipHorizontalItem)
 
         let flipVerticalItem = NSMenuItem(
@@ -1304,9 +1294,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         )
         flipVerticalItem.tag = MenuTag.imageFlipVertical
         flipVerticalItem.target = self
-        if #available(macOS 27.0, *) {
-            flipVerticalItem.preferredImageVisibility = .visible
-        }
+        flipVerticalItem.makeImagePreferredVisible()
         menu.addItem(flipVerticalItem)
         menu.addItem(.separator())
 
