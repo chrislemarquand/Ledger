@@ -8,7 +8,7 @@ supersedes those terms.
 
 Bundled directly into the app's resources (`exiftool/bin/exiftool`, see
 `scripts/build/bundle_exiftool.sh`) and used for all metadata reading and
-writing. Currently pinned to version 13.50 (`Config/Base.xcconfig`,
+writing. Currently pinned to version 13.55 (`Config/Base.xcconfig`,
 `EXIFTOOL_REQUIRED_VERSION`).
 
 - **Author**: Phil Harvey
