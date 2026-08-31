@@ -4,6 +4,7 @@ import AppKit
 /// Every control here is laid out exactly as the writable ES-E1 UI would be —
 /// just `isEnabled = false` — so enabling writes later only means flipping
 /// that flag, not redesigning the screen.
+@MainActor
 enum EOS1VControlFactory {
     static func bodyLabel(_ text: String) -> NSTextField {
         let label = NSTextField(wrappingLabelWithString: text)

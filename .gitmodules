@@ -1,0 +1,3 @@
+[submodule "External/eos1v-serial"]
+	path = External/eos1v-serial
+	url = https://github.com/chrislemarquand/eos1v-serial.git

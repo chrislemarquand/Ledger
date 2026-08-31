@@ -29,3 +29,7 @@ docs/fixtures/
 /Vendor/
 /1vdriver/
 .claude/
+
+# Local-only backup snapshots (not for sharing) — see External/eos1v-serial
+# for the tracked, submoduled working copy.
+/LocalReference/

@@ -105,7 +105,9 @@ final class EOS1VToolRunner: ObservableObject {
     init() {
         let defaults = UserDefaults.standard
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let guessedTool = "\(home)/Xcode Projects/eos1v-serial"
+        // eos1v-serial lives as a git submodule inside Ledger's own project
+        // folder (External/eos1v-serial) rather than as a sibling directory.
+        let guessedTool = "\(home)/Xcode Projects/Ledger/External/eos1v-serial"
         toolDirectory = defaults.string(forKey: Keys.toolDirectory) ?? guessedTool
         pythonPath = defaults.string(forKey: Keys.pythonPath) ?? "\(guessedTool)/.venv/bin/python"
         outputDirectory = defaults.string(forKey: Keys.outputDirectory) ?? "\(guessedTool)/captures"

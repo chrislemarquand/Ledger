@@ -619,6 +619,7 @@
 		};
 		A10001400000000000000001 /* Set Build Number */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);

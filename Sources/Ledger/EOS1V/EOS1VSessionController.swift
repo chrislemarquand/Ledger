@@ -238,8 +238,10 @@ final class EOS1VToolClient {
     private func resolvedConfiguration() -> (python: URL, script: URL) {
         let defaults = UserDefaults.standard
         let prefix = AppBrand.identifierPrefix
+        // eos1v-serial lives as a git submodule inside Ledger's own project
+        // folder (External/eos1v-serial) rather than as a sibling directory.
         let projectRoot = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Xcode Projects/eos1v-serial", isDirectory: true)
+            .appendingPathComponent("Xcode Projects/Ledger/External/eos1v-serial", isDirectory: true)
         let toolDirectory = defaults.string(forKey: "\(prefix).eos1v.toolDirectory")
             .map { URL(fileURLWithPath: $0, isDirectory: true) } ?? projectRoot
         let python = defaults.string(forKey: "\(prefix).eos1v.pythonPath")
