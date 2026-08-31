@@ -123,6 +123,9 @@ Directional, not committed — less specified than v1.3/v1.4 on purpose; expect 
 ### EOS-1V
 
 - [ ] **Roll metadata database**: a Ledger-owned overlay of user-editable info (starting with Title/Remarks, extensible to any field via per-roll/per-frame overrides) layered on top of the camera's immutable downloaded data, plus a second "Ledger-enriched" CSV export alongside the existing untouched-camera-data export. Full data model, file-by-file plan, and rationale (including why this isn't a database engine) in `docs/eos1v-roll-metadata-plan-2026-08.md`.
+- [ ] **Seamless import pipeline:** rather than exporting a CSV then re-importing it, make the import pipeline for a folder of photos from an EOS-1V camera seamless, without the user having to export and import CSV files.
+- [ ]  **Date/time write: u**sing the eos1v-serial script, write updated date/time to the camera via the ES-E1 cable.
+- [ ] **Multiple camera gate:** if the data being downloaded from the camera doesn't match what Ledger already has, prompt the user. Need to decide the policy - overwrite or add to existing lens data stored.
 
 ### Metadata
 
