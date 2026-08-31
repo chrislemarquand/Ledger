@@ -25,7 +25,6 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     private weak var imageMenuForInjection: NSMenu?
     private weak var folderMenuForInjection: NSMenu?
     private weak var helpMenuForInjection: NSMenu?
-    private weak var debugMenuForInjection: NSMenu?
     private var menuTrackingObserver: NSObjectProtocol?
     private var uiRefreshObservers: [AnyCancellable] = []
     private var browserFocusRequestObserver: NSObjectProtocol?
@@ -428,7 +427,6 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             self?.injectSortMenuIfNeeded()
             self?.injectImageMenuIfNeeded()
             self?.injectFolderMenuIfNeeded()
-            self?.injectDebugMenuIfNeeded()
             self?.injectHelpMenuIfNeeded()
         }
         // Re-register menu delegates every time the user clicks the menu bar.
@@ -446,7 +444,6 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                 self?.injectEditMenuIfNeeded()
                 self?.injectImageMenuIfNeeded()
                 self?.injectFolderMenuIfNeeded()
-                self?.injectDebugMenuIfNeeded()
                 self?.injectHelpMenuIfNeeded()
             }
         }
@@ -803,31 +800,6 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         helpMenuForInjection = submenu
         submenu.delegate = self
         rebuildHelpMenu(submenu)
-    }
-
-    /// Debug menu — developer tooling only.
-    ///
-    /// Everything here must stay cheap and synchronous: this runs on the eager injection
-    /// path at launch, and `validateMenuItem` is called globally by AppKit independently of
-    /// any menu being open. No I/O, no `Process`, no pasteboard access on either path — the
-    /// items are static and their actions merely show a window.
-    /// See `docs/menu-bar-architecture-audit-2026-08.md`.
-    private func injectDebugMenuIfNeeded() {
-        guard let submenu = ensureTopLevelMenu(title: "Debug", insertAfterTitle: "Folder") else { return }
-        debugMenuForInjection = submenu
-        submenu.delegate = self
-        rebuildDebugMenu(submenu)
-    }
-
-    private func rebuildDebugMenu(_ menu: NSMenu) {
-        menu.removeAllItems()
-        let consoleItem = NSMenuItem(
-            title: "EOS-1V Console…",
-            action: #selector(AppDelegate.showEOS1VConsoleAction(_:)),
-            keyEquivalent: ""
-        )
-        consoleItem.image = NSImage(systemSymbolName: "camera.aperture", accessibilityDescription: nil)
-        menu.addItem(consoleItem)
     }
 
     /// Builds and returns the Sort By NSMenuItem with submenu.
@@ -1539,8 +1511,6 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             rebuildFolderMenu(menu)
         } else if menu === helpMenuForInjection {
             rebuildHelpMenu(menu)
-        } else if menu === debugMenuForInjection {
-            rebuildDebugMenu(menu)
         }
     }
 
