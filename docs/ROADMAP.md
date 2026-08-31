@@ -23,12 +23,14 @@ Summary only — full item-by-item detail in `docs/ROADMAPOLD.MD` and `CHANGELOG
 ## v1.3 — Import Maturity + Polish
 
 ### Import
+
 - [ ] **EOS-1V lens-tag policy system**: originally scoped as policy modes + unknown-focal-length handling + named lens profiles + override selector. Decision 2026-08-29: the `Do not write lens`/`Single lens for import` policy modes are **not being pursued** — the EOS-1V CSV is a source of truth and this feature is just interpreting it into accurate EXIF values; if a resolved lens is wrong for a given frame, editing it after import is trivial, so a dedicated policy switch isn't worth the complexity. Scope narrowed to just the registry (done) and the picker UI (done):
   - [x] **Named lens profiles**: `LensProfile` registry (`LensProfiles.swift`) replacing the hardcoded embedded CSV (`EOSLensMappingEmbedded.swift`, now unused at runtime — reference copy at `~/Desktop/eos-lens-mapping-reference.csv`, safe to delete once manually re-entered lenses are confirmed complete). Editable via Settings → General → "Manage Lenses…" (bridging to SwiftUI via `NSHostingController` + `presentAsSheet`), Prime/Zoom radio toggle, per-lens focal range + aperture(s). `applyEOSLensPolicy`'s matching now sources from `AppModel.lensProfiles` instead of the embedded table.
   - [x] **Ambiguous-lens picker → one sheet**: `EOSLensChoiceSheetView` replaces the old loop of blocking `NSAlert`s (`ImportSession.chooseLens`, removed). One sheet lists every ambiguous frame at once (filename, focal length, frame aperture, a native grey `InspectorPopupField` dropdown per row), grouped by focal length with a live-linked "Apply to all at this focal length" checkbox per group. A frame left on "Leave Blank" now just skips that one field — the rest of the batch still stages, unlike the old alert's full-abort cancel.
-  - [ ] Unknown focal length behaviour (no registered lens covers a row's focal length) — still undecided/open, smaller than the dropped policy-mode work.
+  - [x] **Unknown focal length behaviour** (no registered lens covers a row's focal length): one aggregated "No Registered Lens Matches" alert per import (not a popup per file), listing every affected focal length and total frame count. "Manage Lenses…" (default) opens the lens registry sheet and automatically retries matching on close; "Continue Without Lens Tags" skips the `exif-lens` field for just those focal lengths, remembered only in-memory for the current import (`ImportSession.unknownFocalLengthsAcknowledged`, never persisted); "Cancel Import" aborts. Distinct from the ambiguous-lens picker above (multiple candidates) — this is zero candidates.
 
 ### EOS-1V Direct Connection
+
 - [x] **Direct EOS-1V connection over the ES-E1 cable** (unplanned addition, built 2026-08-29–31 — previously scoped and cancelled, see the removed Cancelled-section entries this superseded): a new sidebar device entry with Connect / Shooting Data / Date and Time tabs, backed by `eos1v-serial`'s versioned `machine` JSON subprocess interface (`EOS1VSessionController`, `EOS1VToolClient`).
   - [x] Connect: wake/search/download flow with live status.
   - [x] Shooting Data: flat multi-select roll table, roll detail sheet (SwiftUI `Table`, one column per frame field), local-only delete/restore (tombstone — never touches the camera or downloaded files, see `EOS1VDeletedRollsStore`).
@@ -39,18 +41,20 @@ Summary only — full item-by-item detail in `docs/ROADMAPOLD.MD` and `CHANGELOG
   - Future editable roll-metadata layer (Title/Remarks, per-field overrides, a second enriched CSV export) parked — see the v2.0+ entry and `docs/eos1v-roll-metadata-plan-2026-08.md`.
 
 ### Browse
+
 - [x] **iCloud Drive file-state UI**: make it obvious in list/gallery/inspector when a file is a cloud placeholder rather than downloaded locally (evicted/dataless items currently look like a thumbnail/metadata loading failure — exiftool reads time out silently and previews stall while fileproviderd materialises multi-hundred-MB scans). Detect via `URLResourceValues` (`isUbiquitousItem` / `ubiquitousItemDownloadingStatus`) and badge undownloaded items with an iCloud symbol using SharedUI's `makeGalleryOverlaySymbol` (`Gallery/GalleryOverlay.swift`), in the style of Librarian's shared-library `person.2.fill` grid badge. Consider a download affordance/progress and skipping exiftool reads until files are materialised.
 - [x] **Finder-style gallery view**: filmstrip along bottom, large preview at top — third browser mode alongside list and grid.
 - [x] Gallery metadata lines/subtitle customisation.
-- [x] Explicit Home/End/Page Up/Page Down keyboard nav in list/gallery.
 
 ### Metadata
+
 - [x] Metadata copy/paste:
   - [x] Field-level copy/paste.
   - [x] Metadata-set copy/paste.
 - [x] ExifTool console: live readout of ExifTool commands and output as operations run, mirroring what would appear if running ExifTool directly in the terminal.
 
 ### Maintenance
+
 - [ ] Bump bundled ExifTool from 13.50 to latest (13.59 as of 2026-07-25). Includes three security updates (13.53, 13.54, 13.59), Exif 3.1 spec tags (13.56), and Canon/Nikon/Sony lens improvements.
 - [x] No-op batch rename: suppress the staged/applied state when a rename pattern produces no changes (filenames unchanged); keep the rename sheet open and explain that no names would change.
 
@@ -97,28 +101,36 @@ documents referenced there.
 Directional, not committed — less specified than v1.3/v1.4 on purpose; expect this section to be re-scoped as it gets closer.
 
 ### Browse
+
 - [ ] **Finder-style hierarchical browsing**: the core file-browser model, replacing today's flat folder-at-a-time navigation.
 - [ ] **In-app image viewing**: a core workflow for Ledger-supported image formats, no external viewer needed.
 - [ ] **HDR-aware rendering** (moved from v1.2.3, 2026-08-15): decode HDR/gain-map images via ImageIO `kCGImageSourceDecodeToHDR` (+ `kCGComputeHDRStats`); render inspector/grid previews with `NSImage.DynamicRange.constrainedHigh` (`NSImageView.preferredImageDynamicRange` / SwiftUI `allowedDynamicRange`) and the in-app viewer with `.high` on EDR displays. SDR files are unaffected (decode option is a no-op). Keep the JPEG thumbnail disk cache SDR; HDR applies to live decodes only.
 - [ ] **Smart folders**: saved metadata-facet queries surfaced like regular folders.
 - [ ] **Bridge-class search, filter, and sort**: across folders and metadata facets (type, rating, labels, keywords, and other attributes).
 - [ ] **Drag a folder onto the sidebar**: to add as a favourite.
+- [ ] **Keyboard navigation:** Explicit Home/End/Page Up/Page Down keyboard nav in list/gallery.
+- [ ] **Drag files out**: to Finder/Mail/Messages etc. (`NSItemProvider`/`NSPasteboardWriter` on gallery/list items).
+- [ ] **Toolbar customisation**
 
 ### Devices
+
 - [ ] **Camera/SD card photo import**: a new "Devices" sidebar entry (alongside Canon EOS-1V, same section) for any connected camera or memory card, built on Apple's native `ImageCaptureCore` (`ICDeviceBrowser`/`ICCameraDevice` — the same framework Photos.app/Preview/Image Capture.app use), adopting the system's native photo-import UI/paradigm rather than a custom-built one. No existing groundwork — `ImageCaptureCore` isn't referenced anywhere in the codebase yet.
 
 ### Import
+
 - [ ] **Import conflict-resolution, revisited**: a real UI for unresolved/ambiguous import rows, designed against how matching actually behaves rather than assumed. Full context, the structural finding from the 2026-08-29 attempt (no current adapter path can produce `.multipleTargets` or a multi-candidate `.duplicateSourceIdentifier`), and a recommended approach are in `docs/import-conflict-resolution-plan-2026-08.md`.
 
 ### EOS-1V
+
 - [ ] **Roll metadata database**: a Ledger-owned overlay of user-editable info (starting with Title/Remarks, extensible to any field via per-roll/per-frame overrides) layered on top of the camera's immutable downloaded data, plus a second "Ledger-enriched" CSV export alongside the existing untouched-camera-data export. Full data model, file-by-file plan, and rationale (including why this isn't a database engine) in `docs/eos1v-roll-metadata-plan-2026-08.md`.
 
 ### Metadata
+
 - [ ] **Copy/paste field selector**: using the same UI/plumbing as preset sheets — "Copy selected fields…" pops up a window to pick fields, then paste applies only those.
 
 ### Export & Output
-- [ ] **Drag files out**: to Finder/Mail/Messages etc. (`NSItemProvider`/`NSPasteboardWriter` on gallery/list items).
-- [ ] **Print support**: batch output as PDF contact sheets.
+
+- [ ] **Print support**: batch output as PDF contact sheets     
 
 ---
 
@@ -127,10 +139,4 @@ Directional, not committed — less specified than v1.3/v1.4 on purpose; expect 
 - [ ] **Audit/validation mode**: surfaces missing/inconsistent metadata (missing DateTimeOriginal, missing GPS, missing copyright, conflicting IPTC/XMP). Inspector "Issues" section with one-click fixes where safe.
 - [ ] **Sidecar management**: XMP sidecar create/rebuild/apply; browser badges for sidecar-exists and sidecar-differs-from-embedded states.
 
----
-
-## Cancelled
-
-- [ ] Toolbar customisation.
-- [ ] Inspector clear-field control: optional trailing `x.circle.fill` action per field for staged-clear UX.
-- [ ] Large-folder performance pass (1000+ images) — cancelled as an open-ended optimisation project; v1.4 retains only a bounded benchmark/regression gate and trace-backed fixes.
+-

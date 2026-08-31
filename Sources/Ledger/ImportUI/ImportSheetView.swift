@@ -27,6 +27,15 @@ final class ImportSession: ObservableObject {
         let candidates: [String]
     }
 
+    /// One focal length with no registered lens covering it, aggregated across every
+    /// frame shot at that length so the whole import surfaces as one prompt rather than
+    /// a popup per file.
+    struct EOSUnknownFocalLengthGroup: Identifiable {
+        var id: Int { focalMillimeters }
+        let focalMillimeters: Int
+        let frameCount: Int
+    }
+
     private let coordinator = ImportCoordinator()
     private let eosLensMappingURLOverride: URL?
     private var eosLensMappingCache: [Int: [(lens: String, maxAperture: Double?)]]?
@@ -37,7 +46,12 @@ final class ImportSession: ObservableObject {
     @Published var isBusy = false
     @Published var previewError: String?
     @Published var pendingLensChoices: [EOSLensAmbiguousRow]?
+    @Published var pendingUnknownFocalLengths: [EOSUnknownFocalLengthGroup]?
     var lensChoiceResolutions: [URL: String] = [:]
+    /// Focal lengths the user chose "Continue Without Lens Tags" for. In-memory only —
+    /// applies to the current import and isn't persisted, per the "remember nothing
+    /// permanently" decision: this is a per-import call, not a standing policy.
+    var unknownFocalLengthsAcknowledged: Set<Int> = []
     private var previewTask: Task<Void, Never>?
     private unowned let model: AppModel
 
@@ -80,6 +94,13 @@ final class ImportSession: ObservableObject {
 
     deinit {
         previewTask?.cancel()
+    }
+
+    /// Call after the user edits the lens registry (e.g. via "Manage Lenses…" from the
+    /// unknown-focal-length prompt) so the next match pass re-reads AppModel.lensProfiles
+    /// instead of serving the stale cached mapping.
+    func invalidateLensMappingCache() {
+        eosLensMappingCache = nil
     }
 
     func schedulePreviewRefresh(model: AppModel) {
@@ -185,6 +206,13 @@ final class ImportSession: ObservableObject {
 
         let activeTagIDs = effectiveActiveTagIDSet(model: model)
         let eosLensResult = applyEOSLensPolicy(assignments: resolve.assignments, run: run, activeTagIDs: activeTagIDs)
+        if !eosLensResult.pendingUnknownFocalLengths.isEmpty {
+            pendingUnknownFocalLengths = eosLensResult.pendingUnknownFocalLengths
+            importReport = makeImportReport(run: run, resolve: resolve, stageSummary: nil)
+            shouldEnterPostImportReview = shouldReview(report: importReport)
+            return false
+        }
+        pendingUnknownFocalLengths = nil
         if !eosLensResult.pendingChoices.isEmpty {
             pendingLensChoices = eosLensResult.pendingChoices
             importReport = makeImportReport(run: run, resolve: resolve, stageSummary: nil)
@@ -393,16 +421,16 @@ final class ImportSession: ObservableObject {
         assignments: [ImportAssignment],
         run: ImportPreparedRun,
         activeTagIDs: Set<String>
-    ) -> (assignments: [ImportAssignment], pendingChoices: [EOSLensAmbiguousRow]) {
+    ) -> (assignments: [ImportAssignment], pendingChoices: [EOSLensAmbiguousRow], pendingUnknownFocalLengths: [EOSUnknownFocalLengthGroup]) {
         guard run.options.sourceKind == .eos1v else {
-            return (assignments, [])
+            return (assignments, [], [])
         }
         guard activeTagIDs.contains("exif-lens") else {
-            return (assignments, [])
+            return (assignments, [], [])
         }
         let mapping = loadEOSLensMapping()
         guard !mapping.isEmpty else {
-            return (assignments, [])
+            return (assignments, [], [])
         }
 
         // Defensive: matching should provide unique target URLs, but avoid
@@ -413,8 +441,11 @@ final class ImportSession: ObservableObject {
         }
 
         // Pass 1: find every row that's genuinely ambiguous and doesn't already have a
-        // resolution from a previous round through this sheet.
+        // resolution from a previous round through this sheet, plus every row whose focal
+        // length isn't covered by any registered lens at all. The latter aggregates by
+        // focal length into one prompt rather than a popup per file.
         var ambiguousRows: [EOSLensAmbiguousRow] = []
+        var unknownFocalLengthCounts: [Int: Int] = [:]
         for assignment in assignments {
             guard let row = rowByTargetURL[assignment.targetURL] else { continue }
             let hasLens = assignment.fields.contains {
@@ -422,9 +453,14 @@ final class ImportSession: ObservableObject {
             }
             if hasLens { continue }
             guard let focalRaw = row.fields.first(where: { $0.tagID == "exif-focal" })?.value,
-                  let focalMM = focalLengthMillimeters(from: focalRaw),
-                  let candidates = mapping[focalMM]
+                  let focalMM = focalLengthMillimeters(from: focalRaw)
             else { continue }
+            guard let candidates = mapping[focalMM], !candidates.isEmpty else {
+                if !unknownFocalLengthsAcknowledged.contains(focalMM) {
+                    unknownFocalLengthCounts[focalMM, default: 0] += 1
+                }
+                continue
+            }
             let frameMaxAperture = maxApertureFromRow(row)
             let filtered = apertureFilteredCandidates(candidates, frameMaxAperture: frameMaxAperture)
             guard filtered.count > 1, lensChoiceResolutions[assignment.targetURL] == nil else { continue }
@@ -440,8 +476,14 @@ final class ImportSession: ObservableObject {
                 )
             )
         }
+        guard unknownFocalLengthCounts.isEmpty else {
+            let groups = unknownFocalLengthCounts.keys.sorted().map {
+                EOSUnknownFocalLengthGroup(focalMillimeters: $0, frameCount: unknownFocalLengthCounts[$0] ?? 0)
+            }
+            return (assignments, [], groups)
+        }
         guard ambiguousRows.isEmpty else {
-            return (assignments, ambiguousRows)
+            return (assignments, ambiguousRows, [])
         }
 
         // Pass 2: every row is now either unambiguous (auto-resolve) or has a resolution
@@ -491,7 +533,7 @@ final class ImportSession: ObservableObject {
             )
         }
 
-        return (updatedAssignments, [])
+        return (updatedAssignments, [], [])
     }
 
     private func maxApertureFromRow(_ row: ImportRow) -> Double? {
@@ -844,6 +886,8 @@ struct ImportSheetView: View {
     @State private var importProgress: Double?
     @State private var isPostImportReviewMode = false
     @State private var showLensChoiceSheet = false
+    @State private var showUnknownFocalLengthAlert = false
+    @State private var showLensManagerSheet = false
 
     private static let sectionSpacing = WorkflowSheetSectionSpacing.uniform(20)
 
@@ -980,6 +1024,54 @@ struct ImportSheetView: View {
                     performImport()
                 }
             )
+        }
+        .alert(
+            "No Registered Lens Matches",
+            isPresented: $showUnknownFocalLengthAlert
+        ) {
+            Button("Manage Lenses…") {
+                showLensManagerSheet = true
+            }
+            Button("Continue Without Lens Tags") {
+                guard let groups = session.pendingUnknownFocalLengths else { return }
+                for group in groups {
+                    session.unknownFocalLengthsAcknowledged.insert(group.focalMillimeters)
+                }
+                session.pendingUnknownFocalLengths = nil
+                performImport()
+            }
+            Button("Cancel Import", role: .cancel) {
+                session.pendingUnknownFocalLengths = nil
+                model.dismissImportSheet()
+            }
+        } message: {
+            Text(unknownFocalLengthAlertMessage)
+        }
+        .sheet(isPresented: $showLensManagerSheet) {
+            LensProfileManagerSheet(model: model, onDone: {
+                showLensManagerSheet = false
+                session.invalidateLensMappingCache()
+                session.pendingUnknownFocalLengths = nil
+                performImport()
+            })
+        }
+    }
+
+    private var unknownFocalLengthAlertMessage: String {
+        guard let groups = session.pendingUnknownFocalLengths, !groups.isEmpty else { return "" }
+        let frameCount = groups.reduce(0) { $0 + $1.frameCount }
+        let framesText = frameCount == 1 ? "1 frame" : "\(frameCount) frames"
+        let focalText = focalLengthListText(groups.map(\.focalMillimeters).sorted())
+        return "Ledger couldn’t find a registered lens for \(framesText) at \(focalText)."
+    }
+
+    private func focalLengthListText(_ millimeters: [Int]) -> String {
+        let strings = millimeters.map { "\($0)mm" }
+        switch strings.count {
+        case 0: return ""
+        case 1: return strings[0]
+        case 2: return "\(strings[0]) and \(strings[1])"
+        default: return strings.dropLast().joined(separator: ", ") + ", and \(strings[strings.count - 1])"
         }
     }
 
@@ -1267,7 +1359,9 @@ struct ImportSheetView: View {
                 }
             } else {
                 importProgress = nil
-                if let lensChoices = session.pendingLensChoices, !lensChoices.isEmpty {
+                if let unknownFocalLengths = session.pendingUnknownFocalLengths, !unknownFocalLengths.isEmpty {
+                    showUnknownFocalLengthAlert = true
+                } else if let lensChoices = session.pendingLensChoices, !lensChoices.isEmpty {
                     showLensChoiceSheet = true
                 } else if session.shouldEnterPostImportReview {
                     isPostImportReviewMode = true
