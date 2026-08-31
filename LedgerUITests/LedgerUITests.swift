@@ -114,4 +114,20 @@ final class LedgerUITests: XCTestCase {
         XCTAssertTrue(sortButton.waitForExistence(timeout: 5))
         XCTAssertTrue(sortButton.isEnabled)
     }
+
+    // NOTE: a rapid-sidebar-switching test (Desktop/Downloads/Pictures) was
+    // written and run here to investigate the historical "Publishing changes
+    // from within view updates is not allowed" SwiftUI warning (ROADMAPOLD.MD
+    // B22), then deliberately removed. Clicking those sidebar shortcuts
+    // triggers macOS's TCC privacy dialog for each protected folder, and it
+    // re-prompts on every run (the UI test runner gets a fresh ad-hoc
+    // signature per build, which TCC treats as a new app each time) — a real,
+    // unsuppressible automation blocker, not something fixable with a launch
+    // argument. The investigation still ran successfully once (with the
+    // dialogs manually dismissed) and its finding is recorded in
+    // docs/v1.4-progress.md: the warning did not reproduce. Don't re-add a
+    // sidebar-click test against these specific protected folders without a
+    // real fix for the TCC re-prompt (e.g. pre-approving the built app's
+    // stable identity in System Settings, if that ever proves durable across
+    // rebuilds).
 }
