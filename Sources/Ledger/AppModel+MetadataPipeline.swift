@@ -472,6 +472,16 @@ extension AppModel {
         let uniqueFiles = Array(Set(files))
         guard !uniqueFiles.isEmpty else { return }
 
+        // v1.4 Phase 2.2: only the most-recently-left folder's warm work is worth
+        // keeping. Without this, a quick A -> B -> C navigation left A's warm task
+        // running for its full duration with no further guard against it — competing
+        // with C's now-foreground metadata/preview work for ExifTool and decode
+        // capacity even though A was obsolete the moment B was left too.
+        for (staleID, task) in backgroundWarmTasksBySelectionID {
+            task.cancel()
+            backgroundWarmTasksBySelectionID[staleID] = nil
+        }
+
         backgroundWarmTasksBySelectionID[id] = Task(priority: .utility) { @MainActor [weak self] in
             guard let self else { return }
             defer { self.backgroundWarmTasksBySelectionID[id] = nil }
@@ -498,6 +508,10 @@ extension AppModel {
             var map = metadataByFile
             for fileURL in filesNeedingMetadata {
                 if Task.isCancelled { return }
+                // Foreground work starting mid-run (e.g. the user landed back on this
+                // folder, or moved to another one that now needs its own prefetch)
+                // takes priority — yield the rest of this speculative pass.
+                if isFolderMetadataLoading || isPreviewPreloading { return }
                 await Task.yield()
 
                 let snapshots = await readMetadataBatchResilient([fileURL])
@@ -517,6 +531,7 @@ extension AppModel {
         }
         for fileURL in filesNeedingPreview {
             if Task.isCancelled { return }
+            if isFolderMetadataLoading || isPreviewPreloading { return }
             await Task.yield()
 
             if ThumbnailService.cachedImage(for: fileURL, minRenderedSide: Self.inspectorPreviewTargetSide) != nil { continue }
