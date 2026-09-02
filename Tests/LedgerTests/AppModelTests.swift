@@ -733,6 +733,72 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.folderMetadataLoadCompleted, 0)
     }
 
+    // v1.4 Phase 3.1: metadataByFile was previously retained for every file visited all
+    // session long, unbounded. These verify the LRU-ish cap actually evicts once exceeded,
+    // and that it never evicts the current selection/folder/pending-edit/in-flight protections.
+    func testMetadataCacheEvictsOldestUnprotectedEntriesOnceOverCapacity() {
+        let model = makeModel()
+        let overflow = 10
+        let totalFiles = AppModel.maxMetadataCacheEntries + overflow
+
+        for i in 0 ..< totalFiles {
+            let url = URL(fileURLWithPath: "/tmp/cache_evict_\(i).jpg")
+            model.metadataByFile[url] = FileMetadataSnapshot(fileURL: url, fields: [])
+            // Oldest files get the oldest timestamps so eviction order is deterministic.
+            model.metadataLastLoadedAt[url] = Date(timeIntervalSince1970: Double(i))
+        }
+        XCTAssertEqual(model.metadataByFile.count, totalFiles)
+
+        model.trimMetadataCacheIfNeeded()
+
+        XCTAssertEqual(model.metadataByFile.count, AppModel.maxMetadataCacheEntries)
+        // The `overflow` oldest-timestamped files should be exactly the ones evicted.
+        for i in 0 ..< overflow {
+            let url = URL(fileURLWithPath: "/tmp/cache_evict_\(i).jpg")
+            XCTAssertNil(model.metadataByFile[url], "expected the oldest entry \(i) to be evicted")
+            XCTAssertNil(model.metadataLastLoadedAt[url])
+        }
+        let survivorURL = URL(fileURLWithPath: "/tmp/cache_evict_\(totalFiles - 1).jpg")
+        XCTAssertNotNil(model.metadataByFile[survivorURL], "expected the newest entry to survive")
+    }
+
+    func testMetadataCacheEvictionProtectsSelectionFolderAndPendingWork() {
+        let model = makeModel()
+        let protectedSelection = URL(fileURLWithPath: "/tmp/cache_protect_selected.jpg")
+        let protectedFolder = URL(fileURLWithPath: "/tmp/cache_protect_folder.jpg")
+        let protectedPendingEdit = URL(fileURLWithPath: "/tmp/cache_protect_pending_edit.jpg")
+        let protectedStale = URL(fileURLWithPath: "/tmp/cache_protect_stale.jpg")
+        let protectedURLs = [protectedSelection, protectedFolder, protectedPendingEdit, protectedStale]
+
+        model.selectedFileURLs = [protectedSelection]
+        model.browserItems = [makeBrowserItem(name: "cache_protect_folder.jpg")]
+        model.pendingEditsByFile[protectedPendingEdit] = [
+            AppModel.EditableTag.rating: AppModel.StagedEditRecord(value: "5", source: .manual, updatedAt: Date())
+        ]
+        model.staleMetadataFiles.insert(protectedStale)
+
+        // Every protected URL gets the very oldest timestamp, so a naive age-only eviction
+        // would remove them first if the protection set were ignored.
+        for (i, url) in protectedURLs.enumerated() {
+            model.metadataByFile[url] = FileMetadataSnapshot(fileURL: url, fields: [])
+            model.metadataLastLoadedAt[url] = Date(timeIntervalSince1970: Double(i))
+        }
+        for i in 0 ..< AppModel.maxMetadataCacheEntries {
+            let url = URL(fileURLWithPath: "/tmp/cache_filler_\(i).jpg")
+            model.metadataByFile[url] = FileMetadataSnapshot(fileURL: url, fields: [])
+            model.metadataLastLoadedAt[url] = Date(timeIntervalSince1970: 1000 + Double(i))
+        }
+
+        model.trimMetadataCacheIfNeeded()
+
+        for url in protectedURLs {
+            XCTAssertNotNil(model.metadataByFile[url], "expected \(url.lastPathComponent) to be protected from eviction")
+        }
+        // Total went in at cap + 4 protected; trimming to cap must come entirely out of the
+        // unprotected fillers, since the protected 4 are ineligible for eviction.
+        XCTAssertEqual(model.metadataByFile.count, AppModel.maxMetadataCacheEntries)
+    }
+
     // MARK: - Helpers
 
     private func makeBrowserItems(count: Int) -> [AppModel.BrowserItem] {

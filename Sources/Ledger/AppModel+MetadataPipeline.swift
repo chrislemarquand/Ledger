@@ -31,15 +31,12 @@ extension AppModel {
 
             // Ignore stale async results after selection has changed.
             guard selectionAtStart == selectedFileURLs else { return }
-            for snapshot in snapshots {
-                map[snapshot.fileURL] = snapshot
-                staleMetadataFiles.remove(snapshot.fileURL)
-                pendingCommitsByFile.removeValue(forKey: snapshot.fileURL)
-            }
+            mergeMetadataSnapshots(snapshots, into: &map)
         }
 
         guard selectionAtStart == selectedFileURLs else { return }
         metadataByFile = map
+        trimMetadataCacheIfNeeded()
         recalculateInspectorState()
     }
 
@@ -87,12 +84,9 @@ extension AppModel {
                 if Task.isCancelled { return }
                 guard self.folderMetadataLoadID == loadID else { return }
 
-                for snapshot in snapshots {
-                    map[snapshot.fileURL] = snapshot
-                    self.staleMetadataFiles.remove(snapshot.fileURL)
-                    self.pendingCommitsByFile.removeValue(forKey: snapshot.fileURL)
-                }
+                self.mergeMetadataSnapshots(snapshots, into: &map)
                 self.metadataByFile = map
+                self.trimMetadataCacheIfNeeded()
                 self.folderMetadataLoadCompleted = self.loadedMetadataCount(in: filesToLoad, from: map)
                 let batchURLs = Set(batch)
                 if !self.selectedFileURLs.isEmpty,
@@ -117,6 +111,51 @@ extension AppModel {
             if map[fileURL] != nil {
                 count += 1
             }
+        }
+    }
+
+    /// v1.4 Phase 3.1: shared merge step for every site that folds freshly-read snapshots into
+    /// `metadataByFile` — clears their stale/pending-commit markers and records a load
+    /// timestamp for `trimMetadataCacheIfNeeded()`. Callers still own assigning the mutated
+    /// `map` back to `metadataByFile` themselves (some accumulate across several batches
+    /// before doing so, under a selection/load-ID guard) — this only prepares one batch.
+    func mergeMetadataSnapshots(_ snapshots: [FileMetadataSnapshot], into map: inout [URL: FileMetadataSnapshot]) {
+        let now = Date()
+        for snapshot in snapshots {
+            map[snapshot.fileURL] = snapshot
+            staleMetadataFiles.remove(snapshot.fileURL)
+            pendingCommitsByFile.removeValue(forKey: snapshot.fileURL)
+            metadataLastLoadedAt[snapshot.fileURL] = now
+        }
+    }
+
+    /// Evicts the oldest-loaded entries once `metadataByFile` exceeds
+    /// `Self.maxMetadataCacheEntries`, protecting the current selection, the currently open
+    /// folder's files, pending edits/image-ops/commits, and files mid-reload
+    /// (`staleMetadataFiles`) — exactly the plan's "current selection, active folder, pending
+    /// edits, undo/restore requirements, and in-flight operations" list. (Undo/redo itself
+    /// doesn't need protecting here: `PendingEditState` is self-contained and doesn't read
+    /// back through `metadataByFile`.)
+    func trimMetadataCacheIfNeeded() {
+        let excess = metadataByFile.count - Self.maxMetadataCacheEntries
+        guard excess > 0 else { return }
+
+        var protectedURLs = selectedFileURLs
+        protectedURLs.formUnion(browserItems.map(\.url))
+        protectedURLs.formUnion(pendingEditsByFile.keys)
+        protectedURLs.formUnion(pendingImageOpsByFile.keys)
+        protectedURLs.formUnion(pendingCommitsByFile.keys)
+        protectedURLs.formUnion(staleMetadataFiles)
+
+        let evictionCandidates = metadataByFile.keys.filter { !protectedURLs.contains($0) }
+        guard !evictionCandidates.isEmpty else { return }
+
+        let orderedByAge = evictionCandidates.sorted {
+            (metadataLastLoadedAt[$0] ?? .distantPast) < (metadataLastLoadedAt[$1] ?? .distantPast)
+        }
+        for url in orderedByAge.prefix(excess) {
+            metadataByFile.removeValue(forKey: url)
+            metadataLastLoadedAt.removeValue(forKey: url)
         }
     }
 
@@ -537,13 +576,10 @@ extension AppModel {
                 let snapshots = await readMetadataBatchResilient([fileURL])
                 if Task.isCancelled { return }
 
-                for snapshot in snapshots {
-                    map[snapshot.fileURL] = snapshot
-                    staleMetadataFiles.remove(snapshot.fileURL)
-                    pendingCommitsByFile.removeValue(forKey: snapshot.fileURL)
-                }
+                mergeMetadataSnapshots(snapshots, into: &map)
             }
             metadataByFile = map
+            trimMetadataCacheIfNeeded()
         }
 
         let filesNeedingPreview = warmCandidates.filter {

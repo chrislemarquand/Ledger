@@ -641,6 +641,12 @@ final class AppModel: ObservableObject {
     var inspectorPreviewTasksByURL: [URL: Task<Void, Never>] = [:]
     var inspectorPreviewRecency: [URL] = []
     var staleMetadataFiles: Set<URL> = []
+    /// v1.4 Phase 3.1: last-loaded timestamp per file backing `metadataByFile`'s LRU-ish
+    /// eviction — "last freshly read from ExifTool", not "last read from the dictionary"
+    /// (the latter would need intercepting every one of the many direct `metadataByFile[...]`
+    /// read sites across the app; this simpler proxy still favours recently-visited folders'
+    /// data, which is what the plan's "resident memory plateaus" goal actually needs).
+    var metadataLastLoadedAt: [URL: Date] = [:]
     var selectionAnchorURL: URL?
     var selectionFocusURL: URL?
     var quickLookSourceFrames: [URL: NSRect] = [:]
@@ -699,6 +705,12 @@ final class AppModel: ObservableObject {
     static let inspectorPreviewTargetSide: CGFloat = 700
     static let inspectorPreviewFullSide: CGFloat = 1400
     static let maxInspectorPreviewCacheEntries = 48
+    /// v1.4 Phase 3.1: `metadataByFile` was previously retained for every file visited all
+    /// session long, unbounded — this caps it to roughly a handful of average folders' worth
+    /// (the Phase 0.4 benchmark corpus is 1,012 files; most real folders are far smaller) so
+    /// resident memory plateaus rather than growing with every folder visited. See
+    /// `trimMetadataCacheIfNeeded()` in AppModel+MetadataPipeline.swift.
+    static let maxMetadataCacheEntries = 5000
     static let previewPreloadNeighborRadius = 10
     static let maxPreviewPreloadCandidates = 64
     static let maxRecentLocations = 20

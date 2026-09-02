@@ -390,6 +390,7 @@ extension AppModel {
         if !preserveSessionCaches {
             metadataByFile = [:]
             staleMetadataFiles = []
+            metadataLastLoadedAt = [:]
         }
         pendingEditsByFile = [:]
         pendingImageOpsByFile = [:]

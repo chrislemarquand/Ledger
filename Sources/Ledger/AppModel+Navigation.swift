@@ -102,12 +102,9 @@ extension AppModel {
             do {
                 let snapshots = try await engine.readMetadata(files: existingFiles)
                 var map = metadataByFile
-                for snapshot in snapshots {
-                    map[snapshot.fileURL] = snapshot
-                    staleMetadataFiles.remove(snapshot.fileURL)
-                    pendingCommitsByFile.removeValue(forKey: snapshot.fileURL)
-                }
+                mergeMetadataSnapshots(snapshots, into: &map)
                 metadataByFile = map
+                trimMetadataCacheIfNeeded()
                 invalidateInspectorPreviews(for: existingFiles)
                 ThumbnailPipeline.invalidateCachedImages(for: Set(existingFiles))
                 for fileURL in existingFiles {
