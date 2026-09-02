@@ -93,7 +93,6 @@
 		C20002060000000000000001 /* ImportCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001060000000000000001 /* ImportCoordinator.swift */; };
 		C20002070000000000000001 /* ImportMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001070000000000000001 /* ImportMatcher.swift */; };
 		C20002080000000000000001 /* ImportModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001080000000000000001 /* ImportModels.swift */; };
-		C20002090000000000000001 /* EOSLensMappingEmbedded.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001090000000000000001 /* EOSLensMappingEmbedded.swift */; };
 		C200020A0000000000000001 /* ImportSourceAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010A0000000000000001 /* ImportSourceAdapter.swift */; };
 		C200020B0000000000000001 /* ReferenceFolderImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010B0000000000000001 /* ReferenceFolderImportAdapter.swift */; };
 		C200020C0000000000000001 /* ReferenceImageImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200010C0000000000000001 /* ReferenceImageImportAdapter.swift */; };
@@ -108,6 +107,7 @@
 		E10001050000000000000001 /* DateTimeAdjustSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10001040000000000000001 /* DateTimeAdjustSheetView.swift */; };
 		E20000090000000000000001 /* Tests/LedgerTests/AppModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000020000000000000001 /* Tests/LedgerTests/AppModelTests.swift */; };
 		E200001A0000000000000001 /* Tests/LedgerTests/ThumbnailServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E200001B0000000000000001 /* Tests/LedgerTests/ThumbnailServiceTests.swift */; };
+		E200001C0000000000000001 /* Tests/LedgerTests/EOS1VSessionControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E200001D0000000000000001 /* Tests/LedgerTests/EOS1VSessionControllerTests.swift */; };
 		E200000A0000000000000001 /* Tests/LedgerTests/ImportSystemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000030000000000000001 /* Tests/LedgerTests/ImportSystemTests.swift */; };
 		E200000B0000000000000001 /* Tests/LedgerTests/ImportMatrixTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000040000000000000001 /* Tests/LedgerTests/ImportMatrixTests.swift */; };
 		E200000C0000000000000001 /* Tests/LedgerTests/EOS1VFrameDecoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000050000000000000001 /* Tests/LedgerTests/EOS1VFrameDecoderTests.swift */; };
@@ -247,7 +247,6 @@
 		C20001060000000000000001 /* ImportCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportCoordinator.swift; sourceTree = "<group>"; };
 		C20001070000000000000001 /* ImportMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportMatcher.swift; sourceTree = "<group>"; };
 		C20001080000000000000001 /* ImportModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportModels.swift; sourceTree = "<group>"; };
-		C20001090000000000000001 /* EOSLensMappingEmbedded.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOSLensMappingEmbedded.swift; sourceTree = "<group>"; };
 		C200010A0000000000000001 /* ImportSourceAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportSourceAdapter.swift; sourceTree = "<group>"; };
 		C200010B0000000000000001 /* ReferenceFolderImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceFolderImportAdapter.swift; sourceTree = "<group>"; };
 		C200010C0000000000000001 /* ReferenceImageImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceImageImportAdapter.swift; sourceTree = "<group>"; };
@@ -262,6 +261,7 @@
 		E20000010000000000000001 /* ExifEditMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ExifEditMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E20000020000000000000001 /* Tests/LedgerTests/AppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/AppModelTests.swift; sourceTree = SOURCE_ROOT; };
 		E200001B0000000000000001 /* Tests/LedgerTests/ThumbnailServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/ThumbnailServiceTests.swift; sourceTree = SOURCE_ROOT; };
+		E200001D0000000000000001 /* Tests/LedgerTests/EOS1VSessionControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/EOS1VSessionControllerTests.swift; sourceTree = SOURCE_ROOT; };
 		E20000030000000000000001 /* Tests/LedgerTests/ImportSystemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/ImportSystemTests.swift; sourceTree = SOURCE_ROOT; };
 		E20000040000000000000001 /* Tests/LedgerTests/ImportMatrixTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/ImportMatrixTests.swift; sourceTree = SOURCE_ROOT; };
 		E20000050000000000000001 /* Tests/LedgerTests/EOS1VFrameDecoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/EOS1VFrameDecoderTests.swift; sourceTree = SOURCE_ROOT; };
@@ -363,6 +363,7 @@
 				A100001A0000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift */,
 				E20000020000000000000001 /* Tests/LedgerTests/AppModelTests.swift */,
 				E200001B0000000000000001 /* Tests/LedgerTests/ThumbnailServiceTests.swift */,
+				E200001D0000000000000001 /* Tests/LedgerTests/EOS1VSessionControllerTests.swift */,
 				E20000030000000000000001 /* Tests/LedgerTests/ImportSystemTests.swift */,
 				E20000040000000000000001 /* Tests/LedgerTests/ImportMatrixTests.swift */,
 				E20000050000000000000001 /* Tests/LedgerTests/EOS1VFrameDecoderTests.swift */,
@@ -523,7 +524,6 @@
 				C20001060000000000000001 /* ImportCoordinator.swift */,
 				C20001070000000000000001 /* ImportMatcher.swift */,
 				C20001080000000000000001 /* ImportModels.swift */,
-				C20001090000000000000001 /* EOSLensMappingEmbedded.swift */,
 				C200010A0000000000000001 /* ImportSourceAdapter.swift */,
 				C200010B0000000000000001 /* ReferenceFolderImportAdapter.swift */,
 				C200010C0000000000000001 /* ReferenceImageImportAdapter.swift */,
@@ -841,7 +841,6 @@
 				C20002060000000000000001 /* ImportCoordinator.swift in Sources */,
 				C20002070000000000000001 /* ImportMatcher.swift in Sources */,
 				C20002080000000000000001 /* ImportModels.swift in Sources */,
-				C20002090000000000000001 /* EOSLensMappingEmbedded.swift in Sources */,
 				C200020A0000000000000001 /* ImportSourceAdapter.swift in Sources */,
 				C200020B0000000000000001 /* ReferenceFolderImportAdapter.swift in Sources */,
 				C200020C0000000000000001 /* ReferenceImageImportAdapter.swift in Sources */,
@@ -899,6 +898,7 @@
 			files = (
 				E20000090000000000000001 /* Tests/LedgerTests/AppModelTests.swift in Sources */,
 				E200001A0000000000000001 /* Tests/LedgerTests/ThumbnailServiceTests.swift in Sources */,
+				E200001C0000000000000001 /* Tests/LedgerTests/EOS1VSessionControllerTests.swift in Sources */,
 				E200000A0000000000000001 /* Tests/LedgerTests/ImportSystemTests.swift in Sources */,
 				E200000B0000000000000001 /* Tests/LedgerTests/ImportMatrixTests.swift in Sources */,
 				E200000C0000000000000001 /* Tests/LedgerTests/EOS1VFrameDecoderTests.swift in Sources */,

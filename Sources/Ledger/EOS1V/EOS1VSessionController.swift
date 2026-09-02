@@ -291,13 +291,6 @@ final class EOS1VToolClient {
     }
 }
 
-struct EOS1VShootingRow: Identifiable, Sendable {
-    let id: Int
-    let film: String
-    let frame: String
-    let details: String
-}
-
 /// One frame record, retaining every field from eos1v-serial's own CSV
 /// (`films_to_csv`) verbatim — enough to rebuild Canon's exact export format
 /// without re-invoking eos1v-serial or touching its code.
@@ -360,7 +353,6 @@ final class EOS1VSessionController: ObservableObject {
     // later reopened.
     @Published private(set) var cameraClockSnapshotDate: Date?
     @Published private(set) var rawStatus: [String: String] = [:]
-    @Published private(set) var shootingRows: [EOS1VShootingRow] = []
     @Published private(set) var filmRolls: [EOS1VFilmRoll] = []
     @Published private(set) var lastCSVURL: URL?
     @Published private(set) var lastRawURL: URL?
@@ -484,11 +476,10 @@ final class EOS1VSessionController: ObservableObject {
                 case let .success(payload):
                     lastCSVURL = csv
                     lastRawURL = raw
-                    shootingRows = Self.loadShootingRows(from: csv)
                     filmRolls = Self.loadFilmRolls(from: csv)
                     state = .loaded(
                         films: payload.filmCount ?? 0,
-                        frames: payload.frameCount ?? shootingRows.count
+                        frames: payload.frameCount ?? filmRolls.reduce(0) { $0 + $1.frames.count }
                     )
                 }
             }
@@ -510,26 +501,6 @@ final class EOS1VSessionController: ObservableObject {
         return url
     }
 
-    private static func loadShootingRows(from url: URL) -> [EOS1VShootingRow] {
-        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
-        let lines = text.split(whereSeparator: \.isNewline).map(String.init)
-        guard let headerLine = lines.first else { return [] }
-        let header = csvFields(headerLine)
-        return lines.dropFirst().enumerated().compactMap { index, line in
-            let fields = csvFields(line)
-            guard fields.count >= header.count else { return nil }
-            let values = Dictionary(uniqueKeysWithValues: zip(header, fields))
-            let film = values["Film"] ?? ""
-            let frame = values["Frame"] ?? ""
-            let dateTime = [values["Date"], values["Time"]].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " ")
-            let exposure = [values["Tv"], values["Av"].map { "f/\($0)" }, values["Focal length"],
-                            (values["ISO (M)"]?.isEmpty == false ? values["ISO (M)"] : values["ISO (DX)"]).map { "ISO \($0)" }]
-                .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
-            return EOS1VShootingRow(id: index, film: film, frame: frame,
-                                    details: [dateTime, exposure].filter { !$0.isEmpty }.joined(separator: " — "))
-        }
-    }
-
     /// Parses eos1v-serial's own CSV (`Film,Film loaded date,Film loaded
     /// time,Frame,Focal length,Max aperture,Tv,Av,ISO (DX),ISO (M),Exposure
     /// compensation,Flash exposure compensation,Shooting mode,Metering mode,
@@ -538,11 +509,14 @@ final class EOS1VSessionController: ObservableObject {
     /// into rolls, retaining every field for EOS1VRollCSVExporter to
     /// reformat into Canon's own export layout. Never re-invokes or reshapes
     /// eos1v-serial's own output.
-    private static func loadFilmRolls(from url: URL) -> [EOS1VFilmRoll] {
+    // v1.4 Phase 3.4: was `private`; now `static` (internal) so ThumbnailServiceTests-style
+    // direct unit testing can lock in behavior after de-duplicating this file's own
+    // hand-rolled CSV field splitter in favor of the shared CSVSupport parser.
+    static func loadFilmRolls(from url: URL) -> [EOS1VFilmRoll] {
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
         let lines = text.split(whereSeparator: \.isNewline).map(String.init)
         guard let headerLine = lines.first else { return [] }
-        let header = csvFields(headerLine)
+        let header = CSVSupport.parseRows(from: headerLine, delimiter: ",").first ?? []
         func field(_ values: [String: String], _ name: String) -> String {
             values[name] ?? ""
         }
@@ -550,7 +524,7 @@ final class EOS1VSessionController: ObservableObject {
         var framesByFilm: [String: (loadedDate: String, loadedTime: String, frames: [EOS1VFrameRecord])] = [:]
         var order: [String] = []
         for (index, line) in lines.dropFirst().enumerated() {
-            let fields = csvFields(line)
+            let fields = CSVSupport.parseRows(from: line, delimiter: ",").first ?? []
             guard fields.count >= header.count else { continue }
             let values = Dictionary(uniqueKeysWithValues: zip(header, fields))
             let film = field(values, "Film")
@@ -589,19 +563,6 @@ final class EOS1VSessionController: ObservableObject {
             guard let entry = framesByFilm[film] else { return nil }
             return EOS1VFilmRoll(id: film, loadedDate: entry.loadedDate, loadedTime: entry.loadedTime, frames: entry.frames)
         }
-    }
-
-    private static func csvFields(_ line: String) -> [String] {
-        var fields: [String] = []
-        var field = ""
-        var quoted = false
-        for character in line {
-            if character == "\"" { quoted.toggle() }
-            else if character == ",", !quoted { fields.append(field); field = "" }
-            else { field.append(character) }
-        }
-        fields.append(field)
-        return fields
     }
 
     private static let stampFormatter: DateFormatter = {

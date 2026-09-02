@@ -320,7 +320,7 @@ fi
 
 echo "==> Warm-up ($WARMUP_ITERATIONS unmeasured iteration(s))"
 for ((i = 1; i <= WARMUP_ITERATIONS; i++)); do
-  pid=$(run_isolated_launch "${SCENARIO_LAUNCH_ARGS[@]}")
+  pid=$(run_isolated_launch "${SCENARIO_LAUNCH_ARGS[@]:-}")
   sleep "$WARMUP_SETTLE_SECONDS"
   terminate_process "$pid"
 done
@@ -361,7 +361,7 @@ for ((i = 1; i <= ITERATIONS; i++)); do
   log_stream_pid=$!
   sleep 0.4 # let log stream attach before the process we're measuring exists
 
-  pid=$(run_isolated_launch "${SCENARIO_LAUNCH_ARGS[@]}")
+  pid=$(run_isolated_launch "${SCENARIO_LAUNCH_ARGS[@]:-}")
 
   # Sample RSS while the app settles; report the peak. folder-load with a
   # 1000+ file corpus needs longer to reach FirstStablePaint than a bare
