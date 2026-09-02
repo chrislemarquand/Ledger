@@ -45,6 +45,108 @@ enum ThumbnailService {
               let jpeg = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.82])
         else { return }
         try? jpeg.write(to: diskURL, options: .atomic)
+        scheduleDiskCacheMaintenanceIfNeeded()
+    }
+
+    // MARK: - Disk cache maintenance (Phase 3.3)
+
+    /// Measured against this app's real disk cache contents (2026-09-02): 627 thumbnails
+    /// (a mix of ~180px gallery thumbnails and up to 1400px inspector previews) averaged
+    /// ~224KB each, ~135MB total, for well under one full benchmark-corpus folder (1,012
+    /// files) worth of browsing. With no cap at all, that grows without bound across every
+    /// folder ever visited, forever. 1GB holds roughly 4,000+ thumbnails at that measured
+    /// average — several corpus-folders' worth — as a documented, evidence-derived budget
+    /// rather than an arbitrary number.
+    static let diskCacheBudgetBytes = 1_000 * 1024 * 1024
+    /// Trim back to 80% of budget, not exactly to the limit, so maintenance doesn't re-run
+    /// on essentially every subsequent write once the cache sits right at the boundary.
+    static let diskCacheTrimTargetBytes = 800 * 1024 * 1024
+    private static let diskCacheMaintenanceMinInterval: TimeInterval = 5 * 60
+
+    private nonisolated(unsafe) static var lastDiskCacheMaintenanceAt = Date.distantPast
+    private static let maintenanceScheduleLock = NSLock()
+
+    /// Rate-limited trigger, called after every disk-cache write (already off the hot path —
+    /// `writeDiskCache` itself only ever runs inside a detached background `Task`, never from
+    /// launch, cell-configuration, scrolling, or decode call sites). A cheap timestamp check
+    /// under a lock, not a directory scan, is all that runs synchronously here; the scan itself
+    /// is further dispatched to a detached utility-priority task.
+    private static func scheduleDiskCacheMaintenanceIfNeeded() {
+        maintenanceScheduleLock.lock()
+        let now = Date()
+        guard now.timeIntervalSince(lastDiskCacheMaintenanceAt) >= diskCacheMaintenanceMinInterval else {
+            maintenanceScheduleLock.unlock()
+            return
+        }
+        lastDiskCacheMaintenanceAt = now
+        maintenanceScheduleLock.unlock()
+
+        Task.detached(priority: .utility) {
+            performDiskCacheMaintenance()
+        }
+    }
+
+    /// Pure selection logic, independent of `FileManager` so it's directly unit-testable:
+    /// given every cache entry's size and modification date, returns which URLs to delete —
+    /// oldest-modified first — to bring `totalSize` down to `trimTargetBytes`, or an empty
+    /// array if `totalSize` doesn't exceed `budgetBytes` yet.
+    static func urlsToEvictForDiskCacheMaintenance(
+        items: [(url: URL, size: Int, modifiedAt: Date)],
+        totalSize: Int,
+        budgetBytes: Int,
+        trimTargetBytes: Int
+    ) -> [URL] {
+        guard totalSize > budgetBytes else { return [] }
+        let orderedByAge = items.sorted { $0.modifiedAt < $1.modifiedAt }
+        var remaining = totalSize
+        var toEvict: [URL] = []
+        for item in orderedByAge {
+            guard remaining > trimTargetBytes else { break }
+            toEvict.append(item.url)
+            remaining -= item.size
+        }
+        return toEvict
+    }
+
+    /// Scans a disk cache directory and evicts oldest entries if over budget. Tolerant of
+    /// missing, corrupt, or concurrently-removed files throughout — a file that vanishes or
+    /// fails to read between the scan and the delete is simply skipped, never treated as an
+    /// error worth surfacing (this is disposable cache maintenance, not user data).
+    /// `budgetBytes`/`trimTargetBytes` default to the real production constants; overridable
+    /// so tests can exercise real eviction end-to-end on a small temporary directory without
+    /// needing a multi-gigabyte fixture to cross the real budget.
+    static func performDiskCacheMaintenance(
+        in directory: URL = diskCacheDirectory,
+        budgetBytes: Int = diskCacheBudgetBytes,
+        trimTargetBytes: Int = diskCacheTrimTargetBytes
+    ) {
+        let fileManager = FileManager.default
+        guard let entries = try? fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+
+        var items: [(url: URL, size: Int, modifiedAt: Date)] = []
+        var totalSize = 0
+        for url in entries {
+            guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey]),
+                  let size = values.fileSize
+            else { continue }
+            let modifiedAt = values.contentModificationDate ?? .distantPast
+            items.append((url, size, modifiedAt))
+            totalSize += size
+        }
+
+        let toEvict = urlsToEvictForDiskCacheMaintenance(
+            items: items,
+            totalSize: totalSize,
+            budgetBytes: budgetBytes,
+            trimTargetBytes: trimTargetBytes
+        )
+        for url in toEvict {
+            try? fileManager.removeItem(at: url)
+        }
     }
 
     // MARK: - Cost

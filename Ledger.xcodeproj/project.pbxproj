@@ -107,6 +107,7 @@
 		E10001030000000000000001 /* AppModel+DateTimeAdjust.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10001020000000000000001 /* AppModel+DateTimeAdjust.swift */; };
 		E10001050000000000000001 /* DateTimeAdjustSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10001040000000000000001 /* DateTimeAdjustSheetView.swift */; };
 		E20000090000000000000001 /* Tests/LedgerTests/AppModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000020000000000000001 /* Tests/LedgerTests/AppModelTests.swift */; };
+		E200001A0000000000000001 /* Tests/LedgerTests/ThumbnailServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E200001B0000000000000001 /* Tests/LedgerTests/ThumbnailServiceTests.swift */; };
 		E200000A0000000000000001 /* Tests/LedgerTests/ImportSystemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000030000000000000001 /* Tests/LedgerTests/ImportSystemTests.swift */; };
 		E200000B0000000000000001 /* Tests/LedgerTests/ImportMatrixTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000040000000000000001 /* Tests/LedgerTests/ImportMatrixTests.swift */; };
 		E200000C0000000000000001 /* Tests/LedgerTests/EOS1VFrameDecoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000050000000000000001 /* Tests/LedgerTests/EOS1VFrameDecoderTests.swift */; };
@@ -260,6 +261,7 @@
 		E10001040000000000000001 /* DateTimeAdjustSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateTimeAdjustSheetView.swift; sourceTree = "<group>"; };
 		E20000010000000000000001 /* ExifEditMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ExifEditMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E20000020000000000000001 /* Tests/LedgerTests/AppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/AppModelTests.swift; sourceTree = SOURCE_ROOT; };
+		E200001B0000000000000001 /* Tests/LedgerTests/ThumbnailServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/ThumbnailServiceTests.swift; sourceTree = SOURCE_ROOT; };
 		E20000030000000000000001 /* Tests/LedgerTests/ImportSystemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/ImportSystemTests.swift; sourceTree = SOURCE_ROOT; };
 		E20000040000000000000001 /* Tests/LedgerTests/ImportMatrixTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/ImportMatrixTests.swift; sourceTree = SOURCE_ROOT; };
 		E20000050000000000000001 /* Tests/LedgerTests/EOS1VFrameDecoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/EOS1VFrameDecoderTests.swift; sourceTree = SOURCE_ROOT; };
@@ -360,6 +362,7 @@
 				A10000190000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift */,
 				A100001A0000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift */,
 				E20000020000000000000001 /* Tests/LedgerTests/AppModelTests.swift */,
+				E200001B0000000000000001 /* Tests/LedgerTests/ThumbnailServiceTests.swift */,
 				E20000030000000000000001 /* Tests/LedgerTests/ImportSystemTests.swift */,
 				E20000040000000000000001 /* Tests/LedgerTests/ImportMatrixTests.swift */,
 				E20000050000000000000001 /* Tests/LedgerTests/EOS1VFrameDecoderTests.swift */,
@@ -895,6 +898,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E20000090000000000000001 /* Tests/LedgerTests/AppModelTests.swift in Sources */,
+				E200001A0000000000000001 /* Tests/LedgerTests/ThumbnailServiceTests.swift in Sources */,
 				E200000A0000000000000001 /* Tests/LedgerTests/ImportSystemTests.swift in Sources */,
 				E200000B0000000000000001 /* Tests/LedgerTests/ImportMatrixTests.swift in Sources */,
 				E200000C0000000000000001 /* Tests/LedgerTests/EOS1VFrameDecoderTests.swift in Sources */,
