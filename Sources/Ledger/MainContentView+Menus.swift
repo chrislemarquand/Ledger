@@ -515,51 +515,15 @@ extension NativeThreePaneSplitViewController {
         return menu
     }
 
+    // v1.4 Phase 4.1 slice 2: Undo/Redo/Cut/Copy/Paste/Select All are now authored
+    // statically in MainMenu.xib (their shape never changes, only enable state, which
+    // validateMenuItem already handles) — this only sets the Undo/Redo SF Symbol images,
+    // which aren't expressible in the xib schema without embedding image assets.
     private func rebuildEditMenu(_ menu: NSMenu) {
-        ensureEditMenuBaseline(in: menu)
-
         menu.items.first(where: { $0.action == #selector(undoMetadataMenuAction(_:)) })?.image =
             NSImage(systemSymbolName: "arrow.uturn.backward", accessibilityDescription: nil)
         menu.items.first(where: { $0.action == #selector(redoMetadataMenuAction(_:)) })?.image =
             NSImage(systemSymbolName: "arrow.uturn.forward", accessibilityDescription: nil)
-    }
-
-    private func ensureEditMenuBaseline(in menu: NSMenu) {
-        let hasUndo = menu.items.contains { $0.action == #selector(undoMetadataMenuAction(_:)) }
-        let hasRedo = menu.items.contains { $0.action == #selector(redoMetadataMenuAction(_:)) }
-        let hasCut = menu.items.contains { $0.action == #selector(NSText.cut(_:)) }
-        let hasCopy = menu.items.contains { $0.action == #selector(NSText.copy(_:)) }
-        let hasPaste = menu.items.contains { $0.action == #selector(NSText.paste(_:)) }
-        let hasSelectAll = menu.items.contains { $0.action == #selector(NSText.selectAll(_:)) }
-        guard !(hasUndo && hasRedo && hasCut && hasCopy && hasPaste && hasSelectAll) else { return }
-
-        menu.removeAllItems()
-
-        let undoItem = NSMenuItem(title: "Undo", action: #selector(undoMetadataMenuAction(_:)), keyEquivalent: "z")
-        undoItem.keyEquivalentModifierMask = .command
-        menu.addItem(undoItem)
-
-        let redoItem = NSMenuItem(title: "Redo", action: #selector(redoMetadataMenuAction(_:)), keyEquivalent: "Z")
-        redoItem.keyEquivalentModifierMask = .command
-        menu.addItem(redoItem)
-
-        menu.addItem(.separator())
-
-        let cutItem = NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        cutItem.keyEquivalentModifierMask = .command
-        menu.addItem(cutItem)
-
-        let copyItem = NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        copyItem.keyEquivalentModifierMask = .command
-        menu.addItem(copyItem)
-
-        let pasteItem = NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        pasteItem.keyEquivalentModifierMask = .command
-        menu.addItem(pasteItem)
-
-        let selectAllItem = NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
-        selectAllItem.keyEquivalentModifierMask = .command
-        menu.addItem(selectAllItem)
     }
 
     private func rebuildImageMenu(_ menu: NSMenu) {

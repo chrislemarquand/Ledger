@@ -20,14 +20,34 @@
           applicationDidFinishLaunching has a measured, intermittent race against the
           WindowServer's menu-bar-activation handoff that nib-loaded menus don't have).
 
-          Deliberately minimal for this slice: only the App menu placeholder (its real
-          content is still built by AppDelegate.configureApplicationMenu(), unchanged —
-          this nib only needs to provide a first item for that function to find and
-          replace) and six empty File/Edit/View/Image/Folder/Help shells in the correct
-          order. NativeThreePaneSplitViewController's existing injectXMenuIfNeeded()
-          methods populate their real content exactly as before, via
+          The App menu placeholder's real content is still built by
+          AppDelegate.configureApplicationMenu(), unchanged — this nib only needs to
+          provide a first item for that function to find and replace. File/View/Image/
+          Folder/Help stay empty shells, populated by
+          NativeThreePaneSplitViewController's existing injectXMenuIfNeeded() methods via
           Self.ensureTopLevelMenu(title:insertAfterTitle:) finding these nib-provided
           items by title and reusing their (initially empty) submenus.
+
+          v1.4 Phase 4.1 slice 2: Edit's six items (Undo/Redo/Cut/Copy/Paste/Select All)
+          are authored statically here instead of in Swift (ensureEditMenuBaseline was
+          removed) — they never change shape, only enable state, which
+          NSMenuValidation (validateMenuItem) already handles regardless of where the
+          items came from. rebuildEditMenu still runs on each menuWillOpen to set the
+          Undo/Redo SF Symbol images, since NSMenuItem images aren't expressible in this
+          xib schema without embedding image assets. File/View/Image/Folder/Export/
+          Import/Open With/Apply Preset stay Swift-built because their content is
+          genuinely dynamic per open (live selection state, installed apps via
+          NSWorkspace, the user's preset list) — porting them to static xib items would
+          just have Swift tear them down and rebuild them on first open anyway.
+
+          Also adds a systemMenu="window" Window menu (Minimize/Zoom/Bring All to
+          Front) between Folder and Help — this marker is IB's declarative mechanism
+          for what SharedUI's makeStandardWindowMenu()/NSApp.windowsMenu= does in code
+          (used by Librarian); NSApplicationMain wires it up automatically from the nib,
+          same as systemMenu="main"/"apple" above, no Swift needed. This didn't exist in
+          Ledger before slice 2 — injectHelpMenuIfNeeded() already anticipated it
+          (checks for a "Window" item and inserts Help after it if present), but nothing
+          had ever created one.
         -->
         <menu title="MainMenu" systemMenu="main" id="AppMainMenu1">
             <items>
@@ -38,7 +58,41 @@
                     <menu key="submenu" title="File" id="FileMenuSubmenu1"/>
                 </menuItem>
                 <menuItem title="Edit" id="EditMenuItem001">
-                    <menu key="submenu" title="Edit" id="EditMenuSubmenu1"/>
+                    <menu key="submenu" title="Edit" id="EditMenuSubmenu1">
+                        <items>
+                            <menuItem title="Undo" keyEquivalent="z" id="EditUndoItem001">
+                                <connections>
+                                    <action selector="undoMetadataMenuAction:" target="-1" id="EditUndoAction01"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Redo" keyEquivalent="Z" id="EditRedoItem001">
+                                <connections>
+                                    <action selector="redoMetadataMenuAction:" target="-1" id="EditRedoAction01"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="EditSepItem0001"/>
+                            <menuItem title="Cut" keyEquivalent="x" id="EditCutItem0001">
+                                <connections>
+                                    <action selector="cut:" target="-1" id="EditCutAction001"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Copy" keyEquivalent="c" id="EditCopyItem001">
+                                <connections>
+                                    <action selector="copy:" target="-1" id="EditCopyAction01"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Paste" keyEquivalent="v" id="EditPasteItem01">
+                                <connections>
+                                    <action selector="paste:" target="-1" id="EditPasteAction1"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Select All" keyEquivalent="a" id="EditSelAllItem1">
+                                <connections>
+                                    <action selector="selectAll:" target="-1" id="EditSelAllAct01"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
                 </menuItem>
                 <menuItem title="View" id="ViewMenuItem001">
                     <menu key="submenu" title="View" id="ViewMenuSubmenu1"/>
@@ -48,6 +102,28 @@
                 </menuItem>
                 <menuItem title="Folder" id="FoldrMenuItem01">
                     <menu key="submenu" title="Folder" id="FoldrMenuSubmen1"/>
+                </menuItem>
+                <menuItem title="Window" id="WindowMenuItem01">
+                    <menu key="submenu" title="Window" systemMenu="window" id="WindowMenuSub01">
+                        <items>
+                            <menuItem title="Minimize" keyEquivalent="m" id="WindowMinItem01">
+                                <connections>
+                                    <action selector="performMiniaturize:" target="-1" id="WindowMinAction1"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Zoom" id="WindowZoomItem1">
+                                <connections>
+                                    <action selector="performZoom:" target="-1" id="WindowZoomAct01"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="WindowSepItem01"/>
+                            <menuItem title="Bring All to Front" id="WindowFrontItem1">
+                                <connections>
+                                    <action selector="arrangeInFront:" target="-1" id="WindowFrontAct1"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
                 </menuItem>
                 <menuItem title="Help" id="HelpMenuItem001">
                     <menu key="submenu" title="Help" id="HelpMenuSubmenu1"/>
