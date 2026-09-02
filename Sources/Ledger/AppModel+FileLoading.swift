@@ -46,6 +46,7 @@ extension AppModel {
                 counts[id] = count
                 self.sidebarImageCounts = counts
                 self.sidebarImageCountTasks[id] = nil
+                self.checkQuiescenceIfNeeded()
             }
         }
     }
@@ -79,6 +80,9 @@ extension AppModel {
         let folderLoadSignpostID = Signposts.folderLoad.makeSignpostID()
         let folderLoadState = Signposts.folderLoad.beginInterval("FolderLoad", id: folderLoadSignpostID)
         defer { Signposts.folderLoad.endInterval("FolderLoad", folderLoadState) }
+        // v1.4 Phase 2.3: covers both "initial display" and "folder switch" — both are the
+        // same "make a folder visible" journey for quiescence purposes.
+        beginQuiescenceTracking(reason: "FolderLoad")
 
         deferredFolderMetadataPrefetchTask?.cancel()
         deferredFolderMetadataPrefetchTask = nil
@@ -90,6 +94,8 @@ extension AppModel {
         browserItemHydrationID = UUID()
         selectionMetadataLoadTask?.cancel()
         selectionMetadataLoadTask = nil
+        initialThumbnailWarmupTask?.cancel()
+        initialThumbnailWarmupTask = nil
         previewPreloadTask?.cancel()
         previewPreloadTask = nil
         deferredPreviewPreloadTask?.cancel()
@@ -372,6 +378,8 @@ extension AppModel {
         deferredPreviewPreloadTask = nil
         previewPreloadID = UUID()
         isPreviewPreloading = false
+        initialThumbnailWarmupTask?.cancel()
+        initialThumbnailWarmupTask = nil
 
         if !preserveBrowserItemsDuringSwitch {
             browserItems = []
@@ -401,9 +409,27 @@ extension AppModel {
 
     private func startInitialThumbnailWarmup(for files: [URL], loadID: UUID) {
         let warmupTargets = Array(files.prefix(Self.initialThumbnailWarmupCount))
-        guard !warmupTargets.isEmpty else { return }
+        guard !warmupTargets.isEmpty else {
+            checkQuiescenceIfNeeded()
+            return
+        }
 
-        Task.detached(priority: .userInitiated) { [weak self] in
+        // v1.4 Phase 2.3: stored (previously fire-and-forget) so it's visible to the
+        // unified quiescence signal and can be cancelled immediately on folder switch
+        // rather than only self-terminating cooperatively on its next iteration.
+        // Generation-guarded for the same reason as selectionMetadataLoadGenerationID —
+        // a superseded warmup's belated cleanup must not clobber a newer one's reference.
+        let generationID = UUID()
+        initialThumbnailWarmupGenerationID = generationID
+        initialThumbnailWarmupTask = Task.detached(priority: .userInitiated) { [weak self] in
+            defer {
+                Task { @MainActor [weak self] in
+                    if self?.initialThumbnailWarmupGenerationID == generationID {
+                        self?.initialThumbnailWarmupTask = nil
+                    }
+                    self?.checkQuiescenceIfNeeded()
+                }
+            }
             guard let self else { return }
             for fileURL in warmupTargets {
                 if Task.isCancelled { return }
@@ -441,8 +467,24 @@ extension AppModel {
     private func scheduleDeferredFolderMetadataPrefetch(for files: [URL], batchSize: Int, loadID: UUID) {
         deferredFolderMetadataPrefetchTask?.cancel()
         deferredFolderMetadataPrefetchTask = nil
+        // v1.4 Phase 2.3: this task previously never nilled itself once its sleep
+        // finished and it handed off to startFolderMetadataPrefetch — a stale
+        // non-nil reference to an already-completed task, discovered while wiring
+        // up the isFolderWorkActive quiescence signal (it would have permanently
+        // reported "busy" after the very first folder load with a metadata column
+        // enabled). Guarded by a generation id, same pattern as
+        // selectionMetadataLoadGenerationID, so a superseded task's belated
+        // cleanup can't clobber a newer task's reference.
+        let generationID = UUID()
+        deferredFolderMetadataPrefetchGenerationID = generationID
         deferredFolderMetadataPrefetchTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            defer {
+                if self.deferredFolderMetadataPrefetchGenerationID == generationID {
+                    self.deferredFolderMetadataPrefetchTask = nil
+                }
+                self.checkQuiescenceIfNeeded()
+            }
             do { try await Task.sleep(nanoseconds: Self.metadataPrefetchStartDelayNanoseconds) } catch { return }
             guard self.activeFolderLoadID == loadID else { return }
             self.startFolderMetadataPrefetch(for: files, batchSize: batchSize)
@@ -452,7 +494,10 @@ extension AppModel {
     private func startBrowserItemHydration(for files: [URL], hydrationID: UUID) {
         browserItemHydrationTask?.cancel()
         browserItemHydrationTask = nil
-        guard !files.isEmpty else { return }
+        guard !files.isEmpty else {
+            checkQuiescenceIfNeeded()
+            return
+        }
 
         browserItemHydrationTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -481,6 +526,7 @@ extension AppModel {
                 }
             }
             self.browserItemHydrationTask = nil
+            self.checkQuiescenceIfNeeded()
         }
     }
 

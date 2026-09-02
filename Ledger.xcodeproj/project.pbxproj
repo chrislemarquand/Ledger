@@ -32,6 +32,7 @@
 		A100014E0000000000000001 /* ThumbnailService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014D0000000000000001 /* ThumbnailService.swift */; };
 		A10001500000000000000001 /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014F0000000000000001 /* SettingsWindowController.swift */; };
 		A10001510000000000000001 /* AppModel+Sidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001530000000000000001 /* AppModel+Sidebar.swift */; };
+		A10001E40000000000000001 /* AppModel+Quiescence.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E50000000000000001 /* AppModel+Quiescence.swift */; };
 		A10001520000000000000001 /* AppModel+Preview.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001540000000000000001 /* AppModel+Preview.swift */; };
 		A10001620000000000000001 /* AppModel+Actions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001550000000000000001 /* AppModel+Actions.swift */; };
 		A10001630000000000000001 /* AppModel+Navigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001560000000000000001 /* AppModel+Navigation.swift */; };
@@ -184,6 +185,7 @@
 		A100014D0000000000000001 /* ThumbnailService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailService.swift; sourceTree = "<group>"; };
 		A100014F0000000000000001 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
 		A10001530000000000000001 /* AppModel+Sidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Sidebar.swift"; sourceTree = "<group>"; };
+		A10001E50000000000000001 /* AppModel+Quiescence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Quiescence.swift"; sourceTree = "<group>"; };
 		A10001540000000000000001 /* AppModel+Preview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Preview.swift"; sourceTree = "<group>"; };
 		A10001550000000000000001 /* AppModel+Actions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Actions.swift"; sourceTree = "<group>"; };
 		A10001560000000000000001 /* AppModel+Navigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Navigation.swift"; sourceTree = "<group>"; };
@@ -412,6 +414,7 @@
 				E10001020000000000000001 /* AppModel+DateTimeAdjust.swift */,
 				E10001040000000000000001 /* DateTimeAdjustSheetView.swift */,
 				A10001530000000000000001 /* AppModel+Sidebar.swift */,
+				A10001E50000000000000001 /* AppModel+Quiescence.swift */,
 				A10001540000000000000001 /* AppModel+Preview.swift */,
 				A10001550000000000000001 /* AppModel+Actions.swift */,
 				A10001560000000000000001 /* AppModel+Navigation.swift */,
@@ -782,6 +785,7 @@
 				E10001030000000000000001 /* AppModel+DateTimeAdjust.swift in Sources */,
 				E10001050000000000000001 /* DateTimeAdjustSheetView.swift in Sources */,
 				A10001510000000000000001 /* AppModel+Sidebar.swift in Sources */,
+				A10001E40000000000000001 /* AppModel+Quiescence.swift in Sources */,
 				A10001520000000000000001 /* AppModel+Preview.swift in Sources */,
 				A10001620000000000000001 /* AppModel+Actions.swift in Sources */,
 				A10001630000000000000001 /* AppModel+Navigation.swift in Sources */,

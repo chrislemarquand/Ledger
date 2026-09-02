@@ -8,9 +8,15 @@ set -euo pipefail
 # Usage:
 #   scripts/performance/run_benchmarks.sh --scenario launch [options]
 #   scripts/performance/run_benchmarks.sh --scenario folder-load --corpus scripts/performance/corpus/browse [options]
+#   scripts/performance/run_benchmarks.sh --scenario quiescence --corpus scripts/performance/corpus/browse [options]
 #
 # Options:
-#   --scenario NAME       Journey to measure: "launch" or "folder-load".
+#   --scenario NAME       Journey to measure: "launch", "folder-load", or
+#                          "quiescence" (Phase 2.3 — time from folder switch
+#                          to AppModel+Quiescence.swift's isFolderWorkActive
+#                          becoming false: folder metadata prefetch demand
+#                          gate aside, this is hydration + initial thumbnail
+#                          warmup + any preview preload settling).
 #   --iterations N        Measured iterations (default 5, per the plan's
 #                          "start with five measured iterations for noisy
 #                          UI journeys").
@@ -66,15 +72,15 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$SCENARIO" in
-  launch|folder-load) ;;
+  launch|folder-load|quiescence) ;;
   *)
-    echo "error: unknown --scenario '$SCENARIO'. Only 'launch' and 'folder-load' exist today; add new scenarios to this script deliberately, don't guess." >&2
+    echo "error: unknown --scenario '$SCENARIO'. Only 'launch', 'folder-load', and 'quiescence' exist today; add new scenarios to this script deliberately, don't guess." >&2
     exit 1
     ;;
 esac
 
-if [[ "$SCENARIO" == "folder-load" && -z "$BROWSE_CORPUS" ]]; then
-  echo "error: --scenario folder-load requires --corpus (see scripts/performance/generate_browse_corpus.sh)" >&2
+if [[ ( "$SCENARIO" == "folder-load" || "$SCENARIO" == "quiescence" ) && -z "$BROWSE_CORPUS" ]]; then
+  echo "error: --scenario $SCENARIO requires --corpus (see scripts/performance/generate_browse_corpus.sh)" >&2
   exit 1
 fi
 
@@ -222,16 +228,27 @@ terminate_process() {
 }
 
 # Parses the ndjson `log stream --signpost` capture for this run and prints
-# the span in milliseconds between the first `begin_name` "begin" signpost
-# and the first `end_name` "end" or "event" signpost after it, or empty if
-# not found. Field shape verified against a real capture on 2026-08-31:
+# the span in milliseconds between the LAST `begin_name` "begin" signpost and
+# the first `end_name` "end" or "event" signpost after it, or empty if not
+# found. Field shape verified against a real capture on 2026-08-31:
 # signpost events carry `signpostName` ("Launch", "MenuReady",
 # "FirstStablePaint", ...) and `signpostType` ("begin"/"event"/"end") — NOT
 # `category` or `eventMessage` (which is always empty for signposts). Pass
-# the same name twice for a plain begin/end interval (the "launch" scenario);
-# different names measure the span between an interval's begin and a
-# separate event fired later (the "folder-load" scenario's
-# FolderLoad-begin -> FirstStablePaint-event span).
+# the same name twice for a plain begin/end interval (the "launch" and
+# "quiescence" scenarios); different names measure the span between an
+# interval's begin and a separate event fired later (the "folder-load"
+# scenario's FolderLoad-begin -> FirstStablePaint-event span).
+#
+# Uses the LAST begin, not the first: confirmed directly (2026-08-31, Phase
+# 2.3) that opening a folder via `-openFolderPath` on a real dev machine can
+# fire more than one begin/end cycle for the same name in one launch — e.g.
+# the app restoring its previously-selected sidebar location on launch, moments
+# before `-openFolderPath` redirects to the benchmark corpus, produces a
+# begin/end/begin/end sequence where the FIRST cycle is a same-run artifact,
+# not the journey being measured. AppModel+Quiescence.swift already discards a
+# superseded measurement's meaning (tagged "superseded by ..." rather than a
+# real duration); this extractor now matches that by always resetting to the
+# most recent begin before it looks for that begin's end.
 extract_signpost_span_ms() {
   local log_file="$1"
   local begin_name="$2"
@@ -254,8 +271,9 @@ with open(log_file) as f:
             continue
         name = entry.get("signpostName")
         kind = entry.get("signpostType")
-        if begin_ts is None and name == begin_name and kind == "begin":
+        if name == begin_name and kind == "begin":
             begin_ts = entry.get("timestamp")
+            end_ts = None
             continue
         if begin_ts is not None and end_ts is None and name == end_name and kind in ("end", "event"):
             end_ts = entry.get("timestamp")
@@ -274,6 +292,11 @@ if [[ "$SCENARIO" == "folder-load" ]]; then
   BEGIN_SIGNPOST="FolderLoad"
   END_SIGNPOST="FirstStablePaint"
   METRIC_LABEL="folder load (folder-load begin → first stable paint signpost span)"
+elif [[ "$SCENARIO" == "quiescence" ]]; then
+  SCENARIO_LAUNCH_ARGS=(-openFolderPath "$BROWSE_CORPUS")
+  BEGIN_SIGNPOST="Quiescence"
+  END_SIGNPOST="Quiescence"
+  METRIC_LABEL="folder quiescence (folder switch → AppModel fully idle signpost interval)"
 else
   SCENARIO_LAUNCH_ARGS=()
   BEGIN_SIGNPOST="Launch"
@@ -284,6 +307,15 @@ fi
 WARMUP_SETTLE_SECONDS=4
 if [[ "$SCENARIO" == "folder-load" ]]; then
   WARMUP_SETTLE_SECONDS=20
+elif [[ "$SCENARIO" == "quiescence" ]]; then
+  # v1.4 Phase 2.3: confirmed directly (2026-08-31) on a real dev machine that
+  # real quiescence for this corpus takes ~30-45s of continuous 90-130% CPU —
+  # NOT a measurement artifact (verified with `ps` CPU sampling across the
+  # whole window) — so this needs a much longer settle/capture window than
+  # folder-load's "first paint" measurement. See docs/v1.4-progress.md's
+  # Phase 2.3 section for what's actually consuming that CPU (not yet
+  # root-caused — flagged as a real finding, not silently hidden).
+  WARMUP_SETTLE_SECONDS=60
 fi
 
 echo "==> Warm-up ($WARMUP_ITERATIONS unmeasured iteration(s))"
@@ -339,6 +371,9 @@ for ((i = 1; i <= ITERATIONS; i++)); do
   if [[ "$SCENARIO" == "folder-load" ]]; then
     rss_samples=40
     rss_interval=0.5
+  elif [[ "$SCENARIO" == "quiescence" ]]; then
+    rss_samples=60
+    rss_interval=1
   fi
   peak_rss=0
   for _ in $(seq 1 "$rss_samples"); do
@@ -388,7 +423,7 @@ MEDIAN_LAUNCH_MS="$(median "${WALL_TIMES_MS[@]:-}")"
 MEDIAN_PEAK_RSS_KB="$(median "${PEAK_RSS_KB[@]:-}")"
 
 CORPUS_NOTE="not used by the launch scenario"
-if [[ "$SCENARIO" == "folder-load" ]]; then
+if [[ "$SCENARIO" == "folder-load" || "$SCENARIO" == "quiescence" ]]; then
   CORPUS_NOTE="used as the opened folder for this run"
 fi
 

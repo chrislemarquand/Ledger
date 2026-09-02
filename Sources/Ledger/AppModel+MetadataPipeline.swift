@@ -166,6 +166,7 @@ extension AppModel {
 
         guard !filesToPreload.isEmpty else {
             isPreviewPreloading = false
+            checkQuiescenceIfNeeded()
             return
         }
 
@@ -198,6 +199,7 @@ extension AppModel {
             self.previewPreloadTask = nil
             self.isPreviewPreloading = false
             self.setStatusMessage("Metadata loaded", autoClearAfterSuccess: true)
+            self.checkQuiescenceIfNeeded()
         }
     }
 
@@ -273,6 +275,7 @@ extension AppModel {
     }
 
     func selectionChanged() {
+        beginQuiescenceTracking(reason: "SelectionSweep")
         let selection = selectedFileURLs
         cancelStaleInspectorPreviewTasks(keeping: selection)
 
@@ -294,10 +297,24 @@ extension AppModel {
         // Force a refresh even when canonical values happen to be unchanged, so selection/header state updates.
         recalculateInspectorState(forceNotify: true)
         let needsMetadataLoad = selection.contains { staleMetadataFiles.contains($0) || metadataByFile[$0] == nil }
-        guard needsMetadataLoad else { return }
+        guard needsMetadataLoad else {
+            checkQuiescenceIfNeeded()
+            return
+        }
         selectionMetadataLoadTask?.cancel()
+        let generationID = UUID()
+        selectionMetadataLoadGenerationID = generationID
         selectionMetadataLoadTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            defer {
+                // Only the still-current generation may clear the property — an old,
+                // superseded task's cleanup running after a newer one has already
+                // started must not clobber the newer task's reference.
+                if self.selectionMetadataLoadGenerationID == generationID {
+                    self.selectionMetadataLoadTask = nil
+                }
+                self.checkQuiescenceIfNeeded()
+            }
             do { try await Task.sleep(nanoseconds: Self.selectionMetadataDebounceNanoseconds) } catch { return }
             await self.loadMetadataForSelection()
         }
@@ -484,7 +501,10 @@ extension AppModel {
 
         backgroundWarmTasksBySelectionID[id] = Task(priority: .utility) { @MainActor [weak self] in
             guard let self else { return }
-            defer { self.backgroundWarmTasksBySelectionID[id] = nil }
+            defer {
+                self.backgroundWarmTasksBySelectionID[id] = nil
+                self.checkQuiescenceIfNeeded()
+            }
             await self.warmCachesInBackground(files: uniqueFiles)
         }
     }

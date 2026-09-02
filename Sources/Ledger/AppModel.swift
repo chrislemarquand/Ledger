@@ -492,7 +492,11 @@ final class AppModel: ObservableObject {
     }
     @Published var selectedFileURLs: Set<URL> = []
     @Published var browserViewMode: BrowserViewMode {
-        didSet { UserDefaults.standard.set(browserViewMode.rawValue, forKey: Self.browserViewModeKey) }
+        didSet {
+            UserDefaults.standard.set(browserViewMode.rawValue, forKey: Self.browserViewModeKey)
+            guard oldValue != browserViewMode else { return }
+            beginQuiescenceTracking(reason: "ModeSwitch")
+        }
     }
     @Published var galleryGridLevel: Int {
         didSet { UserDefaults.standard.set(galleryGridLevel, forKey: Self.galleryGridLevelKey) }
@@ -621,8 +625,15 @@ final class AppModel: ObservableObject {
     /// hasn't supplied a percentage yet.
     @Published var cloudDownloadProgressByURL: [URL: Double] = [:]
     var selectionMetadataLoadTask: Task<Void, Never>?
+    /// v1.4 Phase 2.3: guards `selectionMetadataLoadTask`'s self-nilling `defer` against a
+    /// superseded task's cleanup racing ahead of and clobbering a newer task's reference —
+    /// see the call site in `selectionChanged()`.
+    var selectionMetadataLoadGenerationID = UUID()
     var previewPreloadTask: Task<Void, Never>?
     var deferredFolderMetadataPrefetchTask: Task<Void, Never>?
+    /// v1.4 Phase 2.3: guards `deferredFolderMetadataPrefetchTask`'s self-nilling `defer` —
+    /// same race as `selectionMetadataLoadGenerationID`.
+    var deferredFolderMetadataPrefetchGenerationID = UUID()
     var deferredPreviewPreloadTask: Task<Void, Never>?
     var activeFolderLoadID = UUID()
     var previewPreloadID = UUID()
@@ -652,6 +663,14 @@ final class AppModel: ObservableObject {
     var workspaceObserverTokens: [NSObjectProtocol] = []
     var sidebarImageCountTasks: [String: Task<Void, Never>] = [:]
     var backgroundWarmTasksBySelectionID: [String: Task<Void, Never>] = [:]
+    var initialThumbnailWarmupTask: Task<Void, Never>?
+    /// v1.4 Phase 2.3: guards `initialThumbnailWarmupTask`'s self-nilling `defer` —
+    /// same race as `selectionMetadataLoadGenerationID`.
+    var initialThumbnailWarmupGenerationID = UUID()
+    /// Phase 2.3: state for the in-flight quiescence measurement, if any — see
+    /// AppModel+Quiescence.swift for what starts/ends it.
+    var quiescenceSignpostState: OSSignpostIntervalState?
+    var quiescenceReason: String?
     var photosImportStagingDirectory: URL?
     var lastNonDeviceSidebarID: String?
 
