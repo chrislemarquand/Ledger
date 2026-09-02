@@ -379,7 +379,14 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         defaults.set(true, forKey: key)
     }
 
-    private func installMainToolbar(on window: NSWindow, resetDelegateState: Bool) {
+    // v1.4 Phase 4.3: internal (was private) so MainWindowController can install the toolbar
+    // on the window before assigning self as its contentViewController — see the init comment
+    // in LedgerApp.swift for why: NSWindow(contentViewController:) forces this controller's
+    // view through a real, geometry-bearing layout pass immediately, and if the toolbar isn't
+    // attached yet at that point, NSScrollView.automaticallyAdjustsContentInsets computes a
+    // zero top inset for the sidebar and never retroactively corrects it once the toolbar
+    // later appears — the root cause of the sidebar's launch-time scroll snap.
+    func installMainToolbar(on window: NSWindow, resetDelegateState: Bool) {
         let toolbarContent: MainToolbarController
         if let existing = mainToolbarController {
             toolbarContent = existing
@@ -407,9 +414,10 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         guard !didConfigureWindow, let window = view.window else { return }
         didConfigureWindow = true
 
-        configureWindowForToolbar(window)
-
-        installMainToolbar(on: window, resetDelegateState: true)
+        // v1.4 Phase 4.3: configureWindowForToolbar(window) and installMainToolbar(on:) now run
+        // in MainWindowController.init, before this controller is attached to the window at
+        // all — see installMainToolbar's doc comment. Only the toolbar's per-appearance
+        // revalidation belongs here.
         toolbarShellController?.syncAndValidate(window: window)
         if isSidebarCollapsed { isSidebarCollapsed = false }
         schedulePaneStateSync()

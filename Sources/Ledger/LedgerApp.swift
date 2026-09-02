@@ -410,11 +410,29 @@ final class MainWindowController: NSWindowController {
         appModel = model
         let contentController = NativeThreePaneSplitViewController(model: model)
         self.contentController = contentController
-        let window = NSWindow(contentViewController: contentController)
+
+        // v1.4 Phase 4.3: built without a content view controller and with the toolbar
+        // installed before one is attached — NSWindow(contentViewController:) (the previous
+        // approach) forces contentController's view through a real, geometry-bearing layout
+        // pass immediately, before this initializer's caller can set window.toolbar. At that
+        // point NSScrollView.automaticallyAdjustsContentInsets computes a zero top inset for
+        // the sidebar (no toolbar exists yet to account for), and never retroactively
+        // corrects it once the toolbar appears later — the root cause of the sidebar's
+        // launch-time scroll snap (see AppKitSidebarController.applyInitialScrollPositionIfNeeded,
+        // which patches the symptom; this fixes the actual cause). The styleMask below matches
+        // what NSWindow(contentViewController:) used to set implicitly.
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: ThreePaneSplitViewController.Metrics.windowDefault),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
         window.title = AppBrand.displayName
         window.isReleasedWhenClosed = false
         window.isRestorable = true
         configureWindowForToolbar(window)
+        contentController.installMainToolbar(on: window, resetDelegateState: true)
+        window.contentViewController = contentController
         let frameAutosaveName = "\(AppBrand.identifierPrefix).MainWindow"
         super.init(window: window)
         framePersistenceController = WindowFramePersistenceController(
