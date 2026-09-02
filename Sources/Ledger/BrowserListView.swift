@@ -174,8 +174,7 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
             columns: Self.sharedColumns(from: ListColumnDefinition.all),
             persistence: SharedListPersistenceConfig(
                 autosaveName: "\(AppBrand.identifierPrefix).BrowserList",
-                visibilityDefaultsKey: "\(AppBrand.identifierPrefix).listColumns.visible",
-                initialFitDefaultsKey: "\(AppBrand.identifierPrefix).listColumns.initialFitApplied"
+                visibilityDefaultsKey: "\(AppBrand.identifierPrefix).listColumns.visible"
             ),
             layoutConfig: SharedListLayoutConfig(
                 primaryColumnID: ListColumnDefinition.idName,
