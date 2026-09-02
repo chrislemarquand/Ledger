@@ -119,10 +119,6 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     override func viewWillAppear() {
         super.viewWillAppear()
         eos1vDeviceMonitor.start()
-        // Configure the window before it becomes visible so the macOS 26
-        // compositor can apply the correct floating-sidebar shadow from the
-        // first frame. Calling this in viewDidAppear causes a brief flash of
-        // sharp-cornered shadow before the toolbar style triggers a re-composite.
         configureWindowIfNeeded()
     }
 
