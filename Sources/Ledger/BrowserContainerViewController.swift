@@ -56,6 +56,22 @@ final class BrowserContainerViewController: NSViewController {
         UserDefaults.standard.bool(forKey: pathBarDefaultsKey)
     }
 
+    /// Hands keyboard focus to whichever concrete browser view (list/icon/filmstrip) is
+    /// currently active. v1.4 Phase 4.3: this used to also run on every sidebar folder
+    /// selection via a `.browserDidRequestFocus` broadcast, which produced a visible
+    /// accent-then-grey flash on the sidebar's just-clicked row — default AppKit correctly
+    /// showing a real first-responder change we were forcing. Removed that broadcast entirely
+    /// (see AppModel+Navigation.swift) rather than trying to hide it; this method now only
+    /// runs at launch and on toolbar view-mode switches, called directly instead of via a
+    /// notification three view controllers each separately subscribed to.
+    func focusCurrentBrowserView() {
+        switch model.browserViewMode {
+        case .list: listController.focusListForKeyboardNavigation()
+        case .icon: iconController.focusGalleryForKeyboardNavigation()
+        case .gallery: filmstripController.focusFilmstripForKeyboardNavigation()
+        }
+    }
+
     init(model: AppModel) {
         self.model = model
         iconController = BrowserIconViewController(model: model, items: model.filteredBrowserItems)

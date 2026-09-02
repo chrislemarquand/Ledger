@@ -149,7 +149,6 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
     private var lastRenderedDetailSignatures: [RowDetailSignature] = []
     private var lastRenderedViewMode: AppModel.BrowserViewMode?
     private var contextMenuTargetURLs: [URL] = []
-    private var browserFocusObserver: NSObjectProtocol?
     private var viewModeObserver: NSObjectProtocol?
     private var pendingSelectionAdoptionTask: Task<Void, Never>?
 
@@ -199,15 +198,6 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
     override func viewDidLoad() {
         super.viewDidLoad()
         configureList()
-        browserFocusObserver = NotificationCenter.default.addObserver(
-            forName: .browserDidRequestFocus,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.focusListForKeyboardNavigation()
-            }
-        }
         viewModeObserver = NotificationCenter.default.addObserver(
             forName: .browserDidSwitchViewMode,
             object: nil,
@@ -236,10 +226,6 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
                     }
                 }
             }
-        }
-        if let browserFocusObserver {
-            NotificationCenter.default.removeObserver(browserFocusObserver)
-            self.browserFocusObserver = nil
         }
         if let viewModeObserver {
             NotificationCenter.default.removeObserver(viewModeObserver)
@@ -404,7 +390,7 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
         )
     }
 
-    private func focusListForKeyboardNavigation() {
+    func focusListForKeyboardNavigation() {
         guard model.browserViewMode == .list else { return }
         guard let window = view.window else { return }
         window.makeFirstResponder(tableView)

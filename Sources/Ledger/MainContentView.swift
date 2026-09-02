@@ -657,9 +657,8 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     @objc func togglePathBarAction(_ sender: Any?) { browserController.setPathBarVisible(!browserController.isPathBarVisible) }
 
     private func focusBrowserPane() {
-        guard let window = view.window else { return }
-        NotificationCenter.default.post(name: .browserDidRequestFocus, object: nil)
-        window.makeFirstResponder(browserController.view)
+        guard view.window != nil else { return }
+        browserController.focusCurrentBrowserView()
     }
 
     private func toolbarTitleText() -> String {

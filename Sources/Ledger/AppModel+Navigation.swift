@@ -180,11 +180,13 @@ extension AppModel {
             scheduleBackgroundWarm(forSelectionID: oldID, files: browserItems.map(\.url))
         }
         selectSidebar(id: newID)
-        // Navigating (sidebar click, breadcrumb, Recents) commonly moves first responder onto
-        // whatever was clicked (e.g. the sidebar outline view itself). Without this, the
-        // browser pane loses keyboard focus on every folder change and arrow-key navigation
-        // stops working until the user clicks into it — matches the .browserDidRequestFocus
-        // posted at launch and on toolbar view-mode switches (see focusBrowserPane()).
-        NotificationCenter.default.post(name: .browserDidRequestFocus, object: nil)
+        // v1.4 Phase 4.3: deliberately does NOT steal keyboard focus to the browser pane here.
+        // That used to happen via a .browserDidRequestFocus broadcast on every sidebar
+        // selection, which produced a visible accent-then-grey flash on the sidebar's
+        // just-clicked row — default AppKit correctly rendering the real first-responder
+        // change we were forcing. Removed per explicit product decision: the sidebar keeps
+        // keyboard focus (and its selection stays visibly accented) after a folder switch,
+        // same as it would with zero custom focus-management code; the user clicks into the
+        // browser pane to interact with it, same as any plain AppKit split view.
     }
 }

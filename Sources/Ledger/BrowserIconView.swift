@@ -27,7 +27,6 @@ final class BrowserIconViewController: NSViewController, NSCollectionViewDataSou
     private var isRenderingState = false
     private var zoomRestoreToken = 0
     private let pinchZoomAccumulator = PinchZoomAccumulator()
-    private var browserFocusObserver: NSObjectProtocol?
     private var viewModeObserver: NSObjectProtocol?
     private var selectionAppearanceObserver: GallerySelectionAppearanceObserver?
     private var lastRenderedViewMode: AppModel.BrowserViewMode?
@@ -54,15 +53,6 @@ final class BrowserIconViewController: NSViewController, NSCollectionViewDataSou
     override func viewDidLoad() {
         super.viewDidLoad()
         configureGallery()
-        browserFocusObserver = NotificationCenter.default.addObserver(
-            forName: .browserDidRequestFocus,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.focusGalleryForKeyboardNavigation()
-            }
-        }
         viewModeObserver = NotificationCenter.default.addObserver(
             forName: .browserDidSwitchViewMode,
             object: nil,
@@ -89,10 +79,6 @@ final class BrowserIconViewController: NSViewController, NSCollectionViewDataSou
         super.viewWillDisappear()
         for indexPath in collectionView.indexPathsForVisibleItems() {
             (collectionView.item(at: indexPath) as? AppKitIconItem)?.cancelThumbnailRequest()
-        }
-        if let browserFocusObserver {
-            NotificationCenter.default.removeObserver(browserFocusObserver)
-            self.browserFocusObserver = nil
         }
         if let viewModeObserver {
             NotificationCenter.default.removeObserver(viewModeObserver)
@@ -214,7 +200,7 @@ final class BrowserIconViewController: NSViewController, NSCollectionViewDataSou
         updateQuickLookArtifacts()
     }
 
-    private func focusGalleryForKeyboardNavigation() {
+    func focusGalleryForKeyboardNavigation() {
         guard model.browserViewMode == .icon else { return }
         guard let window = view.window else { return }
         window.makeFirstResponder(collectionView)

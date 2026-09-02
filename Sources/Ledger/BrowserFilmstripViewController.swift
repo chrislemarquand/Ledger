@@ -31,7 +31,6 @@ final class BrowserFilmstripViewController: NSViewController, NSCollectionViewDa
     private var pendingThumbnailRefreshURLs: Set<URL> = []
     private var isRenderingState = false
     private var lastRenderedViewMode: AppModel.BrowserViewMode?
-    private var browserFocusObserver: NSObjectProtocol?
     private var viewModeObserver: NSObjectProtocol?
     private var selectionAppearanceObserver: GallerySelectionAppearanceObserver?
 
@@ -55,15 +54,6 @@ final class BrowserFilmstripViewController: NSViewController, NSCollectionViewDa
     override func viewDidLoad() {
         super.viewDidLoad()
         configureLayout()
-        browserFocusObserver = NotificationCenter.default.addObserver(
-            forName: .browserDidRequestFocus,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.focusFilmstripForKeyboardNavigation()
-            }
-        }
         viewModeObserver = NotificationCenter.default.addObserver(
             forName: .browserDidSwitchViewMode,
             object: nil,
@@ -90,10 +80,6 @@ final class BrowserFilmstripViewController: NSViewController, NSCollectionViewDa
         super.viewWillDisappear()
         for indexPath in collectionView.indexPathsForVisibleItems() {
             (collectionView.item(at: indexPath) as? AppKitFilmstripItem)?.cancelThumbnailRequest()
-        }
-        if let browserFocusObserver {
-            NotificationCenter.default.removeObserver(browserFocusObserver)
-            self.browserFocusObserver = nil
         }
         if let viewModeObserver {
             NotificationCenter.default.removeObserver(viewModeObserver)
@@ -226,7 +212,7 @@ final class BrowserFilmstripViewController: NSViewController, NSCollectionViewDa
         isApplyingProgrammaticSelection = false
     }
 
-    private func focusFilmstripForKeyboardNavigation() {
+    func focusFilmstripForKeyboardNavigation() {
         guard model.browserViewMode == .gallery else { return }
         guard let window = view.window else { return }
         window.makeFirstResponder(collectionView)

@@ -6,7 +6,7 @@ MARKETING_VERSION = 1.2.3
 // Placeholder only — every build (Debug, Release, archive, CI) overwrites this in the
 // built Info.plist via scripts/build/set_build_number.sh, so it's never hand-edited and
 // never diverges between build types. Bump MARKETING_VERSION by hand; this takes care of itself.
-CURRENT_PROJECT_VERSION = 519
+CURRENT_PROJECT_VERSION = 520
 // Disabled to allow build scripts that bundle ExifTool into the app resources.
 ENABLE_USER_SCRIPT_SANDBOXING = NO
 EXIFTOOL_REQUIRED_VERSION = 13.55
