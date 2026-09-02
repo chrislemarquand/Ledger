@@ -56,7 +56,9 @@ extension NativeThreePaneSplitViewController {
         static let helpExifToolDocs = 9_401
     }
 
-    private func ensureTopLevelMenu(title: String, insertAfterTitle: String? = nil) -> NSMenu? {
+    // v1.4 Phase 4.1: static (was an instance method that never touched `self`) so
+    // AppDelegate can build the top-level menu shells before any view controller exists.
+    static func ensureTopLevelMenu(title: String, insertAfterTitle: String? = nil) -> NSMenu? {
         guard let mainMenu = NSApp.mainMenu else { return nil }
         if let existing = mainMenu.items.first(where: { $0.title == title }) {
             if existing.submenu == nil {
@@ -95,14 +97,14 @@ extension NativeThreePaneSplitViewController {
 
     func injectFileMenuIfNeeded() {
         let appMenuTitle = NSApp.mainMenu?.items.first?.title
-        guard let submenu = ensureTopLevelMenu(title: "File", insertAfterTitle: appMenuTitle) else { return }
+        guard let submenu = Self.ensureTopLevelMenu(title: "File", insertAfterTitle: appMenuTitle) else { return }
         fileMenuForInjection = submenu
         submenu.delegate = self
         rebuildFileMenu(submenu)
     }
 
     func injectEditMenuIfNeeded() {
-        guard let submenu = ensureTopLevelMenu(title: "Edit", insertAfterTitle: "File") else { return }
+        guard let submenu = Self.ensureTopLevelMenu(title: "Edit", insertAfterTitle: "File") else { return }
         editMenuForInjection = submenu
         submenu.delegate = self
         rebuildEditMenu(submenu)
@@ -112,21 +114,21 @@ extension NativeThreePaneSplitViewController {
     /// Also calls rebuildViewMenu immediately so Zoom In/Out keyboard shortcuts
     /// are registered from launch.
     func injectSortMenuIfNeeded() {
-        guard let submenu = ensureTopLevelMenu(title: "View", insertAfterTitle: "Edit") else { return }
+        guard let submenu = Self.ensureTopLevelMenu(title: "View", insertAfterTitle: "Edit") else { return }
         viewMenuForSortInjection = submenu
         submenu.delegate = self
         rebuildViewMenu(submenu)
     }
 
     func injectImageMenuIfNeeded() {
-        guard let submenu = ensureTopLevelMenu(title: "Image", insertAfterTitle: "View") else { return }
+        guard let submenu = Self.ensureTopLevelMenu(title: "Image", insertAfterTitle: "View") else { return }
         imageMenuForInjection = submenu
         submenu.delegate = self
         rebuildImageMenu(submenu)
     }
 
     func injectFolderMenuIfNeeded() {
-        guard let submenu = ensureTopLevelMenu(title: "Folder", insertAfterTitle: "Image") else { return }
+        guard let submenu = Self.ensureTopLevelMenu(title: "Folder", insertAfterTitle: "Image") else { return }
         folderMenuForInjection = submenu
         submenu.delegate = self
         rebuildFolderMenu(submenu)
@@ -134,13 +136,13 @@ extension NativeThreePaneSplitViewController {
 
     func injectHelpMenuIfNeeded() {
         if NSApp.mainMenu?.items.contains(where: { $0.title == "Window" }) == true {
-            guard let submenu = ensureTopLevelMenu(title: "Help", insertAfterTitle: "Window") else { return }
+            guard let submenu = Self.ensureTopLevelMenu(title: "Help", insertAfterTitle: "Window") else { return }
             helpMenuForInjection = submenu
             submenu.delegate = self
             rebuildHelpMenu(submenu)
             return
         }
-        guard let submenu = ensureTopLevelMenu(title: "Help", insertAfterTitle: "Folder") else { return }
+        guard let submenu = Self.ensureTopLevelMenu(title: "Help", insertAfterTitle: "Folder") else { return }
         helpMenuForInjection = submenu
         submenu.delegate = self
         rebuildHelpMenu(submenu)
@@ -172,14 +174,12 @@ extension NativeThreePaneSplitViewController {
         let subtitleMenu = NSMenu(title: "Subtitle")
 
         let noneItem = NSMenuItem(title: "None", action: #selector(setIconSubtitleAction(_:)), keyEquivalent: "")
-        noneItem.target = self
         subtitleMenu.addItem(noneItem)
         subtitleMenu.addItem(.separator())
 
         for column in ListColumnDefinition.toggleable {
             let columnItem = NSMenuItem(title: column.label, action: #selector(setIconSubtitleAction(_:)), keyEquivalent: "")
             columnItem.representedObject = column.id
-            columnItem.target = self
             subtitleMenu.addItem(columnItem)
         }
 
@@ -399,7 +399,6 @@ extension NativeThreePaneSplitViewController {
         for app in apps {
             let item = NSMenuItem(title: app.name, action: #selector(openSelectionWithSpecificAppAction(_:)), keyEquivalent: "")
             item.representedObject = app.url
-            item.target = self
             let appIcon = NSWorkspace.shared.icon(forFile: app.url.path)
             appIcon.size = NSSize(width: 16, height: 16)
             item.image = appIcon
@@ -430,7 +429,6 @@ extension NativeThreePaneSplitViewController {
 
         for descriptor in items {
             let item = NSMenuItem(title: descriptor.title, action: descriptor.action, keyEquivalent: "")
-            item.target = controller
             item.image = NSImage(systemSymbolName: descriptor.symbol, accessibilityDescription: nil)
             item.tag = descriptor.tag
             item.isEnabled = isEnabled
@@ -458,7 +456,6 @@ extension NativeThreePaneSplitViewController {
             action: #selector(NativeThreePaneSplitViewController.exportExifToolCSVAction(_:)),
             keyEquivalent: ""
         )
-        createCSVItem.target = controller
         createCSVItem.tag = MenuTag.fileExportExifToolCSV
         createCSVItem.isEnabled = hasBrowserItems
         createCSVItem.image = NSImage(systemSymbolName: "tablecells.badge.ellipsis", accessibilityDescription: nil)
@@ -470,7 +467,6 @@ extension NativeThreePaneSplitViewController {
             action: #selector(NativeThreePaneSplitViewController.sendToPhotosAction(_:)),
             keyEquivalent: ""
         )
-        sendToPhotosItem.target = controller
         sendToPhotosItem.tag = MenuTag.fileExportSendToPhotos
         sendToPhotosItem.isEnabled = photosState.isEnabled
         if let photosAppURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Photos") {
@@ -488,7 +484,6 @@ extension NativeThreePaneSplitViewController {
             action: #selector(NativeThreePaneSplitViewController.sendToLightroomAction(_:)),
             keyEquivalent: ""
         )
-        sendToLightroomItem.target = controller
         sendToLightroomItem.tag = MenuTag.fileExportSendToLightroom
         sendToLightroomItem.isEnabled = lightroomState.isEnabled
         if let lightroomAppURL = model.lightroomApplicationURL(for: targetURLs) {
@@ -506,7 +501,6 @@ extension NativeThreePaneSplitViewController {
             action: #selector(NativeThreePaneSplitViewController.sendToLightroomClassicAction(_:)),
             keyEquivalent: ""
         )
-        sendToLightroomClassicItem.target = controller
         sendToLightroomClassicItem.tag = MenuTag.fileExportSendToLightroomClassic
         sendToLightroomClassicItem.isEnabled = lightroomClassicState.isEnabled
         if let lightroomAppURL = model.lightroomClassicApplicationURL(for: targetURLs) {
@@ -543,12 +537,10 @@ extension NativeThreePaneSplitViewController {
 
         let undoItem = NSMenuItem(title: "Undo", action: #selector(undoMetadataMenuAction(_:)), keyEquivalent: "z")
         undoItem.keyEquivalentModifierMask = .command
-        undoItem.target = self
         menu.addItem(undoItem)
 
         let redoItem = NSMenuItem(title: "Redo", action: #selector(redoMetadataMenuAction(_:)), keyEquivalent: "Z")
         redoItem.keyEquivalentModifierMask = .command
-        redoItem.target = self
         menu.addItem(redoItem)
 
         menu.addItem(.separator())
@@ -580,7 +572,6 @@ extension NativeThreePaneSplitViewController {
         )
         adjustDateTimeItem.image = NSImage(systemSymbolName: "calendar.badge.clock", accessibilityDescription: nil)
         adjustDateTimeItem.tag = MenuTag.imageAdjustDateTime
-        adjustDateTimeItem.target = self
         menu.addItem(adjustDateTimeItem)
 
         let setLocationItem = NSMenuItem(
@@ -590,7 +581,6 @@ extension NativeThreePaneSplitViewController {
         )
         setLocationItem.image = NSImage(systemSymbolName: "mappin.and.ellipse", accessibilityDescription: nil)
         setLocationItem.tag = MenuTag.imageSetLocation
-        setLocationItem.target = self
         menu.addItem(setLocationItem)
         menu.addItem(.separator())
 
@@ -601,7 +591,6 @@ extension NativeThreePaneSplitViewController {
         )
         rotateAnticlockwiseItem.image = NSImage(systemSymbolName: "rotate.left", accessibilityDescription: nil)
         rotateAnticlockwiseItem.tag = MenuTag.imageRotateAnticlockwise
-        rotateAnticlockwiseItem.target = self
         rotateAnticlockwiseItem.makeImagePreferredVisible()
         menu.addItem(rotateAnticlockwiseItem)
 
@@ -612,7 +601,6 @@ extension NativeThreePaneSplitViewController {
         )
         rotateClockwiseItem.image = NSImage(systemSymbolName: "rotate.right", accessibilityDescription: nil)
         rotateClockwiseItem.tag = MenuTag.imageRotateClockwise
-        rotateClockwiseItem.target = self
         rotateClockwiseItem.makeImagePreferredVisible()
         menu.addItem(rotateClockwiseItem)
 
@@ -623,7 +611,6 @@ extension NativeThreePaneSplitViewController {
         )
         flipHorizontalItem.image = NSImage(systemSymbolName: "flip.horizontal", accessibilityDescription: nil)
         flipHorizontalItem.tag = MenuTag.imageFlipHorizontal
-        flipHorizontalItem.target = self
         flipHorizontalItem.makeImagePreferredVisible()
         menu.addItem(flipHorizontalItem)
 
@@ -637,7 +624,6 @@ extension NativeThreePaneSplitViewController {
             accessibilityDescription: nil
         )
         flipVerticalItem.tag = MenuTag.imageFlipVertical
-        flipVerticalItem.target = self
         flipVerticalItem.makeImagePreferredVisible()
         menu.addItem(flipVerticalItem)
         menu.addItem(.separator())
@@ -646,28 +632,24 @@ extension NativeThreePaneSplitViewController {
         applySelectionItem.keyEquivalentModifierMask = .command
         applySelectionItem.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
         applySelectionItem.tag = MenuTag.imageApplySelection
-        applySelectionItem.target = self
         menu.addItem(applySelectionItem)
 
         let clearSelectionItem = NSMenuItem(title: "Clear Changes", action: #selector(clearChangesAction(_:)), keyEquivalent: "k")
         clearSelectionItem.keyEquivalentModifierMask = .command
         clearSelectionItem.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
         clearSelectionItem.tag = MenuTag.imageClearSelection
-        clearSelectionItem.target = self
         menu.addItem(clearSelectionItem)
 
         let refreshSelectionItem = NSMenuItem(title: "Refresh Metadata", action: #selector(refreshSelectionMetadataAction(_:)), keyEquivalent: "R")
         refreshSelectionItem.keyEquivalentModifierMask = [.command, .shift]
         refreshSelectionItem.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
         refreshSelectionItem.tag = MenuTag.imageRefreshSelection
-        refreshSelectionItem.target = self
         menu.addItem(refreshSelectionItem)
 
         let restoreSelectionItem = NSMenuItem(title: "Restore from Backup", action: #selector(restoreFromBackupAction(_:)), keyEquivalent: "b")
         restoreSelectionItem.keyEquivalentModifierMask = .command
         restoreSelectionItem.image = NSImage(systemSymbolName: "arrow.uturn.backward.circle", accessibilityDescription: nil)
         restoreSelectionItem.tag = MenuTag.imageRestoreSelection
-        restoreSelectionItem.target = self
         menu.addItem(restoreSelectionItem)
 
         menu.addItem(.separator())
@@ -684,7 +666,6 @@ extension NativeThreePaneSplitViewController {
                 let item = NSMenuItem(title: preset.name, action: #selector(applyPresetFromMenuAction(_:)), keyEquivalent: "")
                 item.representedObject = preset.id.uuidString
                 item.tag = MenuTag.imageApplyPreset
-                item.target = self
                 applySubmenu.addItem(item)
             }
         }
@@ -694,13 +675,11 @@ extension NativeThreePaneSplitViewController {
         let savePresetItem = NSMenuItem(title: "Save Metadata as Preset…", action: #selector(saveCurrentAsPresetAction(_:)), keyEquivalent: "")
         savePresetItem.tag = MenuTag.imageSavePreset
         savePresetItem.image = NSImage(systemSymbolName: "square.and.arrow.down.badge.checkmark", accessibilityDescription: nil)
-        savePresetItem.target = self
         menu.addItem(savePresetItem)
 
         let managePresetsItem = NSMenuItem(title: "Manage Presets…", action: #selector(managePresetsAction(_:)), keyEquivalent: "")
         managePresetsItem.tag = MenuTag.imageManagePresets
         managePresetsItem.image = NSImage(systemSymbolName: "slider.horizontal.below.square.filled.and.square", accessibilityDescription: nil)
-        managePresetsItem.target = self
         menu.addItem(managePresetsItem)
 
         menu.addItem(.separator())
@@ -712,7 +691,6 @@ extension NativeThreePaneSplitViewController {
         )
         batchRenameSelectionItem.image = NSImage(systemSymbolName: "pencil.and.list.clipboard", accessibilityDescription: nil)
         batchRenameSelectionItem.tag = MenuTag.imageBatchRenameSelection
-        batchRenameSelectionItem.target = self
         menu.addItem(batchRenameSelectionItem)
     }
 
@@ -727,7 +705,6 @@ extension NativeThreePaneSplitViewController {
         applyFolderItem.keyEquivalentModifierMask = [.command, .option, .shift]
         applyFolderItem.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
         applyFolderItem.tag = MenuTag.folderApply
-        applyFolderItem.target = self
         menu.addItem(applyFolderItem)
 
         let clearFolderItem = NSMenuItem(
@@ -738,7 +715,6 @@ extension NativeThreePaneSplitViewController {
         clearFolderItem.keyEquivalentModifierMask = [.command, .option]
         clearFolderItem.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
         clearFolderItem.tag = MenuTag.folderClear
-        clearFolderItem.target = self
         menu.addItem(clearFolderItem)
 
         let refreshFolderItem = NSMenuItem(
@@ -749,7 +725,6 @@ extension NativeThreePaneSplitViewController {
         refreshFolderItem.keyEquivalentModifierMask = [.command, .option]
         refreshFolderItem.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
         refreshFolderItem.tag = MenuTag.folderRefresh
-        refreshFolderItem.target = self
         menu.addItem(refreshFolderItem)
 
         let restoreFolderItem = NSMenuItem(
@@ -760,7 +735,6 @@ extension NativeThreePaneSplitViewController {
         restoreFolderItem.keyEquivalentModifierMask = [.command, .option]
         restoreFolderItem.image = NSImage(systemSymbolName: "arrow.uturn.backward.circle", accessibilityDescription: nil)
         restoreFolderItem.tag = MenuTag.folderRestore
-        restoreFolderItem.target = self
         menu.addItem(restoreFolderItem)
 
         menu.addItem(.separator())
@@ -772,7 +746,6 @@ extension NativeThreePaneSplitViewController {
         )
         batchRenameFolderItem.image = NSImage(systemSymbolName: "pencil.and.list.clipboard", accessibilityDescription: nil)
         batchRenameFolderItem.tag = MenuTag.folderBatchRename
-        batchRenameFolderItem.target = self
         menu.addItem(batchRenameFolderItem)
     }
 
@@ -786,7 +759,6 @@ extension NativeThreePaneSplitViewController {
                 let item = NSMenuItem(title: preset.name, action: #selector(applyPresetFromMenuAction(_:)), keyEquivalent: "")
                 item.representedObject = preset.id.uuidString
                 item.tag = MenuTag.imageApplyPreset
-                item.target = self
                 item.isEnabled = hasSelection
                 menu.addItem(item)
             }
@@ -796,14 +768,12 @@ extension NativeThreePaneSplitViewController {
         let saveItem = NSMenuItem(title: "Save Metadata as Preset…", action: #selector(saveCurrentAsPresetAction(_:)), keyEquivalent: "")
         saveItem.tag = MenuTag.imageSavePreset
         saveItem.image = NSImage(systemSymbolName: "square.and.arrow.down.badge.checkmark", accessibilityDescription: nil)
-        saveItem.target = self
         saveItem.isEnabled = hasSelection
         menu.addItem(saveItem)
 
         let manageItem = NSMenuItem(title: "Manage Presets…", action: #selector(managePresetsAction(_:)), keyEquivalent: "")
         manageItem.tag = MenuTag.imageManagePresets
         manageItem.image = NSImage(systemSymbolName: "slider.horizontal.below.square.filled.and.square", accessibilityDescription: nil)
-        manageItem.target = self
         manageItem.isEnabled = true
         menu.addItem(manageItem)
 

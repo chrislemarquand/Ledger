@@ -30,7 +30,6 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     weak var imageMenuForInjection: NSMenu?
     weak var folderMenuForInjection: NSMenu?
     weak var helpMenuForInjection: NSMenu?
-    private var menuTrackingObserver: NSObjectProtocol?
     private var uiRefreshObservers: [AnyCancellable] = []
     private var browserFocusRequestObserver: NSObjectProtocol?
     private var keyMonitor: Any?
@@ -142,10 +141,6 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         if let browserFocusRequestObserver {
             NotificationCenter.default.removeObserver(browserFocusRequestObserver)
             self.browserFocusRequestObserver = nil
-        }
-        if let menuTrackingObserver {
-            NotificationCenter.default.removeObserver(menuTrackingObserver)
-            self.menuTrackingObserver = nil
         }
     }
 
@@ -425,32 +420,18 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         refreshWindowTitleSubtitleIfNeeded()
         installBrowserFocusRequestObserverIfNeeded()
         installKeyMonitorIfNeeded()
+        // v1.4 Phase 4.1: menu injection used to happen here, deferred by one run-loop tick
+        // and re-registered defensively on every menu-bar click (NSMenu.didBeginTrackingNotification)
+        // because SwiftUI could mutate NSApp.mainMenu after this point, invalidating the
+        // *ForInjection weak references. AppDelegate now builds the menu shells before any
+        // NSHostingController exists and populates their content immediately after
+        // MainWindowController is constructed — see LedgerApp.swift's applicationDidFinishLaunching
+        // — so injection here would just be redundant, not defensive. focusBrowserPane still
+        // needs its own run-loop-tick defer (unrelated to the menu timing issue): the window
+        // isn't necessarily key/able to accept first responder yet at this exact point in the
+        // view lifecycle.
         DispatchQueue.main.async { [weak self] in
             self?.focusBrowserPane()
-            self?.injectFileMenuIfNeeded()
-            self?.injectEditMenuIfNeeded()
-            self?.injectSortMenuIfNeeded()
-            self?.injectImageMenuIfNeeded()
-            self?.injectFolderMenuIfNeeded()
-            self?.injectHelpMenuIfNeeded()
-        }
-        // Re-register menu delegates every time the user clicks the menu bar.
-        // SwiftUI may rebuild NSMenu objects after our initial async setup, invalidating
-        // the weak references. didBeginTrackingNotification fires before menuWillOpen,
-        // so delegates are always current by the time injection is needed.
-        menuTrackingObserver = NotificationCenter.default.addObserver(
-            forName: NSMenu.didBeginTrackingNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.injectSortMenuIfNeeded()
-                self?.injectFileMenuIfNeeded()
-                self?.injectEditMenuIfNeeded()
-                self?.injectImageMenuIfNeeded()
-                self?.injectFolderMenuIfNeeded()
-                self?.injectHelpMenuIfNeeded()
-            }
         }
     }
 

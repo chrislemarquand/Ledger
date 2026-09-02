@@ -110,6 +110,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    /// v1.4 Phase 4.1: creates the six top-level menu shells (File/Edit/View/Image/Folder/Help)
+    /// in the correct order before any window or hosted SwiftUI view exists — matching what a
+    /// MainMenu.xib or SwiftUI `.commands` gives other apps for free. Their real content is
+    /// populated synchronously right after `MainWindowController` is constructed (see
+    /// `applicationDidFinishLaunching`), still before the window is shown, so there is never a
+    /// frame where the menu bar is visibly incomplete. See docs/menu-bar-architecture-audit-2026-08.md.
+    private func configureStaticMenuBarShells() {
+        var previousTitle = NSApp.mainMenu?.items.first?.title
+        for title in ["File", "Edit", "View", "Image", "Folder"] {
+            _ = NativeThreePaneSplitViewController.ensureTopLevelMenu(title: title, insertAfterTitle: previousTitle)
+            previousTitle = title
+        }
+        // Mirrors injectHelpMenuIfNeeded's own placement logic: after Window if AppKit has
+        // already inserted one (it hasn't, this early — kept for parity with that function so
+        // the two never disagree on where Help belongs), otherwise after Folder.
+        if NSApp.mainMenu?.items.contains(where: { $0.title == "Window" }) == true {
+            _ = NativeThreePaneSplitViewController.ensureTopLevelMenu(title: "Help", insertAfterTitle: "Window")
+        } else {
+            _ = NativeThreePaneSplitViewController.ensureTopLevelMenu(title: "Help", insertAfterTitle: "Folder")
+        }
+    }
+
     private func bundledExifToolVersion() -> String? {
         guard let executablePath = Bundle.main.path(forResource: "exiftool/bin/exiftool", ofType: nil) else {
             return nil
@@ -150,6 +172,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWindow.allowsAutomaticWindowTabbing = false
         updateService = UpdateService()
         configureApplicationMenu()
+        // v1.4 Phase 4.1: the six top-level menus' shells exist here, before any
+        // NSHostingController is constructed anywhere below (SettingsWindowController and
+        // ExifToolConsoleWindowController both build one eagerly in their own init).
+        configureStaticMenuBarShells()
         Signposts.launch.emitEvent("MenuReady")
         if !Self.isSparkleAutoupdateDisabled() {
             updateService?.performBackgroundCheck()
@@ -164,6 +190,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         exifToolConsoleWindowController = ExifToolConsoleWindowController(model: model)
         let windowController = MainWindowController(model: model)
         mainWindowController = windowController
+        // v1.4 Phase 4.1: populate the six menus' real content synchronously here — after
+        // every launch-time NSHostingController exists but before the window is shown, so
+        // there's no frame where the user could see or click an incomplete menu, and no
+        // NSMenu.didBeginTrackingNotification reinjection needed (removed from
+        // configureWindowIfNeeded — see its comment).
+        let content = windowController.contentController
+        content.injectFileMenuIfNeeded()
+        content.injectEditMenuIfNeeded()
+        content.injectSortMenuIfNeeded()
+        content.injectImageMenuIfNeeded()
+        content.injectFolderMenuIfNeeded()
+        content.injectHelpMenuIfNeeded()
         windowController.showWindow(nil)
         if let openFolderPath = Self.openFolderPathFromLaunchArguments() {
             model.openFolder(at: URL(fileURLWithPath: openFolderPath))
@@ -374,11 +412,16 @@ private func presentAboutPanel(
 @MainActor
 final class MainWindowController: NSWindowController {
     let appModel: AppModel
+    // v1.4 Phase 4.1: exposed so AppDelegate can populate the top-level menus' real content
+    // synchronously right after construction, before the window is ever shown — see
+    // applicationDidFinishLaunching.
+    let contentController: NativeThreePaneSplitViewController
     private var framePersistenceController: WindowFramePersistenceController?
 
     init(model: AppModel) {
         appModel = model
         let contentController = NativeThreePaneSplitViewController(model: model)
+        self.contentController = contentController
         let window = NSWindow(contentViewController: contentController)
         window.title = AppBrand.displayName
         window.isReleasedWhenClosed = false
