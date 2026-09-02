@@ -4,15 +4,25 @@ import SharedUI
 @MainActor
 @main
 enum LedgerMain {
-    private static var appDelegate: AppDelegate?
-
+    // v1.4 Phase 4.1 slice 1: NSApplicationMain loads MainMenu.xib (NSMainNibFile in
+    // Config/Ledger-Info.plist) -- which establishes NSApp.mainMenu and connects
+    // AppDelegate via the nib's own delegate outlet -- before applicationWillFinishLaunching
+    // is even sent, materially earlier than anything reachable from delegate-method code.
+    // This replaces a manual NSApplication.shared/app.delegate=/app.run() bootstrap that
+    // built the menu bar entirely from inside applicationDidFinishLaunching, which had a
+    // measured, intermittent race against the WindowServer's menu-bar-activation handoff
+    // (window visible, menu bar still showing only the app name, for up to several
+    // seconds) -- not reproducible with nib-loaded menus (confirmed against Photos.app,
+    // whose menu appears even while its own window is still a blank loading spinner).
+    // AppDelegate needs no code changes: it has no custom init, and nib-instantiated
+    // top-level objects loaded via the specific NSMainNibFile pathway are retained
+    // automatically by that mechanism -- the same reason every classic Xcode "Cocoa
+    // Application" template's App Delegate has never needed an explicit retaining
+    // reference anywhere in code. .regular activation policy needs no explicit call
+    // either -- it's already the default for a normal app bundle (no LSUIElement/
+    // LSBackgroundOnly set).
     static func main() {
-        let app = NSApplication.shared
-        let delegate = AppDelegate()
-        self.appDelegate = delegate
-        app.delegate = delegate
-        app.setActivationPolicy(.regular)
-        app.run()
+        _ = NSApplicationMain(CommandLine.argc, CommandLine.unsafeArgv)
     }
 }
 
@@ -110,28 +120,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    /// v1.4 Phase 4.1: creates the six top-level menu shells (File/Edit/View/Image/Folder/Help)
-    /// in the correct order before any window or hosted SwiftUI view exists — matching what a
-    /// MainMenu.xib or SwiftUI `.commands` gives other apps for free. Their real content is
-    /// populated synchronously right after `MainWindowController` is constructed (see
-    /// `applicationDidFinishLaunching`), still before the window is shown, so there is never a
-    /// frame where the menu bar is visibly incomplete. See docs/menu-bar-architecture-audit-2026-08.md.
-    private func configureStaticMenuBarShells() {
-        var previousTitle = NSApp.mainMenu?.items.first?.title
-        for title in ["File", "Edit", "View", "Image", "Folder"] {
-            _ = NativeThreePaneSplitViewController.ensureTopLevelMenu(title: title, insertAfterTitle: previousTitle)
-            previousTitle = title
-        }
-        // Mirrors injectHelpMenuIfNeeded's own placement logic: after Window if AppKit has
-        // already inserted one (it hasn't, this early — kept for parity with that function so
-        // the two never disagree on where Help belongs), otherwise after Folder.
-        if NSApp.mainMenu?.items.contains(where: { $0.title == "Window" }) == true {
-            _ = NativeThreePaneSplitViewController.ensureTopLevelMenu(title: "Help", insertAfterTitle: "Window")
-        } else {
-            _ = NativeThreePaneSplitViewController.ensureTopLevelMenu(title: "Help", insertAfterTitle: "Folder")
-        }
-    }
-
     private func bundledExifToolVersion() -> String? {
         guard let executablePath = Bundle.main.path(forResource: "exiftool/bin/exiftool", ofType: nil) else {
             return nil
@@ -171,11 +159,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         NSWindow.allowsAutomaticWindowTabbing = false
         updateService = UpdateService()
+        // v1.4 Phase 4.1 slice 1: the six top-level menus' shells (File/Edit/View/Image/
+        // Folder/Help) already exist by this point, loaded from MainMenu.xib before this
+        // method was even called — configureApplicationMenu() only needs to replace the
+        // App menu's content (mainMenu.items.first), same as before.
         configureApplicationMenu()
-        // v1.4 Phase 4.1: the six top-level menus' shells exist here, before any
-        // NSHostingController is constructed anywhere below (SettingsWindowController and
-        // ExifToolConsoleWindowController both build one eagerly in their own init).
-        configureStaticMenuBarShells()
         Signposts.launch.emitEvent("MenuReady")
         if !Self.isSparkleAutoupdateDisabled() {
             updateService?.performBackgroundCheck()

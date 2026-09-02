@@ -86,6 +86,7 @@
 		A19000020000000000000001 /* Signposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19000010000000000000001 /* Signposts.swift */; };
 		A19000040000000000000001 /* Signposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19000030000000000000001 /* Signposts.swift */; };
 		B100001D0000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000D0000000000000001 /* Assets.xcassets */; };
+		B100002E0000000000000001 /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = B100002D0000000000000001 /* MainMenu.xib */; };
 		C20002010000000000000001 /* CSVImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001010000000000000001 /* CSVImportAdapter.swift */; };
 		C20002020000000000000001 /* CSVSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001020000000000000001 /* CSVSupport.swift */; };
 		C20002030000000000000001 /* EOS1VImportAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001030000000000000001 /* EOS1VImportAdapter.swift */; };
@@ -241,6 +242,7 @@
 		A19000010000000000000001 /* Signposts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signposts.swift; sourceTree = "<group>"; };
 		A19000030000000000000001 /* Signposts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signposts.swift; sourceTree = "<group>"; };
 		B100000D0000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B100002D0000000000000001 /* MainMenu.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = MainMenu.xib; sourceTree = "<group>"; };
 		C20001010000000000000001 /* CSVImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSVImportAdapter.swift; sourceTree = "<group>"; };
 		C20001020000000000000001 /* CSVSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSVSupport.swift; sourceTree = "<group>"; };
 		C20001030000000000000001 /* EOS1VImportAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VImportAdapter.swift; sourceTree = "<group>"; };
@@ -411,6 +413,7 @@
 			children = (
 				469CE1902F4B7DE400D51BC9 /* AppIcon.icon */,
 				B100000D0000000000000001 /* Assets.xcassets */,
+				B100002D0000000000000001 /* MainMenu.xib */,
 				C20000F00000000000000001 /* Import */,
 				C20000F10000000000000001 /* ImportUI */,
 				A10001A00000000000000001 /* EOS1V */,
@@ -716,6 +719,7 @@
 			files = (
 				B100001D0000000000000001 /* Assets.xcassets in Resources */,
 				469CE1912F4B7DE400D51BC9 /* AppIcon.icon in Resources */,
+				B100002E0000000000000001 /* MainMenu.xib in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

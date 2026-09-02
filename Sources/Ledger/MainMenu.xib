@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="24506" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES">
+    <dependencies>
+        <deployment identifier="macosx"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="24506"/>
+    </dependencies>
+    <objects>
+        <customObject id="-2" userLabel="File's Owner" customClass="NSApplication">
+            <connections>
+                <outlet property="delegate" destination="LdgrAppDelegate1" id="w0I-XO-wWG"/>
+            </connections>
+        </customObject>
+        <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
+        <customObject id="-3" userLabel="Application" customClass="NSObject"/>
+        <!--
+          v1.4 Phase 4.1 slice 1: minimal Application Menu nib — File's Owner (NSApplication)
+          loads this before applicationWillFinishLaunching even fires (see
+          docs/v1.4-progress.md's Phase 4.1 post-commit correction and the follow-on nib
+          investigation for why this exists: a code-built menu bar populated from inside
+          applicationDidFinishLaunching has a measured, intermittent race against the
+          WindowServer's menu-bar-activation handoff that nib-loaded menus don't have).
+
+          Deliberately minimal for this slice: only the App menu placeholder (its real
+          content is still built by AppDelegate.configureApplicationMenu(), unchanged —
+          this nib only needs to provide a first item for that function to find and
+          replace) and six empty File/Edit/View/Image/Folder/Help shells in the correct
+          order. NativeThreePaneSplitViewController's existing injectXMenuIfNeeded()
+          methods populate their real content exactly as before, via
+          Self.ensureTopLevelMenu(title:insertAfterTitle:) finding these nib-provided
+          items by title and reusing their (initially empty) submenus.
+        -->
+        <menu title="MainMenu" systemMenu="main" id="AppMainMenu1">
+            <items>
+                <menuItem title="Ledger" id="AppMenuItem001">
+                    <menu key="submenu" title="Ledger" id="AppMenuSubmenu01"/>
+                </menuItem>
+                <menuItem title="File" id="FileMenuItem001">
+                    <menu key="submenu" title="File" id="FileMenuSubmenu1"/>
+                </menuItem>
+                <menuItem title="Edit" id="EditMenuItem001">
+                    <menu key="submenu" title="Edit" id="EditMenuSubmenu1"/>
+                </menuItem>
+                <menuItem title="View" id="ViewMenuItem001">
+                    <menu key="submenu" title="View" id="ViewMenuSubmenu1"/>
+                </menuItem>
+                <menuItem title="Image" id="ImageMenuItem01">
+                    <menu key="submenu" title="Image" id="ImageMenuSubmen1"/>
+                </menuItem>
+                <menuItem title="Folder" id="FoldrMenuItem01">
+                    <menu key="submenu" title="Folder" id="FoldrMenuSubmen1"/>
+                </menuItem>
+                <menuItem title="Help" id="HelpMenuItem001">
+                    <menu key="submenu" title="Help" id="HelpMenuSubmenu1"/>
+                </menuItem>
+            </items>
+            <point key="canvasLocation" x="140" y="154"/>
+        </menu>
+        <customObject id="LdgrAppDelegate1" customClass="AppDelegate" customModule="Ledger" customModuleProvider="target"/>
+    </objects>
+</document>
