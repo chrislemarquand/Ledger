@@ -3,12 +3,41 @@
 //  LedgerUITests
 //
 
+import AppKit
 import XCTest
 
 final class LedgerUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        terminateAnyRunningLedgerInstance()
+    }
+
+    /// A stray `Ledger` process left over from a prior test run, a killed
+    /// `xcodebuild test` invocation, or a stuck Xcode debug session blocks
+    /// every subsequent `XCUIApplication.launch()` call: `launch()` first
+    /// tries to terminate any already-running same-bundle-ID instance, and
+    /// if that instance doesn't respond (observed: a debugger-suspended
+    /// process in particular never will), the whole test hangs for ~60s and
+    /// then fails with "Failed to terminate com.chrislemarquand.Ledger:<pid>"
+    /// — attributed to whichever `launch()` call happens to hit it, not to
+    /// the actual cause. Confirmed by reproducing directly: killing a real
+    /// stray process by hand turned a 60s failure into a 6s pass with no
+    /// other change. Force-terminating any pre-existing instance before each
+    /// test removes the precondition entirely instead of chasing the
+    /// resulting timeout.
+    private func terminateAnyRunningLedgerInstance() {
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: "com.chrislemarquand.Ledger")
+        guard !running.isEmpty else { return }
+        for instance in running {
+            instance.forceTerminate()
+        }
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
+            let stillRunning = NSRunningApplication.runningApplications(withBundleIdentifier: "com.chrislemarquand.Ledger")
+            if stillRunning.isEmpty { return }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
     }
 
     /// The bundled fixture JPEGs' own folder, used directly as the browsed
