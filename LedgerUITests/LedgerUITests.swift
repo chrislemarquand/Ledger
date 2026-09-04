@@ -13,21 +13,40 @@ final class LedgerUITests: XCTestCase {
         terminateAnyRunningLedgerInstance()
     }
 
-    /// A stray `Ledger` process left over from a prior test run, a killed
-    /// `xcodebuild test` invocation, or a stuck Xcode debug session blocks
-    /// every subsequent `XCUIApplication.launch()` call: `launch()` first
-    /// tries to terminate any already-running same-bundle-ID instance, and
-    /// if that instance doesn't respond (observed: a debugger-suspended
-    /// process in particular never will), the whole test hangs for ~60s and
-    /// then fails with "Failed to terminate com.chrislemarquand.Ledger:<pid>"
-    /// — attributed to whichever `launch()` call happens to hit it, not to
-    /// the actual cause. Confirmed by reproducing directly: killing a real
-    /// stray process by hand turned a 60s failure into a 6s pass with no
-    /// other change. Force-terminating any pre-existing instance before each
-    /// test removes the precondition entirely instead of chasing the
-    /// resulting timeout.
+    /// A stray `Ledger` process left over from a prior test run or a killed
+    /// `xcodebuild test` invocation blocks every subsequent
+    /// `XCUIApplication.launch()` call: `launch()` first tries to terminate
+    /// any already-running same-bundle-ID instance, and if that instance
+    /// doesn't respond, the whole test hangs for ~60s and then fails with
+    /// "Failed to terminate com.chrislemarquand.Ledger:<pid>" — attributed to
+    /// whichever `launch()` call happens to hit it, not the actual cause.
+    ///
+    /// **This must never terminate a process the user is actively debugging
+    /// in Xcode.** An earlier version of this function terminated *any*
+    /// running instance unconditionally, including the user's own live,
+    /// paused Xcode debug session — indistinguishable from an abandoned
+    /// stray by PID or process state alone (both can be reported as
+    /// suspended/traced by `ps`). That version crashed a real debug session
+    /// (confirmed via the resulting crash report: "External Modification
+    /// Warnings: Debugger attached to process", terminated by SIGTRAP when
+    /// this code's fallback killed the attached `debugserver`) and is not
+    /// something to risk recurring. Fixed by checking the kernel's own
+    /// `P_TRACED` flag (`sysctl(KERN_PROC_PID)`, the same signal a debugger
+    /// itself sets) before touching a process — a debugger-attached instance
+    /// is always skipped, never terminated, no exceptions.
+    private func isBeingDebugged(pid: pid_t) -> Bool {
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        let result = sysctl(&mib, u_int(mib.count), &info, &size, nil, 0)
+        guard result == 0 else { return false }
+        let pTraced: Int32 = 0x0000_0800 // P_TRACED, from <sys/proc.h>
+        return (Int32(info.kp_proc.p_flag) & pTraced) != 0
+    }
+
     private func terminateAnyRunningLedgerInstance() {
         let running = NSRunningApplication.runningApplications(withBundleIdentifier: "com.chrislemarquand.Ledger")
+            .filter { !isBeingDebugged(pid: $0.processIdentifier) }
         guard !running.isEmpty else { return }
         for instance in running {
             instance.forceTerminate()
@@ -35,6 +54,7 @@ final class LedgerUITests: XCTestCase {
         let deadline = Date().addingTimeInterval(5)
         while Date() < deadline {
             let stillRunning = NSRunningApplication.runningApplications(withBundleIdentifier: "com.chrislemarquand.Ledger")
+                .filter { !isBeingDebugged(pid: $0.processIdentifier) }
             if stillRunning.isEmpty { return }
             Thread.sleep(forTimeInterval: 0.1)
         }
