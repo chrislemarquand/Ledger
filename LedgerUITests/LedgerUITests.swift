@@ -8,56 +8,39 @@ import XCTest
 
 final class LedgerUITests: XCTestCase {
 
+    /// The instance this specific test launched, if any — `tearDown()` terminates only this,
+    /// never anything discovered by scanning for other processes with the same bundle ID.
+    ///
+    /// **History, read before changing this file's process-lifecycle handling again.** Two
+    /// prior versions of "clean up a stray Ledger process so `XCUIApplication.launch()` doesn't
+    /// hang ~60s trying to terminate it" both caused real harm:
+    /// 1. Force-terminating *any* running `com.chrislemarquand.Ledger` instance in `setUp`
+    ///    crashed the user's live, paused Xcode debug session — indistinguishable from an
+    ///    abandoned stray by PID or process state alone (confirmed via the resulting crash
+    ///    report: "External Modification Warnings: Debugger attached to process").
+    /// 2. The fix for that — skip any instance with the kernel's `P_TRACED` flag set — turned
+    ///    out to be too broad in the other direction: `xcodebuild test` itself launches the
+    ///    app under test with a debugger attached for every ordinary UI test run (that's what
+    ///    `-NSDocumentRevisionsDebugMode YES` on the launched process signals), which is
+    ///    *routine*, not evidence of the user's own interactive session. `P_TRACED` can't tell
+    ///    the two apart, so it ended up protecting test-spawned processes from cleanup too —
+    ///    reintroducing the original hang, just from ordinary test-to-test leakage instead of a
+    ///    genuinely abandoned process.
+    ///
+    /// Neither version should have existed: sweeping by bundle ID and guessing which matches
+    /// are safe to kill is the wrong shape of fix regardless of the heuristic. The actual fix is
+    /// to never do that — each test owns exactly the one instance it launched and is
+    /// responsible for terminating it itself, via `XCUIApplication.terminate()` (the API this
+    /// is meant for), not `NSRunningApplication`/`kill` against a PID found by scanning.
+    private var currentApp: XCUIApplication?
+
     override func setUpWithError() throws {
         continueAfterFailure = false
-        terminateAnyRunningLedgerInstance()
     }
 
-    /// A stray `Ledger` process left over from a prior test run or a killed
-    /// `xcodebuild test` invocation blocks every subsequent
-    /// `XCUIApplication.launch()` call: `launch()` first tries to terminate
-    /// any already-running same-bundle-ID instance, and if that instance
-    /// doesn't respond, the whole test hangs for ~60s and then fails with
-    /// "Failed to terminate com.chrislemarquand.Ledger:<pid>" — attributed to
-    /// whichever `launch()` call happens to hit it, not the actual cause.
-    ///
-    /// **This must never terminate a process the user is actively debugging
-    /// in Xcode.** An earlier version of this function terminated *any*
-    /// running instance unconditionally, including the user's own live,
-    /// paused Xcode debug session — indistinguishable from an abandoned
-    /// stray by PID or process state alone (both can be reported as
-    /// suspended/traced by `ps`). That version crashed a real debug session
-    /// (confirmed via the resulting crash report: "External Modification
-    /// Warnings: Debugger attached to process", terminated by SIGTRAP when
-    /// this code's fallback killed the attached `debugserver`) and is not
-    /// something to risk recurring. Fixed by checking the kernel's own
-    /// `P_TRACED` flag (`sysctl(KERN_PROC_PID)`, the same signal a debugger
-    /// itself sets) before touching a process — a debugger-attached instance
-    /// is always skipped, never terminated, no exceptions.
-    private func isBeingDebugged(pid: pid_t) -> Bool {
-        var info = kinfo_proc()
-        var size = MemoryLayout<kinfo_proc>.stride
-        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
-        let result = sysctl(&mib, u_int(mib.count), &info, &size, nil, 0)
-        guard result == 0 else { return false }
-        let pTraced: Int32 = 0x0000_0800 // P_TRACED, from <sys/proc.h>
-        return (Int32(info.kp_proc.p_flag) & pTraced) != 0
-    }
-
-    private func terminateAnyRunningLedgerInstance() {
-        let running = NSRunningApplication.runningApplications(withBundleIdentifier: "com.chrislemarquand.Ledger")
-            .filter { !isBeingDebugged(pid: $0.processIdentifier) }
-        guard !running.isEmpty else { return }
-        for instance in running {
-            instance.forceTerminate()
-        }
-        let deadline = Date().addingTimeInterval(5)
-        while Date() < deadline {
-            let stillRunning = NSRunningApplication.runningApplications(withBundleIdentifier: "com.chrislemarquand.Ledger")
-                .filter { !isBeingDebugged(pid: $0.processIdentifier) }
-            if stillRunning.isEmpty { return }
-            Thread.sleep(forTimeInterval: 0.1)
-        }
+    override func tearDown() {
+        currentApp?.terminate()
+        currentApp = nil
     }
 
     /// The bundled fixture JPEGs' own folder, used directly as the browsed
@@ -89,6 +72,7 @@ final class LedgerUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-openFolderPath", fixtureFolder().path, "-disableSparkleAutoupdate"]
         app.launch()
+        currentApp = app
         return app
     }
 

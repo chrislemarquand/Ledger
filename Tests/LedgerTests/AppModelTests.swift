@@ -799,6 +799,40 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.metadataByFile.count, AppModel.maxMetadataCacheEntries)
     }
 
+    // MARK: - Stale-work cancellation (Phase 6 automated-gate gap)
+
+    /// Phase 2.1/2.3's demand-gated folder metadata prefetch guards every batch against
+    /// `Task.isCancelled`/`folderMetadataLoadID` staleness (`AppModel+MetadataPipeline.swift`,
+    /// `startFolderMetadataPrefetch`) — this proves that guard actually discards a slow read's
+    /// results once a newer prefetch has superseded it, rather than asserting the guard exists
+    /// by reading the code. Uses `SlowExifToolService` to hold the first prefetch's read open
+    /// past the point where a second prefetch (simulating a folder switch) starts and
+    /// reassigns `folderMetadataLoadID`, then releases it and confirms its stale result never
+    /// reaches `metadataByFile`.
+    func testStaleMetadataPrefetchResultIsDiscardedAfterSupersedingLoad() async throws {
+        let slowService = SlowExifToolService()
+        let model = makeModel(exifToolService: slowService)
+
+        let staleFile = URL(fileURLWithPath: "/tmp/stale_prefetch_a.jpg")
+        let freshFile = URL(fileURLWithPath: "/tmp/stale_prefetch_b.jpg")
+
+        model.startFolderMetadataPrefetch(for: [staleFile], batchSize: 1)
+        try await waitUntilReadCallCount(1, on: slowService)
+
+        // Simulates switching folders while the first read is still in flight — this
+        // reassigns folderMetadataLoadID and cancels/nils the superseded folderMetadataLoadTask
+        // (see startFolderMetadataPrefetch's own first two lines).
+        model.startFolderMetadataPrefetch(for: [freshFile], batchSize: 1)
+        try await waitUntilReadCallCount(2, on: slowService)
+
+        await slowService.releaseAll()
+
+        try await waitUntil("both reads to resolve") { model.isFolderMetadataLoading == false }
+
+        XCTAssertNil(model.metadataByFile[staleFile], "a superseded load's result must not be merged in")
+        XCTAssertNotNil(model.metadataByFile[freshFile], "the current load's result must still land normally")
+    }
+
     // MARK: - Helpers
 
     private func makeBrowserItems(count: Int) -> [AppModel.BrowserItem] {
@@ -872,6 +906,26 @@ final class AppModelTests: XCTestCase {
             try await Task.sleep(nanoseconds: pollIntervalNanoseconds)
         }
         XCTFail("Timed out waiting for \(description)")
+    }
+
+    /// `waitUntil`'s condition closure is synchronous and can't `await` an actor-isolated
+    /// property like `SlowExifToolService.readCallCount` — this is the same poll loop, just
+    /// with an async condition.
+    private func waitUntilReadCallCount(
+        _ expected: Int,
+        on service: SlowExifToolService,
+        timeoutNanoseconds: UInt64 = 3_000_000_000,
+        pollIntervalNanoseconds: UInt64 = 20_000_000
+    ) async throws {
+        let timeoutSeconds = Double(timeoutNanoseconds) / 1_000_000_000
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while Date() < deadline {
+            if await service.readCallCount == expected {
+                return
+            }
+            try await Task.sleep(nanoseconds: pollIntervalNanoseconds)
+        }
+        XCTFail("Timed out waiting for readCallCount == \(expected)")
     }
 
     // MARK: - Batch Rename action-state tests
@@ -2010,6 +2064,35 @@ private actor WritingExifToolService: ExifToolServiceProtocol {
             try? Data("edited".utf8).write(to: fileURL)
         }
         return OperationResult(operationID: operation.id, succeeded: operation.targetFiles, failed: [], backupLocation: nil, duration: 0)
+    }
+}
+
+/// Blocks every `readMetadata` call until `releaseAll()` is called, so a test can start a read,
+/// observe it's genuinely in flight (`readCallCount`), do something concurrent (like starting a
+/// second, superseding read), and only then let the first one resolve — proving what happens to
+/// a slow read's result once it's stale, not just what happens to a fast one.
+private actor SlowExifToolService: ExifToolServiceProtocol {
+    private(set) var readCallCount = 0
+    private var pendingContinuations: [CheckedContinuation<Void, Never>] = []
+
+    func readMetadata(files: [URL]) async throws -> [FileMetadataSnapshot] {
+        readCallCount += 1
+        await withCheckedContinuation { continuation in
+            pendingContinuations.append(continuation)
+        }
+        return files.map { FileMetadataSnapshot(fileURL: $0, fields: []) }
+    }
+
+    func writeMetadata(operation: EditOperation) async -> OperationResult {
+        OperationResult(operationID: operation.id, succeeded: operation.targetFiles, failed: [], backupLocation: nil, duration: 0)
+    }
+
+    func releaseAll() {
+        let toResume = pendingContinuations
+        pendingContinuations.removeAll()
+        for continuation in toResume {
+            continuation.resume()
+        }
     }
 }
 
