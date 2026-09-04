@@ -19,6 +19,7 @@
 		A10000230000000000000001 /* MetadataValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000160000000000000001 /* MetadataValidator.swift */; };
 		A10000240000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000180000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift */; };
 		A10000250000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000190000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift */; };
+		A10001E90000000000000001 /* Tests/ExifEditCoreTests/ExifToolServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E80000000000000001 /* Tests/ExifEditCoreTests/ExifToolServiceTests.swift */; };
 		A10000260000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100001A0000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift */; };
 		A10000270000000000000001 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A100003A0000000000000001 /* XCTest.framework */; };
 		A10000280000000000000001 /* libExifEditCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000370000000000000001 /* libExifEditCore.a */; };
@@ -176,6 +177,7 @@
 		A10000160000000000000001 /* MetadataValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataValidator.swift; sourceTree = "<group>"; };
 		A10000180000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/BackupManagerTests.swift; sourceTree = SOURCE_ROOT; };
 		A10000190000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift; sourceTree = SOURCE_ROOT; };
+		A10001E80000000000000001 /* Tests/ExifEditCoreTests/ExifToolServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/ExifToolServiceTests.swift; sourceTree = SOURCE_ROOT; };
 		A100001A0000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/MetadataValidatorTests.swift; sourceTree = SOURCE_ROOT; };
 		A10000370000000000000001 /* libExifEditCore.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libExifEditCore.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		A100003A0000000000000001 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
@@ -364,6 +366,7 @@
 			children = (
 				A10000180000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift */,
 				A10000190000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift */,
+				A10001E80000000000000001 /* Tests/ExifEditCoreTests/ExifToolServiceTests.swift */,
 				A100001A0000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift */,
 				E20000020000000000000001 /* Tests/LedgerTests/AppModelTests.swift */,
 				E200001B0000000000000001 /* Tests/LedgerTests/ThumbnailServiceTests.swift */,
@@ -896,6 +899,7 @@
 			files = (
 				A10000240000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift in Sources */,
 				A10000250000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift in Sources */,
+				A10001E90000000000000001 /* Tests/ExifEditCoreTests/ExifToolServiceTests.swift in Sources */,
 				A10000260000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
