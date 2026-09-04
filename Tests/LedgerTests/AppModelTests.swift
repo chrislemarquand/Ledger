@@ -833,6 +833,40 @@ final class AppModelTests: XCTestCase {
         XCTAssertNotNil(model.metadataByFile[freshFile], "the current load's result must still land normally")
     }
 
+    // MARK: - Thumbnail invalidation scope (Phase 6 automated-gate gap)
+
+    /// `browserThumbnailInvalidationToken` + `browserThumbnailInvalidatedURLs` is the contract
+    /// every browser view controller (Icon/List/Filmstrip) reads to decide "targeted reload of
+    /// just these URLs" vs. "everything is stale" — an empty invalidated set on a token change
+    /// means "all" (see `BrowserIconView.swift`'s `if invalidated.isEmpty` branch). Real call
+    /// sites: apply/restore, undo, and sidebar-folder-refresh. This proves the AppModel-level
+    /// state each of those actually produces, per Phase 5.1's "never broaden existing targeted
+    /// reload scope" rule — a regression here would silently turn every targeted invalidation
+    /// into a full one, or vice versa, for all three browser surfaces at once.
+    func testInvalidateBrowserThumbnailsForSpecificFilesSetsTargetedInvalidation() {
+        let model = makeModel()
+        let targetURL = URL(fileURLWithPath: "/tmp/invalidate_target.jpg")
+        let otherURL = URL(fileURLWithPath: "/tmp/invalidate_other.jpg")
+        let tokenBefore = model.browserThumbnailInvalidationToken
+
+        model.invalidateBrowserThumbnails(for: [targetURL])
+
+        XCTAssertNotEqual(model.browserThumbnailInvalidationToken, tokenBefore)
+        XCTAssertEqual(model.browserThumbnailInvalidatedURLs, [targetURL])
+        XCTAssertFalse(model.browserThumbnailInvalidatedURLs.contains(otherURL))
+    }
+
+    func testInvalidateAllBrowserThumbnailsClearsTargetedSet() {
+        let model = makeModel()
+        model.invalidateBrowserThumbnails(for: [URL(fileURLWithPath: "/tmp/invalidate_leftover.jpg")])
+        let tokenAfterTargeted = model.browserThumbnailInvalidationToken
+
+        model.invalidateAllBrowserThumbnails()
+
+        XCTAssertNotEqual(model.browserThumbnailInvalidationToken, tokenAfterTargeted)
+        XCTAssertTrue(model.browserThumbnailInvalidatedURLs.isEmpty, "an empty set on token change is the real 'invalidate everything' signal every browser view reads")
+    }
+
     // MARK: - Helpers
 
     private func makeBrowserItems(count: Int) -> [AppModel.BrowserItem] {
