@@ -224,6 +224,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         CommandLine.arguments.contains("-disableSparkleAutoupdate")
     }
 
+    /// `-disableStateRestoration` skips restoring the previous session's window/selection
+    /// state for UI tests and benchmarks. Found during v1.4 Phase 6 re-baselining: secure
+    /// state restoration racing against `-openFolderPath` made some benchmark launches
+    /// non-deterministically restore a prior real selection, firing an unconditional
+    /// `loadMetadataForSelection()` (and an ExifTool subprocess) on some iterations but not
+    /// others — the same class of real-preference/state contamination as the Phase 2.1/2.3
+    /// incidents, just via window-state restoration instead of a demand-gate default. See
+    /// docs/v1.4-progress.md's Phase 6 section.
+    private static func isStateRestorationDisabled() -> Bool {
+        CommandLine.arguments.contains("-disableStateRestoration")
+    }
+
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
         true
     }
@@ -233,7 +245,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldRestoreApplicationState(_ sender: NSApplication) -> Bool {
-        true
+        !Self.isStateRestorationDisabled()
     }
 
     // MARK: - Dock Menu

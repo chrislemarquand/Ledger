@@ -202,6 +202,7 @@ run_isolated_launch() {
   "$APP_PATH/Contents/MacOS/$EXECUTABLE_NAME" \
     -disableSparkleAutoupdate \
     -skipRecentLocationPersistence \
+    -disableStateRestoration \
     -"${ID_PREFIX}.welcomeLastSeenVersion" "$MINOR_VERSION" \
     "$@" > /dev/null 2>&1 &
   echo $!
@@ -339,7 +340,7 @@ if [[ "$CAPTURE_TRACE" -eq 1 ]]; then
     --no-prompt \
     --output "$TRACE_FILE" \
     --launch -- "$APP_PATH/Contents/MacOS/$EXECUTABLE_NAME" \
-      -disableSparkleAutoupdate -skipRecentLocationPersistence \
+      -disableSparkleAutoupdate -skipRecentLocationPersistence -disableStateRestoration \
       -"${ID_PREFIX}.welcomeLastSeenVersion" "$MINOR_VERSION" \
       "${SCENARIO_LAUNCH_ARGS[@]}" \
     > "$RUN_RAW_DIR/xctrace.log" 2>&1 || true
