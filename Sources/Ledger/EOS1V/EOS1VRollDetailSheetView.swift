@@ -32,8 +32,7 @@ struct EOS1VRollDetailSheetView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(roll.id)
-                .font(.title2)
-                .bold()
+                .font(.title3.weight(.semibold))
             HStack(spacing: 24) {
                 labeled("Loaded", "\(roll.loadedDate) \(roll.loadedTime)")
                 labeled("Frame count", "\(roll.frames.count)")

@@ -80,6 +80,7 @@ struct EOSLensChoiceSheetView: View {
                         onContinue(resolutions())
                     }
                     .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
                 }
                 .frame(width: Self.contentWidth, alignment: .leading)
             }

@@ -162,6 +162,9 @@ final class BrowserIconViewController: NSViewController, NSCollectionViewDataSou
         collectionView.contextMenuProvider = { [weak self] indexPath in
             self?.menuForItem(at: indexPath)
         }
+        collectionView.onFirstResponderStatusChanged = { [weak self] in
+            self?.refreshSelectionAppearanceForVisibleCells()
+        }
         collectionView.addGestureRecognizer(
             NSMagnificationGestureRecognizer(target: self, action: #selector(handleMagnification(_:)))
         )
@@ -286,6 +289,10 @@ final class BrowserIconViewController: NSViewController, NSCollectionViewDataSou
         if listChanged {
             collectionView.reloadData()
             lastRenderedURLs = currentURLs
+            Signposts.browserReload.emitEvent(
+                "IconReload",
+                "trigger=list kind=full count=\(currentURLs.count, privacy: .public)"
+            )
         }
 
         if lastThumbnailInvalidationToken != model.browserThumbnailInvalidationToken {
@@ -296,6 +303,10 @@ final class BrowserIconViewController: NSViewController, NSCollectionViewDataSou
                 pendingThumbnailRefreshURLs.removeAll()
                 if !listChanged {
                     collectionView.reloadData()
+                    Signposts.browserReload.emitEvent(
+                        "IconReload",
+                        "trigger=thumbnailAll kind=full count=\(currentURLs.count, privacy: .public)"
+                    )
                 }
             } else if !listChanged {
                 // If the list also changed this pass, reloadData() above already
@@ -306,6 +317,10 @@ final class BrowserIconViewController: NSViewController, NSCollectionViewDataSou
                 })
                 if !indexPaths.isEmpty {
                     collectionView.reloadItems(at: indexPaths)
+                    Signposts.browserReload.emitEvent(
+                        "IconReload",
+                        "trigger=thumbnailTargeted kind=targeted count=\(indexPaths.count, privacy: .public)"
+                    )
                 }
             } else {
                 pendingThumbnailRefreshURLs.formUnion(invalidated)
@@ -325,10 +340,21 @@ final class BrowserIconViewController: NSViewController, NSCollectionViewDataSou
         }
 
         if listChanged || columnsChanged || selectionChanged || pendingChanged || cloudStatesChanged || stagedOpsChanged || subtitleChanged || metadataChanged || justBecameActive {
+            var reasons: [String] = []
+            if listChanged { reasons.append("list") }
+            if columnsChanged { reasons.append("columns") }
+            if selectionChanged { reasons.append("selection") }
+            if pendingChanged { reasons.append("pending") }
+            if cloudStatesChanged { reasons.append("cloud") }
+            if stagedOpsChanged { reasons.append("stagedOps") }
+            if subtitleChanged { reasons.append("subtitle") }
+            if metadataChanged { reasons.append("metadata") }
+            if justBecameActive { reasons.append("becameActive") }
             refreshVisibleCellState(
                 pendingURLs: pendingURLs,
                 selectedURLs: selectedURLs,
-                needsFullReconfigure: listChanged || columnsChanged || pendingChanged || stagedOpsChanged || subtitleChanged || metadataChanged || justBecameActive
+                needsFullReconfigure: listChanged || columnsChanged || pendingChanged || stagedOpsChanged || subtitleChanged || metadataChanged || justBecameActive,
+                trigger: reasons.joined(separator: "+")
             )
             lastRenderedPending = pendingURLs
             lastRenderedCloudStates = cloudStates
@@ -409,8 +435,11 @@ final class BrowserIconViewController: NSViewController, NSCollectionViewDataSou
     private func refreshVisibleCellState(
         pendingURLs: Set<URL>,
         selectedURLs: Set<URL>,
-        needsFullReconfigure: Bool
+        needsFullReconfigure: Bool,
+        trigger: String
     ) {
+        var fullCount = 0
+        var lightCount = 0
         for indexPath in collectionView.indexPathsForVisibleItems() {
             guard indexPath.item >= 0, indexPath.item < items.count else { continue }
             guard let cell = collectionView.item(at: indexPath) as? AppKitIconItem else { continue }
@@ -436,6 +465,7 @@ final class BrowserIconViewController: NSViewController, NSCollectionViewDataSou
                 )
                 cell.onCloudBadgeTapped = { [weak model] in model?.requestCloudDownload(for: item.url) }
                 requestThumbnail(for: item, in: cell, tileSide: max(layout.tileSide, 40))
+                fullCount += 1
             } else {
                 cell.applySelection(isSelected: selectedURLs.contains(item.url))
                 cell.applyPending(hasPendingEdits: pendingURLs.contains(item.url))
@@ -444,8 +474,13 @@ final class BrowserIconViewController: NSViewController, NSCollectionViewDataSou
                 if awaitingRefresh {
                     requestThumbnail(for: item, in: cell, tileSide: max(layout.tileSide, 40))
                 }
+                lightCount += 1
             }
         }
+        Signposts.browserReload.emitEvent(
+            "IconCellConfigure",
+            "trigger=\(trigger, privacy: .public) full=\(fullCount, privacy: .public) light=\(lightCount, privacy: .public)"
+        )
         updateQuickLookArtifacts()
     }
 

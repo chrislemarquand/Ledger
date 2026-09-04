@@ -48,7 +48,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             initialSelectionBehavior: .noInitialSelection
         )
         let bc = BrowserContainerViewController(model: model)
-        let ic = NSHostingController(rootView: AnyView(InspectorView(model: model).tint(AppTheme.accentColor)))
+        let ic = NSHostingController(rootView: AnyView(InspectorView(model: model)))
         // Prevent inspector content from forcing pane expansion during SwiftUI view updates.
         ic.sizingOptions = []
         let eosSession = EOS1VSessionController()
@@ -767,7 +767,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                     } catch {
                         let alert = NSAlert()
                         alert.alertStyle = .warning
-                        alert.messageText = "Export Failed"
+                        alert.messageText = "Couldn\u{2019}t export."
                         alert.informativeText = error.localizedDescription
                         alert.addButton(withTitle: "OK")
                         alert.runSheetOrModal(for: self.view.window) { _ in }
@@ -815,44 +815,54 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         let selectionURLs = Array(model.selectedFileURLs)
         let folderURLs = model.browserItems.map(\.url)
         let hasPendingEdits = model.hasPendingEdits(inImportScope: .folder)
-        let pendingEditsNote = hasPendingEdits
-            ? "\n\nYou have unapplied changes that won't be included. Apply them first if you want them exported."
-            : ""
 
         guard !selectionURLs.isEmpty else {
             // No selection — fall straight through, but warn about pending edits if needed.
-            if hasPendingEdits {
-                let alert = NSAlert()
-                alert.alertStyle = .warning
-                alert.messageText = actionTitle
-                alert.informativeText = "You have unapplied changes that won't be included. Apply them first if you want them exported."
-                alert.addButton(withTitle: "Export Anyway")
-                alert.addButton(withTitle: "Cancel")
-                alert.runSheetOrModal(for: view.window) { response in
-                    guard response == .alertFirstButtonReturn else { return }
-                    completion(.folder, folderURLs)
-                }
-            } else {
+            guard hasPendingEdits else {
+                completion(.folder, folderURLs)
+                return
+            }
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "You have unapplied changes."
+            alert.informativeText = "They won\u{2019}t be included unless you apply them first."
+            alert.addButton(withTitle: actionTitle)
+            alert.addButton(withTitle: "Cancel")
+            alert.runSheetOrModal(for: view.window) { response in
+                guard response == .alertFirstButtonReturn else { return }
                 completion(.folder, folderURLs)
             }
             return
         }
 
+        // Which files to include is a routine choice, not a warning — HIG: alert buttons
+        // should be verbs describing what happens to something at risk, not a stand-in for
+        // an options picker. An accessory segmented control carries the choice; the alert's
+        // two buttons stay a real action-verb + Cancel.
         let n = selectionURLs.count
+        let scopeControl = NSSegmentedControl(labels: ["Selection (\(n))", "Folder"], trackingMode: .selectOne, target: nil, action: nil)
+        scopeControl.selectedSegment = 0
+        scopeControl.translatesAutoresizingMaskIntoConstraints = false
+
         let alert = NSAlert()
-        alert.messageText = actionTitle
-        alert.informativeText = "Export the current selection or all images in the folder?\(pendingEditsNote)"
-        alert.addButton(withTitle: "Selection (\(n) \(n == 1 ? "file" : "files"))")
-        alert.addButton(withTitle: "Folder")
+        if hasPendingEdits {
+            alert.alertStyle = .warning
+            alert.messageText = "You have unapplied changes."
+            alert.informativeText = "They won\u{2019}t be included unless you apply them first. Choose which files to include below."
+        } else {
+            alert.messageText = "Choose which files to include."
+            alert.informativeText = "\(n) \(n == 1 ? "file is" : "files are") selected, or you can include the whole folder."
+        }
+        alert.accessoryView = scopeControl
+        alert.addButton(withTitle: actionTitle)
         alert.addButton(withTitle: "Cancel")
 
         alert.runSheetOrModal(for: view.window) { response in
-            switch response {
-            case .alertFirstButtonReturn:
+            guard response == .alertFirstButtonReturn else { return }
+            if scopeControl.selectedSegment == 0 {
                 completion(.selection, selectionURLs)
-            case .alertSecondButtonReturn:
+            } else {
                 completion(.folder, folderURLs)
-            default: break
             }
         }
     }

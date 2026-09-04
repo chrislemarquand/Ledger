@@ -264,6 +264,7 @@ struct DateTimeAdjustSheetView: View {
                         model.stageDateTimeAdjustments(session: session)
                     }
                     .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
                     .disabled(!isAdjustActionEnabled)
                 }
             }
@@ -988,6 +989,7 @@ struct LocationAdjustSheetView: View {
                         model.stageLocationAdjustments(session: session)
                     }
                     .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
                     .disabled(!isApplyActionEnabled)
                 }
             }

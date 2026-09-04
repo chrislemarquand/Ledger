@@ -14,4 +14,7 @@ enum Signposts {
     static let browserTransition = OSSignposter(subsystem: subsystem, category: "BrowserTransition")
     /// Phase 2.3: unified "fully idle" signal — see AppModel+Quiescence.swift.
     static let quiescence = OSSignposter(subsystem: subsystem, category: "Quiescence")
+    /// Phase 5.1: full-vs-targeted collection/table reload and cell-configure counts,
+    /// tagged by trigger. See docs/v1.4-performance-audit-plan.md Phase 5.1.
+    static let browserReload = OSSignposter(subsystem: subsystem, category: "BrowserReload")
 }

@@ -305,8 +305,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "You have unsaved changes."
-        alert.informativeText = "Quit and discard your prepared changes?"
+        alert.messageText = "Quit and discard your prepared changes?"
+        alert.informativeText = "You have unsaved changes. They\u{2019}ll be lost if you quit now."
         alert.addButton(withTitle: "Quit and Discard")
         alert.addButton(withTitle: "Cancel")
 

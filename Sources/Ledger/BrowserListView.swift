@@ -272,6 +272,10 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
             tableView.selectRowIndexes([], byExtendingSelection: false)
             isApplyingProgrammaticSelection = false
             sharedListController.reloadData()
+            Signposts.browserReload.emitEvent(
+                "ListReload",
+                "trigger=list kind=full count=\(currentURLs.count, privacy: .public)"
+            )
         } else {
             let rowsNeedingNameReload = IndexSet(items.enumerated().compactMap { index, item in
                 if pendingInvalidatedThumbnailURLs.contains(item.url) || pendingThumbnailRefreshURLs.contains(item.url) {
@@ -289,8 +293,16 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
                 let nameColumn = tableView.column(withIdentifier: NSUserInterfaceItemIdentifier("name"))
                 if nameColumn >= 0 {
                     tableView.reloadData(forRowIndexes: rowsNeedingNameReload, columnIndexes: IndexSet(integer: nameColumn))
+                    Signposts.browserReload.emitEvent(
+                        "ListReload",
+                        "trigger=nameSignature kind=targeted count=\(rowsNeedingNameReload.count, privacy: .public)"
+                    )
                 } else {
                     tableView.reloadData()
+                    Signposts.browserReload.emitEvent(
+                        "ListReload",
+                        "trigger=nameSignatureNoColumn kind=full count=\(currentURLs.count, privacy: .public)"
+                    )
                 }
             }
             if !rowsNeedingDetailReload.isEmpty && !detailColumnIDs.isEmpty {
@@ -300,6 +312,10 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
                 })
                 if !detailColumnIndexes.isEmpty {
                     tableView.reloadData(forRowIndexes: rowsNeedingDetailReload, columnIndexes: detailColumnIndexes)
+                    Signposts.browserReload.emitEvent(
+                        "ListReload",
+                        "trigger=detailSignature kind=targeted count=\(rowsNeedingDetailReload.count, privacy: .public)"
+                    )
                 }
             }
         }

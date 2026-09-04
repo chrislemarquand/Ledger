@@ -598,7 +598,7 @@ extension NativeThreePaneSplitViewController {
         applySelectionItem.tag = MenuTag.imageApplySelection
         menu.addItem(applySelectionItem)
 
-        let clearSelectionItem = NSMenuItem(title: "Clear Changes", action: #selector(clearChangesAction(_:)), keyEquivalent: "k")
+        let clearSelectionItem = NSMenuItem(title: "Discard Changes", action: #selector(clearChangesAction(_:)), keyEquivalent: "k")
         clearSelectionItem.keyEquivalentModifierMask = .command
         clearSelectionItem.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
         clearSelectionItem.tag = MenuTag.imageClearSelection
@@ -672,7 +672,7 @@ extension NativeThreePaneSplitViewController {
         menu.addItem(applyFolderItem)
 
         let clearFolderItem = NSMenuItem(
-            title: "Clear Changes from Folder",
+            title: "Discard Changes from Folder",
             action: #selector(clearAllChangesAction(_:)),
             keyEquivalent: "k"
         )
@@ -748,7 +748,7 @@ extension NativeThreePaneSplitViewController {
         let existing = menu.items.first { $0.tag == MenuTag.helpExifToolDocs }
         if existing != nil { return }
         menu.addItem(.separator())
-        let whatsNewItem = NSMenuItem(title: "What's New in \(AppBrand.displayName)…", action: #selector(openWhatsNewAction(_:)), keyEquivalent: "")
+        let whatsNewItem = NSMenuItem(title: "What\u{2019}s New in \(AppBrand.displayName)", action: #selector(openWhatsNewAction(_:)), keyEquivalent: "")
         whatsNewItem.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil)
         whatsNewItem.tag = MenuTag.helpWhatsNew
         menu.addItem(whatsNewItem)

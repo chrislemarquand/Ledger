@@ -25,7 +25,6 @@ struct BatchRenameSheetView: View {
     @State private var preview: [RenamePlanEntry] = []
     @State private var previewIssues: [RenameValidationIssue] = []
     @State private var isLoadingPreview = false
-    @State private var isShowingNoChangesAlert = false
 
     private var fileCount: Int {
         model.renameFilesForBatchRename(scope).count
@@ -33,6 +32,13 @@ struct BatchRenameSheetView: View {
 
     private var pattern: RenamePattern {
         RenamePattern(tokens: tokens)
+    }
+
+    // Reflects the current preview, so it can go stale for the length of the debounce —
+    // the same tolerance the Rename button's previewIssues-based disabling already accepts.
+    private var hasNoChanges: Bool {
+        !preview.isEmpty && previewIssues.isEmpty
+            && preview.allSatisfy { $0.sourceURL.lastPathComponent == $0.finalTargetURL.lastPathComponent }
     }
 
     var body: some View {
@@ -61,47 +67,47 @@ struct BatchRenameSheetView: View {
                     .padding(.bottom, Self.sectionSpacing.mainToFooter)
 
                 // Footer
-                HStack {
-                    Button("Preview…") {
-                        if preview.isEmpty && !isLoadingPreview {
-                            Task { await refreshPreview() }
+                VStack(alignment: .trailing, spacing: 4) {
+                    if hasNoChanges {
+                        Text("The new filenames match the current filenames.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Button("Preview…") {
+                            if preview.isEmpty && !isLoadingPreview {
+                                Task { await refreshPreview() }
+                            }
+                            showPreview = true
                         }
-                        showPreview = true
-                    }
-                    .popover(isPresented: $showPreview) {
-                        previewPopover
-                    }
+                        .popover(isPresented: $showPreview) {
+                            previewPopover
+                        }
 
-                    Spacer()
+                        Spacer()
 
-                    Button("Cancel") {
-                        model.dismissBatchRenameSheet()
-                    }
-                    .keyboardShortcut(.cancelAction)
+                        Button("Cancel") {
+                            model.dismissBatchRenameSheet()
+                        }
+                        .keyboardShortcut(.cancelAction)
 
-                    Button("Rename") {
-                        let files = model.renameFilesForBatchRename(scope)
-                        let operation = RenameOperation(files: files, pattern: pattern)
-                        Task { @MainActor in
-                            let result = await model.stageBatchRename(operation: operation)
-                            if result == .noChanges {
-                                isShowingNoChangesAlert = true
+                        Button("Rename") {
+                            let files = model.renameFilesForBatchRename(scope)
+                            let operation = RenameOperation(files: files, pattern: pattern)
+                            Task { @MainActor in
+                                _ = await model.stageBatchRename(operation: operation)
                             }
                         }
+                        .keyboardShortcut(.defaultAction)
+                        .buttonStyle(.borderedProminent)
+                        .disabled(tokens.isEmpty || !previewIssues.isEmpty || hasNoChanges)
                     }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(tokens.isEmpty || !previewIssues.isEmpty)
                 }
             }
         }
         .task(id: pattern) {
             do { try await Task.sleep(nanoseconds: Self.previewDebounceNanoseconds) } catch { return }
             await refreshPreview()
-        }
-        .alert("No Names Would Change", isPresented: $isShowingNoChangesAlert) {
-            Button("OK") {}
-        } message: {
-            Text("The new filenames are the same as the current filenames. Change the rename pattern to prepare name changes.")
         }
     }
 

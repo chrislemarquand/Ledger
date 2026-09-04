@@ -172,7 +172,7 @@ final class ImportSession: ObservableObject {
                 let message = error.localizedDescription
                 previewError = message
                 presentBlockingImportAlert(
-                    title: "Couldn’t prepare import.",
+                    title: "Couldn’t prepare import",
                     message: error.localizedDescription
                 )
                 return false
@@ -192,7 +192,7 @@ final class ImportSession: ObservableObject {
             )
             shouldEnterPostImportReview = shouldReview(report: importReport)
             presentBlockingImportAlert(
-                title: "Import needs conflict resolution.",
+                title: "Import needs conflict resolution",
                 message: message
             )
             return false
@@ -988,6 +988,7 @@ struct ImportSheetView: View {
                         }
                     }
                     .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
                     .disabled(isPostImportReviewMode ? false : (session.options.sourceURL == nil || session.isBusy || importProgress != nil))
                 }
             }

@@ -801,7 +801,7 @@ final class AppModel: ObservableObject {
             statusMessage = "\(AppBrand.displayName) requires ExifTool to work. Try reinstalling the app."
             Task { @MainActor in
                 let alert = NSAlert()
-                alert.messageText = "\(AppBrand.displayName) requires exiftool"
+                alert.messageText = "\(AppBrand.displayName) requires ExifTool."
                 alert.informativeText = "The exiftool executable could not be found. The app bundle may be corrupted. Please reinstall \(AppBrand.displayName)."
                 alert.alertStyle = .critical
                 alert.addButton(withTitle: "OK")

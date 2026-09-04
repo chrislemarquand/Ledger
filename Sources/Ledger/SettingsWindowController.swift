@@ -28,7 +28,7 @@ final class GeneralSettingsViewController: SettingsGridViewController {
         return p
     }()
     private lazy var clearBackupsButton = makeActionButton(
-        title: "Clear Backups…",
+        title: "Delete Backups",
         action: #selector(clearBackupsAction(_:))
     )
     private lazy var manageLensesButton = makeActionButton(

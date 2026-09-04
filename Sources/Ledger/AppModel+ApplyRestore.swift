@@ -8,8 +8,8 @@ extension AppModel {
     func confirmDiscardUnsavedChanges(for actionDescription: String) -> Bool {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "You have unsaved changes."
-        alert.informativeText = "Discard your prepared changes before \(actionDescription)?"
+        alert.messageText = "Discard your prepared changes?"
+        alert.informativeText = "You have unsaved changes. They\u{2019}ll be lost if you continue \(actionDescription)."
         alert.addButton(withTitle: "Discard Changes")
         alert.addButton(withTitle: "Cancel")
         var response: NSApplication.ModalResponse = .abort
@@ -386,7 +386,7 @@ extension AppModel {
                     let n = renameFailedCount
                     let files = n == 1 ? "1 file" : "\(n) files"
                     let alert = NSAlert()
-                    alert.messageText = "Couldn’t Apply Name Changes"
+                    alert.messageText = "Couldn\u{2019}t apply name changes."
                     alert.informativeText = "Couldn’t rename \(files). No files were renamed.\n\(failedNames)\n\n\(firstError)"
                     alert.alertStyle = .warning
                     alert.addButton(withTitle: "OK")
@@ -491,7 +491,19 @@ extension AppModel {
         let clearedCount = trashedOperationIDs.count
         let backups = clearedCount == 1 ? "1 backup" : "\(clearedCount) backups"
         if failedTrashCount > 0 {
+            // A partial failure of a destructive action the user just explicitly confirmed
+            // is exactly the kind of unexpected/important result HIG says merits an alert,
+            // not just a transient status label easy to miss right after dismissing a dialog.
             statusMessage = "Moved \(backups) to \(trashName). \(failedTrashCount) couldn’t be moved."
+            let failedBackups = failedTrashCount == 1 ? "1 backup" : "\(failedTrashCount) backups"
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "\(failedBackups) couldn\u{2019}t be moved to \(trashName)."
+            alert.informativeText = clearedCount > 0
+                ? "Moved \(backups) to \(trashName); \(failedBackups) couldn\u{2019}t be moved."
+                : "None of the backups could be moved."
+            alert.addButton(withTitle: "OK")
+            alert.runSheetOrModal(for: NSApp.keyWindow) { _ in }
         } else {
             setStatusMessage("Moved \(backups) to \(trashName).", autoClearAfterSuccess: true)
         }
@@ -626,7 +638,7 @@ extension AppModel {
                 let failedNames = summary.failed.prefix(5).map { $0.fileURL.lastPathComponent }.joined(separator: "\n")
                 Task { @MainActor in
                     let alert = NSAlert()
-                    alert.messageText = "Restore failed"
+                    alert.messageText = "Couldn\u{2019}t restore metadata."
                     let failedFiles = summary.failed.count == 1 ? "1 file" : "\(summary.failed.count) files"
                     alert.informativeText = "Could not restore \(failedFiles):\n\(failedNames)\n\n\(firstError)"
                     alert.alertStyle = .warning

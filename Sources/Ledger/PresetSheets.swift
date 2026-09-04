@@ -1,3 +1,4 @@
+import SharedUI
 import SwiftUI
 
 struct PresetEditorSheet: View {
@@ -12,10 +13,8 @@ struct PresetEditorSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(editorTitle)
-                .font(.title3.weight(.semibold))
-
+        WorkflowSheetContainer(title: editorTitle, width: 760) {
+            VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Name")
                     .frame(width: 70, alignment: .leading)
@@ -69,7 +68,7 @@ struct PresetEditorSheet: View {
                 }
                 .padding(.vertical, 2)
             }
-            .frame(minHeight: 240)
+            .frame(minHeight: 240, maxHeight: 420)
 
             if let validationMessage {
                 Text(validationMessage)
@@ -95,10 +94,10 @@ struct PresetEditorSheet: View {
                     handleSave()
                 }
                 .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+            }
             }
         }
-        .padding(20)
-        .frame(width: 760)
         .onAppear {
             validationMessage = nil
             duplicateConflict = nil
@@ -162,7 +161,37 @@ struct PresetEditorSheet: View {
 
     @ViewBuilder
     private func presetControl(for tag: AppModel.EditableTag) -> some View {
-        if model.isDateTimeTag(tag) {
+        if tag.id == AppModel.EditableTag.rating.id {
+            InspectorRatingFlagView(
+                rating: Int(editor.valuesByTagID[tag.id] ?? "") ?? 0,
+                ratingPending: false,
+                ratingEnabled: true,
+                onRatingChange: { updatePresetValue($0 == 0 ? "" : String($0), for: tag) },
+                pick: 0, pickPending: false, pickEnabled: false, onPickChange: { _ in },
+                label: "", labelPending: false, labelEnabled: false, onLabelChange: { _ in }
+            )
+            .padding(.horizontal, -InspectorMetrics.horizontalPadding)
+        } else if tag.id == AppModel.EditableTag.pick.id {
+            InspectorRatingFlagView(
+                rating: 0, ratingPending: false, ratingEnabled: false, onRatingChange: { _ in },
+                pick: Int(editor.valuesByTagID[tag.id] ?? "") ?? 0,
+                pickPending: false,
+                pickEnabled: true,
+                onPickChange: { updatePresetValue($0 == 0 ? "" : String($0), for: tag) },
+                label: "", labelPending: false, labelEnabled: false, onLabelChange: { _ in }
+            )
+            .padding(.horizontal, -InspectorMetrics.horizontalPadding)
+        } else if tag.id == AppModel.EditableTag.label.id {
+            InspectorRatingFlagView(
+                rating: 0, ratingPending: false, ratingEnabled: false, onRatingChange: { _ in },
+                pick: 0, pickPending: false, pickEnabled: false, onPickChange: { _ in },
+                label: editor.valuesByTagID[tag.id] ?? "",
+                labelPending: false,
+                labelEnabled: true,
+                onLabelChange: { updatePresetValue($0, for: tag) }
+            )
+            .padding(.horizontal, -InspectorMetrics.horizontalPadding)
+        } else if model.isDateTimeTag(tag) {
             let raw = editor.valuesByTagID[tag.id] ?? ""
             if let date = model.parseEditableDateValue(raw) {
                 HStack(spacing: 6) {
@@ -285,10 +314,8 @@ struct PresetManagerSheet: View {
     @State private var pendingDeletePresetID: UUID?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Manage Presets")
-                .font(.title3.weight(.semibold))
-
+        WorkflowSheetContainer(title: "Manage Presets", width: 480) {
+            VStack(alignment: .leading, spacing: 12) {
             List(model.presets, selection: $selectedPresetID) { preset in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(preset.name)
@@ -301,7 +328,7 @@ struct PresetManagerSheet: View {
             .frame(minHeight: 280)
 
             HStack {
-                Button("New Preset…") {
+                Button("New…") {
                     DispatchQueue.main.async {
                         model.beginCreateBlankPreset()
                         model.isManagePresetsPresented = false
@@ -326,6 +353,8 @@ struct PresetManagerSheet: View {
                 Button("Delete", role: .destructive) {
                     pendingDeletePresetID = selectedPresetID
                 }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
                 .disabled(selectedPresetID == nil)
 
                 Spacer()
@@ -337,9 +366,8 @@ struct PresetManagerSheet: View {
                 }
                 .keyboardShortcut(.cancelAction)
             }
+            }
         }
-        .padding(20)
-        .frame(minWidth: 480, minHeight: 420)
         .onAppear {
             pendingDeletePresetID = nil
             if selectedPresetID == nil {

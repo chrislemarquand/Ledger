@@ -161,12 +161,11 @@ extension AppModel {
             selectedSidebarID = nil
 
             if !folderName.isEmpty, !isRunningUnitTests {
-                let alert = NSAlert()
-                alert.alertStyle = .informational
-                alert.messageText = "\u{201c}\(folderName)\u{201d} No Longer Available"
-                alert.informativeText = "This folder could not be found — it may have been deleted or moved. It has been removed from \(sectionLabel) in \(AppBrand.displayName)."
-                alert.addButton(withTitle: "OK")
-                alert.runSheetOrModal(for: NSApp.keyWindow) { _ in }
+                // The stale sidebar entry is already removed above by the time this runs —
+                // there's no decision left for the user to make, so this is status text
+                // rather than a modal alert (HIG: alerts are for situations requiring a
+                // choice, not for reporting a correction the app already made).
+                statusMessage = "\u{201c}\(folderName)\u{201d} removed from \(sectionLabel) \u{2014} folder no longer found."
             }
         }
 

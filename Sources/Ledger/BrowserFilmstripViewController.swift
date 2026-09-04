@@ -171,6 +171,9 @@ final class BrowserFilmstripViewController: NSViewController, NSCollectionViewDa
         collectionView.contextMenuProvider = { [weak self] indexPath in
             self?.menuForItem(at: indexPath)
         }
+        collectionView.onFirstResponderStatusChanged = { [weak self] in
+            self?.refreshSelectionAppearanceForVisibleCells()
+        }
 
         scrollView.documentView = collectionView
         view.addSubview(scrollView)
@@ -261,6 +264,10 @@ final class BrowserFilmstripViewController: NSViewController, NSCollectionViewDa
         if listChanged {
             collectionView.reloadData()
             lastRenderedURLs = currentURLs
+            Signposts.browserReload.emitEvent(
+                "FilmstripReload",
+                "trigger=list kind=full count=\(currentURLs.count, privacy: .public)"
+            )
         }
 
         if lastThumbnailInvalidationToken != model.browserThumbnailInvalidationToken {
@@ -271,6 +278,10 @@ final class BrowserFilmstripViewController: NSViewController, NSCollectionViewDa
                 pendingThumbnailRefreshURLs.removeAll()
                 if !listChanged {
                     collectionView.reloadData()
+                    Signposts.browserReload.emitEvent(
+                        "FilmstripReload",
+                        "trigger=thumbnailAll kind=full count=\(currentURLs.count, privacy: .public)"
+                    )
                 }
             } else if !listChanged {
                 pendingThumbnailRefreshURLs.formUnion(invalidated)
@@ -279,6 +290,10 @@ final class BrowserFilmstripViewController: NSViewController, NSCollectionViewDa
                 })
                 if !indexPaths.isEmpty {
                     collectionView.reloadItems(at: indexPaths)
+                    Signposts.browserReload.emitEvent(
+                        "FilmstripReload",
+                        "trigger=thumbnailTargeted kind=targeted count=\(indexPaths.count, privacy: .public)"
+                    )
                 }
             } else {
                 pendingThumbnailRefreshURLs.formUnion(invalidated)
@@ -295,10 +310,17 @@ final class BrowserFilmstripViewController: NSViewController, NSCollectionViewDa
         }
 
         if listChanged || selectionChanged || pendingChanged || cloudStatesChanged || justBecameActive {
+            var reasons: [String] = []
+            if listChanged { reasons.append("list") }
+            if selectionChanged { reasons.append("selection") }
+            if pendingChanged { reasons.append("pending") }
+            if cloudStatesChanged { reasons.append("cloud") }
+            if justBecameActive { reasons.append("becameActive") }
             refreshVisibleCellState(
                 pendingURLs: pendingURLs,
                 selectedURLs: selectedURLs,
-                needsFullReconfigure: listChanged || pendingChanged || justBecameActive
+                needsFullReconfigure: listChanged || pendingChanged || justBecameActive,
+                trigger: reasons.joined(separator: "+")
             )
             lastRenderedPending = pendingURLs
             lastRenderedCloudStates = cloudStates
@@ -326,7 +348,9 @@ final class BrowserFilmstripViewController: NSViewController, NSCollectionViewDa
         }
     }
 
-    private func refreshVisibleCellState(pendingURLs: Set<URL>, selectedURLs: Set<URL>, needsFullReconfigure: Bool) {
+    private func refreshVisibleCellState(pendingURLs: Set<URL>, selectedURLs: Set<URL>, needsFullReconfigure: Bool, trigger: String) {
+        var fullCount = 0
+        var lightCount = 0
         for indexPath in collectionView.indexPathsForVisibleItems() {
             guard indexPath.item >= 0, indexPath.item < items.count else { continue }
             guard let cell = collectionView.item(at: indexPath) as? AppKitFilmstripItem else { continue }
@@ -345,6 +369,7 @@ final class BrowserFilmstripViewController: NSViewController, NSCollectionViewDa
                 )
                 cell.onCloudBadgeTapped = { [weak model] in model?.requestCloudDownload(for: item.url) }
                 requestThumbnail(for: item, in: cell)
+                fullCount += 1
             } else {
                 cell.applySelection(isSelected: selectedURLs.contains(item.url))
                 cell.applyPending(hasPendingEdits: pendingURLs.contains(item.url))
@@ -353,8 +378,13 @@ final class BrowserFilmstripViewController: NSViewController, NSCollectionViewDa
                 if awaitingRefresh {
                     requestThumbnail(for: item, in: cell)
                 }
+                lightCount += 1
             }
         }
+        Signposts.browserReload.emitEvent(
+            "FilmstripCellConfigure",
+            "trigger=\(trigger, privacy: .public) full=\(fullCount, privacy: .public) light=\(lightCount, privacy: .public)"
+        )
     }
 
     private func menuForItem(at indexPath: IndexPath) -> NSMenu? {
