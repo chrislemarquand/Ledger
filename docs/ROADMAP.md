@@ -142,6 +142,34 @@ Directional, not committed — less specified than v1.3/v1.4 on purpose; expect 
 
 ---
 
+## Post-v2.0 — Exploratory / Under Investigation
+
+Ideas scoped for feasibility but not committed, decided on, or scheduled — distinct from v2.0+
+above (which is directional but intended) and from Parked below (deprioritized). An item here has
+had at least an initial investigation pass; promote it to v2.0+ (or later) if/when it's actually
+decided on.
+
+- [ ] **Native (ImageIO) EXIF reader, read-only**: replace exiftool subprocess calls with a native
+  Swift reader for the read path only (folder load, metadata prefetch, inspector display) — writes
+  stay on exiftool. Real measured upside (a native reader is ~7-8x faster per file than the
+  already-batched exiftool path in this session's benchmarks), but exiftool itself was found to
+  disagree with its own standard-EXIF-tag vs. manufacturer-MakerNote values for several
+  photography-relevant fields (ISO, ExposureTime, MeteringMode, FNumber) on a real CR2, so this
+  isn't a mechanical port. Full scoping, real benchmark numbers, and a recommended validation
+  approach in `docs/native-exif-reader-feasibility-2026-09.md`.
+- [ ] **Native (Swift/IOKit) EOS-1V driver**: replace the Python (`eos1v-serial`) subprocess with a
+  native transport for the four operations Ledger actually uses (`inspect`/`settings`/`download`/
+  `set-clock`), motivated by not wanting a Python/pyusb/libusb dependency chain in the app rather
+  than by any feature/performance gain. **Safety-critical**: a previous, separate project in this
+  exact space destroyed a camera in March 2026 by misclassifying a write opcode as harmless. This
+  round starts from a working, already-shipped reference implementation instead of guesswork, which
+  is the key difference — but the same hard rules apply (verified-semantics-only opcode allowlist,
+  no un-derived write opcodes, no teardown without confirmed completion). Also surfaced a real,
+  separate finding worth its own follow-up: the current Python tool may not actually be bundled/
+  distributable to real customers at all. Full scoping, the incident writeup, and a required staged
+  validation approach (offline byte-equivalence testing as a hard gate before any live hardware
+  test) in `docs/native-eos1v-driver-feasibility-2026-09.md`.
+
 ## Parked
 
 - [ ] **Audit/validation mode**: surfaces missing/inconsistent metadata (missing DateTimeOriginal, missing GPS, missing copyright, conflicting IPTC/XMP). Inspector "Issues" section with one-click fixes where safe.
