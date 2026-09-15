@@ -6,12 +6,13 @@ what's next, and why anything was rejected or deferred. Update it in the same se
 it describes — a new session should be able to resume from this file alone, without re-explaining
 anything to the user (their explicit preference: don't re-consult except when something breaks).
 
-**Current position:** Plan approved 2026-09-15. Phases 0–4 complete, all verified (build/test
-green throughout, `scripts/release/release_check.sh` passes end-to-end). **Paused here
-deliberately, on the user's instruction — Phase 5 (local prepare/publish pipeline) not started.**
-It's the highest-risk phase and has real "requires the user" stops (real notarization/Sparkle
-signing, GitHub secrets, the first production publish) — pick it up in a later session, resuming
-from this file.
+**Current position:** Plan approved 2026-09-15. Phases 0–4 complete and verified. Phase 5's
+"prepare" half (preflight through generating update metadata, including the real notarize/staple
+bug fix) is complete and verified against real signed artifacts and the real live appcast feed.
+Phase 5's "publish" half (staging a GitHub draft, publishing, removing old CI secrets) is written
+but deliberately not exercised — it needs the user present for real credentials (no notarization
+profile is configured on this Mac yet) and the first real GitHub release action. See Phase 5
+below for exactly what's verified vs. what's next.
 
 ## Baseline verification (do not repeat)
 
@@ -403,7 +404,135 @@ introduced here; flagging for awareness only.
 
 ## Phase 5 — Local prepare/publish pipeline
 
-Status: not started. Highest-risk phase — see plan doc's "requires the user directly" list before touching credentials, real notarization, or GitHub secrets.
+**Status: "prepare" half complete and verified, 2026-09-15; "publish" half written but
+deliberately not exercised against the real repo/credentials.** Commit `c382159`.
+
+### The real notarize/staple bug — actually fixed
+
+Confirmed the plan's own finding first: `release.sh` notarized the `.app`'s zip, and
+`notarize.sh` explicitly skipped stapling for `.zip` artifacts (stapler can't staple a zip) — so
+the `.app` inside the shipped archive was never stapled, only the separately-built DMG was.
+Fixed by restructuring the flow: submit a throwaway zip for notarization, staple the **`.app`
+itself** once Accepted, discard the submission zip, then re-zip the now-stapled app as the real
+distributable. `notarize.sh` now takes an optional second "staple this instead" argument, checks
+explicitly for `status: Accepted` (previously only checked for `status: Invalid`, so an
+unexpected third status would have proceeded to staple anyway), runs `stapler validate` after
+staple, and hard-refuses to ever staple a `.zip`.
+
+### New scripts, each tested against real data, not just written
+
+- **`preflight.sh`** — 7 checks (clean tree, SharedUI pin, tag/version relationship,
+  not-already-published, ExifTool presence, signing identity presence, notary profile presence).
+  All checks are presence/read-only, never touch secret material. Run for real against the
+  actual repo state multiple times; see "Real findings" below for what it caught.
+- **`verify_signature.sh`** — deep/strict verify, Developer ID vs ad hoc, Hardened Runtime,
+  secure timestamp, entitlements match, nested binaries all signed. Built a **real signed
+  archive** with the real local Developer ID identity (`archive.sh`, unmodified) and ran this
+  against it. Found and fixed two real bugs doing so:
+  - Hardened Runtime's flag is inline in the `CodeDirectory` line
+    (`flags=0x10000(runtime)`), not on its own `Flags=` line as first assumed — the initial
+    version of this check always failed, even against a genuinely correct signature.
+  - The entitlement-key check used a regex over `PlistBuddy -c Print` output that silently
+    truncated any key containing a hyphen — `com.apple.security.app-sandbox` became
+    `com.apple.security.app`, producing a false "missing" failure. Replaced with real `plistlib`
+    parsing of both the declared and actual entitlements plists.
+  Passes cleanly against the real archive now.
+- **`validate_artifacts.sh`** — Gatekeeper (`spctl`), stapled-ticket validation, arm64-only
+  architecture, bundled ExifTool version, checksums, embedded version strings. Tested against the
+  same real (unnotarized) local archive/zip/dmg: **correctly and specifically fails at the
+  Gatekeeper check** (`source=Unnotarized Developer ID`) rather than silently passing — proves
+  the check actually discriminates notarized from unnotarized, not just "app exists." The
+  remaining checks (architecture, ExifTool version, checksums, version strings) were confirmed
+  correct by running their underlying commands directly against the same build.
+- **`merge_appcast.sh`** — fetches the **real live production feed**
+  (`https://chrislemarquand.github.io/Ledger/appcast.xml`, currently one item: v1.3) and splices
+  the new release's item in rather than replacing the whole feed. This is the actual fix for the
+  plan's "don't silently drop older feed entries" finding: Sparkle's own `generate_appcast` tool
+  only sees whatever's in its local input directory, which for this repo's process is just the
+  newest zip — every prior run was silently producing a single-item feed. Tested the merge logic
+  with a hand-built synthetic new-item XML against the real fetched v1.3 feed: v1.3 correctly
+  preserved, new item correctly inserted first. Also tested the reject path directly (same
+  version, different enclosure URL/length → refuses, matching the plan's explicit "existing
+  version with different bytes: reject" acceptance scenario).
+  **Real Sparkle signing tool was not run.** Checking whether `generate_appcast` would need a key
+  (`generate_keys` with no arguments, its own "report what's configured" mode) revealed a
+  **pre-existing real production Ed25519 private key already stored in this Mac's keychain** —
+  backed away immediately without exporting or otherwise touching it, and verified the merge
+  logic in isolation with synthetic data instead. **Worth knowing directly: real Sparkle signing
+  is possible from this Mac without any further credential setup**, unlike notarization (see
+  preflight's finding below).
+- **`stage_github_release.sh`** / **`publish.sh`** — full draft-then-publish separation,
+  `--clobber` never used, checksum-verified re-uploads, a re-check-remote-state race guard in
+  `publish.sh` immediately before flipping a release public, assets verified downloadable (HTTP
+  200) before the feed deploy, feed deployed last. Written and reviewed but **not run against the
+  real repo** — creating even a draft was judged as crossing into real release-lifecycle
+  territory worth deferring alongside notarization/publish.
+- **`release_check.sh`** gained the zero-test guard the plan's own Phase 0 gate named ("a
+  successful exit with zero discovered tests must fail validation") but which nothing actually
+  enforced. Verified the gap was real first: this project's `swift test` output always prints a
+  separate "Test run with 0 tests in 0 suites passed" line for the unused Swift Testing
+  framework, meaning a naive "did it print success" check could pass even if real test discovery
+  broke entirely. Now counts actual test-case lines from both `swift test` and `xcodebuild test`
+  and fails if either is zero. Verified: 49 LedgerCore + 204 app-side tests correctly counted,
+  full pipeline still reports "Release checks passed."
+- **`.github/workflows/release.yml` retired entirely**, replaced with **`deploy-appcast.yml`** —
+  `workflow_dispatch`-only, downloads an already-generated `appcast.xml` release asset and
+  deploys it to Pages. Builds/signs/notarizes nothing; triggered by `publish.sh` as the last step
+  of a release, never by a push or tag.
+
+### Real findings from running preflight for real (not hypothetical)
+
+- **No `EXIFEDIT_NOTARY` notarization profile is configured on this Mac** —
+  `xcrun notarytool history --keychain-profile EXIFEDIT_NOTARY` fails outright. Real notarization
+  genuinely cannot happen from this session without the user running
+  `xcrun notarytool store-credentials EXIFEDIT_NOTARY` themselves (needs an app-specific
+  password, a secret only they should enter) — this isn't a policy choice this session made, the
+  pipeline is structurally incapable of submitting anything right now.
+- **A real Developer ID Application identity IS present**
+  (`Developer ID Application: Christopher Le Marquand (S4F3HUG3TQ)`), matching
+  `DEVELOPMENT_TEAM = S4F3HUG3TQ`) — real local signing (not notarization, not publishing) works,
+  and was used to build and verify the real signed archive above.
+- **`v1.2.3` is already published** (confirmed via a real `gh release view` query) while
+  `Config/Base.xcconfig`'s `MARKETING_VERSION` is still `1.2.3` — preflight correctly refuses to
+  prepare a release from `v1.4`'s current state until `MARKETING_VERSION` is bumped past what's
+  already shipped. This is a real, correct stop, not a bug — bumping the version is a product
+  decision for the user, not something done here unprompted.
+
+### Acceptance scenarios (plan section 6) verified for real, not just designed for
+
+- Dirty SharedUI → `verify_shared_ui_pin.sh --require-pin-match` rejects; confirmed the checkout
+  itself is never touched (added a throwaway untracked file to SharedUI, ran the check, removed
+  the file afterward — nothing else changed).
+- Local release lock: a live PID in the lock file correctly blocks; a stale (dead) PID is
+  correctly detected and would be cleared.
+- Zero tests: see `release_check.sh` fix above.
+- Existing version, different bytes: see `merge_appcast.sh` reject-path test above.
+- Path containing spaces: already proven in Phase 1's isolated-worktree test; this repo's own
+  path exercises it on every run regardless.
+
+### Deliberately not done this session
+
+Any real notarization submission, any real Sparkle-signed feed entry, staging or publishing a
+real GitHub release, and the remaining acceptance scenarios that require one of those (invalid
+notarization/stapling result, upload failure and resume, served-URL mismatch, fresh-install
+delivery behavior). These need the user present for the one deliberate real-credential run the
+plan itself calls for — pick up from here.
+
+### Open items for the user, specific to Phase 5
+
+- [ ] Bump `MARKETING_VERSION` in `Config/Base.xcconfig` past `1.2.3` before any release can be
+  prepared from `v1.4` — `preflight.sh` will otherwise correctly refuse every time.
+- [ ] Run `xcrun notarytool store-credentials EXIFEDIT_NOTARY` on this Mac (needs an
+  app-specific password) before any real notarization can happen.
+- [ ] Be present for the first real run of `scripts/release/release.sh` through to
+  `stage_github_release.sh` — this is where real notarization and a real (draft) GitHub release
+  first get exercised.
+- [ ] Remove the now-unused GitHub Actions secrets (`APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`,
+  `APPLE_TEAM_ID`, `BUILD_CERTIFICATE_BASE64`, `P12_PASSWORD`, `KEYCHAIN_PASSWORD`,
+  `DEVELOPMENT_TEAM`, `DEVELOPER_ID_APPLICATION`, `SPARKLE_PRIVATE_KEY`,
+  `SPARKLE_PUBLIC_ED_KEY`) once the new local pipeline is verified end-to-end and
+  `deploy-appcast.yml` is confirmed working — all 10 were confirmed still present (names only
+  checked, values never touched) as of this session.
 
 ## Cross-branch rollout
 
