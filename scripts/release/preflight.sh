@@ -6,8 +6,26 @@ set -euo pipefail
 # This script only reads and validates — it never signs, notarizes, uploads, or publishes
 # anything, and it never modifies SharedUI or any other checkout.
 #
-# Usage: scripts/release/preflight.sh
+# Usage: scripts/release/preflight.sh <intended-marketing-version>
+#
+# The version is a REQUIRED argument, not read from Config/Base.xcconfig — deliberately, after a
+# real incident: v1.3 was tagged and shipped while Config/Base.xcconfig's MARKETING_VERSION still
+# said 1.2.3. archive.sh's own git-tag-derived override silently produced a correct binary
+# anyway, so nobody noticed the source was never updated — v1.4 then inherited that stale 1.2.3,
+# and every release before v1.3 (1.0.0 through 1.2.3) really had bumped the xcconfig by hand, so
+# this was a one-time slip, not a pre-existing pattern. Making the version an explicit input here
+# and hard-failing on any mismatch is what actually prevents that slip from recurring — this is
+# exactly the "enforce checks, don't depend on the owner remembering a checklist" policy this
+# whole pipeline exists for. By the time archive.sh runs later in the same pipeline,
+# Config/Base.xcconfig is therefore guaranteed to already say the right thing.
+#
 # Exits non-zero on the first failed check, with a clear reason.
+
+if [[ $# -ne 1 ]]; then
+  echo "Usage: $0 <intended-marketing-version>  (e.g. 1.4)" >&2
+  exit 1
+fi
+INTENDED_VERSION="$1"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
@@ -24,24 +42,27 @@ pass() {
   echo "  ok: $1"
 }
 
-echo "[1/7] Ledger repo state"
+echo "[1/8] Ledger repo state"
 if [[ -n "$(git status --porcelain)" ]]; then
   fail "Ledger working tree is not clean. Commit or stash before preparing a release."
 fi
 LEDGER_COMMIT="$(git rev-parse HEAD)"
 pass "clean at $LEDGER_COMMIT"
 
-echo "[2/7] SharedUI revision pin"
+echo "[2/8] SharedUI revision pin"
 if ! "$ROOT_DIR/scripts/deps/verify_shared_ui_pin.sh" --require-pin-match; then
   fail "SharedUI does not match the recorded release pin, or is dirty. See output above."
 fi
 pass "SharedUI matches Config/SharedUI.revision, clean"
 
-echo "[3/7] Version / tag relationship"
+echo "[3/8] Intended version matches the committed source"
 MARKETING_VERSION="$(grep -m1 '^MARKETING_VERSION' Config/Base.xcconfig | sed -E 's/^MARKETING_VERSION = //')"
-if [[ -z "$MARKETING_VERSION" ]]; then
-  fail "Could not read MARKETING_VERSION from Config/Base.xcconfig."
+if [[ "$MARKETING_VERSION" != "$INTENDED_VERSION" ]]; then
+  fail "You said you're releasing ${INTENDED_VERSION}, but Config/Base.xcconfig's MARKETING_VERSION is ${MARKETING_VERSION}. Bump it and commit before preparing a release — this check exists specifically because that step was skipped once before (see the comment at the top of this script)."
 fi
+pass "Config/Base.xcconfig already says ${INTENDED_VERSION}"
+
+echo "[4/8] Version / tag relationship"
 GIT_TAG="v${MARKETING_VERSION}"
 if git rev-parse -q --verify "refs/tags/${GIT_TAG}" >/dev/null 2>&1; then
   TAG_COMMIT="$(git rev-parse "refs/tags/${GIT_TAG}")"
@@ -53,7 +74,7 @@ else
   pass "tag ${GIT_TAG} does not exist yet (will be created at publish time)"
 fi
 
-echo "[4/7] Not already published"
+echo "[5/8] Not already published"
 if command -v gh >/dev/null 2>&1; then
   if gh release view "$GIT_TAG" --repo "$GITHUB_REPO" >/dev/null 2>&1; then
     RELEASE_STATE="$(gh release view "$GIT_TAG" --repo "$GITHUB_REPO" --json isDraft --jq '.isDraft')"
@@ -68,7 +89,7 @@ else
   echo "  warning: gh CLI not found — cannot check for an already-published release. Check manually." >&2
 fi
 
-echo "[5/7] ExifTool payload"
+echo "[6/8] ExifTool payload"
 REQUIRED_VERSION="$(grep -m1 '^EXIFTOOL_REQUIRED_VERSION' Config/Base.xcconfig | sed -E 's/^EXIFTOOL_REQUIRED_VERSION = //')"
 FOUND_EXIFTOOL=""
 for candidate in "${EXIFTOOL_SOURCE_PATH:-}" "Vendor/exiftool/bin/exiftool" "Vendor/exiftool/exiftool" "/opt/homebrew/bin/exiftool" "/usr/local/bin/exiftool"; do
@@ -82,7 +103,7 @@ if [[ -z "$FOUND_EXIFTOOL" ]]; then
 fi
 pass "found at $FOUND_EXIFTOOL (version check happens for real during archive.sh)"
 
-echo "[6/7] Signing credentials (presence only — never reads secret material)"
+echo "[7/8] Signing credentials (presence only — never reads secret material)"
 : "${DEVELOPMENT_TEAM:?Set DEVELOPMENT_TEAM to your Apple Team ID.}"
 : "${DEVELOPER_ID_APPLICATION:?Set DEVELOPER_ID_APPLICATION to your Developer ID Application identity.}"
 if ! security find-identity -v -p codesigning 2>/dev/null | grep -qF "$DEVELOPER_ID_APPLICATION"; then
@@ -90,7 +111,7 @@ if ! security find-identity -v -p codesigning 2>/dev/null | grep -qF "$DEVELOPER
 fi
 pass "DEVELOPMENT_TEAM and DEVELOPER_ID_APPLICATION set, identity present in keychain"
 
-echo "[7/7] Notarization profile (presence only)"
+echo "[8/8] Notarization profile (presence only)"
 NOTARY_PROFILE="${NOTARY_PROFILE:-EXIFEDIT_NOTARY}"
 if ! xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1; then
   fail "Notarization profile \"$NOTARY_PROFILE\" is not configured in this Mac's keychain. Run: xcrun notarytool store-credentials $NOTARY_PROFILE"

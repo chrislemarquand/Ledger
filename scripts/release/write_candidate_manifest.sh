@@ -14,6 +14,12 @@ set -euo pipefail
 # Usage: scripts/release/write_candidate_manifest.sh [<output-path>]
 # Reads: MARKETING_VERSION (from Config/Base.xcconfig), RELEASE_BUILD_NUMBER (env, optional),
 #        the current Ledger commit, and Config/SharedUI.revision.
+#
+# Reading MARKETING_VERSION straight from xcconfig is only safe because release.sh always runs
+# preflight.sh (which takes the intended version as an explicit, required argument and hard-fails
+# if it doesn't match this file) before ever reaching this script. If you run this script
+# standalone, outside that pipeline, treat its marketingVersion field as "whatever the source
+# currently says" — not independently verified against anything.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"

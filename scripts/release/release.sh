@@ -10,9 +10,18 @@ set -euo pipefail
 # Never rebuilds an already-prepared candidate: re-running this script after a partial failure
 # re-verifies what's already on disk rather than blindly redoing signing/notarization work.
 #
-# Usage: scripts/release/release.sh
+# Usage: scripts/release/release.sh <marketing-version>
 # Env: GENERATE_APPCAST=1 to also produce the merged Sparkle feed (off by default, since not
 #      every prepare run is heading toward a release).
+#
+# The version is a required argument, checked against Config/Base.xcconfig by preflight.sh
+# (see its own comment for why that check exists — it's not optional ceremony).
+
+if [[ $# -ne 1 ]]; then
+  echo "Usage: $0 <marketing-version>  (e.g. 1.4)" >&2
+  exit 1
+fi
+MARKETING_VERSION="$1"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
@@ -32,7 +41,7 @@ echo "$$" > "$LOCK_FILE"
 trap 'rm -f "$LOCK_FILE"' EXIT
 
 echo "=== [1/7] Preflight ==="
-"$ROOT_DIR/scripts/release/preflight.sh"
+"$ROOT_DIR/scripts/release/preflight.sh" "$MARKETING_VERSION"
 
 echo "=== [2/7] Validate locally (build + full test suite) ==="
 "$ROOT_DIR/scripts/release/release_check.sh"
@@ -101,5 +110,5 @@ echo "  DMG: $DMG_PATH"
 echo "  Evidence: $EVIDENCE_DIR"
 echo
 echo "Next steps (manual, never automatic):"
-echo "  scripts/release/stage_github_release.sh <version> \"$ZIP_PATH\" \"$DMG_PATH\" \"$APPCAST_PATH\""
-echo "  scripts/release/publish.sh <version>"
+echo "  scripts/release/stage_github_release.sh $MARKETING_VERSION \"$ZIP_PATH\" \"$DMG_PATH\" \"$APPCAST_PATH\""
+echo "  scripts/release/publish.sh $MARKETING_VERSION"
