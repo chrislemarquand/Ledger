@@ -4,6 +4,23 @@ All notable changes to Ledger are documented here.
 
 ---
 
+## [1.4] — YYYY-MM-DD
+
+### Improved
+
+- **Native UI polish pass**: Gallery and Icon view selection highlighting now dims when focus moves elsewhere in the window, matching List's native behaviour; the Preset editor's rating, flag, and label fields are now proper controls instead of raw text entry; destructive actions in alerts show the standard red tint — small consistency fixes throughout aimed at making the app feel as native as possible.
+- **Overall responsiveness and memory use**: metadata and thumbnails now load on demand rather than being speculatively warmed ahead of need, browser re-renders are routed only to the active view, and both the in-memory metadata cache and the on-disk thumbnail cache (bounded to 1GB) now have real limits instead of growing unbounded during a long session.
+
+### Fixed
+
+- Fixed a glitch where clicking a row in List view could cause a brief incorrect accent-colour flash.
+
+### Removed
+
+- Removed the first-launch welcome screen and the Help menu's "What's New" item.
+
+---
+
 ## [1.3] — 2026-08-31
 
 ### Added
