@@ -27,7 +27,7 @@ public struct ExifToolInvocationTrace: Identifiable, Codable, Hashable, Sendable
 }
 
 public extension Notification.Name {
-    static let exifToolInvocationDidFinish = Notification.Name("ExifEditCore.ExifToolInvocationDidFinish")
+    static let exifToolInvocationDidFinish = Notification.Name("LedgerCore.ExifToolInvocationDidFinish")
 }
 
 public struct ExifToolService: ExifToolServiceProtocol {
@@ -66,7 +66,7 @@ public struct ExifToolService: ExifToolServiceProtocol {
         } else if let located = Self.findDefaultExifToolPath() {
             self.executableURL = located
         } else {
-            throw ExifEditError.exifToolNotFound
+            throw MetadataEditError.exifToolNotFound
         }
 
         self.commandBuilder = commandBuilder
@@ -81,7 +81,7 @@ public struct ExifToolService: ExifToolServiceProtocol {
         guard
             let json = try JSONSerialization.jsonObject(with: data) as? [[String: Any]]
         else {
-            throw ExifEditError.invalidExifToolJSON
+            throw MetadataEditError.invalidExifToolJSON
         }
 
         return json.compactMap(parseSnapshot(dictionary:))
@@ -347,7 +347,7 @@ public struct ExifToolService: ExifToolServiceProtocol {
         )
 
         guard process.terminationStatus == 0 else {
-            throw ExifEditError.processFailed(code: process.terminationStatus, stderr: stderrText)
+            throw MetadataEditError.processFailed(code: process.terminationStatus, stderr: stderrText)
         }
 
         // exiftool exits 0 when a mixed batch has some writable tags and some not —
@@ -357,7 +357,7 @@ public struct ExifToolService: ExifToolServiceProtocol {
         if kind == .write, !stderrText.isEmpty,
            let warning = stderrText.components(separatedBy: "\n")
                .first(where: { $0.contains("doesn't exist or isn't writable") }) {
-            throw ExifEditError.processFailed(code: 0, stderr: warning)
+            throw MetadataEditError.processFailed(code: 0, stderr: warning)
         }
 
         return stdoutData

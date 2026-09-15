@@ -74,7 +74,7 @@ public actor BatchRenameService {
         let plan = buildPlan(files: operation.files, pattern: operation.pattern)
         let issues = validatePlannedEntries(plan, pattern: operation.pattern)
         if let first = issues.first {
-            throw ExifEditError.invalidOperation(first.message)
+            throw MetadataEditError.invalidOperation(first.message)
         }
         return try executePlan(plan: plan, operationID: operation.id, backupManager: backupManager)
     }
@@ -83,7 +83,7 @@ public actor BatchRenameService {
         let plan = buildPlan(files: operation.files, pattern: operation.pattern)
         let issues = validatePlannedEntries(plan, pattern: operation.pattern)
         if let first = issues.first {
-            throw ExifEditError.invalidOperation(first.message)
+            throw MetadataEditError.invalidOperation(first.message)
         }
         return try executePlan(plan: plan, operationID: operation.id, backupManager: nil)
     }
@@ -110,7 +110,7 @@ public actor BatchRenameService {
         }
         let issues = validatePlannedEntries(plan, pattern: RenamePattern())
         if let first = issues.first {
-            throw ExifEditError.invalidOperation(first.message)
+            throw MetadataEditError.invalidOperation(first.message)
         }
         return try executePlan(plan: plan, operationID: operationID, backupManager: backupManager)
     }
@@ -124,7 +124,7 @@ public actor BatchRenameService {
     ) throws -> RenameResult {
         let start = Date()
         guard !plan.isEmpty else {
-            throw ExifEditError.invalidOperation("No files were selected.")
+            throw MetadataEditError.invalidOperation("No files were selected.")
         }
 
         let backupURL = try backupManager?.createBackup(operationID: operationID, files: plan.map(\.sourceURL))
@@ -141,7 +141,7 @@ public actor BatchRenameService {
                 moves.append((source: entry.sourceURL, temp: tempURL, final: entry.finalTargetURL))
             } catch {
                 _ = rollbackAtomicMoves(moves)
-                throw ExifEditError.invalidOperation("Couldn't rename files. No files were renamed.")
+                throw MetadataEditError.invalidOperation("Couldn't rename files. No files were renamed.")
             }
         }
 
@@ -151,11 +151,11 @@ public actor BatchRenameService {
             } catch {
                 let rollbackError = rollbackAtomicMoves(moves)
                 if let rollbackError {
-                    throw ExifEditError.invalidOperation(
+                    throw MetadataEditError.invalidOperation(
                         "Couldn't finish renaming files, and restore was incomplete: \(rollbackError.localizedDescription)"
                     )
                 }
-                throw ExifEditError.invalidOperation("Couldn't rename files. All files were restored.")
+                throw MetadataEditError.invalidOperation("Couldn't rename files. All files were restored.")
             }
         }
 

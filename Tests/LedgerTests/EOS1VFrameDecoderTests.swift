@@ -1,4 +1,4 @@
-@testable import ExifEditMac
+@testable import Ledger
 import XCTest
 
 /// Stage A gate for the native EOS-1V decoder.

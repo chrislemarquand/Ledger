@@ -362,7 +362,7 @@ public struct RenameResult: Sendable {
 
 // MARK: - Errors
 
-public enum ExifEditError: Error, LocalizedError {
+public enum MetadataEditError: Error, LocalizedError {
     case exifToolNotFound
     case processFailed(code: Int32, stderr: String)
     case invalidExifToolJSON

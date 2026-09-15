@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-PACKAGE_SWIFT="${PACKAGE_SWIFT:-Package.swift}"
+PROJECT_PBXPROJ="${PROJECT_PBXPROJ:-Ledger.xcodeproj/project.pbxproj}"
 SHAREDUI_PATH="${SHAREDUI_PATH:-../SharedUI}"
 REVISION_FILE="${REVISION_FILE:-Config/SharedUI.revision}"
 
@@ -13,20 +13,24 @@ if [[ "${1:-}" == "--require-pin-match" ]]; then
   REQUIRE_PIN_MATCH=1
 fi
 
-if [[ ! -f "$PACKAGE_SWIFT" ]]; then
-  echo "Missing $PACKAGE_SWIFT"
+# The app has no SPM manifest of its own (LedgerCore is the only local package, and it has no
+# SharedUI dependency at all) — SharedUI is wired directly into Ledger.xcodeproj as its own
+# XCLocalSwiftPackageReference. That's what's checked here, not a Package.swift.
+if [[ ! -f "$PROJECT_PBXPROJ" ]]; then
+  echo "Missing $PROJECT_PBXPROJ"
   exit 1
 fi
 
-if grep -Eq 'https://github\.com/chrislemarquand/SharedUI\.git' "$PACKAGE_SWIFT"; then
-  echo "Error: remote SharedUI dependency detected in $PACKAGE_SWIFT"
-  echo "Local-only policy is active. Use: .package(path: \"../SharedUI\")"
+if grep -Eq 'repositoryURL = "https://github\.com/chrislemarquand/SharedUI(\.git)?"' "$PROJECT_PBXPROJ"; then
+  echo "Error: remote SharedUI dependency detected in $PROJECT_PBXPROJ"
+  echo "Local-only policy is active. Use a local XCLocalSwiftPackageReference (relativePath = ../SharedUI)."
   exit 1
 fi
 
-if ! grep -Eq '\.package\(path:[[:space:]]*"\.\./SharedUI"\)' "$PACKAGE_SWIFT"; then
-  echo "Error: SharedUI local path dependency is missing in $PACKAGE_SWIFT"
-  echo "Expected: .package(path: \"../SharedUI\")"
+if ! grep -Eq 'XCLocalSwiftPackageReference "\.\./SharedUI"' "$PROJECT_PBXPROJ" \
+  || ! grep -Eq 'relativePath = \.\./SharedUI;' "$PROJECT_PBXPROJ"; then
+  echo "Error: SharedUI local package reference is missing in $PROJECT_PBXPROJ"
+  echo "Expected an XCLocalSwiftPackageReference with relativePath = ../SharedUI"
   exit 1
 fi
 

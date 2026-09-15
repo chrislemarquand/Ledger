@@ -5,39 +5,52 @@ Ledger is a macOS-only photo metadata editor.
 - Deployment target: `macOS 26`
 - Swift language mode: `Swift 6`
 - UI model: AppKit shell with SwiftUI feature surfaces
-- Shared dependency: `SharedUI` — local path dependency (`.package(path: "../SharedUI")`
-  in `Package.swift`), not a remote pinned tag. This is a deliberate, enforced
-  policy (`scripts/deps/verify_shared_ui_pin.sh` errors if a remote pin is
-  detected instead), not a stale/WIP state.
+- Shared dependency: `SharedUI` — a local path package, referenced directly by
+  `Ledger.xcodeproj` as its own `XCLocalSwiftPackageReference`
+  (`relativePath = ../SharedUI`), not a remote pinned tag. This is a deliberate,
+  enforced policy (`scripts/deps/verify_shared_ui_pin.sh` errors if a remote pin
+  is detected instead), not a stale/WIP state. A release additionally pins an
+  exact SharedUI commit in `Config/SharedUI.revision` — see
+  `docs/DEPENDENCY_POLICY.md`.
 - External dependency: `External/eos1v-serial` (git submodule) — a third-party
   Python tool the EOS-1V feature drives as a subprocess; see below.
 
 ## Repo and targets
 
-Ledger is a Swift Package with an Xcode project wrapper.
+Ledger is an Xcode project with one local Swift package (`LedgerCore`) alongside
+it — not a Swift Package with an Xcode wrapper. The app itself has no SPM
+manifest of its own; `Ledger.xcodeproj` is the single owner of the app and its
+tests.
 
 ```text
+LedgerCore/            # local Swift package — metadata engine + exiftool integration
+  Sources/LedgerCore/  # (no app UI, no SharedUI dependency)
+  Tests/LedgerCoreTests/
 Sources/
-  ExifEditCore/        # metadata engine + exiftool integration (no app UI)
-  Ledger/              # app target (AppKit + SwiftUI + SharedUI)
+  Ledger/              # app target (AppKit + SwiftUI + SharedUI), Xcode-owned only
     EOS1V/             # EOS-1V device connection feature (see below)
     Import/ ImportUI/  # import pipeline + sheets
 Tests/
-  ExifEditCoreTests/
-  LedgerTests/
+  LedgerTests/         # app-side tests, Xcode-owned only
 Config/
   Base.xcconfig
   Debug.xcconfig
   Release.xcconfig
+  SharedUI.revision    # exact SharedUI commit a release is validated against
 External/
   eos1v-serial/        # git submodule — third-party Python tool, see below
 ```
 
-`Package.swift` defines:
-- library target: `ExifEditCore`
-- executable target: `ExifEditMac` (path: `Sources/Ledger`)
+`LedgerCore/Package.swift` defines the `LedgerCore` library + its test target —
+the only local Swift package in this repo. `Ledger.xcodeproj` defines the
+`Ledger` app target, `LedgerTests`, and `LedgerUITests`, and consumes both
+`LedgerCore` and `SharedUI` as local package references directly (no
+intermediate root-level manifest). It uses explicit Info.plist/entitlements
+from `Config/`.
 
-`Ledger.xcodeproj` builds the macOS app and uses explicit Info.plist/entitlements from `Config/`.
+`swift test` (via `scripts/test/run_all.sh`) only ever covers `LedgerCore` —
+there's nothing else SPM-buildable in this repo. App-side tests
+(`LedgerTests`) run exclusively via `xcodebuild test`.
 
 ## Runtime architecture
 
@@ -50,7 +63,7 @@ NSApplication + AppDelegate
        -> Inspector (SwiftUI hosted in AppKit)
 
 AppModel (@MainActor, single source of truth)
-  -> ExifEditCore actor/services
+  -> LedgerCore actor/services
   -> filesystem/exiftool side effects
 ```
 
@@ -76,7 +89,7 @@ These are intentionally generic and reusable across apps.
 
 Ledger-specific logic remains in Ledger and is not moved into SharedUI:
 
-- Metadata domain model and write pipeline (`ExifEditCore` + `AppModel` extensions).
+- Metadata domain model and write pipeline (`LedgerCore` + `AppModel` extensions).
 - ExifTool command construction/execution and backup/restore behavior.
 - Import/export workflows and file-format specific handling.
 - Ledger-specific sidebar semantics, inspector field catalog, and editing policies.

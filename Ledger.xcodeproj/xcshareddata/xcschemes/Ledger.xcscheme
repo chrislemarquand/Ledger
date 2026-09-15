@@ -35,20 +35,9 @@
             parallelizable = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "A10000620000000000000001"
-               BuildableName = "ExifEditCoreTests.xctest"
-               BlueprintName = "ExifEditCoreTests"
-               ReferencedContainer = "container:Ledger.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
                BlueprintIdentifier = "E20000140000000000000001"
-               BuildableName = "ExifEditMacTests.xctest"
-               BlueprintName = "ExifEditMacTests"
+               BuildableName = "LedgerTests.xctest"
+               BlueprintName = "LedgerTests"
                ReferencedContainer = "container:Ledger.xcodeproj">
             </BuildableReference>
          </TestableReference>

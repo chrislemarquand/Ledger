@@ -1,5 +1,5 @@
 import AppKit
-import ExifEditCore
+import LedgerCore
 import Foundation
 import SharedUI
 
@@ -14,7 +14,7 @@ extension AppModel {
                !presets.contains(where: { $0.id == selectedPresetID }) {
                 self.selectedPresetID = nil
             }
-        } catch ExifEditError.presetSchemaVersionTooNew {
+        } catch MetadataEditError.presetSchemaVersionTooNew {
             presets = []
             selectedPresetID = nil
             Task { @MainActor in

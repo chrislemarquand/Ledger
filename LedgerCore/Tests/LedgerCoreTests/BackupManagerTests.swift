@@ -1,4 +1,4 @@
-import ExifEditCore
+import LedgerCore
 import Foundation
 import XCTest
 
@@ -35,8 +35,8 @@ final class BackupManagerTests: XCTestCase {
         let nonExistentID = UUID()
 
         XCTAssertThrowsError(try manager.restoreBackup(operationID: nonExistentID)) { error in
-            guard let editError = error as? ExifEditError, case .backupNotFound = editError else {
-                XCTFail("Expected ExifEditError.backupNotFound, got \(error)")
+            guard let editError = error as? MetadataEditError, case .backupNotFound = editError else {
+                XCTFail("Expected MetadataEditError.backupNotFound, got \(error)")
                 return
             }
         }

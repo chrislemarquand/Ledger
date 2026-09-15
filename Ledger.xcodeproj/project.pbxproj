@@ -11,20 +11,6 @@
 		A100001B0000000000000001 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000B0000000000000001 /* AppModel.swift */; };
 		A100001C0000000000000001 /* LedgerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000C0000000000000001 /* LedgerApp.swift */; };
 		A100001D0000000000000001 /* MainContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000D0000000000000001 /* MainContentView.swift */; };
-		A100001E0000000000000001 /* BackupManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000110000000000000001 /* BackupManager.swift */; };
-		A100001F0000000000000001 /* Domain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000120000000000000001 /* Domain.swift */; };
-		A10000200000000000000001 /* ExifEditEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000130000000000000001 /* ExifEditEngine.swift */; };
-		A10000210000000000000001 /* ExifToolCommandBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000140000000000000001 /* ExifToolCommandBuilder.swift */; };
-		A10000220000000000000001 /* ExifToolService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000150000000000000001 /* ExifToolService.swift */; };
-		A10000230000000000000001 /* MetadataValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000160000000000000001 /* MetadataValidator.swift */; };
-		A10000240000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000180000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift */; };
-		A10000250000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000190000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift */; };
-		A10001E90000000000000001 /* Tests/ExifEditCoreTests/ExifToolServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E80000000000000001 /* Tests/ExifEditCoreTests/ExifToolServiceTests.swift */; };
-		A10000260000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100001A0000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift */; };
-		A10000270000000000000001 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A100003A0000000000000001 /* XCTest.framework */; };
-		A10000280000000000000001 /* libExifEditCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000370000000000000001 /* libExifEditCore.a */; };
-		A10000290000000000000001 /* libExifEditCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000370000000000000001 /* libExifEditCore.a */; };
-		A10000B10000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000B20000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift */; };
 		A10001420000000000000001 /* Presets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001410000000000000001 /* Presets.swift */; };
 		A10001440000000000000001 /* BrowserIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001430000000000000001 /* BrowserIconView.swift */; };
 		A10001460000000000000001 /* BrowserListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001450000000000000001 /* BrowserListView.swift */; };
@@ -83,7 +69,6 @@
 		A10001DF0000000000000001 /* EOS1VDeletedRollsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001DE0000000000000001 /* EOS1VDeletedRollsStore.swift */; };
 		A10001E10000000000000001 /* EOS1VRollDetailSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E00000000000000001 /* EOS1VRollDetailSheetView.swift */; };
 		A10001E30000000000000001 /* EOS1VSetClockSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001E20000000000000001 /* EOS1VSetClockSheetView.swift */; };
-		A19000020000000000000001 /* Signposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19000010000000000000001 /* Signposts.swift */; };
 		A19000040000000000000001 /* Signposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19000030000000000000001 /* Signposts.swift */; };
 		B100001D0000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000D0000000000000001 /* Assets.xcassets */; };
 		B100002E0000000000000001 /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = B100002D0000000000000001 /* MainMenu.xib */; };
@@ -129,21 +114,7 @@
 			remoteGlobalIDString = A10000600000000000000001;
 			remoteInfo = Ledger;
 		};
-		A10000920000000000000001 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = A10001000000000000000001 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = A10000610000000000000001;
-			remoteInfo = ExifEditCore;
-		};
-		A10000930000000000000001 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = A10001000000000000000001 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = A10000610000000000000001;
-			remoteInfo = ExifEditCore;
-		};
-		E20000150000000000000001 /* PBXContainerItemProxy */ = {
+						E20000150000000000000001 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = A10001000000000000000001 /* Project object */;
 			proxyType = 1;
@@ -156,7 +127,6 @@
 		469CE1902F4B7DE400D51BC9 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		46E8AA583045F8E60033B66F /* LedgerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LedgerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000010000000000000001 /* Ledger.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Ledger.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A10000020000000000000001 /* ExifEditCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ExifEditCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000030000000000000001 /* Config/Ledger-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Config/Ledger-Info.plist"; sourceTree = SOURCE_ROOT; };
 		A10000040000000000000001 /* Config/Ledger.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Config/Ledger.entitlements; sourceTree = SOURCE_ROOT; };
 		A10000050000000000000001 /* Config/Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Debug.xcconfig; sourceTree = SOURCE_ROOT; };
@@ -168,19 +138,7 @@
 		A100000B0000000000000001 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		A100000C0000000000000001 /* LedgerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerApp.swift; sourceTree = "<group>"; };
 		A100000D0000000000000001 /* MainContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainContentView.swift; sourceTree = "<group>"; };
-		A10000110000000000000001 /* BackupManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupManager.swift; sourceTree = "<group>"; };
-		A10000120000000000000001 /* Domain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domain.swift; sourceTree = "<group>"; };
-		A10000130000000000000001 /* ExifEditEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifEditEngine.swift; sourceTree = "<group>"; };
-		A10000140000000000000001 /* ExifToolCommandBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifToolCommandBuilder.swift; sourceTree = "<group>"; };
-		A10000150000000000000001 /* ExifToolService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExifToolService.swift; sourceTree = "<group>"; };
-		A10000160000000000000001 /* MetadataValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataValidator.swift; sourceTree = "<group>"; };
-		A10000180000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/BackupManagerTests.swift; sourceTree = SOURCE_ROOT; };
-		A10000190000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift; sourceTree = SOURCE_ROOT; };
-		A10001E80000000000000001 /* Tests/ExifEditCoreTests/ExifToolServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/ExifToolServiceTests.swift; sourceTree = SOURCE_ROOT; };
-		A100001A0000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/ExifEditCoreTests/MetadataValidatorTests.swift; sourceTree = SOURCE_ROOT; };
-		A10000370000000000000001 /* libExifEditCore.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libExifEditCore.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		A100003A0000000000000001 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
-		A10000B20000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ExifEditCore/BatchRenameService.swift; sourceTree = SOURCE_ROOT; };
 		A10001410000000000000001 /* Presets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Presets.swift; sourceTree = "<group>"; };
 		A10001430000000000000001 /* BrowserIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserIconView.swift; sourceTree = "<group>"; };
 		A10001450000000000000001 /* BrowserListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserListView.swift; sourceTree = "<group>"; };
@@ -239,7 +197,6 @@
 		A10001DE0000000000000001 /* EOS1VDeletedRollsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VDeletedRollsStore.swift; sourceTree = "<group>"; };
 		A10001E00000000000000001 /* EOS1VRollDetailSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VRollDetailSheetView.swift; sourceTree = "<group>"; };
 		A10001E20000000000000001 /* EOS1VSetClockSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EOS1VSetClockSheetView.swift; sourceTree = "<group>"; };
-		A19000010000000000000001 /* Signposts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signposts.swift; sourceTree = "<group>"; };
 		A19000030000000000000001 /* Signposts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signposts.swift; sourceTree = "<group>"; };
 		B100000D0000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B100002D0000000000000001 /* MainMenu.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = MainMenu.xib; sourceTree = "<group>"; };
@@ -262,7 +219,7 @@
 		E10001000000000000000001 /* DateTimeAdjustModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateTimeAdjustModels.swift; sourceTree = "<group>"; };
 		E10001020000000000000001 /* AppModel+DateTimeAdjust.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+DateTimeAdjust.swift"; sourceTree = "<group>"; };
 		E10001040000000000000001 /* DateTimeAdjustSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateTimeAdjustSheetView.swift; sourceTree = "<group>"; };
-		E20000010000000000000001 /* ExifEditMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ExifEditMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E20000010000000000000001 /* LedgerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LedgerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E20000020000000000000001 /* Tests/LedgerTests/AppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/AppModelTests.swift; sourceTree = SOURCE_ROOT; };
 		E200001B0000000000000001 /* Tests/LedgerTests/ThumbnailServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/ThumbnailServiceTests.swift; sourceTree = SOURCE_ROOT; };
 		E200001D0000000000000001 /* Tests/LedgerTests/EOS1VSessionControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/LedgerTests/EOS1VSessionControllerTests.swift; sourceTree = SOURCE_ROOT; };
@@ -291,29 +248,12 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10000280000000000000001 /* libExifEditCore.a in Frameworks */,
 				DD0002020000000000000001 /* SharedUI in Frameworks */,
 				F10000050000000000000001 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		A10000420000000000000001 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		A10000430000000000000001 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				A10000290000000000000001 /* libExifEditCore.a in Frameworks */,
-				A10000270000000000000001 /* XCTest.framework in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		E20000110000000000000001 /* Frameworks */ = {
+						E20000110000000000000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -328,9 +268,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000010000000000000001 /* Ledger.app */,
-				A10000370000000000000001 /* libExifEditCore.a */,
-				A10000020000000000000001 /* ExifEditCoreTests.xctest */,
-				E20000010000000000000001 /* ExifEditMacTests.xctest */,
+				E20000010000000000000001 /* LedgerTests.xctest */,
 				46E8AA583045F8E60033B66F /* LedgerUITests.xctest */,
 			);
 			name = Products;
@@ -354,7 +292,6 @@
 			isa = PBXGroup;
 			children = (
 				A10000560000000000000001 /* Ledger */,
-				A10000570000000000000001 /* ExifEditCore */,
 			);
 			path = Sources;
 			sourceTree = SOURCE_ROOT;
@@ -362,10 +299,6 @@
 		A10000520000000000000001 /* Tests */ = {
 			isa = PBXGroup;
 			children = (
-				A10000180000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift */,
-				A10000190000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift */,
-				A10001E80000000000000001 /* Tests/ExifEditCoreTests/ExifToolServiceTests.swift */,
-				A100001A0000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift */,
 				E20000020000000000000001 /* Tests/LedgerTests/AppModelTests.swift */,
 				E200001B0000000000000001 /* Tests/LedgerTests/ThumbnailServiceTests.swift */,
 				E200001D0000000000000001 /* Tests/LedgerTests/EOS1VSessionControllerTests.swift */,
@@ -473,22 +406,7 @@
 			path = Ledger;
 			sourceTree = "<group>";
 		};
-		A10000570000000000000001 /* ExifEditCore */ = {
-			isa = PBXGroup;
-			children = (
-				A10000110000000000000001 /* BackupManager.swift */,
-				A10000120000000000000001 /* Domain.swift */,
-				A10000130000000000000001 /* ExifEditEngine.swift */,
-				A10000140000000000000001 /* ExifToolCommandBuilder.swift */,
-				A10000150000000000000001 /* ExifToolService.swift */,
-				A10000160000000000000001 /* MetadataValidator.swift */,
-				A10000B20000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift */,
-				A19000010000000000000001 /* Signposts.swift */,
-			);
-			path = ExifEditCore;
-			sourceTree = "<group>";
-		};
-		A10001A00000000000000001 /* EOS1V */ = {
+				A10001A00000000000000001 /* EOS1V */ = {
 			isa = PBXGroup;
 			children = (
 				A10001B00000000000000001 /* Decode */,
@@ -587,53 +505,20 @@
 			buildRules = (
 			);
 			dependencies = (
-				A10000900000000000000001 /* PBXTargetDependency */,
 			);
 			name = Ledger;
 			packageProductDependencies = (
 				DD0002010000000000000001 /* SharedUI */,
 				F10000040000000000000001 /* Sparkle */,
+				EE0001010000000000000001 /* LedgerCore */,
 			);
 			productName = Ledger;
 			productReference = A10000010000000000000001 /* Ledger.app */;
 			productType = "com.apple.product-type.application";
 		};
-		A10000610000000000000001 /* ExifEditCore */ = {
+						E20000140000000000000001 /* LedgerTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A10000710000000000000001 /* Build configuration list for PBXNativeTarget "ExifEditCore" */;
-			buildPhases = (
-				A10000820000000000000001 /* Sources */,
-				A10000420000000000000001 /* Frameworks */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			name = ExifEditCore;
-			productName = ExifEditCore;
-			productReference = A10000370000000000000001 /* libExifEditCore.a */;
-			productType = "com.apple.product-type.library.static";
-		};
-		A10000620000000000000001 /* ExifEditCoreTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = A10000720000000000000001 /* Build configuration list for PBXNativeTarget "ExifEditCoreTests" */;
-			buildPhases = (
-				A10000830000000000000001 /* Sources */,
-				A10000430000000000000001 /* Frameworks */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				A10000910000000000000001 /* PBXTargetDependency */,
-			);
-			name = ExifEditCoreTests;
-			productName = ExifEditCoreTests;
-			productReference = A10000020000000000000001 /* ExifEditCoreTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
-		E20000140000000000000001 /* ExifEditMacTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = E20000190000000000000001 /* Build configuration list for PBXNativeTarget "ExifEditMacTests" */;
+			buildConfigurationList = E20000190000000000000001 /* Build configuration list for PBXNativeTarget "LedgerTests" */;
 			buildPhases = (
 				E20000130000000000000001 /* Sources */,
 				E20000110000000000000001 /* Frameworks */,
@@ -644,9 +529,12 @@
 			dependencies = (
 				E20000160000000000000001 /* PBXTargetDependency */,
 			);
-			name = ExifEditMacTests;
-			productName = ExifEditMacTests;
-			productReference = E20000010000000000000001 /* ExifEditMacTests.xctest */;
+			name = LedgerTests;
+			packageProductDependencies = (
+				EE0001020000000000000001 /* LedgerCore */,
+			);
+			productName = LedgerTests;
+			productReference = E20000010000000000000001 /* LedgerTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
@@ -691,15 +579,14 @@
 			packageReferences = (
 				DD0002000000000000000001 /* XCLocalSwiftPackageReference "../SharedUI" */,
 				F10000010000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
+				EE0001000000000000000001 /* XCLocalSwiftPackageReference "LedgerCore" */,
 			);
 			productRefGroup = A10000360000000000000001 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				A10000600000000000000001 /* Ledger */,
-				A10000610000000000000001 /* ExifEditCore */,
-				A10000620000000000000001 /* ExifEditCoreTests */,
-				E20000140000000000000001 /* ExifEditMacTests */,
+				E20000140000000000000001 /* LedgerTests */,
 				46E8AA573045F8E60033B66F /* LedgerUITests */,
 			);
 		};
@@ -874,33 +761,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		A10000820000000000000001 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				A100001E0000000000000001 /* BackupManager.swift in Sources */,
-				A100001F0000000000000001 /* Domain.swift in Sources */,
-				A10000200000000000000001 /* ExifEditEngine.swift in Sources */,
-				A10000210000000000000001 /* ExifToolCommandBuilder.swift in Sources */,
-				A10000220000000000000001 /* ExifToolService.swift in Sources */,
-				A10000230000000000000001 /* MetadataValidator.swift in Sources */,
-				A10000B10000000000000001 /* Sources/ExifEditCore/BatchRenameService.swift in Sources */,
-				A19000020000000000000001 /* Signposts.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		A10000830000000000000001 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				A10000240000000000000001 /* Tests/ExifEditCoreTests/BackupManagerTests.swift in Sources */,
-				A10000250000000000000001 /* Tests/ExifEditCoreTests/ExifToolCommandBuilderTests.swift in Sources */,
-				A10001E90000000000000001 /* Tests/ExifEditCoreTests/ExifToolServiceTests.swift in Sources */,
-				A10000260000000000000001 /* Tests/ExifEditCoreTests/MetadataValidatorTests.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		E20000130000000000000001 /* Sources */ = {
+						E20000130000000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -921,17 +782,7 @@
 			target = A10000600000000000000001 /* Ledger */;
 			targetProxy = 46E8AA5C3045F8E60033B66F /* PBXContainerItemProxy */;
 		};
-		A10000900000000000000001 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = A10000610000000000000001 /* ExifEditCore */;
-			targetProxy = A10000920000000000000001 /* PBXContainerItemProxy */;
-		};
-		A10000910000000000000001 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = A10000610000000000000001 /* ExifEditCore */;
-			targetProxy = A10000930000000000000001 /* PBXContainerItemProxy */;
-		};
-		E20000160000000000000001 /* PBXTargetDependency */ = {
+						E20000160000000000000001 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = A10000600000000000000001 /* Ledger */;
 			targetProxy = E20000150000000000000001 /* PBXContainerItemProxy */;
@@ -1127,7 +978,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
-				PRODUCT_MODULE_NAME = ExifEditMac;
+				PRODUCT_MODULE_NAME = Ledger;
 				PRODUCT_NAME = "$(APP_DISPLAY_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
@@ -1151,68 +1002,14 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
-				PRODUCT_MODULE_NAME = ExifEditMac;
+				PRODUCT_MODULE_NAME = Ledger;
 				PRODUCT_NAME = "$(APP_DISPLAY_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};
-		A10001240000000000000001 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = A10000050000000000000001 /* Config/Debug.xcconfig */;
-			buildSettings = {
-				DEAD_CODE_STRIPPING = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				SWIFT_VERSION = 6.0;
-			};
-			name = Debug;
-		};
-		A10001250000000000000001 /* Release */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = A10000060000000000000001 /* Config/Release.xcconfig */;
-			buildSettings = {
-				DEAD_CODE_STRIPPING = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				SWIFT_VERSION = 6.0;
-			};
-			name = Release;
-		};
-		A10001260000000000000001 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = A10000050000000000000001 /* Config/Debug.xcconfig */;
-			buildSettings = {
-				BUNDLE_LOADER = "";
-				DEAD_CODE_STRIPPING = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_TEST_BUNDLE_IDENTIFIER)";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_VERSION = 6.0;
-				TEST_HOST = "";
-			};
-			name = Debug;
-		};
-		A10001270000000000000001 /* Release */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = A10000060000000000000001 /* Config/Release.xcconfig */;
-			buildSettings = {
-				BUNDLE_LOADER = "";
-				DEAD_CODE_STRIPPING = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_TEST_BUNDLE_IDENTIFIER)";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_VERSION = 6.0;
-				TEST_HOST = "";
-			};
-			name = Release;
-		};
-		E20000170000000000000001 /* Debug */ = {
+										E20000170000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A10000050000000000000001 /* Config/Debug.xcconfig */;
 			buildSettings = {
@@ -1220,7 +1017,7 @@
 				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).ExifEditMacTests";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).LedgerTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/$(APP_DISPLAY_NAME).app/Contents/MacOS/$(APP_DISPLAY_NAME)";
@@ -1235,7 +1032,7 @@
 				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).ExifEditMacTests";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).LedgerTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/$(APP_DISPLAY_NAME).app/Contents/MacOS/$(APP_DISPLAY_NAME)";
@@ -1263,25 +1060,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A10000710000000000000001 /* Build configuration list for PBXNativeTarget "ExifEditCore" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				A10001240000000000000001 /* Debug */,
-				A10001250000000000000001 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		A10000720000000000000001 /* Build configuration list for PBXNativeTarget "ExifEditCoreTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				A10001260000000000000001 /* Debug */,
-				A10001270000000000000001 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		A10001100000000000000001 /* Build configuration list for PBXProject "Ledger" */ = {
+						A10001100000000000000001 /* Build configuration list for PBXProject "Ledger" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A10001200000000000000001 /* Debug */,
@@ -1290,7 +1069,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		E20000190000000000000001 /* Build configuration list for PBXNativeTarget "ExifEditMacTests" */ = {
+		E20000190000000000000001 /* Build configuration list for PBXNativeTarget "LedgerTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E20000170000000000000001 /* Debug */,
@@ -1305,6 +1084,10 @@
 		DD0002000000000000000001 /* XCLocalSwiftPackageReference "../SharedUI" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../SharedUI;
+		};
+		EE0001000000000000000001 /* XCLocalSwiftPackageReference "LedgerCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = LedgerCore;
 		};
 /* End XCLocalSwiftPackageReference section */
 
@@ -1324,6 +1107,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = DD0002000000000000000001 /* XCLocalSwiftPackageReference "../SharedUI" */;
 			productName = SharedUI;
+		};
+		EE0001010000000000000001 /* LedgerCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = EE0001000000000000000001 /* XCLocalSwiftPackageReference "LedgerCore" */;
+			productName = LedgerCore;
+		};
+		EE0001020000000000000001 /* LedgerCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = EE0001000000000000000001 /* XCLocalSwiftPackageReference "LedgerCore" */;
+			productName = LedgerCore;
 		};
 		F10000040000000000000001 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;

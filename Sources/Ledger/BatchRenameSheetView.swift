@@ -1,4 +1,4 @@
-import ExifEditCore
+import LedgerCore
 import SharedUI
 import SwiftUI
 

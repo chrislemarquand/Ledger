@@ -1,6 +1,6 @@
 @preconcurrency import AppKit
 import Combine
-import ExifEditCore
+import LedgerCore
 import MapKit
 import SharedUI
 import SwiftUI

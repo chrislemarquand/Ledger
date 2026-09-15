@@ -26,16 +26,16 @@ public struct MetadataValidator {
 
     public func validate(patches: [MetadataPatch]) throws {
         guard !patches.isEmpty else {
-            throw ExifEditError.invalidOperation("No metadata changes were provided.")
+            throw MetadataEditError.invalidOperation("No metadata changes were provided.")
         }
 
         for patch in patches {
             if patch.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                throw ExifEditError.invalidOperation("Metadata key cannot be empty.")
+                throw MetadataEditError.invalidOperation("Metadata key cannot be empty.")
             }
 
             if Self.nonWritableKeys.contains(patch.key) {
-                throw ExifEditError.invalidOperation("\(patch.key) is not writable.")
+                throw MetadataEditError.invalidOperation("\(patch.key) is not writable.")
             }
 
             if patch.valueType == .date {
@@ -53,6 +53,6 @@ public struct MetadataValidator {
             return parsed
         }
 
-        throw ExifEditError.invalidOperation("Invalid date format for \(input).")
+        throw MetadataEditError.invalidOperation("Invalid date format for \(input).")
     }
 }

@@ -1,4 +1,4 @@
-import ExifEditCore
+import LedgerCore
 import Foundation
 
 struct PresetFieldValue: Codable, Hashable, Identifiable {
@@ -46,7 +46,7 @@ struct FilePresetStore: PresetStoreProtocol {
         decoder.dateDecodingStrategy = .iso8601
         let envelope = try decoder.decode(Envelope.self, from: data)
         if envelope.schemaVersion > Self.schemaVersion {
-            throw ExifEditError.presetSchemaVersionTooNew
+            throw MetadataEditError.presetSchemaVersionTooNew
         }
         return envelope.presets
     }

@@ -1,5 +1,5 @@
 import AppKit
-import ExifEditCore
+import LedgerCore
 import SwiftUI
 
 /// Standalone auxiliary window, same lifecycle pattern as SharedUI's `SettingsWindowController` —

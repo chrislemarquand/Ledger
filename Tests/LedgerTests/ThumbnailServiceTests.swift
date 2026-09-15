@@ -1,4 +1,4 @@
-@testable import ExifEditMac
+@testable import Ledger
 import Foundation
 import XCTest
 

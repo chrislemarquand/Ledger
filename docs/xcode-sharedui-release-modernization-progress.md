@@ -6,8 +6,8 @@ what's next, and why anything was rejected or deferred. Update it in the same se
 it describes — a new session should be able to resume from this file alone, without re-explaining
 anything to the user (their explicit preference: don't re-consult except when something breaks).
 
-**Current position:** Plan approved 2026-09-15. Phases 0 and 1 complete. Phase 2 (core-package
-extraction + ExifEdit codename retirement) starting next.
+**Current position:** Plan approved 2026-09-15. Phases 0, 1, and 2 complete. Phase 3 (synchronized
+folders) starting next.
 
 ## Baseline verification (do not repeat)
 
@@ -219,7 +219,71 @@ work makes more sense than doing them in isolation now.
 
 ## Phase 2 — Consolidate build/test ownership + retire "ExifEdit" codename
 
-Status: not started. Package-vs-native-fallback decision: not yet made (default per plan doc: extract `ExifEditCore` → `LedgerCore` as a real local package). Rename table is in the plan doc — do not re-derive it, apply it.
+**Status: complete, 2026-09-15.** Decision: extracted `ExifEditCore` as a real local package
+(`LedgerCore/`) per the plan's default — no need to fall back to keeping it a native target.
+
+**Hard sequencing rule honored and verified, not just followed on paper:** `git mv`'d
+`Sources/ExifEditCore` → `LedgerCore/Sources/LedgerCore` and `Tests/ExifEditCoreTests` →
+`LedgerCore/Tests/LedgerCoreTests` (the untracked-in-Xcode `BatchRenameServiceTests.swift` moved
+along with everything else in that directory — SPM auto-discovers all files, no manual wiring
+needed, unlike the old pbxproj). Wrote `LedgerCore/Package.swift`, ran `swift test --parallel`
+standalone **before touching the Xcode project at all**: 49 tests, 31 of them
+`BatchRenameServiceTests`, 0 failures, exit 0. Only after that passed did anything get deleted.
+
+Codename retirement done in the same pass, per the plan's rename table:
+- `ExifEditEngine` → `MetadataEditEngine`, `ExifEditError` → `MetadataEditError` (renamed via
+  targeted regex across `LedgerCore/`, `Sources/Ledger/`, `Tests/LedgerTests/` — 44 files touched).
+- Root `Package.swift`/`Package.resolved` deleted entirely (not narrowed) — confirmed nothing else
+  needed them: `Ledger.xcodeproj` already had its own direct `XCLocalSwiftPackageReference` to
+  SharedUI, independent of the root manifest (verified via `plutil`-parsed inspection before
+  deleting anything), so nothing about the app build depended on it.
+- `Ledger.xcodeproj/project.pbxproj`: removed the `ExifEditCore`/`ExifEditCoreTests` native
+  targets and every object referencing them (build phases, build files, file references, target
+  dependencies + container item proxies, build configs, group entries — done via a scripted,
+  assertion-guarded removal pass, not manual editing) — 5 native targets → 3
+  (`Ledger`, `LedgerTests`, `LedgerUITests`). Added `LedgerCore` as a new
+  `XCLocalSwiftPackageReference`, wired into both `Ledger` and the renamed `LedgerTests` target.
+  Renamed `ExifEditMacTests` → `LedgerTests` (its path was already `Tests/LedgerTests` — this
+  fixed an existing name/path mismatch, not created one) and `PRODUCT_MODULE_NAME` from
+  `ExifEditMac` → `Ledger` (so `@testable import Ledger` now says what it means). Verified after
+  every edit: `plutil -lint` plus a full dangling-reference scan (walk every object, confirm every
+  24-hex-char ID resolves) — caught and fixed one real dangling reference
+  (`libExifEditCore.a in Frameworks` in the `Ledger` target's own Frameworks phase, missed on the
+  first removal pass) before it could reach a build attempt.
+- Migrated every real consumer found in Phase 0 verification: `scripts/test/run_all.sh` now runs
+  `swift test --parallel` inside `LedgerCore/` (the only SPM-testable thing left) instead of a
+  root package that no longer exists; `scripts/deps/verify_shared_ui_pin.sh` redesigned to check
+  the Xcode project's own package reference instead of a `Package.swift` that's gone;
+  `scripts/release/release_check.sh`'s `Package.swift` existence check repointed at
+  `LedgerCore/Package.swift`; `docs/ARCHITECTURE.md` rewritten to describe the new one-owner
+  structure; `docs/RELEASE_CHECKLIST.md`/`docs/DEPENDENCY_POLICY.md` already didn't need further
+  change here (Phase 1 already updated their `Package.swift`-adjacent content).
+- Two more `ExifEdit`-named live values found and fixed, verified safe first: a hardcoded
+  `"ExifEdit/Backups"` fallback path in `BackupManager`'s default constructor (confirmed dead in
+  production — every real app call site explicitly passes `AppBrand.currentSupportDirectoryURL()`
+  instead) and an internal `NotificationCenter` name string (confirmed only ever referenced via
+  its Swift constant, never as a raw string, everywhere in the codebase).
+- **Deliberately left untouched, and must stay that way:** `AppBrand.legacyDisplayNames =
+  ["Logbook", "ExifEditMac"]` in `AppModel.swift` — this is live migration data identifying past
+  app names' support directories for real existing users, not a stale codename. Renaming it would
+  break migration for anyone who actually used the app under that old name.
+
+**Verified end-to-end, not just per-piece:**
+- `xcodebuild build` — succeeded, first attempt after the full pbxproj surgery.
+- `xcodebuild test -skip-testing:LedgerUITests` — 204 passed, 0 failed (down from 222, exactly
+  the 18 tests that used to be `ExifEditCoreTests` and now live in `LedgerCore`).
+- `LedgerCore`'s own `swift test --parallel` — 49 passed, 0 failed.
+- **204 + 49 = 253 — exactly the plan's own predicted total (222 existing + 31 recovered).**
+- Full sweep for remaining `ExifEdit` in every `.swift`/`.sh`/`.yml`/`.pbxproj`/`.xcconfig`/
+  `.plist`/`.xcscheme` file: clean except the one deliberate `legacyDisplayNames` exception above.
+- Ran `scripts/release/release_check.sh` — the actual local release-validation pipeline —
+  end-to-end for real. Found and fixed one more pre-existing bug while doing so, unrelated to this
+  phase's own scope: it never passed `-skip-testing:LedgerUITests`, so it always failed on that
+  known-broken bundle regardless of anything else; fixed, then the whole pipeline reported
+  "Release checks passed." Also fixed four more latent `rg`-not-installed bugs in that same
+  script (same class of bug as Phase 1's `verify_shared_ui_pin.sh` fix) — these safety checks
+  (missing-test-bundle detection, new-warning detection, S0/S1 backlog blockers) had likely never
+  actually fired on this machine before now.
 
 ## Phase 3 — Modernize Xcode representation
 
@@ -265,7 +329,9 @@ Status: deferred. Which of `main`/`feature/print-support`/`feature/hierarchical-
 
 ## Environment notes (as of this record)
 
-- Ledger: branch `v1.4`, commit `816cf76` (Phase 0) → Phase 1 commits on top, clean.
+- Ledger: branch `v1.4`, commit `816cf76` (Phase 0) → Phase 1 → Phase 2 commits on top, clean.
+- Unit test count after Phase 2: 253 total (204 via `xcodebuild test`, 49 via `swift test` in
+  `LedgerCore/`) — see Phase 2 above for the breakdown. `LedgerUITests` still deliberately skipped.
 - SharedUI: branch `v1.4` (new, cut from `feature/hierarchical-browsing`'s `6ca7607`), commit
   `76431c0`, clean. `feature/hierarchical-browsing` itself confirmed untouched at `6ca7607`.
 - `Config/SharedUI.revision`: `76431c08e2e72f8e689fbbb00e01e219c311e9ec`.

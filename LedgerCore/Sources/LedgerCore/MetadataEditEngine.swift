@@ -1,6 +1,6 @@
 import Foundation
 
-public actor ExifEditEngine {
+public actor MetadataEditEngine {
     private let exifToolService: ExifToolServiceProtocol
     private let backupManager: BackupManaging
     private let validator: MetadataValidator
@@ -21,7 +21,7 @@ public actor ExifEditEngine {
 
     public func apply(operation: EditOperation) async throws -> OperationResult {
         guard !operation.targetFiles.isEmpty else {
-            throw ExifEditError.invalidOperation("No files were selected.")
+            throw MetadataEditError.invalidOperation("No files were selected.")
         }
 
         try validator.validate(patches: operation.changes)
@@ -41,14 +41,14 @@ public actor ExifEditEngine {
 
     public func createBackup(operationID: UUID, files: [URL]) throws -> URL {
         guard !files.isEmpty else {
-            throw ExifEditError.invalidOperation("No files were selected.")
+            throw MetadataEditError.invalidOperation("No files were selected.")
         }
         return try backupManager.createBackup(operationID: operationID, files: files)
     }
 
     public func writeMetadataWithoutBackup(operation: EditOperation) async throws -> OperationResult {
         guard !operation.targetFiles.isEmpty else {
-            throw ExifEditError.invalidOperation("No files were selected.")
+            throw MetadataEditError.invalidOperation("No files were selected.")
         }
         try validator.validate(patches: operation.changes)
         return await exifToolService.writeMetadata(operation: operation)

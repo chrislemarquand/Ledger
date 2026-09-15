@@ -1,13 +1,13 @@
 import AppKit
 import Combine
-import ExifEditCore
+import LedgerCore
 import Foundation
 import OSLog
 import Quartz
 import SharedUI
 import SwiftUI
 
-let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "ExifEdit", category: "AppModel")
+let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Ledger", category: "AppModel")
 
 /// XCTestConfigurationFilePath is set by xcodebuild test but not by swift test --parallel.
 /// NSClassFromString covers both runners. Use this to skip blocking modal alerts during
@@ -652,7 +652,7 @@ final class AppModel: ObservableObject {
     var stagedQuickLookPreviewFiles: [URL: URL] = [:]
     var stagedQuickLookPreviewGenerationInFlight: Set<URL> = []
 
-    let engine: ExifEditEngine
+    let engine: MetadataEditEngine
     let presetStore: PresetStoreProtocol
     let lensProfileStore: LensProfileStoreProtocol
     let favoritesStore: SidebarFavoritesStoreProtocol
@@ -809,7 +809,7 @@ final class AppModel: ObservableObject {
         }
 
         let backupDirectory = AppBrand.currentSupportDirectoryURL().appendingPathComponent("Backups", isDirectory: true)
-        engine = ExifEditEngine(exifToolService: service, backupManager: BackupManager(baseDirectory: backupDirectory))
+        engine = MetadataEditEngine(exifToolService: service, backupManager: BackupManager(baseDirectory: backupDirectory))
         self.presetStore = presetStore
         self.lensProfileStore = lensProfileStore
         self.favoritesStore = favoritesStore

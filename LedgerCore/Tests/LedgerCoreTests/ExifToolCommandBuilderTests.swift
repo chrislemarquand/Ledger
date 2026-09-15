@@ -1,4 +1,4 @@
-import ExifEditCore
+import LedgerCore
 import XCTest
 
 final class ExifToolCommandBuilderTests: XCTestCase {

@@ -1,5 +1,5 @@
-@testable import ExifEditCore
-@testable import ExifEditMac
+@testable import LedgerCore
+@testable import Ledger
 import AppKit
 import Foundation
 import XCTest
@@ -594,9 +594,9 @@ final class AppModelTests: XCTestCase {
 
         let store = FilePresetStore(fileURL: presetFile)
         XCTAssertThrowsError(try store.loadPresets()) { error in
-            guard let editError = error as? ExifEditError,
+            guard let editError = error as? MetadataEditError,
                   case .presetSchemaVersionTooNew = editError else {
-                XCTFail("Expected ExifEditError.presetSchemaVersionTooNew, got \(error)")
+                XCTFail("Expected MetadataEditError.presetSchemaVersionTooNew, got \(error)")
                 return
             }
         }

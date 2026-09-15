@@ -29,7 +29,7 @@ public struct BackupManager: BackupManaging {
         } else {
             let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
                 ?? URL(fileURLWithPath: NSTemporaryDirectory())
-            self.baseDirectory = appSupport.appendingPathComponent("ExifEdit/Backups", isDirectory: true)
+            self.baseDirectory = appSupport.appendingPathComponent("LedgerCore/Backups", isDirectory: true)
         }
     }
 
@@ -76,7 +76,7 @@ public struct BackupManager: BackupManaging {
         let manifestURL = folder.appendingPathComponent("manifest.json")
 
         guard FileManager.default.fileExists(atPath: manifestURL.path) else {
-            throw ExifEditError.backupNotFound
+            throw MetadataEditError.backupNotFound
         }
 
         let data = try Data(contentsOf: manifestURL)
