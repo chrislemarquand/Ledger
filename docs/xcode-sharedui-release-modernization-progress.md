@@ -6,7 +6,8 @@ what's next, and why anything was rejected or deferred. Update it in the same se
 it describes — a new session should be able to resume from this file alone, without re-explaining
 anything to the user (their explicit preference: don't re-consult except when something breaks).
 
-**Current position:** Plan approved 2026-09-15. Progress tracker created. Phase 0 not yet started.
+**Current position:** Plan approved 2026-09-15. Phase 0 complete (see below), confirming zero
+drift from the baseline verification. Phase 1 not yet started.
 
 ## Baseline verification (do not repeat)
 
@@ -107,7 +108,25 @@ does not block Ledger-side Phase 0–4 work, which proceeds independently.
 
 ## Phase 0 — Baseline
 
-Status: not started.
+**Status: complete, 2026-09-15. Zero drift from the recorded baseline.**
+
+- Debug build: `** BUILD SUCCEEDED **` (one benign, unrelated `CoreSimulator is out of date`
+  warning from the recent Xcode 27 install — irrelevant to this Mac-only app, not investigated
+  further).
+- Test run: 222 passed, 0 failed (`^Test case '.*' passed` count). `BatchRenameServiceTests` cases
+  confirmed absent from the run — the known gap, not a new failure.
+- Release build: `** BUILD SUCCEEDED **`.
+- Structural pbxproj parse (via `plutil -convert xml1` → `plistlib`, not grep): confirmed exactly 5
+  `PBXNativeTarget`s with the recorded Sources-phase counts — `Ledger` 82, `ExifEditCore` 8,
+  `ExifEditCoreTests` 4, `ExifEditMacTests` 6, `LedgerUITests` synchronized (0 manual entries, as
+  expected). `LedgerUITests`' `PBXFileSystemSynchronizedRootGroup` path confirmed as `LedgerUITests`.
+- Disk-vs-project membership sweep across all four Swift source/test directories: `Sources/Ledger`
+  (82/82), `Sources/ExifEditCore` (8/8), and `Tests/LedgerTests` (6/6) are in perfect sync.
+  `Tests/ExifEditCoreTests` has 5 files on disk vs. 4 wired into the project —
+  `BatchRenameServiceTests.swift` is the sole, confirmed discrepancy. No other drift found anywhere.
+
+**Gate met:** every difference from the reviewed baseline explained (there was exactly one, already
+known); test run was non-zero and its count matched exactly.
 
 ## Phase 1 — Predictable dependencies and workspace
 
