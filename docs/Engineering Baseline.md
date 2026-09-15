@@ -32,6 +32,12 @@ This document defines the required engineering baseline for Librarian and Ledger
 ## SharedUI Release Order
 
 `SharedUI` is a local path dependency (see Dependencies above), so there is
-no separate SharedUI tag/release step — the app repo always builds against
-whatever is currently checked out at `../SharedUI`. Verify with
-`scripts/deps/verify_shared_ui_pin.sh` before releasing.
+no separate SharedUI tag/release step. Ordinary development builds against
+whatever is currently checked out at `../SharedUI`. A release, however, must
+build against an explicitly recorded revision: `Config/SharedUI.revision`
+holds the full commit SHA a release is validated against, accepted
+deliberately via `scripts/deps/bump_sharedui.sh` (never automatically) after
+local integration checks. Verify the match with
+`scripts/deps/verify_shared_ui_pin.sh --require-pin-match` before releasing —
+plain `verify_shared_ui_pin.sh` (no flag) reports drift without failing, since
+ordinary lockstep development is expected to run ahead of the recorded pin.

@@ -130,7 +130,65 @@ known); test run was non-zero and its count matched exactly.
 
 ## Phase 1 — Predictable dependencies and workspace
 
-Status: not started. Ledger-side steps do not wait on SharedUI's WIP; SharedUI-side steps do (see blocking dependency above).
+**Status: in progress, 2026-09-15.**
+
+Done and verified for real (not just written):
+- `Config/SharedUI.revision` added (currently empty — see finding below for why).
+- `scripts/deps/verify_shared_ui_pin.sh` rewritten: reports branch/HEAD/dirty state and pin
+  match/mismatch informationally by default (exit 0); a new `--require-pin-match` flag hard-fails
+  on dirty or mismatched state, for Phase 5's release-time use. **Also fixed a pre-existing,
+  unrelated bug while in this file:** it called `rg` (ripgrep), which isn't installed on this
+  machine at all outside this session's own shell shims — the script has been silently broken
+  for the user in an ordinary Terminal. Replaced both calls with portable `grep -E`.
+- `scripts/deps/sync_sharedui_local.sh` rewritten to only resolve+build against whatever's
+  currently checked out, decoupled from `bump_sharedui.sh` — it no longer touches the pin at all
+  (previously it called `bump_sharedui.sh` internally, which — once `bump` became the deliberate
+  re-pin command — would have silently re-pinned on every sync, exactly the "automatic acceptance"
+  the plan doc says never to do). Verified: ran successfully against the real dirty checkout,
+  confirmed `Config/SharedUI.revision` unchanged after.
+- `scripts/deps/bump_sharedui.sh` rewritten into the deliberate "record a new accepted revision"
+  command: refuses on a dirty SharedUI tree, accepts an optional explicit ref, otherwise pins
+  current HEAD. Verified: correctly refused against the real dirty checkout, revision file
+  untouched.
+- New `scripts/deps/prepare_sharedui_worktree.sh`: provisions the recorded revision into an
+  isolated `git worktree`, never touching `../SharedUI`. Verified: created a real isolated
+  worktree, confirmed the real `../SharedUI` was untouched (still on its dirty branch).
+- `docs/RELEASE_CHECKLIST.md`, `docs/DEPENDENCY_POLICY.md`, `docs/Engineering Baseline.md`
+  (Ledger's copy — **Librarian has its own separate copy of this file, not touched, now stale
+  relative to this contract; flagged as an open item below, out of scope for this repo's work**)
+  updated to describe the new contract and fix a real doc/script mismatch found in passing:
+  `RELEASE_CHECKLIST.md` told the user to run `bump_sharedui.sh <version>`, but the script (even
+  before this rewrite) explicitly rejected any argument at all — the documented command never
+  actually worked.
+
+**Real finding that changes the picture (2026-09-15): Ledger's `v1.4` HEAD cannot currently build
+against any committed SharedUI revision — only against SharedUI's uncommitted working tree.**
+Discovered by actually testing the Phase 1 gate for real, not by inspection: cloned Ledger into an
+isolated space-containing path and built it against a `git worktree` of SharedUI's `main`
+(`beb4a5b`, my first choice of initial pin). It failed:
+`value of type 'SharedGalleryCollectionView' has no member 'onFirstResponderStatusChanged'`
+(`Sources/Ledger/BrowserIconView.swift:165`, `BrowserFilmstripViewController.swift:174` — both
+live, unconditional call sites). Traced the symbol: it exists in **zero** commits on either
+SharedUI branch (`git show 6ca7607:...` → 0 matches, `git show main:...` → 0 matches) — only in
+SharedUI's *live, uncommitted* working-tree edits (3 matches there). So the dependency this build
+actually needs has never been committed anywhere in SharedUI. `sync_sharedui_local.sh` succeeding
+minutes earlier against the real `../SharedUI` only worked because that dirty working tree happens
+to carry the fix — a fresh clone or CI would fail immediately.
+
+Consequence: `Config/SharedUI.revision` is deliberately left **empty** rather than pinned to a
+value I know is wrong (`beb4a5b`) or a value that can't be pinned (uncommitted work has no SHA).
+Recording a plausible-looking but broken value would be worse than recording nothing — the verify
+script already reports "no recorded revision yet" cleanly rather than treating that as an error.
+
+This elevates the existing blocking dependency from a hygiene preference to a hard requirement:
+**a clean `v1.4` branch in SharedUI, with the current uncommitted work (which the
+`onFirstResponderStatusChanged` fix is part of) actually committed, must exist before
+`Config/SharedUI.revision` can hold a real, correct value.** Nothing else in Phase 1 depends on
+this — the scripts and worktree tooling above are all verified working — but the pin itself stays
+empty until that happens.
+
+Not yet done: the SharedUI-side workspace/`.gitignore`/`Package.resolved` fixes (blocked on the
+same dependency), and deterministic ExifTool provisioning / EOS-1V documentation.
 
 ## Phase 2 — Consolidate build/test ownership + retire "ExifEdit" codename
 
@@ -154,12 +212,28 @@ Status: deferred. Which of `main`/`feature/print-support`/`feature/hierarchical-
 
 ## Decision log
 
-(Empty so far — nothing has been rejected or found broken yet. Add entries here in the
-`YYYY-MM-DD — <item> — <finding>` shape this project's other progress docs use.)
+- 2026-09-15 — `Config/SharedUI.revision` initial value — **left empty, not pinned to `beb4a5b`
+  (SharedUI `main`) as originally planned** — found by real isolated-build testing that Ledger's
+  `v1.4` HEAD needs `onFirstResponderStatusChanged` on `SharedGalleryCollectionView`, which exists
+  in no SharedUI commit at all, only in `feature/hierarchical-browsing`'s uncommitted work. See
+  Phase 1 section above for full detail.
+- 2026-09-15 — found and fixed a pre-existing, unrelated bug in `verify_shared_ui_pin.sh`: it used
+  `rg` (ripgrep), not installed on this machine outside the session's own shell shims. Replaced
+  with `grep -E`. Not part of the reviewed baseline's findings; caught by actually running the
+  script rather than only reading it.
+- 2026-09-15 — found a real, pre-existing doc/script mismatch: `docs/RELEASE_CHECKLIST.md`
+  documented `bump_sharedui.sh <version>`, which the script always rejected (even before this
+  session's rewrite). Fixed the doc to match the script's real (and now redesigned) interface.
 
 ## Open items requiring the user
 
-- [ ] Commit/stash SharedUI's `feature/hierarchical-browsing` WIP, so a clean `v1.4` branch can be cut there for Phase 1's SharedUI-side steps.
+- [ ] **Elevated to blocking, not just preferred:** commit SharedUI's `feature/hierarchical-browsing`
+  WIP (it contains a fix Ledger's `v1.4` genuinely needs to build — `onFirstResponderStatusChanged`),
+  then cut a matching `v1.4` branch there, so `Config/SharedUI.revision` can hold a real, correct
+  value and the SharedUI-side workspace/`.gitignore`/`Package.resolved` fixes can land.
+- [ ] Librarian has its own separate copy of `docs/Engineering Baseline.md`, now stale relative to
+  the SharedUI revision-pin contract established here. Out of scope for this repo's work — flagging
+  for awareness, not fixing.
 - [ ] (Deferred, not urgent) Confirm which branches are still active for the eventual cross-branch rollout.
 - [ ] (Phase 5, not yet reached) Remove now-unused GitHub Actions secrets once `release.yml`'s remote build/sign/notarize jobs are retired.
 - [ ] (Phase 5, not yet reached) Be present for the one deliberate real notarization/Sparkle-signing dry run, and for the first real production publish whenever that's separately requested.

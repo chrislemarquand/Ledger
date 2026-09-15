@@ -17,10 +17,18 @@ xcodebuild -resolvePackageDependencies -project Ledger.xcodeproj -scheme Ledger
 
 Release checks must pass with no Swift warnings.
 
-For SharedUI updates, use:
+To deliberately accept a new SharedUI revision (never done automatically — see
+`docs/DEPENDENCY_POLICY.md`), after verifying it locally:
 
 ```bash
-./scripts/deps/bump_sharedui.sh <version>
+./scripts/deps/bump_sharedui.sh          # pins SharedUI's current (clean) HEAD
+./scripts/deps/bump_sharedui.sh <ref>    # pins a specific branch/tag/SHA instead
+```
+
+Before releasing, confirm the checked-out SharedUI actually matches the recorded pin:
+
+```bash
+./scripts/deps/verify_shared_ui_pin.sh --require-pin-match
 ```
 
 ## 2.1 v1.2 Streamlining Gate
