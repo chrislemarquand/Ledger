@@ -1,0 +1,53 @@
+name: Deploy appcast
+
+# Deploys an ALREADY-GENERATED, already-published Sparkle feed asset to GitHub Pages. This
+# workflow never builds, signs, notarizes, or regenerates anything — the appcast.xml it deploys
+# was produced locally by scripts/release/merge_appcast.sh and uploaded as a release asset by
+# scripts/release/stage_github_release.sh, well before this workflow ever runs. It exists only
+# because Pages deployment needs to happen from an Action; deliberately triggered manually
+# (workflow_dispatch), by scripts/release/publish.sh, as the last step of a release — never on a
+# push or tag, so an ordinary commit can never trigger any remote work.
+#
+# All application build/sign/notarize/publish work now happens locally — see
+# docs/DEPENDENCY_POLICY.md and scripts/release/. This replaces the old macOS Release workflow,
+# which used to do all of that remotely on every tag push.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag whose appcast.xml asset should be deployed (e.g. v1.4)"
+        required: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download appcast.xml from the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p appcast
+          gh release download "${{ inputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern "appcast.xml" \
+            --dir appcast \
+            --clobber
+          test -s appcast/appcast.xml
+
+      - name: Upload appcast for Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: appcast
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
