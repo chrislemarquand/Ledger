@@ -492,11 +492,36 @@ staple, and hard-refuses to ever staple a `.zip`.
   (`Developer ID Application: Christopher Le Marquand (S4F3HUG3TQ)`), matching
   `DEVELOPMENT_TEAM = S4F3HUG3TQ`) — real local signing (not notarization, not publishing) works,
   and was used to build and verify the real signed archive above.
-- **`v1.2.3` is already published** (confirmed via a real `gh release view` query) while
-  `Config/Base.xcconfig`'s `MARKETING_VERSION` is still `1.2.3` — preflight correctly refuses to
-  prepare a release from `v1.4`'s current state until `MARKETING_VERSION` is bumped past what's
-  already shipped. This is a real, correct stop, not a bug — bumping the version is a product
-  decision for the user, not something done here unprompted.
+- **Corrected, 2026-09-15 (the user caught this): the finding above was itself wrong.** The
+  actual currently-published/latest version is **v1.3**, not v1.2.3 — but
+  `Config/Base.xcconfig`'s `MARKETING_VERSION` still reads `1.2.3`, and the *first* version of
+  `preflight.sh` trusted that file directly, producing the misleading "Tag v1.2.3 already
+  exists..." message above. Root cause, traced fully: every release through `v1.2.3` had the
+  xcconfig bumped by hand before tagging (verified against every real tag's committed source —
+  `v1.0.0` through `v1.2.3` all match their own tag name exactly); **`v1.3` is the one release
+  where that manual step was skipped**, and `archive.sh`'s own git-tag-derived override
+  (`MARKETING_VERSION` comes from `GITHUB_REF_NAME`/the exact tag when one's present) silently
+  produced a correct shipped binary anyway — so nobody noticed the source was never updated.
+  `v1.4` then branched from that already-stale state. **Fixed properly, not just patched**: see
+  "Preflight version check, corrected" below.
+
+### Preflight version check, corrected (`ca79f61`)
+
+`preflight.sh` and `release.sh` now **require the intended version as an explicit argument**
+(`preflight.sh 1.4`, `release.sh 1.4`) rather than reading `Config/Base.xcconfig` directly. A new
+check (step 3/8) compares the argument against the file and hard-fails on any mismatch — this is
+the actual fix for the underlying problem, not just a patch to make my own check's output less
+confusing. It converts "silently derive the version from a tag at the last second" (what let the
+real v1.3 mistake through unnoticed) into "state what you're releasing, then get a hard failure
+immediately if the source doesn't already agree" — exactly the kind of enforced check the plan's
+own mandatory policy calls for instead of relying on the owner remembering a manual step.
+Verified both directions for real: passing `1.4` against the real (unbumped) `1.2.3` xcconfig
+correctly fails with a clear, specific message; passing `1.2.3` (matching) correctly passes step
+3 and proceeds to the next real check (which then correctly fails for the *separate*, genuine
+reason that `v1.2.3` itself was already tagged long ago under a different commit).
+`write_candidate_manifest.sh` still reads the version from xcconfig directly — safe now only
+because `release.sh` always runs `preflight.sh` first, documented explicitly in that script's own
+header so it's not a silent assumption.
 
 ### Acceptance scenarios (plan section 6) verified for real, not just designed for
 
@@ -520,8 +545,12 @@ plan itself calls for — pick up from here.
 
 ### Open items for the user, specific to Phase 5
 
-- [ ] Bump `MARKETING_VERSION` in `Config/Base.xcconfig` past `1.2.3` before any release can be
-  prepared from `v1.4` — `preflight.sh` will otherwise correctly refuse every time.
+- [ ] Bump `MARKETING_VERSION` in `Config/Base.xcconfig` — it still reads `1.2.3`, two releases
+  behind the real latest published version (`v1.3`), because that manual bump was skipped when
+  `v1.3` was tagged (see "Real findings" above). Bump it to whatever `v1.4`'s real intended
+  version is (presumably `1.4`, matching the branch — confirm with the user, don't assume) and
+  commit it before any release can be prepared. `preflight.sh <version>` will otherwise correctly
+  refuse every time, and will also refuse if the version you pass doesn't match this file.
 - [ ] Run `xcrun notarytool store-credentials EXIFEDIT_NOTARY` on this Mac (needs an
   app-specific password) before any real notarization can happen.
 - [ ] Be present for the first real run of `scripts/release/release.sh` through to
