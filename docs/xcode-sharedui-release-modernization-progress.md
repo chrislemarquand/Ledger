@@ -6,8 +6,8 @@ what's next, and why anything was rejected or deferred. Update it in the same se
 it describes — a new session should be able to resume from this file alone, without re-explaining
 anything to the user (their explicit preference: don't re-consult except when something breaks).
 
-**Current position:** Plan approved 2026-09-15. Phase 0 complete (see below), confirming zero
-drift from the baseline verification. Phase 1 not yet started.
+**Current position:** Plan approved 2026-09-15. Phases 0 and 1 complete. Phase 2 (core-package
+extraction + ExifEdit codename retirement) starting next.
 
 ## Baseline verification (do not repeat)
 
@@ -187,8 +187,35 @@ This elevates the existing blocking dependency from a hygiene preference to a ha
 this — the scripts and worktree tooling above are all verified working — but the pin itself stays
 empty until that happens.
 
-Not yet done: the SharedUI-side workspace/`.gitignore`/`Package.resolved` fixes (blocked on the
-same dependency), and deterministic ExifTool provisioning / EOS-1V documentation.
+**Update, same day: unblocked and completed.** The user confirmed the SharedUI WIP was genuinely
+v1.4 work (traced with evidence: Ledger's consuming commit `47e3a83` is an ancestor of `v1.4`; the
+SharedUI Roadmap entry is explicitly labeled "v1.4 Phase 4.3, 2026-09-02" — not
+`feature/hierarchical-browsing`-specific, just incidentally sitting on that checkout) and asked to
+commit it to a matching `v1.4` branch there.
+
+Done: cut SharedUI `v1.4` from `feature/hierarchical-browsing`'s HEAD (`6ca7607`), committed the
+real source WIP as `03c3ce6` (`feature/hierarchical-browsing` itself confirmed untouched/clean
+afterward), leaving two untracked build byproducts (`build/` — SwiftPM's precompiled-module scratch
+dir, not `.build/`; a 0-byte `default.profraw`) uncommitted as expected. Then, since Phase 1's
+SharedUI-side blocker was now gone, did that work too in the same pass: gitignored `build/` and
+`*.profraw`, removed the `.gitignore` rule that was hiding the canonical workspace's own
+`Package.resolved` and tracked the real file (it additionally pins GRDB and Sparkle beyond what
+each project's own resolution records), and fixed `SharedUI.xcworkspace/contents.xcworkspacedata`'s
+three `absolute:` refs to `group:` (relative). Committed as `76431c0`.
+
+**Verified, not assumed:** `xcodebuild -list` on the fixed workspace resolves all three sibling
+projects' schemes correctly; `xcodebuild build -scheme Ledger` succeeds against it. Then ran
+Ledger's `bump_sharedui.sh` for real — it reported SharedUI clean at `76431c0` and pinned it.
+Finally ran the actual Phase 1 gate end-to-end for real: a disposable Ledger clone at a
+space-containing path (`/…/isolated test 2/Ledger`), building against an isolated `git worktree` of
+SharedUI at exactly the pinned commit (no dependency on either developer's real checkout) — **`swift
+build` succeeded.** All scratch clones/worktrees cleaned up afterward; `git worktree prune` confirms
+none remain.
+
+**Phase 1 is now complete.** Not yet done, deferred (not blocking): deterministic ExifTool
+provisioning (checksum-pinned download) and EOS-1V dev-path documentation — both were always
+lower-priority items within this phase; picking them up in Phase 4 alongside the related build-script
+work makes more sense than doing them in isolation now.
 
 ## Phase 2 — Consolidate build/test ownership + retire "ExifEdit" codename
 
@@ -227,10 +254,8 @@ Status: deferred. Which of `main`/`feature/print-support`/`feature/hierarchical-
 
 ## Open items requiring the user
 
-- [ ] **Elevated to blocking, not just preferred:** commit SharedUI's `feature/hierarchical-browsing`
-  WIP (it contains a fix Ledger's `v1.4` genuinely needs to build — `onFirstResponderStatusChanged`),
-  then cut a matching `v1.4` branch there, so `Config/SharedUI.revision` can hold a real, correct
-  value and the SharedUI-side workspace/`.gitignore`/`Package.resolved` fixes can land.
+- [x] ~~Commit SharedUI's `feature/hierarchical-browsing` WIP to a matching `v1.4` branch~~ — done
+  2026-09-15, see Phase 1 above.
 - [ ] Librarian has its own separate copy of `docs/Engineering Baseline.md`, now stale relative to
   the SharedUI revision-pin contract established here. Out of scope for this repo's work — flagging
   for awareness, not fixing.
@@ -240,7 +265,9 @@ Status: deferred. Which of `main`/`feature/print-support`/`feature/hierarchical-
 
 ## Environment notes (as of this record)
 
-- Ledger: branch `v1.4`, commit `5c84b17` → `c3d2e02` (post WhatsNewKit removal), clean.
-- SharedUI: branch `feature/hierarchical-browsing`, commit `6ca7607`, dirty (see above).
+- Ledger: branch `v1.4`, commit `816cf76` (Phase 0) → Phase 1 commits on top, clean.
+- SharedUI: branch `v1.4` (new, cut from `feature/hierarchical-browsing`'s `6ca7607`), commit
+  `76431c0`, clean. `feature/hierarchical-browsing` itself confirmed untouched at `6ca7607`.
+- `Config/SharedUI.revision`: `76431c08e2e72f8e689fbbb00e01e219c311e9ec`.
 - macOS 27.0 (26A428), Xcode 27.0 (27A266a), `xcode-select -p` → `/Applications/Xcode.app/Contents/Developer`.
 - Unit test count at last full run: 222 passing (excludes the 31 `BatchRenameServiceTests`, not yet recovered; excludes `LedgerUITests`, deliberately skipped).
