@@ -52,7 +52,6 @@ extension NativeThreePaneSplitViewController {
         static let imageFlipVertical = 9_319
         static let folderBatchRename = 9_320
 
-        static let helpWhatsNew = 9_400
         static let helpExifToolDocs = 9_401
     }
 
@@ -748,18 +747,10 @@ extension NativeThreePaneSplitViewController {
         let existing = menu.items.first { $0.tag == MenuTag.helpExifToolDocs }
         if existing != nil { return }
         menu.addItem(.separator())
-        let whatsNewItem = NSMenuItem(title: "What\u{2019}s New in \(AppBrand.displayName)", action: #selector(openWhatsNewAction(_:)), keyEquivalent: "")
-        whatsNewItem.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil)
-        whatsNewItem.tag = MenuTag.helpWhatsNew
-        menu.addItem(whatsNewItem)
         let docsItem = NSMenuItem(title: "ExifTool Documentation", action: #selector(openExifToolDocsAction(_:)), keyEquivalent: "")
         docsItem.image = NSImage(systemSymbolName: "link", accessibilityDescription: nil)
         docsItem.tag = MenuTag.helpExifToolDocs
         menu.addItem(docsItem)
-    }
-
-    @objc private func openWhatsNewAction(_: Any?) {
-        (NSApp.delegate as? AppDelegate)?.showWelcomeScreen()
     }
 
     // MARK: NSMenuDelegate

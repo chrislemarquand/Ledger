@@ -322,16 +322,6 @@ struct InspectorView: View {
             moveInspectorFieldFocus(backward: backward)
         }
         .sheet(item: Binding(
-            get: { model.activeWelcomePresentation },
-            set: { newValue in
-                Task { @MainActor in
-                    model.activeWelcomePresentation = newValue
-                }
-            }
-        )) { presentation in
-            AppWelcomeSheetView(presentation: presentation)
-        }
-        .sheet(item: Binding(
             get: { model.activePresetEditor },
             set: { newValue in
                 Task { @MainActor in

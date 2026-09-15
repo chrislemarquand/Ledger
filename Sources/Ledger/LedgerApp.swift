@@ -52,36 +52,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showAboutPanel()
     }
 
-    func showWelcomeScreen() {
-        guard let appModel else { return }
-        appModel.activeWelcomePresentation = AppWelcomePresentation(
-            appName: AppBrand.displayName,
-            features: Self.welcomeFeatures,
-            primaryButtonTitle: "Get Started",
-            onPrimaryAction: {
-                WelcomeCoordinator.markSeen()
-            }
-        )
-    }
-
-    @objc
-    func showWhatsNewAction(_: Any?) {
-        showWelcomeScreen()
-    }
-
-    private static let welcomeFeatures: [AppWelcomeFeature] = [
-        .init(
-            symbolName: "character.cursor.ibeam",
-            title: "Batch Rename",
-            subtitle: "Rename folders of files using custom patterns with date, sequence, and metadata tokens."
-        ),
-        .init(
-            symbolName: "star.leadinghalf.filled",
-            title: "Expanded Inspector",
-            subtitle: "Edit star ratings, flags, colour labels, and a wider range of EXIF and IPTC fields."
-        ),
-    ]
-
     @objc
     func showSettingsWindowAction(_: Any?) {
         settingsWindowController?.showWindowAndActivate()
@@ -195,9 +165,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             model.openFolder(at: URL(fileURLWithPath: openFolderPath))
         }
         NSApp.activate(ignoringOtherApps: true)
-        if WelcomeCoordinator.shouldShowOnLaunch {
-            Task { @MainActor in self.showWelcomeScreen() }
-        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

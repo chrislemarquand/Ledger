@@ -48,7 +48,6 @@
 		A100016C0000000000000001 /* AppModel+MetadataPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100015F0000000000000001 /* AppModel+MetadataPipeline.swift */; };
 		A100016D0000000000000001 /* AppModel+UndoStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001600000000000000001 /* AppModel+UndoStatus.swift */; };
 		A100016E0000000000000001 /* AppModel+FieldCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001610000000000000001 /* AppModel+FieldCatalog.swift */; };
-		A10001700000000000000001 /* WelcomeCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100016F0000000000000001 /* WelcomeCoordinator.swift */; };
 		A10001720000000000000001 /* ListColumnDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001710000000000000001 /* ListColumnDefinition.swift */; };
 		A10001740000000000000001 /* ListColumnStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001730000000000000001 /* ListColumnStore.swift */; };
 		A10001760000000000000001 /* MainContentView+Chrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10001750000000000000001 /* MainContentView+Chrome.swift */; };
@@ -205,7 +204,6 @@
 		A100015F0000000000000001 /* AppModel+MetadataPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+MetadataPipeline.swift"; sourceTree = "<group>"; };
 		A10001600000000000000001 /* AppModel+UndoStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+UndoStatus.swift"; sourceTree = "<group>"; };
 		A10001610000000000000001 /* AppModel+FieldCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+FieldCatalog.swift"; sourceTree = "<group>"; };
-		A100016F0000000000000001 /* WelcomeCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeCoordinator.swift; sourceTree = "<group>"; };
 		A10001710000000000000001 /* ListColumnDefinition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListColumnDefinition.swift; sourceTree = "<group>"; };
 		A10001730000000000000001 /* ListColumnStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListColumnStore.swift; sourceTree = "<group>"; };
 		A10001750000000000000001 /* MainContentView+Chrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MainContentView+Chrome.swift"; sourceTree = "<group>"; };
@@ -442,7 +440,6 @@
 				A10001600000000000000001 /* AppModel+UndoStatus.swift */,
 				A10001610000000000000001 /* AppModel+FieldCatalog.swift */,
 				A100017E0000000000000001 /* FieldDecoration.swift */,
-				A100016F0000000000000001 /* WelcomeCoordinator.swift */,
 				A100000C0000000000000001 /* LedgerApp.swift */,
 				A100000D0000000000000001 /* MainContentView.swift */,
 				A10001750000000000000001 /* MainContentView+Chrome.swift */,
@@ -814,7 +811,6 @@
 				A100016D0000000000000001 /* AppModel+UndoStatus.swift in Sources */,
 				A100016E0000000000000001 /* AppModel+FieldCatalog.swift in Sources */,
 				A100017F0000000000000001 /* FieldDecoration.swift in Sources */,
-				A10001700000000000000001 /* WelcomeCoordinator.swift in Sources */,
 				A100001C0000000000000001 /* LedgerApp.swift in Sources */,
 				A100001D0000000000000001 /* MainContentView.swift in Sources */,
 				A10001760000000000000001 /* MainContentView+Chrome.swift in Sources */,

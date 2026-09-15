@@ -536,7 +536,6 @@ final class AppModel: ObservableObject {
             notifyInspectorDidChange()
         }
     }
-    @Published var activeWelcomePresentation: AppWelcomePresentation?
     @Published var isManagePresetsPresented = false {
         didSet {
             notifyInspectorDidChange()
