@@ -6,8 +6,8 @@ what's next, and why anything was rejected or deferred. Update it in the same se
 it describes — a new session should be able to resume from this file alone, without re-explaining
 anything to the user (their explicit preference: don't re-consult except when something breaks).
 
-**Current position:** Plan approved 2026-09-15. Phases 0, 1, and 2 complete. Phase 3 (synchronized
-folders) starting next.
+**Current position:** Plan approved 2026-09-15. Phases 0, 1, 2, and 3 complete. Phase 4 (build
+script correctness) starting next.
 
 ## Baseline verification (do not repeat)
 
@@ -287,7 +287,73 @@ Codename retirement done in the same pass, per the plan's rename table:
 
 ## Phase 3 — Modernize Xcode representation
 
-Status: not started. Blocked on Phase 2 completing (converting-then-deleting targets is pointless churn).
+**Status: complete, 2026-09-15.** Converted the two remaining hand-enumerated targets to
+synchronized folders. All 3 native targets are now synchronized (matching `LedgerUITests`, which
+already was) — the "new file needs a manual pbxproj entry" rule this initiative set out to
+eliminate is now actually gone, not just reduced.
+
+**Approach found simpler than expected:** rather than creating brand-new group objects and
+rewiring parents, the existing `Ledger` `PBXGroup` (already correctly placed, already named
+`Ledger`, already `path = Ledger`) was converted **in place** — `isa` changed from `PBXGroup` to
+`PBXFileSystemSynchronizedRootGroup`, its ~85 file children replaced with
+`explicitFileTypes = {}; explicitFolders = ();` (mirroring `LedgerUITests`'s own working example
+exactly). Its parent's `children` list needed no change at all, since the object ID never changed.
+`LedgerTests` had no dedicated subgroup (its files sat as flat children of the shared "Tests"
+group, alongside the now-removed `ExifEditCoreTests` files) — added one new synchronized root
+group there instead.
+
+Removed: all 85 `Ledger`-group file references + build files (Sources: 82, Resources: 3) and the
+4 subgroup objects (`Import`, `ImportUI`, `EOS1V`, `EOS1V/Decode` — synchronized groups recurse
+into subdirectories automatically, no manual subgroup declarations needed at all); all 9
+`LedgerTests` file references + build files (6 source, 3 fixture resources). Cleared both targets'
+Sources/Resources build-phase `files` lists to empty, matching the synchronized pattern. Removed
+two stray untracked `.DS_Store` files under `Sources/Ledger` first, to eliminate any ambiguity
+about what the synchronized group would pick up (confirmed not tracked in git, safe to delete).
+
+**Verified against the actual real risk, not just a successful build** — the plan's own stated
+concern was resources landing in the wrong place, so:
+- Snapshotted the full built `Ledger.app` bundle's file list (550 files) *before* the conversion,
+  rebuilt after, diffed: **zero differences.** Every file in exactly the same place.
+- Explicitly confirmed by name: `AppIcon.icns`, `Assets.car`, `MainMenu.nib`, and the ExifTool
+  executable are all present in the rebuilt app.
+- The plan doc specifically warned that `EOS1VFrameDecoderTests` reads its fixtures via
+  `#filePath` (the *source* file's disk location), so a green test there proves nothing about
+  whether fixtures were actually bundled correctly — verified this claim directly (grep confirmed
+  `#filePath` is really what's used), then checked the **built `LedgerTests.xctest` bundle's
+  `Contents/Resources/` directory itself**, independent of the test result: all 3 fixture files
+  (`ese1-roll-00-023.csv`, `session-expected.csv`, `session-raw.txt`) genuinely present.
+- Full rebuild + test run after: `xcodebuild build` succeeds; `xcodebuild test
+  -skip-testing:LedgerUITests` → 204 passed/0 failed, same count as Phase 2 (no regression from
+  the structural change); `LedgerCore`'s own suite still 49/0. 204 + 49 = 253, unchanged.
+
+Also done in this phase, per its remaining checklist items:
+- Removed the local `.git/hooks/pre-commit` build-number rewriter (documented in Phase 1/2's
+  findings as redundant with the build-number script phase). This is local-only and cannot
+  propagate via git — **if you have another clone of this repo, delete
+  `.git/hooks/pre-commit` there too.**
+- Fixed `CURRENT_YEAR`: `Config/Ledger-Info.plist`'s `NSHumanReadableCopyright` used a
+  `$(CURRENT_YEAR)` Xcode build-setting token that was never defined anywhere (Xcode has no
+  date-substitution mechanism of its own), so the built copyright silently substituted to nothing.
+  Fixed via the same script-phase mechanism already trusted for `CFBundleVersion`
+  (`set_build_number.sh` now also writes the real current year into the processed Info.plist),
+  per the plan's explicit instruction not to add a second undeclared-output phase. Verified
+  directly against the real built `Info.plist`: `Copyright © 2026 Chris Le Marquand`.
+- **Deliberately NOT touched:** `LedgerUITests`'s diverging settings (`SWIFT_VERSION = 5.0`,
+  `MACOSX_DEPLOYMENT_TARGET = 27.0`, explicit `ENABLE_USER_SCRIPT_SANDBOXING = YES`). Normalizing
+  these now would be premature — the plan's own open question ("repair or delete?") for this
+  target hasn't been answered yet, and aligning settings on a target that might get deleted is
+  wasted (or wrong) effort. Revisit once that decision is made.
+- Default unit-test gate vs. opt-in UI automation: already the established convention
+  (`-skip-testing:LedgerUITests`) — nothing new needed here, just confirmed still correct.
+
+**Note on the plan's own Phase 3 gate wording:** it says to compare against "the historical
+resource list" including `WhatsNewKit_WhatsNewKit.bundle` — that bundle **is** still present in
+the built `LedgerTests.xctest` (confirmed while checking the fixture files above), inherited
+transitively through `SharedUI` (which still depends on WhatsNewKit for Librarian's own welcome
+screen — a decision explicitly deferred in this project's own history, not something Phase 3
+changed). Ledger's own app code no longer uses WhatsNewKit directly (removed separately, commit
+`c3d2e02`), but the resource still ships as a side effect of linking SharedUI at all. Not a defect
+introduced here; flagging for awareness only.
 
 ## Phase 4 — Build scripts and release identity
 
@@ -330,8 +396,10 @@ Status: deferred. Which of `main`/`feature/print-support`/`feature/hierarchical-
 ## Environment notes (as of this record)
 
 - Ledger: branch `v1.4`, commit `816cf76` (Phase 0) → Phase 1 → Phase 2 commits on top, clean.
-- Unit test count after Phase 2: 253 total (204 via `xcodebuild test`, 49 via `swift test` in
-  `LedgerCore/`) — see Phase 2 above for the breakdown. `LedgerUITests` still deliberately skipped.
+- Unit test count after Phase 3: still 253 total (204 via `xcodebuild test`, 49 via `swift test`
+  in `LedgerCore/`) — unchanged from Phase 2, confirming the structural change introduced no
+  regression. `LedgerUITests` still deliberately skipped.
+- All 3 native targets now use synchronized folders. `.git/hooks/pre-commit` removed locally.
 - SharedUI: branch `v1.4` (new, cut from `feature/hierarchical-browsing`'s `6ca7607`), commit
   `76431c0`, clean. `feature/hierarchical-browsing` itself confirmed untouched at `6ca7607`.
 - `Config/SharedUI.revision`: `76431c08e2e72f8e689fbbb00e01e219c311e9ec`.

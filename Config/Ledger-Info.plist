@@ -27,7 +27,7 @@
     <key>NSAccentColorName</key>
     <string>AccentColor</string>
     <key>NSHumanReadableCopyright</key>
-    <string>Copyright © $(CURRENT_YEAR) Chris Le Marquand</string>
+    <string>Copyright © 2026 Chris Le Marquand</string>
     <key>SUFeedURL</key>
     <string>https://chrislemarquand.github.io/Ledger/appcast.xml</string>
     <key>SUPublicEDKey</key>
