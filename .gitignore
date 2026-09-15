@@ -21,6 +21,10 @@ tmp/
 # Local test fixtures (not for sharing)
 docs/fixtures/
 
+# Benchmark image corpus — large local fixtures, regenerated not shared.
+# (scripts/performance/output/ is already covered by the output/ rule above.)
+/scripts/performance/corpus/
+
 # Sparkle private key — never commit this
 *sparkle_private_key*
 
