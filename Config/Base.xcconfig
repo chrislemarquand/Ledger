@@ -2,7 +2,7 @@ SWIFT_VERSION = 6.0
 MACOSX_DEPLOYMENT_TARGET = 26.0
 CODE_SIGN_STYLE = Automatic
 DEVELOPMENT_TEAM =
-MARKETING_VERSION = 1.2.3
+MARKETING_VERSION = 1.4
 // Placeholder only — every build (Debug, Release, archive, CI) overwrites this in the
 // built Info.plist via scripts/build/set_build_number.sh, so it's never hand-edited and
 // never diverges between build types. Bump MARKETING_VERSION by hand; this takes care of itself.
