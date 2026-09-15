@@ -545,6 +545,33 @@ reason that `v1.2.3` itself was already tagged long ago under a different commit
 because `release.sh` always runs `preflight.sh` first, documented explicitly in that script's own
 header so it's not a silent assumption.
 
+### Milestone: preflight passes cleanly, all 8/8, for the first time (2026-09-15)
+
+With the version bumped to `1.4` and the user having run `notarytool store-credentials
+EXIFEDIT_NOTARY` for real (validated against Apple's servers — `notarytool history
+--keychain-profile EXIFEDIT_NOTARY` returns genuine submission history including v1.3's real
+Accepted notarization from 2026-08-31), every precondition this pipeline checks is now
+genuinely satisfied at once:
+
+```
+[1/8] Ledger repo state — ok: clean
+[2/8] SharedUI revision pin — ok: matches, clean
+[3/8] Intended version matches the committed source — ok: 1.4
+[4/8] Version / tag relationship — ok: tag v1.4 does not exist yet
+[5/8] Not already published — ok: v1.4 not present on chrislemarquand/Ledger
+[6/8] ExifTool payload — ok: found
+[7/8] Signing credentials — ok: present
+[8/8] Notarization profile — ok: configured
+Preflight passed. Candidate: 1.4 @ 1790b43
+```
+
+This is the first time in this whole modernization effort (and, per the CI-only history traced
+above, arguably the first time ever for this project) that a release candidate has been fully
+unblocked for a genuine local prepare run. `scripts/release/release.sh 1.4` is now the next
+real, viable step — not yet run this session; see open items below for what running it for real
+implies (real notarization submission, real signing) and confirm the user wants to proceed before
+it happens.
+
 ### Acceptance scenarios (plan section 6) verified for real, not just designed for
 
 - Dirty SharedUI → `verify_shared_ui_pin.sh --require-pin-match` rejects; confirmed the checkout
@@ -567,14 +594,15 @@ plan itself calls for — pick up from here.
 
 ### Open items for the user, specific to Phase 5
 
-- [ ] Bump `MARKETING_VERSION` in `Config/Base.xcconfig` — it still reads `1.2.3`, two releases
-  behind the real latest published version (`v1.3`), because that manual bump was skipped when
-  `v1.3` was tagged (see "Real findings" above). Bump it to whatever `v1.4`'s real intended
-  version is (presumably `1.4`, matching the branch — confirm with the user, don't assume) and
-  commit it before any release can be prepared. `preflight.sh <version>` will otherwise correctly
-  refuse every time, and will also refuse if the version you pass doesn't match this file.
-- [ ] Run `xcrun notarytool store-credentials EXIFEDIT_NOTARY` on this Mac (needs an
-  app-specific password) before any real notarization can happen.
+- [x] ~~Bump `MARKETING_VERSION`~~ — done 2026-09-15, bumped to `1.4` (`2d8570b`), confirmed in a
+  real built app's `CFBundleShortVersionString`.
+- [x] ~~Run `xcrun notarytool store-credentials EXIFEDIT_NOTARY`~~ — done 2026-09-15 by the user.
+  Root cause of why it was missing at all (never a local requirement before Phase 5 — the old CI
+  workflow configured this fresh, per-run, on GitHub's ephemeral runner, never on any local Mac)
+  is recorded above. Validated for real against Apple's servers.
+- [ ] Write a `CHANGELOG.md` `## [1.4]` section — `stage_github_release.sh` requires real release
+  notes and will refuse to stage a draft without one. Not written here; product-communication
+  content for the user.
 - [ ] Be present for the first real run of `scripts/release/release.sh` through to
   `stage_github_release.sh` — this is where real notarization and a real (draft) GitHub release
   first get exercised.
