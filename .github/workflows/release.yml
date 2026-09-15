@@ -13,7 +13,9 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-26
+    # GitHub's macOS images are now keyed to the Xcode major version rather than the OS
+    # version, so this is `xcode-27`, not `macos-27` (no such label). arm64 only.
+    runs-on: xcode-27
     env:
       DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
       DEVELOPER_ID_APPLICATION: ${{ secrets.DEVELOPER_ID_APPLICATION }}
@@ -32,7 +34,9 @@ jobs:
         run: git clone https://github.com/chrislemarquand/SharedUI.git ../SharedUI
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app
+          xcodebuild -version
 
       - name: Resolve package dependencies
         run: xcodebuild -resolvePackageDependencies -project Ledger.xcodeproj -scheme Ledger -derivedDataPath build/derived
