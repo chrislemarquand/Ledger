@@ -8,6 +8,15 @@ MARKETING_VERSION = 1.2.3
 // never diverges between build types. Bump MARKETING_VERSION by hand; this takes care of itself.
 CURRENT_PROJECT_VERSION = 544
 // Disabled to allow build scripts that bundle ExifTool into the app resources.
+// Verified 2026-09-15, not assumed: enabling it fails immediately — the sandbox denies even
+// reading the script file itself ("Sandbox: bash deny(1) file-read-data
+// .../scripts/build/bundle_exiftool.sh"), before the script gets anywhere near reading
+// Vendor/Homebrew exiftool paths or writing into TARGET_BUILD_DIR. Xcode's script-phase sandbox
+// only grants read access to declared inputPaths/SCRIPT_INPUT_FILE_N and a fixed ancestor-
+// directory allowlist — not to the script file an inline shellScript execs by path — so making
+// this phase sandboxable would need substantially reworking how the script is invoked, not just
+// declaring its real inputs/outputs. Out of scope for a quick verification; revisit only as a
+// deliberate, separate piece of work.
 ENABLE_USER_SCRIPT_SANDBOXING = NO
 EXIFTOOL_REQUIRED_VERSION = 13.55
 APP_DISPLAY_NAME = Ledger

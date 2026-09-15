@@ -6,8 +6,12 @@ what's next, and why anything was rejected or deferred. Update it in the same se
 it describes — a new session should be able to resume from this file alone, without re-explaining
 anything to the user (their explicit preference: don't re-consult except when something breaks).
 
-**Current position:** Plan approved 2026-09-15. Phases 0, 1, 2, and 3 complete. Phase 4 (build
-script correctness) starting next.
+**Current position:** Plan approved 2026-09-15. Phases 0–4 complete, all verified (build/test
+green throughout, `scripts/release/release_check.sh` passes end-to-end). **Paused here
+deliberately, on the user's instruction — Phase 5 (local prepare/publish pipeline) not started.**
+It's the highest-risk phase and has real "requires the user" stops (real notarization/Sparkle
+signing, GitHub secrets, the first production publish) — pick it up in a later session, resuming
+from this file.
 
 ## Baseline verification (do not repeat)
 
@@ -357,7 +361,45 @@ introduced here; flagging for awareness only.
 
 ## Phase 4 — Build scripts and release identity
 
-Status: not started.
+**Status: complete, 2026-09-15.**
+
+- **`scripts/release/release.sh`**: quoted all 5 unquoted `$ROOT_DIR`-prefixed executable
+  invocations (lines 7, 15, 17, 18, 21 in the reviewed baseline). Verified the bug was real, not
+  theoretical, with a standalone reproduction against this repo's own space-containing path:
+  unquoted form fails with `No such file or directory` (word-split at the space); quoted form
+  correctly executes as one command and reaches the script's own `NOTARY_PROFILE` precondition
+  check.
+- **Bundle ExifTool script phase**: the declared `inputPaths`/`outputPaths` (one xcconfig in, one
+  binary out) never matched what the script actually reads/writes (multiple possible source
+  trees, a whole recursively-copied-and-pruned Perl lib directory) — so Xcode's incremental engine
+  could silently skip a real payload change. Fixed by marking the phase `alwaysOutOfDate = 1`
+  (matching "Set Build Number"'s own existing precedent) and clearing the now-misleading partial
+  path declarations, rather than trying to statically enumerate an unenumerable tree. Documented
+  the reasoning directly in `bundle_exiftool.sh`.
+- **User-script sandboxing**: tested for real, not assumed — flipped `Base.xcconfig`'s
+  `ENABLE_USER_SCRIPT_SANDBOXING` to `YES` and rebuilt. **Fails immediately and more
+  fundamentally than expected**: the sandbox denies even reading the script file itself
+  (`Sandbox: bash deny(1) file-read-data .../scripts/build/bundle_exiftool.sh`) before the script
+  gets anywhere near Vendor/Homebrew paths. Xcode's script-phase sandbox only grants read access
+  to declared `inputPaths`/`SCRIPT_INPUT_FILE_N` and a fixed ancestor-directory allowlist, not to
+  a script file an inline `shellScript` execs by path — so enabling this would need reworking how
+  the script is invoked, not just declaring its real inputs/outputs. Reverted, with the real error
+  message recorded directly in `Base.xcconfig`'s own comment so this isn't re-attempted blind.
+- **`set_build_number.sh`**: now accepts an optional `RELEASE_BUILD_NUMBER` env var, falling back
+  to the existing wall-clock value when unset — verified both paths (override resolves correctly;
+  a real build with it unset still produces a normal wall-clock `CFBundleVersion`). The actual
+  monotonic-vs-published-feed check is **deliberately left for Phase 5**: it needs real feed data
+  and a release-candidate context that doesn't exist yet at the plain-script level — building it
+  here in isolation would be orphaned code with nothing to wire it into.
+- New `scripts/release/write_candidate_manifest.sh`: writes a local, git-ignored
+  `build/release-candidate.json` recording marketing version, build number, the Ledger
+  commit/branch/dirty-state, the recorded `Config/SharedUI.revision`, and toolchain version — the
+  candidate-identity record Phase 5's pipeline will consume. Verified it runs and produces a
+  correctly-populated real record against the current repo state.
+
+**Verified end-to-end after all of the above:** `xcodebuild build` succeeds; `xcodebuild test
+-skip-testing:LedgerUITests` → 204/0; the full `scripts/release/release_check.sh` pipeline itself
+→ "Release checks passed." again.
 
 ## Phase 5 — Local prepare/publish pipeline
 

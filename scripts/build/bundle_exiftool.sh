@@ -1,6 +1,15 @@
 #!/bin/sh
 set -euo pipefail
 
+# This phase always runs (alwaysOutOfDate = 1 in the pbxproj script phase, matching
+# "Set Build Number"'s own precedent), rather than declaring inputs/outputs for Xcode's
+# incremental build system. That's deliberate: the payload is a whole vendored Perl lib tree
+# (copied wholesale below, then selectively pruned) whose real inputs aren't statically
+# enumerable the way a single source file's are. A previous version of this phase declared one
+# xcconfig as input and the exiftool binary as output — accurate for neither: Xcode could
+# silently skip a real payload change that didn't touch that one declared input. Correctness
+# (never silently stale) matters more here than incremental build speed for a rarely-changing
+# vendored dependency.
 DEST_DIR="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/exiftool/bin"
 DEST_FILE="${DEST_DIR}/exiftool"
 REQUIRED_VERSION="${EXIFTOOL_REQUIRED_VERSION:-13.55}"

@@ -305,19 +305,18 @@
 /* Begin PBXShellScriptBuildPhase section */
 		A10001300000000000000001 /* Bundle ExifTool */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			inputFileListPaths = (
 			);
 			inputPaths = (
-				"$(SRCROOT)/Config/Base.xcconfig",
 			);
 			name = "Bundle ExifTool";
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/exiftool/bin/exiftool",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
