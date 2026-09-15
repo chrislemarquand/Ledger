@@ -482,12 +482,34 @@ staple, and hard-refuses to ever staple a `.zip`.
 
 ### Real findings from running preflight for real (not hypothetical)
 
-- **No `EXIFEDIT_NOTARY` notarization profile is configured on this Mac** —
-  `xcrun notarytool history --keychain-profile EXIFEDIT_NOTARY` fails outright. Real notarization
-  genuinely cannot happen from this session without the user running
-  `xcrun notarytool store-credentials EXIFEDIT_NOTARY` themselves (needs an app-specific
-  password, a secret only they should enter) — this isn't a policy choice this session made, the
-  pipeline is structurally incapable of submitting anything right now.
+- **No `EXIFEDIT_NOTARY` notarization profile is configured on this Mac, and this is expected —
+  not a regression, not a wrong-Mac issue.** `xcrun notarytool history --keychain-profile
+  EXIFEDIT_NOTARY` fails outright, and a thorough search (both keychains in the search path,
+  `login.keychain-db`/`System.keychain`, plus two more found on disk but not in the search path,
+  `metadata.keychain-db`/`parallels_shared.keychain-db` — checked all four directly) found no
+  notarytool credential under any name (`EXIFEDIT_NOTARY`, nor the internal
+  `com.apple.gke.notary.tool` identifier) anywhere on this machine.
+
+  **Root cause, confirmed by re-reading the retired `release.yml`:** the old CI workflow's
+  "Configure notarytool profile" step ran `notarytool store-credentials` **on GitHub's ephemeral
+  cloud runner**, populated from the `APPLE_APP_SPECIFIC_PASSWORD` GitHub secret, fresh on every
+  single release run — then the whole VM (profile included) was destroyed at the end of the job.
+  A local notarization profile has **never existed on any Mac** for this project, because
+  notarization itself never ran locally before Phase 5. This is the direct, necessary consequence
+  of the plan's own mandatory policy (signing/notarization move to local execution) — not
+  something that broke. Signing (codesign, Developer ID identity) is a *separate* credential that
+  already lived locally and kept working throughout Phase 5 regardless — the two are easy to
+  conflate but are stored completely differently, which is why "signing has always worked fine"
+  and "no local notarization profile" are both true at once, not a contradiction.
+
+  Real notarization cannot happen from this session until the user runs
+  `xcrun notarytool store-credentials EXIFEDIT_NOTARY --apple-id chris.lemarquand@gmail.com
+  --team-id S4F3HUG3TQ` themselves (needs the app-specific password interactively — a secret only
+  they should enter). Note: GitHub secrets are write-only, so the original
+  `APPLE_APP_SPECIFIC_PASSWORD` value is not recoverable from the repo even though the secret
+  still exists there — the user needs whatever copy they kept outside GitHub when it was first
+  generated, or a freshly-generated app-specific password (Apple allows multiple to exist at
+  once, so generating a new one doesn't invalidate anything).
 - **A real Developer ID Application identity IS present**
   (`Developer ID Application: Christopher Le Marquand (S4F3HUG3TQ)`), matching
   `DEVELOPMENT_TEAM = S4F3HUG3TQ`) — real local signing (not notarization, not publishing) works,
