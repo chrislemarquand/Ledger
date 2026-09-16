@@ -193,22 +193,27 @@ final class EOS1VToolClient {
             return
         }
 
-        let configuration = resolvedConfiguration()
-        guard FileManager.default.isExecutableFile(atPath: configuration.python.path) else {
-            completion(.failure(ClientError.configuration("Python was not found at \(configuration.python.path).")))
-            return
-        }
-        guard FileManager.default.fileExists(atPath: configuration.script.path) else {
-            completion(.failure(ClientError.configuration("eos1v_tool.py was not found at \(configuration.script.path).")))
+        let invocation: EOS1VToolInvocation
+        do {
+            invocation = try resolvedInvocation()
+        } catch {
+            completion(.failure(error))
             return
         }
 
         let task = Process()
         let stdout = Pipe()
         let stderr = Pipe()
-        task.executableURL = configuration.python
-        task.arguments = [configuration.script.path] + operation.arguments
-        task.currentDirectoryURL = configuration.script.deletingLastPathComponent()
+        switch invocation {
+        case let .bundled(executable):
+            task.executableURL = executable
+            task.arguments = operation.arguments
+            task.currentDirectoryURL = executable.deletingLastPathComponent()
+        case let .devPython(python, script):
+            task.executableURL = python
+            task.arguments = [script.path] + operation.arguments
+            task.currentDirectoryURL = script.deletingLastPathComponent()
+        }
         task.standardOutput = stdout
         task.standardError = stderr
         process = task
@@ -235,40 +240,46 @@ final class EOS1VToolClient {
         }
     }
 
-    private func resolvedConfiguration() -> (python: URL, script: URL) {
+    /// The bundled, frozen `eos1v_tool` (built by scripts/build/bundle_eos1v_tool.sh from a
+    /// PyInstaller --onedir freeze, see docs/eos1v-tool-bundling.md) is the only shipped path:
+    /// any Ledger download must be able to run this with no Python/Homebrew/submodule checkout
+    /// on the machine at all, exactly like the bundled exiftool. The old default silently
+    /// assumed this developer's own checkout path (~/Xcode Projects/Ledger/External/eos1v-serial)
+    /// and .venv, which never worked for anyone else. The `.venv`/direct-script path now exists
+    /// only as an explicit, UserDefaults-gated developer override for local iteration without
+    /// re-freezing on every eos1v_tool.py change — never the default, never silently guessed at.
+    private enum EOS1VToolInvocation {
+        case bundled(executable: URL)
+        case devPython(python: URL, script: URL)
+    }
+
+    private func resolvedInvocation() throws -> EOS1VToolInvocation {
         let defaults = UserDefaults.standard
         let prefix = AppBrand.identifierPrefix
         let fm = FileManager.default
-        // eos1v-serial lives as a git submodule inside Ledger's own project
-        // folder (External/eos1v-serial) rather than as a sibling directory.
-        let projectRoot = fm.homeDirectoryForCurrentUser
-            .appendingPathComponent("Xcode Projects/Ledger/External/eos1v-serial", isDirectory: true)
 
-        // A persisted directory can outlive the location it was set for — e.g. this key
-        // predates eos1v-serial's move into External/, so on-disk installs still carry the
-        // old path. Trusting it blindly makes every EOS-1V operation fail preflight (wrong
-        // path, script "not found") before ever touching the camera, which looks identical
-        // to a real connection failure. Validate it still holds the script before trusting
-        // it; otherwise fall back to the current guessed location instead of staying stuck.
+        // Dev override: only engages if BOTH keys are explicitly set to real, currently-valid
+        // paths — a stale or partial override must not silently mask the real bundled tool.
         let persistedToolDirectory = defaults.string(forKey: "\(prefix).eos1v.toolDirectory")
             .map { URL(fileURLWithPath: $0, isDirectory: true) }
-        let toolDirectory: URL
-        if let persistedToolDirectory,
-           fm.fileExists(atPath: persistedToolDirectory.appendingPathComponent("eos1v_tool.py").path) {
-            toolDirectory = persistedToolDirectory
-        } else {
-            toolDirectory = projectRoot
+        let persistedPython = defaults.string(forKey: "\(prefix).eos1v.pythonPath")
+            .map { URL(fileURLWithPath: $0) }
+        if let persistedToolDirectory, let persistedPython,
+           fm.isExecutableFile(atPath: persistedPython.path) {
+            let script = persistedToolDirectory.appendingPathComponent("eos1v_tool.py")
+            if fm.fileExists(atPath: script.path) {
+                return .devPython(python: persistedPython, script: script)
+            }
         }
 
-        let persistedPython = defaults.string(forKey: "\(prefix).eos1v.pythonPath").map { URL(fileURLWithPath: $0) }
-        let python: URL
-        if let persistedPython, fm.isExecutableFile(atPath: persistedPython.path) {
-            python = persistedPython
-        } else {
-            python = toolDirectory.appendingPathComponent(".venv/bin/python")
+        guard let bundled = Bundle.main.resourceURL?.appendingPathComponent("eos1v-tool/bin/eos1v_tool"),
+              fm.isExecutableFile(atPath: bundled.path)
+        else {
+            throw ClientError.configuration(
+                "The bundled EOS-1V tool was not found. This build may be missing its Bundle EOS1V Tool build phase output."
+            )
         }
-
-        return (python, toolDirectory.appendingPathComponent("eos1v_tool.py"))
+        return .bundled(executable: bundled)
     }
 
     private static func decode(output: Data, stderr: Data) -> Result<EOS1VMachineResult, Error> {

@@ -42,6 +42,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             purpose: "Edit photo metadata — EXIF, IPTC, and XMP — powered by ExifTool.",
             credits: [
                 .init(text: "Uses ExifTool \(exifToolVersion) by Phil Harvey", linkURL: "https://exiftool.org/"),
+                .init(text: "EOS-1V support uses eos1v-serial, originally by epvucclaude", linkURL: "https://github.com/epvucclaude/eos1v-serial"),
+                .init(text: "eos1v-serial uses PyUSB and Python (PSF License)", linkURL: "https://www.python.org/psf/license/"),
+                .init(text: "eos1v-serial uses libusb (LGPL-2.1)", linkURL: "https://github.com/libusb/libusb/blob/master/COPYING"),
             ],
             copyright: "© 2026 Chris Le Marquand"
         )

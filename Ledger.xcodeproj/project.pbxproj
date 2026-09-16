@@ -182,6 +182,7 @@
 				A10000410000000000000001 /* Frameworks */,
 				A10000810000000000000001 /* Resources */,
 				A10001300000000000000001 /* Bundle ExifTool */,
+				A10001350000000000000001 /* Bundle EOS1V Tool */,
 				A10001400000000000000001 /* Set Build Number */,
 			);
 			buildRules = (
@@ -321,6 +322,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"${SRCROOT}/scripts/build/bundle_exiftool.sh\"\n";
+		};
+		A10001350000000000000001 /* Bundle EOS1V Tool */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Bundle EOS1V Tool";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/scripts/build/bundle_eos1v_tool.sh\"\n";
 		};
 		A10001400000000000000001 /* Set Build Number */ = {
 			isa = PBXShellScriptBuildPhase;
