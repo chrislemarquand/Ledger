@@ -36,8 +36,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var allowImmediateTermination = false
     var appModel: AppModel? { mainWindowController?.appModel }
 
-    func showAboutPanel() {
-        let exifToolVersion = bundledExifToolVersion() ?? "Unknown"
+    func showAboutPanel() async {
+        let exifToolVersion = await Self.boundedBundledExifToolVersion() ?? "Unknown"
         presentAboutPanel(
             purpose: "Edit photo metadata — EXIF, IPTC, and XMP — powered by ExifTool.",
             credits: [
@@ -52,7 +52,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc
     func showAboutPanelMenuAction(_: Any?) {
-        showAboutPanel()
+        Task { @MainActor in
+            await showAboutPanel()
+        }
     }
 
     @objc
@@ -93,7 +95,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func bundledExifToolVersion() -> String? {
+    /// v1.4 follow-up: dispatches the actual version read to a background task — see
+    /// `bundledExifToolVersion()` below for why the read itself also needs a bounded
+    /// deadline, not just being off the main actor.
+    private nonisolated static func boundedBundledExifToolVersion() async -> String? {
+        await Task.detached(priority: .userInitiated) {
+            bundledExifToolVersion()
+        }.value
+    }
+
+    /// v1.4 follow-up: this used to call `process.waitUntilExit()` with no deadline at all,
+    /// directly on the main actor (`showAboutPanel` called it synchronously) — a hung or
+    /// stuck bundled `exiftool -ver` would block the entire app, forever, just from opening
+    /// the About panel. `nonisolated static` (no `self` capture, touches only `Bundle.main`)
+    /// so it can run on a detached task; deadline/kill loop matches
+    /// `LedgerCore.ExifToolService.run`'s established timeout pattern.
+    private nonisolated static func bundledExifToolVersion() -> String? {
         guard let executablePath = Bundle.main.path(forResource: "exiftool/bin/exiftool", ofType: nil) else {
             return nil
         }
@@ -108,6 +125,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         do {
             try process.run()
+            let deadline = Date().addingTimeInterval(5)
+            while process.isRunning {
+                if Date() >= deadline {
+                    process.terminate()
+                    Thread.sleep(forTimeInterval: 0.2)
+                    if process.isRunning {
+                        kill(process.processIdentifier, SIGKILL)
+                    }
+                    return nil
+                }
+                Thread.sleep(forTimeInterval: 0.05)
+            }
             process.waitUntilExit()
             guard process.terminationStatus == 0 else { return nil }
             let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
@@ -289,7 +318,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.alertStyle = .warning
         alert.messageText = "Quit and discard your prepared changes?"
         alert.informativeText = "You have unsaved changes. They\u{2019}ll be lost if you quit now."
-        alert.addButton(withTitle: "Quit and Discard")
+        let quitButton = alert.addButton(withTitle: "Quit and Discard")
+        quitButton.hasDestructiveAction = true
         alert.addButton(withTitle: "Cancel")
 
         let keyWindow = NSApp.keyWindow ?? mainWindowController?.window

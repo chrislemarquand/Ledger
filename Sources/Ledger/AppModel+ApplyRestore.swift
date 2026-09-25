@@ -10,7 +10,8 @@ extension AppModel {
         alert.alertStyle = .warning
         alert.messageText = "Discard your prepared changes?"
         alert.informativeText = "You have unsaved changes. They\u{2019}ll be lost if you continue \(actionDescription)."
-        alert.addButton(withTitle: "Discard Changes")
+        let discardButton = alert.addButton(withTitle: "Discard Changes")
+        discardButton.hasDestructiveAction = true
         alert.addButton(withTitle: "Cancel")
         var response: NSApplication.ModalResponse = .abort
         alert.runSheetOrModal(for: nil) { response = $0 }
@@ -342,8 +343,7 @@ extension AppModel {
                     // before loadFiles so no racing task can sneak a stale image back in
                     // after the clear, and the new URLs start from a clean slate.
                     invalidateInspectorPreviews(for: Array(renameTargets.keys))
-                    await loadFiles(for: item.kind)
-                    didReloadFiles = true
+                    didReloadFiles = await loadFiles(for: item.kind)
                     for (url, edits) in survivingEdits {
                         pendingEditsByFile[url] = edits
                     }
@@ -601,8 +601,8 @@ extension AppModel {
                     }
                     return tracked != restored
                 }
-                if didRestorePathChangingOperation, let item = selectedSidebarItem {
-                    await loadFiles(for: item.kind)
+                if didRestorePathChangingOperation, let item = selectedSidebarItem,
+                   await loadFiles(for: item.kind) {
                     let restoredOriginalURLs = Set(fullyRestoredOperationIDs.flatMap { restoredFilesByOperationID[$0] ?? [] })
                     let availableURLs = Set(browserItems.map(\.url))
                     let restoredSelection = restoredOriginalURLs.intersection(availableURLs)

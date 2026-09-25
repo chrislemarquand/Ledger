@@ -50,10 +50,7 @@ extension AppModel {
     func refresh() {
         invalidateAllBrowserThumbnails()
         if let item = selectedSidebarItem {
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                await self.loadFiles(for: item.kind)
-            }
+            startLoadingFiles(for: item.kind)
         }
 
         Task {
@@ -71,10 +68,7 @@ extension AppModel {
     func reloadFilesIfBrowserEmpty() {
         guard let item = selectedSidebarItem, browserItems.isEmpty else { return }
         guard !isPrivacySensitiveSidebarKind(item.kind) || hasHadExplicitSidebarSelection else { return }
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            await self.loadFiles(for: item.kind)
-        }
+        startLoadingFiles(for: item.kind)
     }
 
     func refreshMetadata(for fileURLs: [URL], allowFolderReloadFallback: Bool = true) {
@@ -86,7 +80,7 @@ extension AppModel {
             let missingCount = files.count - existingFiles.count
 
             if allowFolderReloadFallback, missingCount > 0, let item = selectedSidebarItem {
-                await loadFiles(for: item.kind)
+                guard await loadFiles(for: item.kind) else { return }
                 refreshMetadata(for: browserItems.map(\.url), allowFolderReloadFallback: false)
                 return
             }
@@ -137,11 +131,14 @@ extension AppModel {
             backgroundWarmTasksBySelectionID[id]?.cancel()
             backgroundWarmTasksBySelectionID[id] = nil
         }
-        guard let itemToLoad = selectedSidebarItem else { return }
+        guard let itemToLoad = selectedSidebarItem else {
+            cancelFileLoad()
+            return
+        }
 
         guard itemToLoad.kind != .eos1vDevice else {
             // No filesystem content for the device — nothing to load or show loading for.
-            isFolderContentLoading = false
+            cancelFileLoad()
             return
         }
         lastNonDeviceSidebarID = itemToLoad.id
@@ -151,13 +148,8 @@ extension AppModel {
 
         // Show the loading skeleton immediately so the gallery's reloadData() flash is masked.
         // loadFiles is deferred to the next task so SwiftUI renders the skeleton before clearing state.
-        isFolderContentLoading = true
         let kind = itemToLoad.kind
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            await self.loadFiles(for: kind)
-            self.isFolderContentLoading = false
-        }
+        startLoadingFiles(for: kind)
     }
 
     /// Explicit user-initiated sidebar selection path from the SwiftUI sidebar.

@@ -597,7 +597,9 @@ struct InspectorView: View {
     private func openDateTimeAdjustSheet(for tag: AppModel.EditableTag) {
         let targetTag = DateTimeTargetTag.from(editableTagID: tag.id) ?? .dateTimeOriginal
         let scope: DateTimeAdjustScope = model.selectedFileURLs.count > 1 ? .selection : .single
-        model.beginDateTimeAdjust(scope: scope, launchTag: targetTag, launchContext: .inspector)
+        Task { @MainActor in
+            await model.beginDateTimeAdjust(scope: scope, launchTag: targetTag, launchContext: .inspector)
+        }
     }
 
     private func openLocationAdjustSheet() {

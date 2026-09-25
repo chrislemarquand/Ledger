@@ -30,7 +30,7 @@ struct ExifToolCSVExportService {
             throw ExportError.noFiles
         }
 
-        try await Task.detached(priority: .userInitiated) {
+        let exportTask = Task.detached(priority: .userInitiated) {
             let executableURL = try Self.resolveExifToolExecutableURL()
             let arguments = Self.exportArguments(for: files)
             let parent = destinationURL.deletingLastPathComponent()
@@ -67,7 +67,16 @@ struct ExifToolCSVExportService {
             } else {
                 try fileManager.moveItem(at: tempOutputURL, to: destinationURL)
             }
-        }.value
+        }
+        // v1.4 follow-up: `Task.detached` is unstructured — awaiting it directly meant
+        // cancelling whatever called `export(...)` never reached this worker or its
+        // subprocess. Forwarded explicitly, same pattern as
+        // `AppModel+FileLoading.swift`'s `readBrowserFileAttributes`.
+        try await withTaskCancellationHandler {
+            try await exportTask.value
+        } onCancel: {
+            exportTask.cancel()
+        }
     }
 
     static func exportArguments(for files: [URL]) -> [String] {
@@ -128,7 +137,26 @@ struct ExifToolCSVExportService {
         process.standardOutput = stdoutHandle
         process.standardError = stderrHandle
 
+        // v1.4 follow-up: this used to call `process.waitUntilExit()` with no deadline or
+        // cancellation at all — a stalled export source could leave the ExifTool helper, this
+        // waiting worker, and the temporary output file alive indefinitely, and further export
+        // attempts would just launch additional helpers on top. Deadline/kill loop matches
+        // `LedgerCore.ExifToolService.run`'s established timeout pattern; `Task.isCancelled` is
+        // also checked so an outer cancellation (forwarded via `withTaskCancellationHandler` in
+        // `export`, below) can terminate the process rather than leaving it running unobserved.
         try process.run()
+        let deadline = Date().addingTimeInterval(120)
+        while process.isRunning {
+            if Date() >= deadline || Task.isCancelled {
+                process.terminate()
+                Thread.sleep(forTimeInterval: 0.2)
+                if process.isRunning {
+                    kill(process.processIdentifier, SIGKILL)
+                }
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
         process.waitUntilExit()
 
         let stderrData = try Data(contentsOf: stderrURL)

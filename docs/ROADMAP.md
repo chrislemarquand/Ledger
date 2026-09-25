@@ -140,6 +140,7 @@ Directional, not committed — less specified than v1.3/v1.4 on purpose; expect 
 - [ ] **Keyboard navigation:** Explicit Home/End/Page Up/Page Down keyboard nav in list/gallery.
 - [ ] **Drag files out**: to Finder/Mail/Messages etc. (`NSItemProvider`/`NSPasteboardWriter` on gallery/list items).
 - [ ] **Toolbar customisation**
+- [ ] **Reopen last folder on launch**: currently the app always launches with no folder selected — only window frame/split-position/column-width survive quit-and-relaunch via macOS Secure State Restoration; there's no folder-URL persistence anywhere in `AppModel`/`LedgerApp.swift`. Noted during the v1.4 manual smoke pass (2026-09-25), not a regression — just never implemented.
 
 ### Devices
 

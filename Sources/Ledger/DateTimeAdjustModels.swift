@@ -169,6 +169,12 @@ struct DateTimeAdjustSession: Identifiable {
     /// Used in place of live model reads to prevent display churn during background loading.
     /// All modes (shift, timezone, specific, data) read from this snapshot for stability.
     var capturedDates: [URL: [DateTimeTargetTag: Date]] = [:]
+    /// v1.4 follow-up: same idea as `capturedDates`, but for the filesystem creation date (the
+    /// "File" data-read source, `DateTimeDataReadSource.sourceTag == nil`) — snapshotted once,
+    /// off the main actor, at sheet-open time in `beginDateTimeAdjust`, instead of being read
+    /// synchronously via `FileManager.attributesOfItem` on every SwiftUI body evaluation
+    /// (radio-option availability, the File-mode date display, preview recomputation).
+    var capturedFileCreationDates: [URL: Date] = [:]
 
     var sourceUsesCameraClock: Bool {
         sourceTimeZoneID == DateTimeAdjustSession.cameraClockIdentifier

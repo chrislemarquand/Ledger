@@ -10,8 +10,15 @@ extension AppModel {
     func beginDateTimeAdjust(
         scope: DateTimeAdjustScope,
         launchTag: DateTimeTargetTag,
-        launchContext: DateTimeAdjustLaunchContext = .inspector
-    ) {
+        launchContext: DateTimeAdjustLaunchContext = .inspector,
+        readCreationDates: @escaping @Sendable ([URL]) async -> [URL: Date] = {
+            AppModel.readFileCreationDates(for: $0)
+        }
+    ) async {
+        let requestID = UUID()
+        dateTimeAdjustRequestID = requestID
+        dateTimeCreationDatesTask?.cancel()
+        dateTimeCreationDatesTask = nil
         let files = filesForDateTimeAdjust(scope)
         guard !files.isEmpty else {
             statusMessage = "No files in scope for date/time adjustment."
@@ -19,6 +26,27 @@ extension AppModel {
         }
 
         guard let primaryFile = files.first else { return }
+
+        // v1.4 follow-up: file-creation-date reads (FileManager.attributesOfItem) used to
+        // happen synchronously, live, on every SwiftUI body evaluation that touched File-mode
+        // read-source availability or its date display — not just once here. Batched off the
+        // main actor and captured once, up front, the same way capturedDates already snapshots
+        // every EXIF tag below; every other call site now reads from that snapshot instead of
+        // hitting the filesystem again.
+        let task = Task.detached(priority: .userInitiated) {
+            await readCreationDates(files)
+        }
+        dateTimeCreationDatesTask = task
+        defer {
+            if dateTimeAdjustRequestID == requestID { dateTimeCreationDatesTask = nil }
+        }
+        let capturedFileCreationDates = await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        guard !Task.isCancelled, dateTimeAdjustRequestID == requestID,
+              filesForDateTimeAdjust(scope) == files else { return }
 
         var session = DateTimeAdjustSession(
             scope: scope,
@@ -30,7 +58,8 @@ extension AppModel {
         session.dataReadSource = preferredInitialDataReadSource(
             for: primaryFile,
             launchTag: launchTag,
-            launchContext: launchContext
+            launchContext: launchContext,
+            capturedFileCreationDates: capturedFileCreationDates
         )
         session.applyTo = []
 
@@ -47,6 +76,7 @@ extension AppModel {
             }
         }
         session.capturedDates = captured
+        session.capturedFileCreationDates = capturedFileCreationDates
         if let primaryDate = captured[primaryFile]?[launchTag] {
             session.specificDate = primaryDate
         }
@@ -54,7 +84,26 @@ extension AppModel {
         pendingDateTimeAdjustSession = session
     }
 
+    /// Batched, off-main-actor file-creation-date reads for `beginDateTimeAdjust`'s upfront
+    /// snapshot. `nonisolated static` (no `self` capture) so it can run on a detached task —
+    /// same pattern as `AppModel+FileLoading.swift`'s `enumerateImages`/
+    /// `readBrowserFileAttributes`.
+    nonisolated static func readFileCreationDates(for files: [URL]) -> [URL: Date] {
+        var result: [URL: Date] = [:]
+        result.reserveCapacity(files.count)
+        for fileURL in files {
+            if Task.isCancelled { break }
+            if let date = try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.creationDate] as? Date {
+                result[fileURL] = date
+            }
+        }
+        return result
+    }
+
     func dismissDateTimeAdjustSheet() {
+        dateTimeAdjustRequestID = UUID()
+        dateTimeCreationDatesTask?.cancel()
+        dateTimeCreationDatesTask = nil
         pendingDateTimeAdjustSession = nil
     }
 
@@ -112,11 +161,15 @@ extension AppModel {
         try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.creationDate] as? Date
     }
 
-    func isDataReadSourceAvailable(_ source: DateTimeDataReadSource, for fileURL: URL) -> Bool {
+    func isDataReadSourceAvailable(
+        _ source: DateTimeDataReadSource,
+        for fileURL: URL,
+        capturedFileCreationDates: [URL: Date]
+    ) -> Bool {
         if let tag = source.sourceTag {
             return originalDate(for: fileURL, tag: tag) != nil
         }
-        return fileCreationDate(for: fileURL) != nil
+        return capturedFileCreationDates[fileURL] != nil
     }
 
     // MARK: - Adjusted Date Computation
@@ -160,20 +213,21 @@ extension AppModel {
         if let sourceTag = session.dataReadSource.sourceTag {
             return session.capturedDates[fileURL]?[sourceTag] ?? originalDate(for: fileURL, tag: sourceTag)
         }
-        return fileCreationDate(for: fileURL)
+        return session.capturedFileCreationDates[fileURL]
     }
 
     private func preferredInitialDataReadSource(
         for representativeFile: URL,
         launchTag: DateTimeTargetTag,
-        launchContext: DateTimeAdjustLaunchContext
+        launchContext: DateTimeAdjustLaunchContext,
+        capturedFileCreationDates: [URL: Date]
     ) -> DateTimeDataReadSource {
         switch launchContext {
         case .inspector:
             return .from(tag: launchTag)
         case .menu:
             return DateTimeDataReadSource.allCases.first {
-                isDataReadSourceAvailable($0, for: representativeFile)
+                isDataReadSourceAvailable($0, for: representativeFile, capturedFileCreationDates: capturedFileCreationDates)
             } ?? .original
         }
     }
@@ -571,7 +625,7 @@ extension AppModel {
             "Prepared date/time changes for \(noun). Ready to apply.",
             autoClearAfterSuccess: true
         )
-        pendingDateTimeAdjustSession = nil
+        dismissDateTimeAdjustSheet()
     }
 }
 

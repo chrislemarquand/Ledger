@@ -120,6 +120,18 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         super.viewWillAppear()
         eos1vDeviceMonitor.start()
         configureWindowIfNeeded()
+        // v1.4 follow-up: `configureWindowIfNeeded()`'s body only ever runs once
+        // (`didConfigureWindow` latches permanently) — the two lines below used to only be
+        // reachable through it, so if `teardownObserversAndMonitors()` (below, on disappear)
+        // cleared them, a second appearance of this same, still-retained view controller (main
+        // window closed while an auxiliary window like Settings/Console kept the app alive,
+        // then reopened via the Dock) never got them back. Both are already idempotent
+        // (`guard ... == nil`), so calling them unconditionally on every appearance is safe.
+        installBrowserFocusRequestObserverIfNeeded()
+        installKeyMonitorIfNeeded()
+        if uiRefreshObservers.isEmpty {
+            installUIRefreshObservers()
+        }
     }
 
     override func viewWillDisappear() {
@@ -1159,7 +1171,10 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
 
     @objc func adjustDateTimeAction(_: Any?) {
         let scope: DateTimeAdjustScope = model.selectedFileURLs.count > 1 ? .selection : .single
-        model.beginDateTimeAdjust(scope: scope, launchTag: .dateTimeOriginal, launchContext: .menu)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.model.beginDateTimeAdjust(scope: scope, launchTag: .dateTimeOriginal, launchContext: .menu)
+        }
     }
 
     @objc

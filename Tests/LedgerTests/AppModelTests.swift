@@ -4,8 +4,125 @@ import AppKit
 import Foundation
 import XCTest
 
+private actor DateCaptureGate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    func wait() async {
+        if !isOpen { await withCheckedContinuation { waiters.append($0) } }
+    }
+    func open() {
+        isOpen = true
+        waiters.forEach { $0.resume() }
+        waiters.removeAll()
+    }
+}
+
 @MainActor
 final class AppModelTests: XCTestCase {
+    func testCancelledEnumerationStopsBeforeTouchingFilesystem() async {
+        let gate = DateCaptureGate()
+        let worker = Task.detached {
+            await gate.wait()
+            return try AppModel.enumerateImages(in: URL(fileURLWithPath: "/nonexistent-ledger-cancel-test"))
+        }
+        worker.cancel()
+        await gate.open()
+        do {
+            _ = try await worker.value
+            XCTFail("cancelled enumeration should throw")
+        } catch is CancellationError {
+            // A filesystem error instead would mean cancellation wasn't checked first.
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+    }
+
+    func testOlderDateCaptureCannotReplaceNewerSessionForSameFiles() async {
+        let model = makeModel()
+        model.selectedFileURLs = [URL(fileURLWithPath: "/test-date-capture.jpg")]
+        let entered = expectation(description: "first capture suspended")
+        let gate = DateCaptureGate()
+        let old = Task {
+            await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal,
+                                           readCreationDates: { _ in
+                entered.fulfill()
+                await gate.wait()
+                XCTAssertTrue(Task.isCancelled)
+                return [:]
+            })
+        }
+        await fulfillment(of: [entered], timeout: 2)
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeModified)
+        await gate.open()
+        await old.value
+        XCTAssertEqual(model.pendingDateTimeAdjustSession?.launchTag, .dateTimeModified)
+    }
+
+    func testDismissalInvalidatesSuspendedDateCapture() async {
+        let model = makeModel()
+        model.selectedFileURLs = [URL(fileURLWithPath: "/test-date-dismiss.jpg")]
+        let entered = expectation(description: "capture suspended")
+        let gate = DateCaptureGate()
+        let request = Task {
+            await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal,
+                                           readCreationDates: { _ in
+                entered.fulfill()
+                await gate.wait()
+                return [:]
+            })
+        }
+        await fulfillment(of: [entered], timeout: 2)
+        model.dismissDateTimeAdjustSheet()
+        await gate.open()
+        await request.value
+        XCTAssertNil(model.pendingDateTimeAdjustSession)
+    }
+
+    func testSupersededLoadCannotClearReplacementLoadingState() async {
+        let model = makeModel()
+        let folder = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let old = model.startLoadingFiles(for: .folder(folder))
+        let replacement = model.startLoadingFiles(for: .folder(folder))
+        XCTAssertTrue(old.isCancelled)
+        XCTAssertTrue(model.isFolderContentLoading)
+        let oldCompleted = await old.value
+        XCTAssertFalse(oldCompleted)
+        let completed = await replacement.value
+        XCTAssertTrue(completed)
+        XCTAssertFalse(model.isFolderContentLoading)
+        XCTAssertNil(model.loadFilesTask)
+    }
+
+    func testCancelFileLoadInvalidatesPendingResultAndClearsLoadingState() async {
+        let model = makeModel()
+        let folder = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let task = model.startLoadingFiles(for: .folder(folder))
+        let loadID = model.activeFolderLoadID
+        model.cancelFileLoad()
+        XCTAssertNotEqual(model.activeFolderLoadID, loadID)
+        XCTAssertFalse(model.isFolderContentLoading)
+        let completed = await task.value
+        XCTAssertFalse(completed)
+        XCTAssertTrue(model.browserItems.isEmpty)
+    }
+
+    func testDateTimeMissingCreationDateDoesNotFallBackToLiveFile() async throws {
+        let model = makeModel()
+        let folder = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("not-yet-created.jpg")
+        model.selectedFileURLs = [file]
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal)
+        var session = try XCTUnwrap(model.pendingDateTimeAdjustSession)
+        XCTAssertNil(session.capturedFileCreationDates[file])
+        try Data("x".utf8).write(to: file)
+        session.dataReadSource = .file
+        XCTAssertNil(model.dataModeReadValue(for: file, session: session))
+        XCTAssertFalse(model.isDataReadSourceAvailable(.file, for: file, capturedFileCreationDates: session.capturedFileCreationDates))
+    }
+
     func testImportTagCatalogMirrorsGroupedEditableTagsPlusOffsetSystemTags() {
         let model = makeModel()
         let groupedIDs = model.orderedEditableTagSections.flatMap(\.tags).map(\.id)
@@ -1024,13 +1141,13 @@ final class AppModelTests: XCTestCase {
 
     // MARK: - Date/Time and Location workflow tests
 
-    func testBeginDateTimeAdjustInitializesSessionFromLaunchTag() {
+    func testBeginDateTimeAdjustInitializesSessionFromLaunchTag() async {
         let model = makeModel()
         let a = URL(fileURLWithPath: "/tmp/B.jpg")
         let b = URL(fileURLWithPath: "/tmp/A.jpg")
         model.selectedFileURLs = [a, b]
 
-        model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeDigitized)
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeDigitized)
 
         guard let session = model.pendingDateTimeAdjustSession else {
             XCTFail("Expected pending date/time session")
@@ -1044,7 +1161,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(session.sourceTimeZoneID.isEmpty)
     }
 
-    func testBeginDateTimeAdjustMenuDefaultsReadSourceToFileWhenMetadataUnavailable() throws {
+    func testBeginDateTimeAdjustMenuDefaultsReadSourceToFileWhenMetadataUnavailable() async throws {
         let model = makeModel()
         let temp = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: temp) }
@@ -1052,7 +1169,7 @@ final class AppModelTests: XCTestCase {
         try Data("x".utf8).write(to: fileURL)
         model.selectedFileURLs = [fileURL]
 
-        model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal, launchContext: .menu)
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal, launchContext: .menu)
 
         guard let session = model.pendingDateTimeAdjustSession else {
             XCTFail("Expected pending date/time session")
@@ -1061,7 +1178,49 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(session.dataReadSource, .file)
     }
 
-    func testBeginDateTimeAdjustInspectorKeepsLaunchFieldAsReadSource() {
+    /// v1.4 follow-up: `beginDateTimeAdjust` used to read the filesystem creation date live,
+    /// via `FileManager.attributesOfItem`, on every SwiftUI body evaluation that touched
+    /// File-mode read-source availability or its date display (radio options, the read-value
+    /// display, preview recomputation) — not just once at sheet-open. Verifies the fix: the
+    /// creation date is captured once into `session.capturedFileCreationDates` at sheet-open,
+    /// and `dataModeReadValue`/`isDataReadSourceAvailable` read from that snapshot afterward
+    /// rather than hitting the filesystem again — proven here by deleting the file between
+    /// sheet-open and the later read/availability calls: a live re-read would return nil/false,
+    /// but the captured snapshot still has it.
+    func testDateTimeAdjustFileCreationDateIsCapturedOnceNotReadLiveOnEveryAccess() async throws {
+        let model = makeModel()
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let fileURL = temp.appendingPathComponent("capture-once.jpg")
+        try Data("x".utf8).write(to: fileURL)
+        model.selectedFileURLs = [fileURL]
+
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal, launchContext: .menu)
+
+        guard var session = model.pendingDateTimeAdjustSession else {
+            XCTFail("Expected pending date/time session")
+            return
+        }
+        guard let capturedDate = session.capturedFileCreationDates[fileURL] else {
+            XCTFail("Expected the file's creation date to be captured at sheet-open")
+            return
+        }
+
+        // Delete the file — a live FileManager read from here on would return nil/false.
+        try FileManager.default.removeItem(at: fileURL)
+
+        session.dataReadSource = .file
+        XCTAssertEqual(
+            model.dataModeReadValue(for: fileURL, session: session), capturedDate,
+            "dataModeReadValue should use the captured snapshot, not a live (now-failing) filesystem read"
+        )
+        XCTAssertTrue(
+            model.isDataReadSourceAvailable(.file, for: fileURL, capturedFileCreationDates: session.capturedFileCreationDates),
+            "isDataReadSourceAvailable should use the captured snapshot, not a live (now-failing) filesystem read"
+        )
+    }
+
+    func testBeginDateTimeAdjustInspectorKeepsLaunchFieldAsReadSource() async {
         let model = makeModel()
         let fileURL = URL(fileURLWithPath: "/tmp/inspector-default.jpg")
         model.selectedFileURLs = [fileURL]
@@ -1074,7 +1233,7 @@ final class AppModelTests: XCTestCase {
             )
         ]
 
-        model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeModified, launchContext: .inspector)
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeModified, launchContext: .inspector)
 
         guard let session = model.pendingDateTimeAdjustSession else {
             XCTFail("Expected pending date/time session")
@@ -1083,19 +1242,19 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(session.dataReadSource, .modified)
     }
 
-    func testBeginDateTimeAdjustDoesNotBlockWhenFolderMetadataLoading() {
+    func testBeginDateTimeAdjustDoesNotBlockWhenFolderMetadataLoading() async {
         let model = makeModel()
         let fileURL = URL(fileURLWithPath: "/tmp/A.jpg")
         model.selectedFileURLs = [fileURL]
         model.isFolderMetadataLoading = true
 
-        model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal)
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal)
 
         XCTAssertNotNil(model.pendingDateTimeAdjustSession)
         XCTAssertEqual(model.statusMessage, "Ready")
     }
 
-    func testBeginDateTimeAdjustSeedsSpecificDateFromFirstSortedFile() {
+    func testBeginDateTimeAdjustSeedsSpecificDateFromFirstSortedFile() async {
         let model = makeModel()
         let b = URL(fileURLWithPath: "/tmp/B.jpg")
         let a = URL(fileURLWithPath: "/tmp/A.jpg")
@@ -1115,7 +1274,7 @@ final class AppModelTests: XCTestCase {
             ),
         ]
 
-        model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeDigitized)
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeDigitized)
 
         guard let session = model.pendingDateTimeAdjustSession else {
             XCTFail("Expected pending date/time session")
@@ -1131,7 +1290,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(session.specificDate, firstDate)
     }
 
-    func testBeginDateTimeAdjustDefaultsToCameraClockAndUsesConsistentOffsetTimeOriginal() {
+    func testBeginDateTimeAdjustDefaultsToCameraClockAndUsesConsistentOffsetTimeOriginal() async {
         let model = makeModel()
         let a = URL(fileURLWithPath: "/tmp/A.cr2")
         let b = URL(fileURLWithPath: "/tmp/B.cr2")
@@ -1153,7 +1312,7 @@ final class AppModelTests: XCTestCase {
             ),
         ]
 
-        model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal)
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal)
 
         guard let session = model.pendingDateTimeAdjustSession else {
             XCTFail("Expected pending date/time session")
@@ -1163,7 +1322,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(session.cameraClockOffsetSeconds, 3_600)
     }
 
-    func testBeginDateTimeAdjustDefaultsToUTCBaselineWhenOffsetTimeOriginalIsMissingOrInconsistent() {
+    func testBeginDateTimeAdjustDefaultsToUTCBaselineWhenOffsetTimeOriginalIsMissingOrInconsistent() async {
         let model = makeModel()
         let a = URL(fileURLWithPath: "/tmp/A.cr2")
         let b = URL(fileURLWithPath: "/tmp/B.cr2")
@@ -1185,7 +1344,7 @@ final class AppModelTests: XCTestCase {
             ),
         ]
 
-        model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal)
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal)
 
         guard let session = model.pendingDateTimeAdjustSession else {
             XCTFail("Expected pending date/time session")
@@ -1311,18 +1470,16 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(adjusted, model.parseDate("2026:03:28 12:00:00"))
     }
 
-    func testDataModeReadSourceFileUsesFilesystemCreationDate() throws {
+    func testDataModeReadSourceFileUsesFilesystemCreationDate() async throws {
         let temp = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: temp) }
         let fileURL = temp.appendingPathComponent("created.jpg")
         try Data("x".utf8).write(to: fileURL)
 
         let model = makeModel()
-        var session = DateTimeAdjustSession(
-            scope: .selection,
-            launchTag: .dateTimeOriginal,
-            fileURLs: [fileURL]
-        )
+        model.selectedFileURLs = [fileURL]
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal)
+        var session = try XCTUnwrap(model.pendingDateTimeAdjustSession)
         session.mode = .file
         session.dataReadSource = .file
 

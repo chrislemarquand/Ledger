@@ -51,8 +51,8 @@ struct LensProfileManagerSheet: View {
                     Button("Delete", role: .destructive) {
                         pendingDeleteLensID = selectedLensID
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.red)
+                    .buttonStyle(.bordered)
+                    .tint(Color(nsColor: .systemRed))
                     .disabled(selectedProfile == nil)
 
                     Spacer()

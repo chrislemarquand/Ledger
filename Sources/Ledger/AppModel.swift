@@ -635,6 +635,10 @@ final class AppModel: ObservableObject {
     var deferredFolderMetadataPrefetchGenerationID = UUID()
     var deferredPreviewPreloadTask: Task<Void, Never>?
     var activeFolderLoadID = UUID()
+    /// Owns the actual load, including reloads awaited by metadata/write workflows.
+    var loadFilesTask: Task<Bool, Never>?
+    var dateTimeAdjustRequestID = UUID()
+    var dateTimeCreationDatesTask: Task<[URL: Date], Never>?
     var previewPreloadID = UUID()
     var inspectorPreviewInflight: Set<URL> = []
     var inspectorPreviewTasksByURL: [URL: Task<Void, Never>] = [:]

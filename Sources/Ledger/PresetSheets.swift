@@ -353,8 +353,8 @@ struct PresetManagerSheet: View {
                 Button("Delete", role: .destructive) {
                     pendingDeletePresetID = selectedPresetID
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
+                .buttonStyle(.bordered)
+                .tint(Color(nsColor: .systemRed))
                 .disabled(selectedPresetID == nil)
 
                 Spacer()

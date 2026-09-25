@@ -190,6 +190,23 @@ final class BrowserContainerViewController: NSViewController {
         }
     }
 
+    // v1.4 follow-up: render subscriptions used to be installed only once, in `viewDidLoad`,
+    // and torn down in `viewWillDisappear` with no corresponding reinstall — correct as long
+    // as this view controller's own lifecycle only ever runs once, which the code's own
+    // justification (closing the last window terminates the app) assumed but doesn't actually
+    // guarantee: an auxiliary window (Settings, ExifTool Console — both ordinary `NSWindow`s)
+    // can keep the app alive after the main window closes, and reopening it via the Dock
+    // brings this same, still-retained view controller back with zero live subscriptions,
+    // permanently unresponsive to model changes. `viewWillAppear` reinstalls only when
+    // `renderObservers` is actually empty, so the normal `viewDidLoad` → `viewWillAppear`
+    // sequence on first appearance doesn't double-install.
+    override func viewWillAppear() {
+        super.viewWillAppear()
+        guard renderObservers.isEmpty else { return }
+        installRenderObservers()
+        render()
+    }
+
     override func viewWillDisappear() {
         super.viewWillDisappear()
         renderObservers.removeAll()

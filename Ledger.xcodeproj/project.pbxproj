@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4637CC253066BF1700AC2A90 /* LedgerCore in Frameworks */ = {isa = PBXBuildFile; productRef = EE0001010000000000000001 /* LedgerCore */; };
+		4637CC263066BF1700AC2A90 /* LedgerCore in Frameworks */ = {isa = PBXBuildFile; productRef = EE0001020000000000000001 /* LedgerCore */; };
 		DD0002020000000000000001 /* SharedUI in Frameworks */ = {isa = PBXBuildFile; productRef = DD0002010000000000000001 /* SharedUI */; };
 		E20000100000000000000001 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A100003A0000000000000001 /* XCTest.framework */; };
 		F10000050000000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = F10000040000000000000001 /* Sparkle */; };
@@ -20,7 +22,7 @@
 			remoteGlobalIDString = A10000600000000000000001;
 			remoteInfo = Ledger;
 		};
-						E20000150000000000000001 /* PBXContainerItemProxy */ = {
+		E20000150000000000000001 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = A10001000000000000000001 /* Project object */;
 			proxyType = 1;
@@ -46,6 +48,8 @@
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		46E8AA593045F8E60033B66F /* LedgerUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = LedgerUITests; sourceTree = "<group>"; };
+		A10000560000000000000001 /* Ledger */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Ledger; sourceTree = "<group>"; };
+		EE0002000000000000000001 /* LedgerTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = LedgerTests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -60,15 +64,17 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4637CC253066BF1700AC2A90 /* LedgerCore in Frameworks */,
 				DD0002020000000000000001 /* SharedUI in Frameworks */,
 				F10000050000000000000001 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-						E20000110000000000000001 /* Frameworks */ = {
+		E20000110000000000000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4637CC263066BF1700AC2A90 /* LedgerCore in Frameworks */,
 				E20000100000000000000001 /* XCTest.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -146,9 +152,7 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
-				A10000560000000000000001 /* Ledger */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Ledger; sourceTree = "<group>"; };
-		EE0002000000000000000001 /* LedgerTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = LedgerTests; sourceTree = "<group>"; };
-										/* End PBXGroup section */
+/* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
 		46E8AA573045F8E60033B66F /* LedgerUITests */ = {
@@ -202,7 +206,7 @@
 			productReference = A10000010000000000000001 /* Ledger.app */;
 			productType = "com.apple.product-type.application";
 		};
-						E20000140000000000000001 /* LedgerTests */ = {
+		E20000140000000000000001 /* LedgerTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = E20000190000000000000001 /* Build configuration list for PBXNativeTarget "LedgerTests" */;
 			buildPhases = (
@@ -242,13 +246,6 @@
 					};
 					A10000600000000000000001 = {
 						CreatedOnToolsVersion = 16.2;
-					};
-					A10000610000000000000001 = {
-						CreatedOnToolsVersion = 16.2;
-					};
-					A10000620000000000000001 = {
-						CreatedOnToolsVersion = 16.2;
-						TestTargetID = A10000600000000000000001;
 					};
 					E20000140000000000000001 = {
 						CreatedOnToolsVersion = 16.2;
@@ -292,13 +289,15 @@
 		A10000810000000000000001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = ();
+			files = (
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		E20000120000000000000001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = ();
+			files = (
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
@@ -374,13 +373,15 @@
 		A10000800000000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = ();
+			files = (
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-						E20000130000000000000001 /* Sources */ = {
+		E20000130000000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = ();
+			files = (
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
@@ -391,7 +392,7 @@
 			target = A10000600000000000000001 /* Ledger */;
 			targetProxy = 46E8AA5C3045F8E60033B66F /* PBXContainerItemProxy */;
 		};
-						E20000160000000000000001 /* PBXTargetDependency */ = {
+		E20000160000000000000001 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = A10000600000000000000001 /* Ledger */;
 			targetProxy = E20000150000000000000001 /* PBXContainerItemProxy */;
@@ -618,7 +619,7 @@
 			};
 			name = Release;
 		};
-										E20000170000000000000001 /* Debug */ = {
+		E20000170000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A10000050000000000000001 /* Config/Debug.xcconfig */;
 			buildSettings = {
@@ -669,7 +670,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-						A10001100000000000000001 /* Build configuration list for PBXProject "Ledger" */ = {
+		A10001100000000000000001 /* Build configuration list for PBXProject "Ledger" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A10001200000000000000001 /* Debug */,

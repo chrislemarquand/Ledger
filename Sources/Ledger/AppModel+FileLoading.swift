@@ -57,18 +57,12 @@ extension AppModel {
             if selectedSidebarID != item.id {
                 selectedSidebarID = item.id
             }
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                await self.loadFiles(for: item.kind)
-            }
+            startLoadingFiles(for: item.kind)
         } else {
             // If the folder is invalid/unreadable, still route through loadFiles so
             // browserEnumerationError is populated for error-state rendering/tests.
             let fallbackURL = folderURL.standardizedFileURL
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                await self.loadFiles(for: .folder(fallbackURL))
-            }
+            startLoadingFiles(for: .folder(fallbackURL))
         }
         NotificationCenter.default.post(
             name: Notification.Name("\(AppBrand.identifierPrefix).SidebarShouldResignFocus"),
@@ -76,7 +70,50 @@ extension AppModel {
         )
     }
 
-    func loadFiles(for kind: SidebarKind) async {
+    /// Await an owned load from a sequential workflow. Fire-and-forget UI actions use
+    /// startLoadingFiles directly; both paths share cancellation and loading-state ownership.
+    /// False means cancelled or superseded, so callers must not continue reload-dependent work.
+    @discardableResult
+    func loadFiles(for kind: SidebarKind) async -> Bool {
+        guard !Task.isCancelled else { return false }
+        let task = startLoadingFiles(for: kind)
+        return await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    @discardableResult
+    func startLoadingFiles(for kind: SidebarKind) -> Task<Bool, Never> {
+        loadFilesTask?.cancel()
+        let loadID = UUID()
+        activeFolderLoadID = loadID
+        isFolderContentLoading = true
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return false }
+            defer {
+                if self.activeFolderLoadID == loadID {
+                    self.loadFilesTask = nil
+                    self.isFolderContentLoading = false
+                    self.checkQuiescenceIfNeeded()
+                }
+            }
+            guard !Task.isCancelled, self.activeFolderLoadID == loadID else { return false }
+            return await self.performFileLoad(for: kind, loadID: loadID)
+        }
+        loadFilesTask = task
+        return task
+    }
+
+    func cancelFileLoad() {
+        activeFolderLoadID = UUID()
+        loadFilesTask?.cancel()
+        loadFilesTask = nil
+        isFolderContentLoading = false
+    }
+
+    private func performFileLoad(for kind: SidebarKind, loadID: UUID) async -> Bool {
         let folderLoadSignpostID = Signposts.folderLoad.makeSignpostID()
         let folderLoadState = Signposts.folderLoad.beginInterval("FolderLoad", id: folderLoadSignpostID)
         defer { Signposts.folderLoad.endInterval("FolderLoad", folderLoadState) }
@@ -103,30 +140,57 @@ extension AppModel {
         previewPreloadID = UUID()
         cloudStateByURL = [:]
 
+        let folderToEnumerate: URL?
+        switch kind {
+        case .pictures:
+            folderToEnumerate = picturesDirectoryURL()
+        case .desktop:
+            folderToEnumerate = desktopDirectoryURL()
+        case .downloads:
+            folderToEnumerate = downloadsDirectoryURL()
+        case .eos1vDevice:
+            folderToEnumerate = nil
+        case let .mountedVolume(volumeURL):
+            folderToEnumerate = volumeURL
+        case let .favorite(favoriteURL):
+            folderToEnumerate = favoriteURL
+        case let .folder(folder):
+            folderToEnumerate = folder
+        }
+
+        // startLoadingFiles assigned loadID before scheduling this task. Check it after
+        // every suspension before publishing either results or enumeration errors.
         let urls: [URL]
         var enumerationError: Error?
-
-        do {
-            switch kind {
-            case .pictures:
-                urls = try enumerateImages(in: picturesDirectoryURL())
-            case .desktop:
-                urls = try enumerateImages(in: desktopDirectoryURL())
-            case .downloads:
-                urls = try enumerateImages(in: downloadsDirectoryURL())
-            case .eos1vDevice:
+        if let folderToEnumerate {
+            do {
+                // v1.4 follow-up: contentsOfDirectory + per-file resourceValues used to run
+                // synchronously on the main actor here, blocking input/drawing for however
+                // long enumeration took — a real gap on a slow external/network-backed
+                // volume, not just a local-corpus timing artifact. enumerateImages itself is
+                // `nonisolated static` (no `self` capture, no actor-isolated state) so it can
+                // run on a detached task instead. `Task.detached` is unstructured — same as
+                // `readBrowserFileAttributes` below — so its handle is retained and
+                // cancellation is forwarded explicitly rather than just awaited directly;
+                // now that every `loadFiles` call site cancels its predecessor's wrapping
+                // task (`loadFilesTask`), that cancellation needs somewhere real to go.
+                let enumerationTask = Task.detached(priority: .userInitiated) {
+                    try Self.enumerateImages(in: folderToEnumerate)
+                }
+                urls = try await withTaskCancellationHandler {
+                    try await enumerationTask.value
+                } onCancel: {
+                    enumerationTask.cancel()
+                }
+            } catch {
+                enumerationError = error
                 urls = []
-            case let .mountedVolume(volumeURL):
-                urls = try enumerateImages(in: volumeURL)
-            case let .favorite(favoriteURL):
-                urls = try enumerateImages(in: favoriteURL)
-            case let .folder(folder):
-                urls = try enumerateImages(in: folder)
             }
-        } catch {
-            enumerationError = error
+        } else {
             urls = []
         }
+
+        guard !Task.isCancelled, activeFolderLoadID == loadID else { return false }
 
         // If enumeration failed because the folder no longer exists, remove the sidebar entry now
         // so stale entries don't persist after relaunch. Permission errors are NOT pruned —
@@ -169,15 +233,13 @@ extension AppModel {
             }
         }
 
-        let loadID = UUID()
-        activeFolderLoadID = loadID
         let hydrationID = UUID()
 
         let shouldPublishHydratedOnly = browserSort != .name
         let prehydratedItems: [BrowserItem]?
         if shouldPublishHydratedOnly {
             let attributesByURL = await readBrowserFileAttributes(for: urls)
-            guard !Task.isCancelled, activeFolderLoadID == loadID else { return }
+            guard !Task.isCancelled, activeFolderLoadID == loadID else { return false }
             mergeCloudStates(from: attributesByURL)
             prehydratedItems = urls.map { url in
                 let attrs = attributesByURL[url]
@@ -244,6 +306,7 @@ extension AppModel {
         cloudDownloadTracker.start(for: urls) { [weak self] states, progress in
             self?.applyCloudStateUpdates(states, progress: progress)
         }
+        return true
     }
 
     func requestCloudDownload(for url: URL) {
@@ -539,7 +602,12 @@ extension AppModel {
     )
 
     private func readBrowserFileAttributes(for files: [URL]) async -> [URL: BrowserFileAttributes] {
-        await Task.detached(priority: .utility) { () -> [URL: BrowserFileAttributes] in
+        // v1.4 follow-up: `Task.detached` is genuinely unstructured — cancelling the caller
+        // (e.g. `browserItemHydrationTask`) never used to reach this worker, so switching
+        // folders mid-hydration left the old folder's attribute reads running to completion
+        // in the background (invisible to the quiescence predicate, wasted I/O). Retain the
+        // detached task's handle and forward cancellation into it explicitly.
+        let task = Task.detached(priority: .utility) { () -> [URL: BrowserFileAttributes] in
             var result: [URL: BrowserFileAttributes] = [:]
             result.reserveCapacity(files.count)
             let batchSize = 96
@@ -566,7 +634,12 @@ extension AppModel {
                 }
             }
             return result
-        }.value
+        }
+        return await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     func sortBrowserItems(_ items: [BrowserItem]) -> [BrowserItem] {
@@ -677,13 +750,16 @@ extension AppModel {
         }
 
         guard selectedSidebarID != previousSelectionID, let replacement = selectedSidebarItem else { return }
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            await self.loadFiles(for: replacement.kind)
-        }
+        startLoadingFiles(for: replacement.kind)
     }
 
     private func clearToEmptyStateAfterSourceLoss() {
+        // v1.4 follow-up: this used to leave `activeFolderLoadID` untouched, so a `loadFiles`
+        // enumeration already in flight when the source is lost (now genuinely suspendable —
+        // enumeration runs off the main actor) could resume, still pass its stale-result
+        // guard unchanged, and publish browser content for a folder whose sidebar entry was
+        // just cleared.
+        cancelFileLoad()
         selectedSidebarID = nil
         clearLoadedContentState(preserveSessionCaches: true)
         setStatusMessage(
@@ -735,14 +811,16 @@ extension AppModel {
             ?? URL(fileURLWithPath: NSHomeDirectory())
     }
 
-    private func enumerateImages(in folder: URL) throws -> [URL] {
+    nonisolated static func enumerateImages(in folder: URL) throws -> [URL] {
+        try Task.checkCancellation()
         let urls = try FileManager.default.contentsOfDirectory(
             at: folder,
             includingPropertiesForKeys: [.isRegularFileKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         )
 
-        return urls.filter { url in
+        return try urls.filter { url in
+            try Task.checkCancellation()
             guard Self.supportedImageExtensions.contains(url.pathExtension.lowercased()) else { return false }
             let isRegular = (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false
             return isRegular

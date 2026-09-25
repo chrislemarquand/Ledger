@@ -162,58 +162,103 @@ enum ThumbnailService {
 
     // MARK: - Request broker
 
-    private actor Broker {
+    // v1.4 follow-up: three related permit-accounting bugs found and fixed together (they
+    // all touch the same `active`/`waiters`/`inflight` bookkeeping, easy to half-fix):
+    // (1) waiter-overflow eviction used to resume the oldest waiter without granting it a
+    //     permit, so it ran `work()` uncounted against `maxConcurrent` — fixed by making
+    //     `acquirePermit` return `Bool`; an evicted waiter is explicitly denied rather than
+    //     silently let through;
+    // (2) `cancelAll` used to reset `active` to 0 unconditionally. An earlier version of this
+    //     fix tried a generation token to stop *that* accounting from corrupting future
+    //     requests — but the real `work()` closure (`generate(fileURL:maxPixelSize:)`) has no
+    //     internal `Task.isCancelled` checks, so a permit-holding task already past its
+    //     cancellation check keeps running to completion regardless of `cancelAll`. Resetting
+    //     `active` to 0 let brand-new requests be admitted immediately on top of that still-
+    //     physically-running old work, genuinely exceeding `maxConcurrent` for real (not just
+    //     in bookkeeping) until the old work finished. Correct fix: don't reset `active` at
+    //     all — only `releasePermit()`, called when a permit-holder's `work()` actually
+    //     returns, may decrement it. New requests submitted right after `cancelAll` correctly
+    //     queue behind still-executing old work, same as they would without any cancellation
+    //     in progress;
+    // (3) `request`'s unconditional `inflight[key] = nil` on completion could erase a
+    //     *replacement* request registered under the same key after this one was superseded —
+    //     fixed by tagging each registration with an id and only clearing the entry if it's
+    //     still the one this call registered.
+    actor Broker {
+        private struct Waiter {
+            let continuation: CheckedContinuation<Bool, Never>
+        }
+
         private let maxConcurrent: Int
         private var active = 0
-        private var waiters: [CheckedContinuation<Void, Never>] = []
-        private var inflight: [RequestKey: Task<NSImage?, Never>] = [:]
+        private var waiters: [Waiter] = []
+        private var inflight: [RequestKey: (id: UUID, task: Task<NSImage?, Never>)] = [:]
         private static let maxWaiters = 200
 
         init(maxConcurrent: Int) { self.maxConcurrent = maxConcurrent }
+
+        // Read-only state for tests to establish queue ordering without scheduling sleeps.
+        var queuedRequestCount: Int { waiters.count }
 
         func request(
             key: RequestKey,
             priority: TaskPriority,
             work: @escaping @Sendable () async -> NSImage?
         ) async -> NSImage? {
-            if let existing = inflight[key] { return await existing.value }
+            if let existing = inflight[key] { return await existing.task.value }
+            let requestID = UUID()
             let task = Task(priority: priority) { [weak self] in
                 await self?.withPermit(work)
             }
-            inflight[key] = task
+            inflight[key] = (requestID, task)
             let image = await task.value
-            inflight[key] = nil
+            if inflight[key]?.id == requestID {
+                inflight[key] = nil
+            }
             return image
         }
 
         func cancelAll() {
-            inflight.values.forEach { $0.cancel() }
+            inflight.values.forEach { $0.task.cancel() }
             inflight.removeAll()
-            waiters.forEach { $0.resume() }
+            // Deny every currently-queued waiter outright — it holds no real resource yet, so
+            // this is safe regardless of what still-running permit-holders do. `active` is
+            // deliberately untouched: any permit a cancelled task already holds is only truly
+            // free once that task's own `releasePermit()` runs, as it finishes for real.
+            waiters.forEach { $0.continuation.resume(returning: false) }
             waiters.removeAll()
-            active = 0
         }
 
         private func withPermit(_ work: @escaping @Sendable () async -> NSImage?) async -> NSImage? {
-            await acquirePermit()
+            guard await acquirePermit() else { return nil }
             guard !Task.isCancelled else { releasePermit(); return nil }
             defer { releasePermit() }
             return await work()
         }
 
-        private func acquirePermit() async {
-            guard active >= maxConcurrent else { active += 1; return }
-            if waiters.count >= Self.maxWaiters { waiters.removeFirst().resume() }
-            await withCheckedContinuation { waiters.append($0) }
+        /// `false` means this request was evicted (waiter overflow) or denied by a
+        /// `cancelAll` while waiting — the caller must not run `work()` or call
+        /// `releasePermit()`, since it never actually holds a slot.
+        private func acquirePermit() async -> Bool {
+            guard active >= maxConcurrent else { active += 1; return true }
+            if waiters.count >= Self.maxWaiters {
+                waiters.removeFirst().continuation.resume(returning: false)
+            }
+            return await withCheckedContinuation { continuation in
+                waiters.append(Waiter(continuation: continuation))
+            }
         }
 
         private func releasePermit() {
-            if !waiters.isEmpty { waiters.removeFirst().resume() }
-            else { active = max(0, active - 1) }
+            if !waiters.isEmpty {
+                waiters.removeFirst().continuation.resume(returning: true)
+            } else {
+                active = max(0, active - 1)
+            }
         }
     }
 
-    private struct RequestKey: Hashable {
+    struct RequestKey: Hashable {
         let url: URL
         let side: Int
     }
