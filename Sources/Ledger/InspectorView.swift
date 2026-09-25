@@ -84,7 +84,7 @@ private struct InspectorPreviewActionLabel: View {
             Image(systemName: symbolName)
                 .font(.body)
                 .foregroundStyle(isPressed ? Color.primary.opacity(0.7) : (isHovered ? Color.primary : Color.secondary))
-                .symbolEffect(.bounce.up.byLayer, options: .nonRepeating, value: bounceTrigger)
+                .symbolEffect(.bounce.up.byLayer, options: .nonRepeating.speed(1.5), value: bounceTrigger)
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
