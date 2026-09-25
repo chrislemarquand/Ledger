@@ -195,6 +195,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowController.showWindow(nil)
         if let openFolderPath = Self.openFolderPathFromLaunchArguments() {
             model.openFolder(at: URL(fileURLWithPath: openFolderPath))
+        } else if !Self.isStateRestorationDisabled() {
+            // v1.4: reopen the last-session folder/selection on a clean launch — mutually
+            // exclusive with -openFolderPath (an explicit launch-argument folder always wins,
+            // e.g. UI tests/benchmarks) and gated by the same flag AppKit's own window-state
+            // restoration already uses, for the same benchmark-isolation reason. See
+            // docs/last-folder-selection-restore-plan-2026-09.md.
+            Task { @MainActor in
+                await model.restoreLastSessionSelectionIfAvailable()
+            }
         }
         NSApp.activate(ignoringOtherApps: true)
     }

@@ -124,7 +124,8 @@ extension AppModel {
         }
     }
 
-    func selectSidebar(id: String?) {
+    @discardableResult
+    func selectSidebar(id: String?) -> Task<Bool, Never>? {
         hasHadExplicitSidebarSelection = true
         selectedSidebarID = id
         if let id {
@@ -133,13 +134,13 @@ extension AppModel {
         }
         guard let itemToLoad = selectedSidebarItem else {
             cancelFileLoad()
-            return
+            return nil
         }
 
         guard itemToLoad.kind != .eos1vDevice else {
             // No filesystem content for the device — nothing to load or show loading for.
             cancelFileLoad()
-            return
+            return nil
         }
         lastNonDeviceSidebarID = itemToLoad.id
 
@@ -149,7 +150,7 @@ extension AppModel {
         // Show the loading skeleton immediately so the gallery's reloadData() flash is masked.
         // loadFiles is deferred to the next task so SwiftUI renders the skeleton before clearing state.
         let kind = itemToLoad.kind
-        startLoadingFiles(for: kind)
+        return startLoadingFiles(for: kind)
     }
 
     /// Explicit user-initiated sidebar selection path from the SwiftUI sidebar.

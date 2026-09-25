@@ -394,6 +394,120 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(recents.map(\.title), ["B", "A"])
     }
 
+    // MARK: - Last-session folder/selection restore (v1.4)
+    //
+    // `restoreLastSessionSelectionIfAvailable` reads/writes UserDefaults.standard directly
+    // (no injectable store, matching browserViewMode/iconSubtitleColumnID above) — save and
+    // restore the real values around each test.
+
+    private func withSavedLastSessionSelectionDefaults(_ body: () async throws -> Void) async rethrows {
+        let originalKind = UserDefaults.standard.string(forKey: AppModel.lastSessionSidebarKindKey)
+        let originalPath = UserDefaults.standard.string(forKey: AppModel.lastSessionSidebarPathKey)
+        let originalFiles = UserDefaults.standard.array(forKey: AppModel.lastSessionSelectedFilePathsKey)
+        defer {
+            if let originalKind {
+                UserDefaults.standard.set(originalKind, forKey: AppModel.lastSessionSidebarKindKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: AppModel.lastSessionSidebarKindKey)
+            }
+            if let originalPath {
+                UserDefaults.standard.set(originalPath, forKey: AppModel.lastSessionSidebarPathKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: AppModel.lastSessionSidebarPathKey)
+            }
+            if let originalFiles {
+                UserDefaults.standard.set(originalFiles, forKey: AppModel.lastSessionSelectedFilePathsKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: AppModel.lastSessionSelectedFilePathsKey)
+            }
+        }
+        try await body()
+    }
+
+    func testRestoreLastSessionSelectionReopensLastFolderAndSelection() async throws {
+        try await withSavedLastSessionSelectionDefaults {
+            let temp = self.makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: temp) }
+            try Data("a".utf8).write(to: temp.appendingPathComponent("a.jpg"))
+            try Data("b".utf8).write(to: temp.appendingPathComponent("b.jpg"))
+
+            let recentLocationsStore = InMemoryRecentLocationsStore()
+            let firstSession = self.makeModel(recentLocationsStore: recentLocationsStore)
+            // openFolder (not a directly-constructed URL) so the selected URLs are the same
+            // symlink-resolved form a real enumeration produces (FileManager's
+            // contentsOfDirectory can resolve /var -> /private/var etc. even when the
+            // directory URL passed in didn't) — matches how a real selection is always made
+            // from already-enumerated browserItems, never independently constructed. Also
+            // registers the recent location, so secondSession's sidebarItems contains a
+            // matching entry to restore against.
+            firstSession.openFolder(at: temp)
+            _ = await firstSession.loadFilesTask?.value
+            let loadedURLs = Set(firstSession.browserItems.map(\.url))
+            XCTAssertEqual(loadedURLs.count, 2)
+            // Simulates the user having selected both files — didSet persists this
+            // synchronously, same as a real selection change would.
+            firstSession.selectedFileURLs = loadedURLs
+
+            let secondSession = self.makeModel(recentLocationsStore: recentLocationsStore)
+            await secondSession.restoreLastSessionSelectionIfAvailable()
+
+            XCTAssertEqual(secondSession.selectedSidebarID, "folder::\(temp.path)")
+            XCTAssertEqual(secondSession.selectedFileURLs, loadedURLs)
+        }
+    }
+
+    func testRestoreLastSessionSelectionDropsFilesThatNoLongerExist() async throws {
+        try await withSavedLastSessionSelectionDefaults {
+            let temp = self.makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: temp) }
+            try Data("a".utf8).write(to: temp.appendingPathComponent("a.jpg"))
+
+            let recentLocationsStore = InMemoryRecentLocationsStore()
+            let firstSession = self.makeModel(recentLocationsStore: recentLocationsStore)
+            firstSession.openFolder(at: temp)
+            _ = await firstSession.loadFilesTask?.value
+            guard let loadedFileA = firstSession.browserItems.first?.url else {
+                XCTFail("expected a.jpg to load")
+                return
+            }
+            // b.jpg was never created — persisted as selected anyway, simulating a file
+            // deleted/moved after the selection was last saved. Built from the resolved
+            // loadedFileA's parent so it matches the same path form a real enumeration
+            // would have used had b.jpg actually existed.
+            let missingFileB = loadedFileA.deletingLastPathComponent().appendingPathComponent("b.jpg")
+            firstSession.selectedFileURLs = [loadedFileA, missingFileB]
+
+            let secondSession = self.makeModel(recentLocationsStore: recentLocationsStore)
+            await secondSession.restoreLastSessionSelectionIfAvailable()
+
+            XCTAssertEqual(secondSession.selectedFileURLs, [loadedFileA], "a selected file that no longer exists on disk must be silently dropped, not error")
+        }
+    }
+
+    func testRestoreLastSessionSelectionSkipsPrivacySensitiveKind() async throws {
+        try await withSavedLastSessionSelectionDefaults {
+            UserDefaults.standard.set("desktop", forKey: AppModel.lastSessionSidebarKindKey)
+            UserDefaults.standard.removeObject(forKey: AppModel.lastSessionSidebarPathKey)
+
+            let model = self.makeModel()
+            await model.restoreLastSessionSelectionIfAvailable()
+
+            XCTAssertNil(model.selectedSidebarID, "a privacy-sensitive kind must never be auto-restored without explicit user interaction")
+        }
+    }
+
+    func testRestoreLastSessionSelectionNoOpWhenNothingPersisted() async throws {
+        try await withSavedLastSessionSelectionDefaults {
+            UserDefaults.standard.removeObject(forKey: AppModel.lastSessionSidebarKindKey)
+            UserDefaults.standard.removeObject(forKey: AppModel.lastSessionSidebarPathKey)
+
+            let model = self.makeModel()
+            await model.restoreLastSessionSelectionIfAvailable()
+
+            XCTAssertNil(model.selectedSidebarID)
+        }
+    }
+
     func testPinnedLocationIsRemovedFromRecentsAndSelectedOnOpen() throws {
         let temp = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: temp) }

@@ -471,7 +471,9 @@ final class AppModel: ObservableObject {
 
     @Published var sidebarItems: [SidebarItem] = []
     @Published var sidebarImageCounts: [String: Int] = [:]
-    @Published var selectedSidebarID: String?
+    @Published var selectedSidebarID: String? {
+        didSet { persistLastSessionSidebarKind() }
+    }
     @Published var isEOS1VCableConnected = false
     @Published var isSidebarCollapsed = false
     @Published var isInspectorCollapsed = false
@@ -490,7 +492,9 @@ final class AppModel: ObservableObject {
             rebuildFilteredBrowserItems()
         }
     }
-    @Published var selectedFileURLs: Set<URL> = []
+    @Published var selectedFileURLs: Set<URL> = [] {
+        didSet { persistLastSessionFileSelection() }
+    }
     @Published var browserViewMode: BrowserViewMode {
         didSet {
             UserDefaults.standard.set(browserViewMode.rawValue, forKey: Self.browserViewModeKey)
@@ -696,6 +700,13 @@ final class AppModel: ObservableObject {
     private static let keepBackupsKey = "ui.settings.keep.backups"
     private static let backupRetentionCountKey = "ui.settings.backup.retention.count"
     static let inspectorFieldVisibilityKey = "ui.settings.inspector.field.visibility"
+    /// v1.4: reopen the last folder/selection on launch — see
+    /// `docs/last-folder-selection-restore-plan-2026-09.md`. Persistence lives in
+    /// `AppModel+Sidebar.swift`'s `persistLastSessionSidebarKind`/
+    /// `persistLastSessionFileSelection`/`restoreLastSessionSelectionIfAvailable`.
+    static let lastSessionSidebarKindKey = "ui.session.last.sidebar.kind"
+    static let lastSessionSidebarPathKey = "ui.session.last.sidebar.path"
+    static let lastSessionSelectedFilePathsKey = "ui.session.last.selected.file.paths"
     static let legacyUserDefaultsPrefixes = ["Logbook"]
     static let selectionMetadataBatchSize = 120
     static let selectionMetadataDebounceNanoseconds: UInt64 = 90_000_000

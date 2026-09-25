@@ -711,7 +711,7 @@ extension AppModel {
         return path.hasPrefix("/Volumes/")
     }
 
-    private func isReachableDirectory(_ url: URL) -> Bool {
+    func isReachableDirectory(_ url: URL) -> Bool {
         var isDirectory: ObjCBool = false
         return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
             && isDirectory.boolValue

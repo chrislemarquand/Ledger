@@ -741,4 +741,125 @@ extension AppModel {
         }
         .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
     }
+
+    // MARK: - Last-session folder/selection restore
+    //
+    // v1.4: reopens the last-session folder and file selection on a clean launch, matching
+    // the HIG's "restore the previous state... so people can continue where they left off"
+    // guidance and the app's existing stance on window/split/column restoration. Full design
+    // and edge cases: `docs/last-folder-selection-restore-plan-2026-09.md`.
+
+    func persistLastSessionSidebarKind() {
+        guard let item = selectedSidebarItem, let encoded = Self.encodeSidebarKind(item.kind) else {
+            UserDefaults.standard.removeObject(forKey: Self.lastSessionSidebarKindKey)
+            UserDefaults.standard.removeObject(forKey: Self.lastSessionSidebarPathKey)
+            return
+        }
+        UserDefaults.standard.set(encoded.caseName, forKey: Self.lastSessionSidebarKindKey)
+        if let path = encoded.path {
+            UserDefaults.standard.set(path, forKey: Self.lastSessionSidebarPathKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Self.lastSessionSidebarPathKey)
+        }
+    }
+
+    func persistLastSessionFileSelection() {
+        // `clearLoadedContentState` (called from every folder load, `performFileLoad`)
+        // transiently resets `selectedFileURLs = []` while `isFolderContentLoading` is still
+        // true, before the newly-loaded folder's content is published — that's correct
+        // internal behaviour, but it isn't a real user selection change, and persisting it
+        // would overwrite the real last-session selection with an empty array on every single
+        // folder load, including the load this very restore feature triggers on launch. Only
+        // persist once a load has actually settled.
+        guard !isFolderContentLoading else { return }
+
+        // Never persist a selection made within a privacy-sensitive location (Desktop/
+        // Downloads, or a file-system URL under isPrivacySensitiveFileSystemURL) — the
+        // restore side also refuses to restore into one of these, but the write is gated
+        // independently so nothing privacy-sensitive is ever written to UserDefaults at all,
+        // not just left unread.
+        guard let item = selectedSidebarItem, !isPrivacySensitiveSidebarKind(item.kind) else {
+            UserDefaults.standard.removeObject(forKey: Self.lastSessionSelectedFilePathsKey)
+            return
+        }
+        UserDefaults.standard.set(selectedFileURLs.map(\.path), forKey: Self.lastSessionSelectedFilePathsKey)
+    }
+
+    /// Called once from `applicationDidFinishLaunching`, mutually exclusive with
+    /// `-openFolderPath` and gated by `-disableStateRestoration` — see the plan doc for why
+    /// (Phase 2.1/2.3 already hit real-preference/benchmark-isolation contamination once this
+    /// project from a similar demand-gate).
+    func restoreLastSessionSelectionIfAvailable() async {
+        guard let caseName = UserDefaults.standard.string(forKey: Self.lastSessionSidebarKindKey) else { return }
+        let path = UserDefaults.standard.string(forKey: Self.lastSessionSidebarPathKey)
+        guard let kind = Self.decodeSidebarKind(caseName: caseName, path: path) else { return }
+
+        // Never silently select a privacy-sensitive location before the user has explicitly
+        // interacted with the sidebar this session — same gate `ensureSidebarImageCount`/
+        // `reloadFilesIfBrowserEmpty` already enforce elsewhere. Deliberate: launches with no
+        // selection restored in this case, rather than prompting/auto-loading Desktop or
+        // Downloads on every launch.
+        guard !isPrivacySensitiveSidebarKind(kind) else { return }
+
+        if case let .mountedVolume(url) = kind, !isReachableDirectory(url) {
+            return
+        }
+
+        guard let item = Self.matchingSidebarItem(for: kind, in: sidebarItems) else { return }
+
+        guard let task = selectSidebar(id: item.id), await task.value else { return }
+
+        guard let persistedPaths = UserDefaults.standard.array(forKey: Self.lastSessionSelectedFilePathsKey) as? [String],
+              !persistedPaths.isEmpty
+        else { return }
+        let persistedURLs = Set(persistedPaths.map { URL(fileURLWithPath: $0) })
+        let availableURLs = Set(browserItems.map(\.url))
+        let restoredSelection = persistedURLs.intersection(availableURLs)
+        guard !restoredSelection.isEmpty else { return }
+        let focusedURL = restoredSelection.sorted { $0.path < $1.path }.first
+        setSelectionFromList(restoredSelection, focusedURL: focusedURL)
+    }
+
+    private static func encodeSidebarKind(_ kind: SidebarKind) -> (caseName: String, path: String?)? {
+        switch kind {
+        case .pictures: return ("pictures", nil)
+        case .desktop: return ("desktop", nil)
+        case .downloads: return ("downloads", nil)
+        case .eos1vDevice: return nil // device state isn't filesystem-backed — never persisted
+        case let .mountedVolume(url): return ("mountedVolume", url.path)
+        case let .favorite(url): return ("favorite", url.path)
+        case let .folder(url): return ("folder", url.path)
+        }
+    }
+
+    private static func decodeSidebarKind(caseName: String, path: String?) -> SidebarKind? {
+        switch caseName {
+        case "pictures": return .pictures
+        case "desktop": return .desktop
+        case "downloads": return .downloads
+        case "mountedVolume": return path.map { .mountedVolume(URL(fileURLWithPath: $0)) }
+        case "favorite": return path.map { .favorite(URL(fileURLWithPath: $0)) }
+        case "folder": return path.map { .folder(URL(fileURLWithPath: $0)) }
+        default: return nil
+        }
+    }
+
+    /// Matches on path string rather than `SidebarKind`'s synthesized `Equatable` — avoids
+    /// relying on the decoded `URL(fileURLWithPath:)` representation being byte-identical to
+    /// whatever canonicalisation (`canonicalSidebarURL`, symlink resolution, standardisation)
+    /// built the live `sidebarItems` URLs.
+    private static func matchingSidebarItem(for kind: SidebarKind, in items: [SidebarItem]) -> SidebarItem? {
+        items.first { item in
+            switch (item.kind, kind) {
+            case (.pictures, .pictures), (.desktop, .desktop), (.downloads, .downloads):
+                return true
+            case let (.mountedVolume(itemURL), .mountedVolume(url)),
+                 let (.favorite(itemURL), .favorite(url)),
+                 let (.folder(itemURL), .folder(url)):
+                return itemURL.path == url.path
+            default:
+                return false
+            }
+        }
+    }
 }
