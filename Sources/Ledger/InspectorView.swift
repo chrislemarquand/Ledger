@@ -54,7 +54,7 @@ struct CloudPlaceholderInspectorView: View {
                 PlaceholderView(
                     symbolName: "icloud.and.arrow.down",
                     title: "Downloading\u{2026}",
-                    description: "Fetching this file from iCloud",
+                    description: "Fetching this file from iCloud.",
                     isPerformingAction: true,
                     actionProgress: downloadProgress
                 )
@@ -62,7 +62,7 @@ struct CloudPlaceholderInspectorView: View {
                 PlaceholderView(
                     symbolName: "icloud.and.arrow.down",
                     title: "Not Downloaded",
-                    description: "This file hasn\u{2019}t been downloaded from iCloud yet",
+                    description: "This file hasn\u{2019}t been downloaded from iCloud yet.",
                     actionTitle: "Download Now",
                     action: onDownload
                 )
@@ -77,15 +77,22 @@ private struct InspectorPreviewActionLabel: View {
     let title: String
     @Environment(\.inspectorPreviewActionIsPressed) private var isPressed
     @Environment(\.inspectorPreviewActionIsHovered) private var isHovered
+    @State private var bounceTrigger = 0
 
     var body: some View {
         VStack(spacing: 4) {
             Image(systemName: symbolName)
                 .font(.body)
                 .foregroundStyle(isPressed ? Color.primary.opacity(0.7) : (isHovered ? Color.primary : Color.secondary))
+                .symbolEffect(.bounce.up.byLayer, options: .nonRepeating.speed(1.5), value: bounceTrigger)
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+        .onChange(of: isPressed) { _, stillPressed in
+            if !stillPressed {
+                bounceTrigger += 1
+            }
         }
     }
 }
@@ -109,7 +116,7 @@ struct InspectorView: View {
                     PlaceholderView(
                         symbolName: "slider.horizontal.3",
                         title: "No Selection",
-                        description: "Select one or more images to view and edit their metadata"
+                        description: "Select one or more images to view and edit their metadata."
                     )
                     .frame(maxWidth: .infinity)
                     .containerRelativeFrame(.vertical, alignment: .center)
@@ -315,16 +322,6 @@ struct InspectorView: View {
             moveInspectorFieldFocus(backward: backward)
         }
         .sheet(item: Binding(
-            get: { model.activeWelcomePresentation },
-            set: { newValue in
-                Task { @MainActor in
-                    model.activeWelcomePresentation = newValue
-                }
-            }
-        )) { presentation in
-            AppWelcomeSheetView(presentation: presentation)
-        }
-        .sheet(item: Binding(
             get: { model.activePresetEditor },
             set: { newValue in
                 Task { @MainActor in
@@ -337,7 +334,6 @@ struct InspectorView: View {
                 initialEditor: editor
             )
         }
-        .tint(AppTheme.accentColor)
         .sheet(isPresented: Binding(
             get: { model.isManagePresetsPresented },
             set: { newValue in
@@ -601,7 +597,9 @@ struct InspectorView: View {
     private func openDateTimeAdjustSheet(for tag: AppModel.EditableTag) {
         let targetTag = DateTimeTargetTag.from(editableTagID: tag.id) ?? .dateTimeOriginal
         let scope: DateTimeAdjustScope = model.selectedFileURLs.count > 1 ? .selection : .single
-        model.beginDateTimeAdjust(scope: scope, launchTag: targetTag, launchContext: .inspector)
+        Task { @MainActor in
+            await model.beginDateTimeAdjust(scope: scope, launchTag: targetTag, launchContext: .inspector)
+        }
     }
 
     private func openLocationAdjustSheet() {

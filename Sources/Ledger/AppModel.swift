@@ -1,13 +1,34 @@
 import AppKit
 import Combine
-import ExifEditCore
+import LedgerCore
 import Foundation
 import OSLog
 import Quartz
 import SharedUI
 import SwiftUI
 
-let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "ExifEdit", category: "AppModel")
+let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Ledger", category: "AppModel")
+
+/// XCTestConfigurationFilePath is set by xcodebuild test but not by swift test --parallel.
+/// NSClassFromString covers both runners. Use this to skip blocking modal alerts during
+/// automated test runs, where there's no user available to dismiss them.
+let isRunningUnitTests: Bool = {
+    ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil ||
+        NSClassFromString("XCTestCase") != nil
+}()
+
+/// `-skipRecentLocationPersistence`: gates the disk write in `persistRecentLocations()`
+/// only — in-memory Recents behavior within the run is unaffected. Added for
+/// scripts/performance/run_benchmarks.sh and any other CLI-launched instance after
+/// discovering (2026-08-31) that `HOME` environment variable redirection does NOT
+/// isolate NSUserDefaults/cfprefsd OR NSHomeDirectory()-based paths on this platform —
+/// every "isolated" benchmark launch this session was actually reading/writing the
+/// real ~/Library/Application Support/Ledger/recent_locations.json, polluting the
+/// real Recents list with corpus/test paths. See feedback_macos_home_isolation_broken
+/// memory and docs/v1.4-progress.md for the full incident writeup.
+let isRecentLocationPersistenceDisabled: Bool = {
+    CommandLine.arguments.contains("-skipRecentLocationPersistence")
+}()
 
 enum ThumbnailPipeline {
     static func cachedImage(for fileURL: URL, minRenderedSide: CGFloat) -> NSImage? {
@@ -450,7 +471,9 @@ final class AppModel: ObservableObject {
 
     @Published var sidebarItems: [SidebarItem] = []
     @Published var sidebarImageCounts: [String: Int] = [:]
-    @Published var selectedSidebarID: String?
+    @Published var selectedSidebarID: String? {
+        didSet { persistLastSessionSidebarKind() }
+    }
     @Published var isEOS1VCableConnected = false
     @Published var isSidebarCollapsed = false
     @Published var isInspectorCollapsed = false
@@ -469,9 +492,15 @@ final class AppModel: ObservableObject {
             rebuildFilteredBrowserItems()
         }
     }
-    @Published var selectedFileURLs: Set<URL> = []
+    @Published var selectedFileURLs: Set<URL> = [] {
+        didSet { persistLastSessionFileSelection() }
+    }
     @Published var browserViewMode: BrowserViewMode {
-        didSet { UserDefaults.standard.set(browserViewMode.rawValue, forKey: Self.browserViewModeKey) }
+        didSet {
+            UserDefaults.standard.set(browserViewMode.rawValue, forKey: Self.browserViewModeKey)
+            guard oldValue != browserViewMode else { return }
+            beginQuiescenceTracking(reason: "ModeSwitch")
+        }
     }
     @Published var galleryGridLevel: Int {
         didSet { UserDefaults.standard.set(galleryGridLevel, forKey: Self.galleryGridLevelKey) }
@@ -511,7 +540,6 @@ final class AppModel: ObservableObject {
             notifyInspectorDidChange()
         }
     }
-    @Published var activeWelcomePresentation: AppWelcomePresentation?
     @Published var isManagePresetsPresented = false {
         didSet {
             notifyInspectorDidChange()
@@ -600,22 +628,39 @@ final class AppModel: ObservableObject {
     /// hasn't supplied a percentage yet.
     @Published var cloudDownloadProgressByURL: [URL: Double] = [:]
     var selectionMetadataLoadTask: Task<Void, Never>?
+    /// v1.4 Phase 2.3: guards `selectionMetadataLoadTask`'s self-nilling `defer` against a
+    /// superseded task's cleanup racing ahead of and clobbering a newer task's reference —
+    /// see the call site in `selectionChanged()`.
+    var selectionMetadataLoadGenerationID = UUID()
     var previewPreloadTask: Task<Void, Never>?
     var deferredFolderMetadataPrefetchTask: Task<Void, Never>?
+    /// v1.4 Phase 2.3: guards `deferredFolderMetadataPrefetchTask`'s self-nilling `defer` —
+    /// same race as `selectionMetadataLoadGenerationID`.
+    var deferredFolderMetadataPrefetchGenerationID = UUID()
     var deferredPreviewPreloadTask: Task<Void, Never>?
     var activeFolderLoadID = UUID()
+    /// Owns the actual load, including reloads awaited by metadata/write workflows.
+    var loadFilesTask: Task<Bool, Never>?
+    var dateTimeAdjustRequestID = UUID()
+    var dateTimeCreationDatesTask: Task<[URL: Date], Never>?
     var previewPreloadID = UUID()
     var inspectorPreviewInflight: Set<URL> = []
     var inspectorPreviewTasksByURL: [URL: Task<Void, Never>] = [:]
     var inspectorPreviewRecency: [URL] = []
     var staleMetadataFiles: Set<URL> = []
+    /// v1.4 Phase 3.1: last-loaded timestamp per file backing `metadataByFile`'s LRU-ish
+    /// eviction — "last freshly read from ExifTool", not "last read from the dictionary"
+    /// (the latter would need intercepting every one of the many direct `metadataByFile[...]`
+    /// read sites across the app; this simpler proxy still favours recently-visited folders'
+    /// data, which is what the plan's "resident memory plateaus" goal actually needs).
+    var metadataLastLoadedAt: [URL: Date] = [:]
     var selectionAnchorURL: URL?
     var selectionFocusURL: URL?
     var quickLookSourceFrames: [URL: NSRect] = [:]
     var stagedQuickLookPreviewFiles: [URL: URL] = [:]
     var stagedQuickLookPreviewGenerationInFlight: Set<URL> = []
 
-    let engine: ExifEditEngine
+    let engine: MetadataEditEngine
     let presetStore: PresetStoreProtocol
     let lensProfileStore: LensProfileStoreProtocol
     let favoritesStore: SidebarFavoritesStoreProtocol
@@ -631,6 +676,14 @@ final class AppModel: ObservableObject {
     var workspaceObserverTokens: [NSObjectProtocol] = []
     var sidebarImageCountTasks: [String: Task<Void, Never>] = [:]
     var backgroundWarmTasksBySelectionID: [String: Task<Void, Never>] = [:]
+    var initialThumbnailWarmupTask: Task<Void, Never>?
+    /// v1.4 Phase 2.3: guards `initialThumbnailWarmupTask`'s self-nilling `defer` —
+    /// same race as `selectionMetadataLoadGenerationID`.
+    var initialThumbnailWarmupGenerationID = UUID()
+    /// Phase 2.3: state for the in-flight quiescence measurement, if any — see
+    /// AppModel+Quiescence.swift for what starts/ends it.
+    var quiescenceSignpostState: OSSignpostIntervalState?
+    var quiescenceReason: String?
     var photosImportStagingDirectory: URL?
     var lastNonDeviceSidebarID: String?
 
@@ -647,6 +700,13 @@ final class AppModel: ObservableObject {
     private static let keepBackupsKey = "ui.settings.keep.backups"
     private static let backupRetentionCountKey = "ui.settings.backup.retention.count"
     static let inspectorFieldVisibilityKey = "ui.settings.inspector.field.visibility"
+    /// v1.4: reopen the last folder/selection on launch — see
+    /// `docs/last-folder-selection-restore-plan-2026-09.md`. Persistence lives in
+    /// `AppModel+Sidebar.swift`'s `persistLastSessionSidebarKind`/
+    /// `persistLastSessionFileSelection`/`restoreLastSessionSelectionIfAvailable`.
+    static let lastSessionSidebarKindKey = "ui.session.last.sidebar.kind"
+    static let lastSessionSidebarPathKey = "ui.session.last.sidebar.path"
+    static let lastSessionSelectedFilePathsKey = "ui.session.last.selected.file.paths"
     static let legacyUserDefaultsPrefixes = ["Logbook"]
     static let selectionMetadataBatchSize = 120
     static let selectionMetadataDebounceNanoseconds: UInt64 = 90_000_000
@@ -659,6 +719,12 @@ final class AppModel: ObservableObject {
     static let inspectorPreviewTargetSide: CGFloat = 700
     static let inspectorPreviewFullSide: CGFloat = 1400
     static let maxInspectorPreviewCacheEntries = 48
+    /// v1.4 Phase 3.1: `metadataByFile` was previously retained for every file visited all
+    /// session long, unbounded — this caps it to roughly a handful of average folders' worth
+    /// (the Phase 0.4 benchmark corpus is 1,012 files; most real folders are far smaller) so
+    /// resident memory plateaus rather than growing with every folder visited. See
+    /// `trimMetadataCacheIfNeeded()` in AppModel+MetadataPipeline.swift.
+    static let maxMetadataCacheEntries = 5000
     static let previewPreloadNeighborRadius = 10
     static let maxPreviewPreloadCandidates = 64
     static let maxRecentLocations = 20
@@ -749,7 +815,7 @@ final class AppModel: ObservableObject {
             statusMessage = "\(AppBrand.displayName) requires ExifTool to work. Try reinstalling the app."
             Task { @MainActor in
                 let alert = NSAlert()
-                alert.messageText = "\(AppBrand.displayName) requires exiftool"
+                alert.messageText = "\(AppBrand.displayName) requires ExifTool."
                 alert.informativeText = "The exiftool executable could not be found. The app bundle may be corrupted. Please reinstall \(AppBrand.displayName)."
                 alert.alertStyle = .critical
                 alert.addButton(withTitle: "OK")
@@ -758,7 +824,7 @@ final class AppModel: ObservableObject {
         }
 
         let backupDirectory = AppBrand.currentSupportDirectoryURL().appendingPathComponent("Backups", isDirectory: true)
-        engine = ExifEditEngine(exifToolService: service, backupManager: BackupManager(baseDirectory: backupDirectory))
+        engine = MetadataEditEngine(exifToolService: service, backupManager: BackupManager(baseDirectory: backupDirectory))
         self.presetStore = presetStore
         self.lensProfileStore = lensProfileStore
         self.favoritesStore = favoritesStore

@@ -51,6 +51,8 @@ struct LensProfileManagerSheet: View {
                     Button("Delete", role: .destructive) {
                         pendingDeleteLensID = selectedLensID
                     }
+                    .buttonStyle(.bordered)
+                    .tint(Color(nsColor: .systemRed))
                     .disabled(selectedProfile == nil)
 
                     Spacer()
@@ -210,6 +212,7 @@ struct LensProfileEditorSheet: View {
                         .keyboardShortcut(.cancelAction)
                     Button("Save") { save() }
                         .keyboardShortcut(.defaultAction)
+                        .buttonStyle(.borderedProminent)
                         .disabled(!isValid)
                 }
                 .padding(.top, 4)

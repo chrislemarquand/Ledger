@@ -1,5 +1,5 @@
 import AppKit
-import ExifEditCore
+import LedgerCore
 import Foundation
 
 private enum ExternalPhotoAppTarget {
@@ -421,7 +421,7 @@ extension AppModel {
         case .clearMetadataChanges:
             return FileActionState(
                 id: id,
-                title: "Clear Changes",
+                title: "Discard Changes",
                 symbolName: "xmark.circle",
                 isEnabled: hasPendingAny
             )

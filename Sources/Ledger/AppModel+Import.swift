@@ -1,4 +1,4 @@
-import ExifEditCore
+import LedgerCore
 import Foundation
 
 @MainActor
@@ -85,10 +85,12 @@ extension AppModel {
             let end = min(start + batchSize, unique.count)
             let batch = Array(unique[start..<end])
             let snapshots = await readMetadataBatchResilient(batch)
+            let loadedAt = Date()
             for snapshot in snapshots {
                 result[snapshot.fileURL] = snapshot
                 map[snapshot.fileURL] = snapshot
                 staleMetadataFiles.remove(snapshot.fileURL)
+                metadataLastLoadedAt[snapshot.fileURL] = loadedAt
             }
         }
 
@@ -119,6 +121,7 @@ extension AppModel {
         }
 
         metadataByFile = map
+        trimMetadataCacheIfNeeded()
         return result
     }
 

@@ -264,6 +264,7 @@ struct DateTimeAdjustSheetView: View {
                         model.stageDateTimeAdjustments(session: session)
                     }
                     .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
                     .disabled(!isAdjustActionEnabled)
                 }
             }
@@ -604,7 +605,9 @@ struct DateTimeAdjustSheetView: View {
 
     private func isReadSourceAvailable(_ source: DateTimeDataReadSource) -> Bool {
         guard let first = session.fileURLs.first else { return false }
-        return model.isDataReadSourceAvailable(source, for: first)
+        return model.isDataReadSourceAvailable(
+            source, for: first, capturedFileCreationDates: session.capturedFileCreationDates
+        )
     }
 
     private func isApplyToTagDisabled(_ tag: DateTimeTargetTag) -> Bool {
@@ -754,7 +757,11 @@ extension View {
             get: { model.pendingDateTimeAdjustSession },
             set: { newValue in
                 Task { @MainActor in
-                    model.pendingDateTimeAdjustSession = newValue
+                    if let newValue {
+                        model.pendingDateTimeAdjustSession = newValue
+                    } else {
+                        model.dismissDateTimeAdjustSheet()
+                    }
                 }
             }
         )) { session in
@@ -988,6 +995,7 @@ struct LocationAdjustSheetView: View {
                         model.stageLocationAdjustments(session: session)
                     }
                     .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
                     .disabled(!isApplyActionEnabled)
                 }
             }

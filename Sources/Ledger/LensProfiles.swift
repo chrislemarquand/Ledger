@@ -1,4 +1,4 @@
-import ExifEditCore
+import LedgerCore
 import Foundation
 
 enum LensKind: String, Codable, CaseIterable {
@@ -54,7 +54,7 @@ struct FileLensProfileStore: LensProfileStoreProtocol {
         decoder.dateDecodingStrategy = .iso8601
         let envelope = try decoder.decode(Envelope.self, from: data)
         if envelope.schemaVersion > Self.schemaVersion {
-            throw ExifEditError.lensProfileSchemaVersionTooNew
+            throw MetadataEditError.lensProfileSchemaVersionTooNew
         }
         return envelope.profiles
     }

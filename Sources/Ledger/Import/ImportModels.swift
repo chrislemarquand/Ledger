@@ -1,4 +1,4 @@
-import ExifEditCore
+import LedgerCore
 import Foundation
 
 enum ImportSourceKind: String, CaseIterable, Codable, Sendable {

@@ -1,6 +1,6 @@
 import AppKit
-import ExifEditCore
-@testable import ExifEditMac
+import LedgerCore
+@testable import Ledger
 import Foundation
 import XCTest
 

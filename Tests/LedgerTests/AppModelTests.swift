@@ -1,11 +1,128 @@
-@testable import ExifEditCore
-@testable import ExifEditMac
+@testable import LedgerCore
+@testable import Ledger
 import AppKit
 import Foundation
 import XCTest
 
+private actor DateCaptureGate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    func wait() async {
+        if !isOpen { await withCheckedContinuation { waiters.append($0) } }
+    }
+    func open() {
+        isOpen = true
+        waiters.forEach { $0.resume() }
+        waiters.removeAll()
+    }
+}
+
 @MainActor
 final class AppModelTests: XCTestCase {
+    func testCancelledEnumerationStopsBeforeTouchingFilesystem() async {
+        let gate = DateCaptureGate()
+        let worker = Task.detached {
+            await gate.wait()
+            return try AppModel.enumerateImages(in: URL(fileURLWithPath: "/nonexistent-ledger-cancel-test"))
+        }
+        worker.cancel()
+        await gate.open()
+        do {
+            _ = try await worker.value
+            XCTFail("cancelled enumeration should throw")
+        } catch is CancellationError {
+            // A filesystem error instead would mean cancellation wasn't checked first.
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+    }
+
+    func testOlderDateCaptureCannotReplaceNewerSessionForSameFiles() async {
+        let model = makeModel()
+        model.selectedFileURLs = [URL(fileURLWithPath: "/test-date-capture.jpg")]
+        let entered = expectation(description: "first capture suspended")
+        let gate = DateCaptureGate()
+        let old = Task {
+            await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal,
+                                           readCreationDates: { _ in
+                entered.fulfill()
+                await gate.wait()
+                XCTAssertTrue(Task.isCancelled)
+                return [:]
+            })
+        }
+        await fulfillment(of: [entered], timeout: 2)
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeModified)
+        await gate.open()
+        await old.value
+        XCTAssertEqual(model.pendingDateTimeAdjustSession?.launchTag, .dateTimeModified)
+    }
+
+    func testDismissalInvalidatesSuspendedDateCapture() async {
+        let model = makeModel()
+        model.selectedFileURLs = [URL(fileURLWithPath: "/test-date-dismiss.jpg")]
+        let entered = expectation(description: "capture suspended")
+        let gate = DateCaptureGate()
+        let request = Task {
+            await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal,
+                                           readCreationDates: { _ in
+                entered.fulfill()
+                await gate.wait()
+                return [:]
+            })
+        }
+        await fulfillment(of: [entered], timeout: 2)
+        model.dismissDateTimeAdjustSheet()
+        await gate.open()
+        await request.value
+        XCTAssertNil(model.pendingDateTimeAdjustSession)
+    }
+
+    func testSupersededLoadCannotClearReplacementLoadingState() async {
+        let model = makeModel()
+        let folder = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let old = model.startLoadingFiles(for: .folder(folder))
+        let replacement = model.startLoadingFiles(for: .folder(folder))
+        XCTAssertTrue(old.isCancelled)
+        XCTAssertTrue(model.isFolderContentLoading)
+        let oldCompleted = await old.value
+        XCTAssertFalse(oldCompleted)
+        let completed = await replacement.value
+        XCTAssertTrue(completed)
+        XCTAssertFalse(model.isFolderContentLoading)
+        XCTAssertNil(model.loadFilesTask)
+    }
+
+    func testCancelFileLoadInvalidatesPendingResultAndClearsLoadingState() async {
+        let model = makeModel()
+        let folder = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let task = model.startLoadingFiles(for: .folder(folder))
+        let loadID = model.activeFolderLoadID
+        model.cancelFileLoad()
+        XCTAssertNotEqual(model.activeFolderLoadID, loadID)
+        XCTAssertFalse(model.isFolderContentLoading)
+        let completed = await task.value
+        XCTAssertFalse(completed)
+        XCTAssertTrue(model.browserItems.isEmpty)
+    }
+
+    func testDateTimeMissingCreationDateDoesNotFallBackToLiveFile() async throws {
+        let model = makeModel()
+        let folder = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("not-yet-created.jpg")
+        model.selectedFileURLs = [file]
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal)
+        var session = try XCTUnwrap(model.pendingDateTimeAdjustSession)
+        XCTAssertNil(session.capturedFileCreationDates[file])
+        try Data("x".utf8).write(to: file)
+        session.dataReadSource = .file
+        XCTAssertNil(model.dataModeReadValue(for: file, session: session))
+        XCTAssertFalse(model.isDataReadSourceAvailable(.file, for: file, capturedFileCreationDates: session.capturedFileCreationDates))
+    }
+
     func testImportTagCatalogMirrorsGroupedEditableTagsPlusOffsetSystemTags() {
         let model = makeModel()
         let groupedIDs = model.orderedEditableTagSections.flatMap(\.tags).map(\.id)
@@ -275,6 +392,120 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedSidebarID, "folder::\(b.path)")
         let recents = model.sidebarItems.filter { $0.section == "Recents" }
         XCTAssertEqual(recents.map(\.title), ["B", "A"])
+    }
+
+    // MARK: - Last-session folder/selection restore (v1.4)
+    //
+    // `restoreLastSessionSelectionIfAvailable` reads/writes UserDefaults.standard directly
+    // (no injectable store, matching browserViewMode/iconSubtitleColumnID above) — save and
+    // restore the real values around each test.
+
+    private func withSavedLastSessionSelectionDefaults(_ body: () async throws -> Void) async rethrows {
+        let originalKind = UserDefaults.standard.string(forKey: AppModel.lastSessionSidebarKindKey)
+        let originalPath = UserDefaults.standard.string(forKey: AppModel.lastSessionSidebarPathKey)
+        let originalFiles = UserDefaults.standard.array(forKey: AppModel.lastSessionSelectedFilePathsKey)
+        defer {
+            if let originalKind {
+                UserDefaults.standard.set(originalKind, forKey: AppModel.lastSessionSidebarKindKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: AppModel.lastSessionSidebarKindKey)
+            }
+            if let originalPath {
+                UserDefaults.standard.set(originalPath, forKey: AppModel.lastSessionSidebarPathKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: AppModel.lastSessionSidebarPathKey)
+            }
+            if let originalFiles {
+                UserDefaults.standard.set(originalFiles, forKey: AppModel.lastSessionSelectedFilePathsKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: AppModel.lastSessionSelectedFilePathsKey)
+            }
+        }
+        try await body()
+    }
+
+    func testRestoreLastSessionSelectionReopensLastFolderAndSelection() async throws {
+        try await withSavedLastSessionSelectionDefaults {
+            let temp = self.makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: temp) }
+            try Data("a".utf8).write(to: temp.appendingPathComponent("a.jpg"))
+            try Data("b".utf8).write(to: temp.appendingPathComponent("b.jpg"))
+
+            let recentLocationsStore = InMemoryRecentLocationsStore()
+            let firstSession = self.makeModel(recentLocationsStore: recentLocationsStore)
+            // openFolder (not a directly-constructed URL) so the selected URLs are the same
+            // symlink-resolved form a real enumeration produces (FileManager's
+            // contentsOfDirectory can resolve /var -> /private/var etc. even when the
+            // directory URL passed in didn't) — matches how a real selection is always made
+            // from already-enumerated browserItems, never independently constructed. Also
+            // registers the recent location, so secondSession's sidebarItems contains a
+            // matching entry to restore against.
+            firstSession.openFolder(at: temp)
+            _ = await firstSession.loadFilesTask?.value
+            let loadedURLs = Set(firstSession.browserItems.map(\.url))
+            XCTAssertEqual(loadedURLs.count, 2)
+            // Simulates the user having selected both files — didSet persists this
+            // synchronously, same as a real selection change would.
+            firstSession.selectedFileURLs = loadedURLs
+
+            let secondSession = self.makeModel(recentLocationsStore: recentLocationsStore)
+            await secondSession.restoreLastSessionSelectionIfAvailable()
+
+            XCTAssertEqual(secondSession.selectedSidebarID, "folder::\(temp.path)")
+            XCTAssertEqual(secondSession.selectedFileURLs, loadedURLs)
+        }
+    }
+
+    func testRestoreLastSessionSelectionDropsFilesThatNoLongerExist() async throws {
+        try await withSavedLastSessionSelectionDefaults {
+            let temp = self.makeTempDirectory()
+            defer { try? FileManager.default.removeItem(at: temp) }
+            try Data("a".utf8).write(to: temp.appendingPathComponent("a.jpg"))
+
+            let recentLocationsStore = InMemoryRecentLocationsStore()
+            let firstSession = self.makeModel(recentLocationsStore: recentLocationsStore)
+            firstSession.openFolder(at: temp)
+            _ = await firstSession.loadFilesTask?.value
+            guard let loadedFileA = firstSession.browserItems.first?.url else {
+                XCTFail("expected a.jpg to load")
+                return
+            }
+            // b.jpg was never created — persisted as selected anyway, simulating a file
+            // deleted/moved after the selection was last saved. Built from the resolved
+            // loadedFileA's parent so it matches the same path form a real enumeration
+            // would have used had b.jpg actually existed.
+            let missingFileB = loadedFileA.deletingLastPathComponent().appendingPathComponent("b.jpg")
+            firstSession.selectedFileURLs = [loadedFileA, missingFileB]
+
+            let secondSession = self.makeModel(recentLocationsStore: recentLocationsStore)
+            await secondSession.restoreLastSessionSelectionIfAvailable()
+
+            XCTAssertEqual(secondSession.selectedFileURLs, [loadedFileA], "a selected file that no longer exists on disk must be silently dropped, not error")
+        }
+    }
+
+    func testRestoreLastSessionSelectionSkipsPrivacySensitiveKind() async throws {
+        try await withSavedLastSessionSelectionDefaults {
+            UserDefaults.standard.set("desktop", forKey: AppModel.lastSessionSidebarKindKey)
+            UserDefaults.standard.removeObject(forKey: AppModel.lastSessionSidebarPathKey)
+
+            let model = self.makeModel()
+            await model.restoreLastSessionSelectionIfAvailable()
+
+            XCTAssertNil(model.selectedSidebarID, "a privacy-sensitive kind must never be auto-restored without explicit user interaction")
+        }
+    }
+
+    func testRestoreLastSessionSelectionNoOpWhenNothingPersisted() async throws {
+        try await withSavedLastSessionSelectionDefaults {
+            UserDefaults.standard.removeObject(forKey: AppModel.lastSessionSidebarKindKey)
+            UserDefaults.standard.removeObject(forKey: AppModel.lastSessionSidebarPathKey)
+
+            let model = self.makeModel()
+            await model.restoreLastSessionSelectionIfAvailable()
+
+            XCTAssertNil(model.selectedSidebarID)
+        }
     }
 
     func testPinnedLocationIsRemovedFromRecentsAndSelectedOnOpen() throws {
@@ -594,9 +825,9 @@ final class AppModelTests: XCTestCase {
 
         let store = FilePresetStore(fileURL: presetFile)
         XCTAssertThrowsError(try store.loadPresets()) { error in
-            guard let editError = error as? ExifEditError,
+            guard let editError = error as? MetadataEditError,
                   case .presetSchemaVersionTooNew = editError else {
-                XCTFail("Expected ExifEditError.presetSchemaVersionTooNew, got \(error)")
+                XCTFail("Expected MetadataEditError.presetSchemaVersionTooNew, got \(error)")
                 return
             }
         }
@@ -733,6 +964,140 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.folderMetadataLoadCompleted, 0)
     }
 
+    // v1.4 Phase 3.1: metadataByFile was previously retained for every file visited all
+    // session long, unbounded. These verify the LRU-ish cap actually evicts once exceeded,
+    // and that it never evicts the current selection/folder/pending-edit/in-flight protections.
+    func testMetadataCacheEvictsOldestUnprotectedEntriesOnceOverCapacity() {
+        let model = makeModel()
+        let overflow = 10
+        let totalFiles = AppModel.maxMetadataCacheEntries + overflow
+
+        for i in 0 ..< totalFiles {
+            let url = URL(fileURLWithPath: "/tmp/cache_evict_\(i).jpg")
+            model.metadataByFile[url] = FileMetadataSnapshot(fileURL: url, fields: [])
+            // Oldest files get the oldest timestamps so eviction order is deterministic.
+            model.metadataLastLoadedAt[url] = Date(timeIntervalSince1970: Double(i))
+        }
+        XCTAssertEqual(model.metadataByFile.count, totalFiles)
+
+        model.trimMetadataCacheIfNeeded()
+
+        XCTAssertEqual(model.metadataByFile.count, AppModel.maxMetadataCacheEntries)
+        // The `overflow` oldest-timestamped files should be exactly the ones evicted.
+        for i in 0 ..< overflow {
+            let url = URL(fileURLWithPath: "/tmp/cache_evict_\(i).jpg")
+            XCTAssertNil(model.metadataByFile[url], "expected the oldest entry \(i) to be evicted")
+            XCTAssertNil(model.metadataLastLoadedAt[url])
+        }
+        let survivorURL = URL(fileURLWithPath: "/tmp/cache_evict_\(totalFiles - 1).jpg")
+        XCTAssertNotNil(model.metadataByFile[survivorURL], "expected the newest entry to survive")
+    }
+
+    func testMetadataCacheEvictionProtectsSelectionFolderAndPendingWork() {
+        let model = makeModel()
+        let protectedSelection = URL(fileURLWithPath: "/tmp/cache_protect_selected.jpg")
+        let protectedFolder = URL(fileURLWithPath: "/tmp/cache_protect_folder.jpg")
+        let protectedPendingEdit = URL(fileURLWithPath: "/tmp/cache_protect_pending_edit.jpg")
+        let protectedStale = URL(fileURLWithPath: "/tmp/cache_protect_stale.jpg")
+        let protectedURLs = [protectedSelection, protectedFolder, protectedPendingEdit, protectedStale]
+
+        model.selectedFileURLs = [protectedSelection]
+        model.browserItems = [makeBrowserItem(name: "cache_protect_folder.jpg")]
+        model.pendingEditsByFile[protectedPendingEdit] = [
+            AppModel.EditableTag.rating: AppModel.StagedEditRecord(value: "5", source: .manual, updatedAt: Date())
+        ]
+        model.staleMetadataFiles.insert(protectedStale)
+
+        // Every protected URL gets the very oldest timestamp, so a naive age-only eviction
+        // would remove them first if the protection set were ignored.
+        for (i, url) in protectedURLs.enumerated() {
+            model.metadataByFile[url] = FileMetadataSnapshot(fileURL: url, fields: [])
+            model.metadataLastLoadedAt[url] = Date(timeIntervalSince1970: Double(i))
+        }
+        for i in 0 ..< AppModel.maxMetadataCacheEntries {
+            let url = URL(fileURLWithPath: "/tmp/cache_filler_\(i).jpg")
+            model.metadataByFile[url] = FileMetadataSnapshot(fileURL: url, fields: [])
+            model.metadataLastLoadedAt[url] = Date(timeIntervalSince1970: 1000 + Double(i))
+        }
+
+        model.trimMetadataCacheIfNeeded()
+
+        for url in protectedURLs {
+            XCTAssertNotNil(model.metadataByFile[url], "expected \(url.lastPathComponent) to be protected from eviction")
+        }
+        // Total went in at cap + 4 protected; trimming to cap must come entirely out of the
+        // unprotected fillers, since the protected 4 are ineligible for eviction.
+        XCTAssertEqual(model.metadataByFile.count, AppModel.maxMetadataCacheEntries)
+    }
+
+    // MARK: - Stale-work cancellation (Phase 6 automated-gate gap)
+
+    /// Phase 2.1/2.3's demand-gated folder metadata prefetch guards every batch against
+    /// `Task.isCancelled`/`folderMetadataLoadID` staleness (`AppModel+MetadataPipeline.swift`,
+    /// `startFolderMetadataPrefetch`) — this proves that guard actually discards a slow read's
+    /// results once a newer prefetch has superseded it, rather than asserting the guard exists
+    /// by reading the code. Uses `SlowExifToolService` to hold the first prefetch's read open
+    /// past the point where a second prefetch (simulating a folder switch) starts and
+    /// reassigns `folderMetadataLoadID`, then releases it and confirms its stale result never
+    /// reaches `metadataByFile`.
+    func testStaleMetadataPrefetchResultIsDiscardedAfterSupersedingLoad() async throws {
+        let slowService = SlowExifToolService()
+        let model = makeModel(exifToolService: slowService)
+
+        let staleFile = URL(fileURLWithPath: "/tmp/stale_prefetch_a.jpg")
+        let freshFile = URL(fileURLWithPath: "/tmp/stale_prefetch_b.jpg")
+
+        model.startFolderMetadataPrefetch(for: [staleFile], batchSize: 1)
+        try await waitUntilReadCallCount(1, on: slowService)
+
+        // Simulates switching folders while the first read is still in flight — this
+        // reassigns folderMetadataLoadID and cancels/nils the superseded folderMetadataLoadTask
+        // (see startFolderMetadataPrefetch's own first two lines).
+        model.startFolderMetadataPrefetch(for: [freshFile], batchSize: 1)
+        try await waitUntilReadCallCount(2, on: slowService)
+
+        await slowService.releaseAll()
+
+        try await waitUntil("both reads to resolve") { model.isFolderMetadataLoading == false }
+
+        XCTAssertNil(model.metadataByFile[staleFile], "a superseded load's result must not be merged in")
+        XCTAssertNotNil(model.metadataByFile[freshFile], "the current load's result must still land normally")
+    }
+
+    // MARK: - Thumbnail invalidation scope (Phase 6 automated-gate gap)
+
+    /// `browserThumbnailInvalidationToken` + `browserThumbnailInvalidatedURLs` is the contract
+    /// every browser view controller (Icon/List/Filmstrip) reads to decide "targeted reload of
+    /// just these URLs" vs. "everything is stale" — an empty invalidated set on a token change
+    /// means "all" (see `BrowserIconView.swift`'s `if invalidated.isEmpty` branch). Real call
+    /// sites: apply/restore, undo, and sidebar-folder-refresh. This proves the AppModel-level
+    /// state each of those actually produces, per Phase 5.1's "never broaden existing targeted
+    /// reload scope" rule — a regression here would silently turn every targeted invalidation
+    /// into a full one, or vice versa, for all three browser surfaces at once.
+    func testInvalidateBrowserThumbnailsForSpecificFilesSetsTargetedInvalidation() {
+        let model = makeModel()
+        let targetURL = URL(fileURLWithPath: "/tmp/invalidate_target.jpg")
+        let otherURL = URL(fileURLWithPath: "/tmp/invalidate_other.jpg")
+        let tokenBefore = model.browserThumbnailInvalidationToken
+
+        model.invalidateBrowserThumbnails(for: [targetURL])
+
+        XCTAssertNotEqual(model.browserThumbnailInvalidationToken, tokenBefore)
+        XCTAssertEqual(model.browserThumbnailInvalidatedURLs, [targetURL])
+        XCTAssertFalse(model.browserThumbnailInvalidatedURLs.contains(otherURL))
+    }
+
+    func testInvalidateAllBrowserThumbnailsClearsTargetedSet() {
+        let model = makeModel()
+        model.invalidateBrowserThumbnails(for: [URL(fileURLWithPath: "/tmp/invalidate_leftover.jpg")])
+        let tokenAfterTargeted = model.browserThumbnailInvalidationToken
+
+        model.invalidateAllBrowserThumbnails()
+
+        XCTAssertNotEqual(model.browserThumbnailInvalidationToken, tokenAfterTargeted)
+        XCTAssertTrue(model.browserThumbnailInvalidatedURLs.isEmpty, "an empty set on token change is the real 'invalidate everything' signal every browser view reads")
+    }
+
     // MARK: - Helpers
 
     private func makeBrowserItems(count: Int) -> [AppModel.BrowserItem] {
@@ -808,6 +1173,26 @@ final class AppModelTests: XCTestCase {
         XCTFail("Timed out waiting for \(description)")
     }
 
+    /// `waitUntil`'s condition closure is synchronous and can't `await` an actor-isolated
+    /// property like `SlowExifToolService.readCallCount` — this is the same poll loop, just
+    /// with an async condition.
+    private func waitUntilReadCallCount(
+        _ expected: Int,
+        on service: SlowExifToolService,
+        timeoutNanoseconds: UInt64 = 3_000_000_000,
+        pollIntervalNanoseconds: UInt64 = 20_000_000
+    ) async throws {
+        let timeoutSeconds = Double(timeoutNanoseconds) / 1_000_000_000
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while Date() < deadline {
+            if await service.readCallCount == expected {
+                return
+            }
+            try await Task.sleep(nanoseconds: pollIntervalNanoseconds)
+        }
+        XCTFail("Timed out waiting for readCallCount == \(expected)")
+    }
+
     // MARK: - Batch Rename action-state tests
 
     func testBatchRenameSelectionDisabledWhenSelectionEmpty() {
@@ -870,13 +1255,13 @@ final class AppModelTests: XCTestCase {
 
     // MARK: - Date/Time and Location workflow tests
 
-    func testBeginDateTimeAdjustInitializesSessionFromLaunchTag() {
+    func testBeginDateTimeAdjustInitializesSessionFromLaunchTag() async {
         let model = makeModel()
         let a = URL(fileURLWithPath: "/tmp/B.jpg")
         let b = URL(fileURLWithPath: "/tmp/A.jpg")
         model.selectedFileURLs = [a, b]
 
-        model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeDigitized)
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeDigitized)
 
         guard let session = model.pendingDateTimeAdjustSession else {
             XCTFail("Expected pending date/time session")
@@ -890,7 +1275,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(session.sourceTimeZoneID.isEmpty)
     }
 
-    func testBeginDateTimeAdjustMenuDefaultsReadSourceToFileWhenMetadataUnavailable() throws {
+    func testBeginDateTimeAdjustMenuDefaultsReadSourceToFileWhenMetadataUnavailable() async throws {
         let model = makeModel()
         let temp = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: temp) }
@@ -898,7 +1283,7 @@ final class AppModelTests: XCTestCase {
         try Data("x".utf8).write(to: fileURL)
         model.selectedFileURLs = [fileURL]
 
-        model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal, launchContext: .menu)
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal, launchContext: .menu)
 
         guard let session = model.pendingDateTimeAdjustSession else {
             XCTFail("Expected pending date/time session")
@@ -907,7 +1292,49 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(session.dataReadSource, .file)
     }
 
-    func testBeginDateTimeAdjustInspectorKeepsLaunchFieldAsReadSource() {
+    /// v1.4 follow-up: `beginDateTimeAdjust` used to read the filesystem creation date live,
+    /// via `FileManager.attributesOfItem`, on every SwiftUI body evaluation that touched
+    /// File-mode read-source availability or its date display (radio options, the read-value
+    /// display, preview recomputation) — not just once at sheet-open. Verifies the fix: the
+    /// creation date is captured once into `session.capturedFileCreationDates` at sheet-open,
+    /// and `dataModeReadValue`/`isDataReadSourceAvailable` read from that snapshot afterward
+    /// rather than hitting the filesystem again — proven here by deleting the file between
+    /// sheet-open and the later read/availability calls: a live re-read would return nil/false,
+    /// but the captured snapshot still has it.
+    func testDateTimeAdjustFileCreationDateIsCapturedOnceNotReadLiveOnEveryAccess() async throws {
+        let model = makeModel()
+        let temp = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let fileURL = temp.appendingPathComponent("capture-once.jpg")
+        try Data("x".utf8).write(to: fileURL)
+        model.selectedFileURLs = [fileURL]
+
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal, launchContext: .menu)
+
+        guard var session = model.pendingDateTimeAdjustSession else {
+            XCTFail("Expected pending date/time session")
+            return
+        }
+        guard let capturedDate = session.capturedFileCreationDates[fileURL] else {
+            XCTFail("Expected the file's creation date to be captured at sheet-open")
+            return
+        }
+
+        // Delete the file — a live FileManager read from here on would return nil/false.
+        try FileManager.default.removeItem(at: fileURL)
+
+        session.dataReadSource = .file
+        XCTAssertEqual(
+            model.dataModeReadValue(for: fileURL, session: session), capturedDate,
+            "dataModeReadValue should use the captured snapshot, not a live (now-failing) filesystem read"
+        )
+        XCTAssertTrue(
+            model.isDataReadSourceAvailable(.file, for: fileURL, capturedFileCreationDates: session.capturedFileCreationDates),
+            "isDataReadSourceAvailable should use the captured snapshot, not a live (now-failing) filesystem read"
+        )
+    }
+
+    func testBeginDateTimeAdjustInspectorKeepsLaunchFieldAsReadSource() async {
         let model = makeModel()
         let fileURL = URL(fileURLWithPath: "/tmp/inspector-default.jpg")
         model.selectedFileURLs = [fileURL]
@@ -920,7 +1347,7 @@ final class AppModelTests: XCTestCase {
             )
         ]
 
-        model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeModified, launchContext: .inspector)
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeModified, launchContext: .inspector)
 
         guard let session = model.pendingDateTimeAdjustSession else {
             XCTFail("Expected pending date/time session")
@@ -929,19 +1356,19 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(session.dataReadSource, .modified)
     }
 
-    func testBeginDateTimeAdjustDoesNotBlockWhenFolderMetadataLoading() {
+    func testBeginDateTimeAdjustDoesNotBlockWhenFolderMetadataLoading() async {
         let model = makeModel()
         let fileURL = URL(fileURLWithPath: "/tmp/A.jpg")
         model.selectedFileURLs = [fileURL]
         model.isFolderMetadataLoading = true
 
-        model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal)
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal)
 
         XCTAssertNotNil(model.pendingDateTimeAdjustSession)
         XCTAssertEqual(model.statusMessage, "Ready")
     }
 
-    func testBeginDateTimeAdjustSeedsSpecificDateFromFirstSortedFile() {
+    func testBeginDateTimeAdjustSeedsSpecificDateFromFirstSortedFile() async {
         let model = makeModel()
         let b = URL(fileURLWithPath: "/tmp/B.jpg")
         let a = URL(fileURLWithPath: "/tmp/A.jpg")
@@ -961,7 +1388,7 @@ final class AppModelTests: XCTestCase {
             ),
         ]
 
-        model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeDigitized)
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeDigitized)
 
         guard let session = model.pendingDateTimeAdjustSession else {
             XCTFail("Expected pending date/time session")
@@ -977,7 +1404,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(session.specificDate, firstDate)
     }
 
-    func testBeginDateTimeAdjustDefaultsToCameraClockAndUsesConsistentOffsetTimeOriginal() {
+    func testBeginDateTimeAdjustDefaultsToCameraClockAndUsesConsistentOffsetTimeOriginal() async {
         let model = makeModel()
         let a = URL(fileURLWithPath: "/tmp/A.cr2")
         let b = URL(fileURLWithPath: "/tmp/B.cr2")
@@ -999,7 +1426,7 @@ final class AppModelTests: XCTestCase {
             ),
         ]
 
-        model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal)
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal)
 
         guard let session = model.pendingDateTimeAdjustSession else {
             XCTFail("Expected pending date/time session")
@@ -1009,7 +1436,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(session.cameraClockOffsetSeconds, 3_600)
     }
 
-    func testBeginDateTimeAdjustDefaultsToUTCBaselineWhenOffsetTimeOriginalIsMissingOrInconsistent() {
+    func testBeginDateTimeAdjustDefaultsToUTCBaselineWhenOffsetTimeOriginalIsMissingOrInconsistent() async {
         let model = makeModel()
         let a = URL(fileURLWithPath: "/tmp/A.cr2")
         let b = URL(fileURLWithPath: "/tmp/B.cr2")
@@ -1031,7 +1458,7 @@ final class AppModelTests: XCTestCase {
             ),
         ]
 
-        model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal)
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal)
 
         guard let session = model.pendingDateTimeAdjustSession else {
             XCTFail("Expected pending date/time session")
@@ -1157,18 +1584,16 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(adjusted, model.parseDate("2026:03:28 12:00:00"))
     }
 
-    func testDataModeReadSourceFileUsesFilesystemCreationDate() throws {
+    func testDataModeReadSourceFileUsesFilesystemCreationDate() async throws {
         let temp = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: temp) }
         let fileURL = temp.appendingPathComponent("created.jpg")
         try Data("x".utf8).write(to: fileURL)
 
         let model = makeModel()
-        var session = DateTimeAdjustSession(
-            scope: .selection,
-            launchTag: .dateTimeOriginal,
-            fileURLs: [fileURL]
-        )
+        model.selectedFileURLs = [fileURL]
+        await model.beginDateTimeAdjust(scope: .selection, launchTag: .dateTimeOriginal)
+        var session = try XCTUnwrap(model.pendingDateTimeAdjustSession)
         session.mode = .file
         session.dataReadSource = .file
 
@@ -1944,6 +2369,35 @@ private actor WritingExifToolService: ExifToolServiceProtocol {
             try? Data("edited".utf8).write(to: fileURL)
         }
         return OperationResult(operationID: operation.id, succeeded: operation.targetFiles, failed: [], backupLocation: nil, duration: 0)
+    }
+}
+
+/// Blocks every `readMetadata` call until `releaseAll()` is called, so a test can start a read,
+/// observe it's genuinely in flight (`readCallCount`), do something concurrent (like starting a
+/// second, superseding read), and only then let the first one resolve — proving what happens to
+/// a slow read's result once it's stale, not just what happens to a fast one.
+private actor SlowExifToolService: ExifToolServiceProtocol {
+    private(set) var readCallCount = 0
+    private var pendingContinuations: [CheckedContinuation<Void, Never>] = []
+
+    func readMetadata(files: [URL]) async throws -> [FileMetadataSnapshot] {
+        readCallCount += 1
+        await withCheckedContinuation { continuation in
+            pendingContinuations.append(continuation)
+        }
+        return files.map { FileMetadataSnapshot(fileURL: $0, fields: []) }
+    }
+
+    func writeMetadata(operation: EditOperation) async -> OperationResult {
+        OperationResult(operationID: operation.id, succeeded: operation.targetFiles, failed: [], backupLocation: nil, duration: 0)
+    }
+
+    func releaseAll() {
+        let toResume = pendingContinuations
+        pendingContinuations.removeAll()
+        for continuation in toResume {
+            continuation.resume()
+        }
     }
 }
 

@@ -96,6 +96,7 @@ struct EOS1VSetClockSheetView: View {
                         .disabled(isWriting)
                     Button("Adjust", action: performAdjust)
                         .keyboardShortcut(.defaultAction)
+                        .buttonStyle(.borderedProminent)
                         .disabled(isWriting || !isAdjustEnabled)
                 }
             }

@@ -1,5 +1,6 @@
 .DS_Store
 /.build
+.build/
 /Packages
 xcuserdata/
 DerivedData/
@@ -21,8 +22,9 @@ tmp/
 # Local test fixtures (not for sharing)
 docs/fixtures/
 
-# Benchmark image corpus — large local fixtures, regenerated not shared.
-# (scripts/performance/output/ is already covered by the output/ rule above.)
+# Local-only v1.4 performance benchmark corpus (large media, never versioned
+# per docs/v1.4-performance-audit-plan.md's evidence policy) — regenerate
+# with scripts/performance/generate_browse_corpus.sh.
 /scripts/performance/corpus/
 
 # Sparkle private key — never commit this

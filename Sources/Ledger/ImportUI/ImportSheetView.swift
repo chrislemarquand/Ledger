@@ -9,12 +9,6 @@ import UniformTypeIdentifiers
 final class ImportSession: ObservableObject {
     static let eosFocalTagID = "exif-focal"
     static let eosLensTagID = "exif-lens"
-    private static let isRunningUnitTests: Bool = {
-        // XCTestConfigurationFilePath is set by xcodebuild test but not by swift test --parallel.
-        // NSClassFromString covers both runners.
-        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil ||
-            NSClassFromString("XCTestCase") != nil
-    }()
 
     struct EOSLensAmbiguousRow: Identifiable {
         var id: URL { targetURL }
@@ -178,7 +172,7 @@ final class ImportSession: ObservableObject {
                 let message = error.localizedDescription
                 previewError = message
                 presentBlockingImportAlert(
-                    title: "Couldn’t prepare import.",
+                    title: "Couldn’t prepare import",
                     message: error.localizedDescription
                 )
                 return false
@@ -198,7 +192,7 @@ final class ImportSession: ObservableObject {
             )
             shouldEnterPostImportReview = shouldReview(report: importReport)
             presentBlockingImportAlert(
-                title: "Import needs conflict resolution.",
+                title: "Import needs conflict resolution",
                 message: message
             )
             return false
@@ -338,7 +332,7 @@ final class ImportSession: ObservableObject {
     private func presentBlockingImportAlert(title: String, message: String) {
         // Unit-test runs have no user interaction path for modal alerts.
         // Returning early keeps conflict-report tests deterministic.
-        if Self.isRunningUnitTests {
+        if isRunningUnitTests {
             return
         }
         let alert = NSAlert()
@@ -994,6 +988,7 @@ struct ImportSheetView: View {
                         }
                     }
                     .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
                     .disabled(isPostImportReviewMode ? false : (session.options.sourceURL == nil || session.isBusy || importProgress != nil))
                 }
             }

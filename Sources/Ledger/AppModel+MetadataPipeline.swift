@@ -1,5 +1,5 @@
 import AppKit
-import ExifEditCore
+import LedgerCore
 import Foundation
 
 @MainActor
@@ -18,6 +18,10 @@ extension AppModel {
             return
         }
 
+        let signpostID = Signposts.metadata.makeSignpostID()
+        let state = Signposts.metadata.beginInterval("SelectionMetadataLoad", id: signpostID)
+        defer { Signposts.metadata.endInterval("SelectionMetadataLoad", state) }
+
         var map = metadataByFile
 
         for batchStart in stride(from: 0, to: filesToLoad.count, by: Self.selectionMetadataBatchSize) {
@@ -27,15 +31,12 @@ extension AppModel {
 
             // Ignore stale async results after selection has changed.
             guard selectionAtStart == selectedFileURLs else { return }
-            for snapshot in snapshots {
-                map[snapshot.fileURL] = snapshot
-                staleMetadataFiles.remove(snapshot.fileURL)
-                pendingCommitsByFile.removeValue(forKey: snapshot.fileURL)
-            }
+            mergeMetadataSnapshots(snapshots, into: &map)
         }
 
         guard selectionAtStart == selectedFileURLs else { return }
         metadataByFile = map
+        trimMetadataCacheIfNeeded()
         recalculateInspectorState()
     }
 
@@ -65,6 +66,10 @@ extension AppModel {
 
         folderMetadataLoadTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            let signpostID = Signposts.metadata.makeSignpostID()
+            let state = Signposts.metadata.beginInterval("FolderMetadataPrefetch", id: signpostID)
+            defer { Signposts.metadata.endInterval("FolderMetadataPrefetch", state) }
+
             var map = self.metadataByFile
 
             for batchStart in stride(from: 0, to: filesToLoad.count, by: effectiveBatchSize) {
@@ -79,12 +84,9 @@ extension AppModel {
                 if Task.isCancelled { return }
                 guard self.folderMetadataLoadID == loadID else { return }
 
-                for snapshot in snapshots {
-                    map[snapshot.fileURL] = snapshot
-                    self.staleMetadataFiles.remove(snapshot.fileURL)
-                    self.pendingCommitsByFile.removeValue(forKey: snapshot.fileURL)
-                }
+                self.mergeMetadataSnapshots(snapshots, into: &map)
                 self.metadataByFile = map
+                self.trimMetadataCacheIfNeeded()
                 self.folderMetadataLoadCompleted = self.loadedMetadataCount(in: filesToLoad, from: map)
                 let batchURLs = Set(batch)
                 if !self.selectedFileURLs.isEmpty,
@@ -112,7 +114,59 @@ extension AppModel {
         }
     }
 
-    private func scheduleDeferredPreviewPreload(for files: [URL]) {
+    /// v1.4 Phase 3.1: shared merge step for every site that folds freshly-read snapshots into
+    /// `metadataByFile` — clears their stale/pending-commit markers and records a load
+    /// timestamp for `trimMetadataCacheIfNeeded()`. Callers still own assigning the mutated
+    /// `map` back to `metadataByFile` themselves (some accumulate across several batches
+    /// before doing so, under a selection/load-ID guard) — this only prepares one batch.
+    func mergeMetadataSnapshots(_ snapshots: [FileMetadataSnapshot], into map: inout [URL: FileMetadataSnapshot]) {
+        let now = Date()
+        for snapshot in snapshots {
+            map[snapshot.fileURL] = snapshot
+            staleMetadataFiles.remove(snapshot.fileURL)
+            pendingCommitsByFile.removeValue(forKey: snapshot.fileURL)
+            metadataLastLoadedAt[snapshot.fileURL] = now
+        }
+    }
+
+    /// Evicts the oldest-loaded entries once `metadataByFile` exceeds
+    /// `Self.maxMetadataCacheEntries`, protecting the current selection, the currently open
+    /// folder's files, pending edits/image-ops/commits, and files mid-reload
+    /// (`staleMetadataFiles`) — exactly the plan's "current selection, active folder, pending
+    /// edits, undo/restore requirements, and in-flight operations" list. (Undo/redo itself
+    /// doesn't need protecting here: `PendingEditState` is self-contained and doesn't read
+    /// back through `metadataByFile`.)
+    func trimMetadataCacheIfNeeded() {
+        let excess = metadataByFile.count - Self.maxMetadataCacheEntries
+        guard excess > 0 else { return }
+
+        var protectedURLs = selectedFileURLs
+        protectedURLs.formUnion(browserItems.map(\.url))
+        protectedURLs.formUnion(pendingEditsByFile.keys)
+        protectedURLs.formUnion(pendingImageOpsByFile.keys)
+        protectedURLs.formUnion(pendingCommitsByFile.keys)
+        protectedURLs.formUnion(staleMetadataFiles)
+
+        let evictionCandidates = metadataByFile.keys.filter { !protectedURLs.contains($0) }
+        guard !evictionCandidates.isEmpty else { return }
+
+        let orderedByAge = evictionCandidates.sorted {
+            (metadataLastLoadedAt[$0] ?? .distantPast) < (metadataLastLoadedAt[$1] ?? .distantPast)
+        }
+        for url in orderedByAge.prefix(excess) {
+            metadataByFile.removeValue(forKey: url)
+            metadataLastLoadedAt.removeValue(forKey: url)
+        }
+    }
+
+    // v1.4 Phase 2.1: was `private`; now called from AppModel+FileLoading.swift's
+    // loadFiles() too, when the whole-folder metadata prefetch is skipped
+    // (hasVisibleMetadataColumnDemand is false) — that prefetch used to be the
+    // only thing that chained into preview preload, including on its
+    // "nothing to load" early-return path, so skipping it entirely would have
+    // silently dropped preview preload for every folder with no metadata
+    // column/subtitle enabled.
+    func scheduleDeferredPreviewPreload(for files: [URL]) {
         deferredPreviewPreloadTask?.cancel()
         deferredPreviewPreloadTask = nil
         let filesSnapshot = files
@@ -151,6 +205,7 @@ extension AppModel {
 
         guard !filesToPreload.isEmpty else {
             isPreviewPreloading = false
+            checkQuiescenceIfNeeded()
             return
         }
 
@@ -164,11 +219,17 @@ extension AppModel {
                 await Task.yield()
 
                 self.inspectorPreviewInflight.insert(fileURL)
-                if let image = await Self.requestInspectorPreviewFromThumbnailService(
+                let image = await Self.requestInspectorPreviewFromThumbnailService(
                     for: fileURL,
                     priority: .utility,
                     forceRefresh: false
-                ) {
+                )
+                // v1.4 architecture-outcome review (2026-09-27, R3): the fetch above runs on a
+                // detached task that does not inherit this task's cancellation, so re-check here
+                // before publishing — a preload superseded mid-fetch (a newer selection bumped
+                // previewPreloadID) must not overwrite state a newer preload already owns.
+                guard !Task.isCancelled, self.previewPreloadID == preloadID else { return }
+                if let image {
                     self.storeInspectorPreview(
                         image,
                         for: fileURL,
@@ -183,6 +244,7 @@ extension AppModel {
             self.previewPreloadTask = nil
             self.isPreviewPreloading = false
             self.setStatusMessage("Metadata loaded", autoClearAfterSuccess: true)
+            self.checkQuiescenceIfNeeded()
         }
     }
 
@@ -258,6 +320,7 @@ extension AppModel {
     }
 
     func selectionChanged() {
+        beginQuiescenceTracking(reason: "SelectionSweep")
         let selection = selectedFileURLs
         cancelStaleInspectorPreviewTasks(keeping: selection)
 
@@ -279,10 +342,24 @@ extension AppModel {
         // Force a refresh even when canonical values happen to be unchanged, so selection/header state updates.
         recalculateInspectorState(forceNotify: true)
         let needsMetadataLoad = selection.contains { staleMetadataFiles.contains($0) || metadataByFile[$0] == nil }
-        guard needsMetadataLoad else { return }
+        guard needsMetadataLoad else {
+            checkQuiescenceIfNeeded()
+            return
+        }
         selectionMetadataLoadTask?.cancel()
+        let generationID = UUID()
+        selectionMetadataLoadGenerationID = generationID
         selectionMetadataLoadTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            defer {
+                // Only the still-current generation may clear the property — an old,
+                // superseded task's cleanup running after a newer one has already
+                // started must not clobber the newer task's reference.
+                if self.selectionMetadataLoadGenerationID == generationID {
+                    self.selectionMetadataLoadTask = nil
+                }
+                self.checkQuiescenceIfNeeded()
+            }
             do { try await Task.sleep(nanoseconds: Self.selectionMetadataDebounceNanoseconds) } catch { return }
             await self.loadMetadataForSelection()
         }
@@ -334,6 +411,12 @@ extension AppModel {
                 priority: requestPriority,
                 forceRefresh: force
             )
+            // v1.4 architecture-outcome review (2026-09-27, R3): the fetch above runs on a
+            // detached task that does not inherit this task's cancellation, so a force-refresh
+            // that cancelled this task (line above, on supersession) can still resume here after
+            // the underlying fetch completes. Bail out without touching inflight/tasksByURL —
+            // the newer request that cancelled us already re-initialised both for this URL.
+            guard !Task.isCancelled else { return }
             if let image {
                 self.storeInspectorPreview(
                     image,
@@ -457,14 +540,31 @@ extension AppModel {
         let uniqueFiles = Array(Set(files))
         guard !uniqueFiles.isEmpty else { return }
 
+        // v1.4 Phase 2.2: only the most-recently-left folder's warm work is worth
+        // keeping. Without this, a quick A -> B -> C navigation left A's warm task
+        // running for its full duration with no further guard against it — competing
+        // with C's now-foreground metadata/preview work for ExifTool and decode
+        // capacity even though A was obsolete the moment B was left too.
+        for (staleID, task) in backgroundWarmTasksBySelectionID {
+            task.cancel()
+            backgroundWarmTasksBySelectionID[staleID] = nil
+        }
+
         backgroundWarmTasksBySelectionID[id] = Task(priority: .utility) { @MainActor [weak self] in
             guard let self else { return }
-            defer { self.backgroundWarmTasksBySelectionID[id] = nil }
+            defer {
+                self.backgroundWarmTasksBySelectionID[id] = nil
+                self.checkQuiescenceIfNeeded()
+            }
             await self.warmCachesInBackground(files: uniqueFiles)
         }
     }
 
     private func warmCachesInBackground(files: [URL]) async {
+        let signpostID = Signposts.metadata.makeSignpostID()
+        let state = Signposts.metadata.beginInterval("BackgroundWarm", id: signpostID)
+        defer { Signposts.metadata.endInterval("BackgroundWarm", state) }
+
         // Never contend with active foreground work.
         guard !isFolderMetadataLoading, !isPreviewPreloading else { return }
         do { try await Task.sleep(nanoseconds: Self.previewBulkStartDelayNanoseconds) } catch { return }
@@ -479,18 +579,19 @@ extension AppModel {
             var map = metadataByFile
             for fileURL in filesNeedingMetadata {
                 if Task.isCancelled { return }
+                // Foreground work starting mid-run (e.g. the user landed back on this
+                // folder, or moved to another one that now needs its own prefetch)
+                // takes priority — yield the rest of this speculative pass.
+                if isFolderMetadataLoading || isPreviewPreloading { return }
                 await Task.yield()
 
                 let snapshots = await readMetadataBatchResilient([fileURL])
                 if Task.isCancelled { return }
 
-                for snapshot in snapshots {
-                    map[snapshot.fileURL] = snapshot
-                    staleMetadataFiles.remove(snapshot.fileURL)
-                    pendingCommitsByFile.removeValue(forKey: snapshot.fileURL)
-                }
+                mergeMetadataSnapshots(snapshots, into: &map)
             }
             metadataByFile = map
+            trimMetadataCacheIfNeeded()
         }
 
         let filesNeedingPreview = warmCandidates.filter {
@@ -498,6 +599,7 @@ extension AppModel {
         }
         for fileURL in filesNeedingPreview {
             if Task.isCancelled { return }
+            if isFolderMetadataLoading || isPreviewPreloading { return }
             await Task.yield()
 
             if ThumbnailService.cachedImage(for: fileURL, minRenderedSide: Self.inspectorPreviewTargetSide) != nil { continue }
@@ -510,11 +612,16 @@ extension AppModel {
                 continue
             }
             inspectorPreviewInflight.insert(fileURL)
-            if let image = await Self.requestInspectorPreviewFromThumbnailService(
+            let image = await Self.requestInspectorPreviewFromThumbnailService(
                 for: fileURL,
                 priority: .utility,
                 forceRefresh: false
-            ) {
+            )
+            // v1.4 architecture-outcome review (2026-09-27, R3): re-check after the detached
+            // fetch (which does not inherit this task's cancellation) before publishing, so a
+            // supersession that happened mid-fetch isn't silently overwritten.
+            guard !Task.isCancelled, !isFolderMetadataLoading, !isPreviewPreloading else { return }
+            if let image {
                 storeInspectorPreview(
                     image,
                     for: fileURL,

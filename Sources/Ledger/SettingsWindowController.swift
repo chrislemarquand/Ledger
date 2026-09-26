@@ -27,10 +27,14 @@ final class GeneralSettingsViewController: SettingsGridViewController {
         p.action = #selector(retentionPopUpChanged(_:))
         return p
     }()
-    private lazy var clearBackupsButton = makeActionButton(
-        title: "Clear Backups…",
-        action: #selector(clearBackupsAction(_:))
-    )
+    private lazy var clearBackupsButton: NSButton = {
+        let button = makeActionButton(
+            title: "Delete Backups",
+            action: #selector(clearBackupsAction(_:))
+        )
+        button.hasDestructiveAction = true
+        return button
+    }()
     private lazy var manageLensesButton = makeActionButton(
         title: "Manage Lenses…",
         action: #selector(manageLensesClicked(_:))

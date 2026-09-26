@@ -1,16 +1,21 @@
 @preconcurrency import AppKit
 import Combine
-import ExifEditCore
+import LedgerCore
 import MapKit
 import SharedUI
 import SwiftUI
 import UniformTypeIdentifiers
 
 final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NSMenuItemValidation, NSMenuDelegate {
-    private var model: AppModel
+    // v1.4 Phase 4.0: `model`, `browserController`, `isEOS1VSelected`, and the `*ForInjection`
+    // menu references were `private` until the menu-construction code moved to
+    // MainContentView+Menus.swift — Swift's `private` extends to same-file scope only, not
+    // same-type-different-file, so these need at least `internal` visibility now. Same
+    // convention already used throughout AppModel's own `AppModel+*.swift` split.
+    var model: AppModel
 
     private let sidebarController: AppKitSidebarController<LedgerSidebarSection, LedgerSidebarItem>
-    private let browserController: BrowserContainerViewController
+    let browserController: BrowserContainerViewController
     private let inspectorController: NSHostingController<AnyView>
     private let eos1vSessionController: EOS1VSessionController
     private let eos1vDeviceController: EOS1VDeviceViewController
@@ -19,13 +24,12 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     private var didConfigureWindow = false
     private var mainToolbarController: MainToolbarController?
     private var toolbarShellController: ToolbarShellController?
-    private weak var fileMenuForInjection: NSMenu?
-    private weak var editMenuForInjection: NSMenu?
-    private weak var viewMenuForSortInjection: NSMenu?
-    private weak var imageMenuForInjection: NSMenu?
-    private weak var folderMenuForInjection: NSMenu?
-    private weak var helpMenuForInjection: NSMenu?
-    private var menuTrackingObserver: NSObjectProtocol?
+    weak var fileMenuForInjection: NSMenu?
+    weak var editMenuForInjection: NSMenu?
+    weak var viewMenuForSortInjection: NSMenu?
+    weak var imageMenuForInjection: NSMenu?
+    weak var folderMenuForInjection: NSMenu?
+    weak var helpMenuForInjection: NSMenu?
     private var uiRefreshObservers: [AnyCancellable] = []
     private var browserFocusRequestObserver: NSObjectProtocol?
     private var keyMonitor: Any?
@@ -44,7 +48,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
             initialSelectionBehavior: .noInitialSelection
         )
         let bc = BrowserContainerViewController(model: model)
-        let ic = NSHostingController(rootView: AnyView(InspectorView(model: model).tint(AppTheme.accentColor)))
+        let ic = NSHostingController(rootView: AnyView(InspectorView(model: model)))
         // Prevent inspector content from forcing pane expansion during SwiftUI view updates.
         ic.sizingOptions = []
         let eosSession = EOS1VSessionController()
@@ -115,11 +119,19 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     override func viewWillAppear() {
         super.viewWillAppear()
         eos1vDeviceMonitor.start()
-        // Configure the window before it becomes visible so the macOS 26
-        // compositor can apply the correct floating-sidebar shadow from the
-        // first frame. Calling this in viewDidAppear causes a brief flash of
-        // sharp-cornered shadow before the toolbar style triggers a re-composite.
         configureWindowIfNeeded()
+        // v1.4 follow-up: `configureWindowIfNeeded()`'s body only ever runs once
+        // (`didConfigureWindow` latches permanently) — the two lines below used to only be
+        // reachable through it, so if `teardownObserversAndMonitors()` (below, on disappear)
+        // cleared them, a second appearance of this same, still-retained view controller (main
+        // window closed while an auxiliary window like Settings/Console kept the app alive,
+        // then reopened via the Dock) never got them back. Both are already idempotent
+        // (`guard ... == nil`), so calling them unconditionally on every appearance is safe.
+        installBrowserFocusRequestObserverIfNeeded()
+        installKeyMonitorIfNeeded()
+        if uiRefreshObservers.isEmpty {
+            installUIRefreshObservers()
+        }
     }
 
     override func viewWillDisappear() {
@@ -137,10 +149,6 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         if let browserFocusRequestObserver {
             NotificationCenter.default.removeObserver(browserFocusRequestObserver)
             self.browserFocusRequestObserver = nil
-        }
-        if let menuTrackingObserver {
-            NotificationCenter.default.removeObserver(menuTrackingObserver)
-            self.menuTrackingObserver = nil
         }
     }
 
@@ -201,7 +209,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         }
     }
 
-    private var isEOS1VSelected: Bool {
+    var isEOS1VSelected: Bool {
         model.selectedSidebarItem?.kind == .eos1vDevice
     }
 
@@ -383,7 +391,14 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         defaults.set(true, forKey: key)
     }
 
-    private func installMainToolbar(on window: NSWindow, resetDelegateState: Bool) {
+    // v1.4 Phase 4.3: internal (was private) so MainWindowController can install the toolbar
+    // on the window before assigning self as its contentViewController — see the init comment
+    // in LedgerApp.swift for why: NSWindow(contentViewController:) forces this controller's
+    // view through a real, geometry-bearing layout pass immediately, and if the toolbar isn't
+    // attached yet at that point, NSScrollView.automaticallyAdjustsContentInsets computes a
+    // zero top inset for the sidebar and never retroactively corrects it once the toolbar
+    // later appears — the root cause of the sidebar's launch-time scroll snap.
+    func installMainToolbar(on window: NSWindow, resetDelegateState: Bool) {
         let toolbarContent: MainToolbarController
         if let existing = mainToolbarController {
             toolbarContent = existing
@@ -411,41 +426,28 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         guard !didConfigureWindow, let window = view.window else { return }
         didConfigureWindow = true
 
-        configureWindowForToolbar(window)
-
-        installMainToolbar(on: window, resetDelegateState: true)
+        // v1.4 Phase 4.3: configureWindowForToolbar(window) and installMainToolbar(on:) now run
+        // in MainWindowController.init, before this controller is attached to the window at
+        // all — see installMainToolbar's doc comment. Only the toolbar's per-appearance
+        // revalidation belongs here.
         toolbarShellController?.syncAndValidate(window: window)
         if isSidebarCollapsed { isSidebarCollapsed = false }
         schedulePaneStateSync()
         refreshWindowTitleSubtitleIfNeeded()
         installBrowserFocusRequestObserverIfNeeded()
         installKeyMonitorIfNeeded()
+        // v1.4 Phase 4.1: menu injection used to happen here, deferred by one run-loop tick
+        // and re-registered defensively on every menu-bar click (NSMenu.didBeginTrackingNotification)
+        // because SwiftUI could mutate NSApp.mainMenu after this point, invalidating the
+        // *ForInjection weak references. AppDelegate now builds the menu shells before any
+        // NSHostingController exists and populates their content immediately after
+        // MainWindowController is constructed — see LedgerApp.swift's applicationDidFinishLaunching
+        // — so injection here would just be redundant, not defensive. focusBrowserPane still
+        // needs its own run-loop-tick defer (unrelated to the menu timing issue): the window
+        // isn't necessarily key/able to accept first responder yet at this exact point in the
+        // view lifecycle.
         DispatchQueue.main.async { [weak self] in
             self?.focusBrowserPane()
-            self?.injectFileMenuIfNeeded()
-            self?.injectEditMenuIfNeeded()
-            self?.injectSortMenuIfNeeded()
-            self?.injectImageMenuIfNeeded()
-            self?.injectFolderMenuIfNeeded()
-            self?.injectHelpMenuIfNeeded()
-        }
-        // Re-register menu delegates every time the user clicks the menu bar.
-        // SwiftUI may rebuild NSMenu objects after our initial async setup, invalidating
-        // the weak references. didBeginTrackingNotification fires before menuWillOpen,
-        // so delegates are always current by the time injection is needed.
-        menuTrackingObserver = NotificationCenter.default.addObserver(
-            forName: NSMenu.didBeginTrackingNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.injectSortMenuIfNeeded()
-                self?.injectFileMenuIfNeeded()
-                self?.injectEditMenuIfNeeded()
-                self?.injectImageMenuIfNeeded()
-                self?.injectFolderMenuIfNeeded()
-                self?.injectHelpMenuIfNeeded()
-            }
         }
     }
 
@@ -666,962 +668,9 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
     }
     @objc func togglePathBarAction(_ sender: Any?) { browserController.setPathBarVisible(!browserController.isPathBarVisible) }
 
-    private enum MenuTag {
-        static let fileOpenFolder = 9_101
-        static let fileOpenSelection = 9_102
-        static let fileOpenWith = 9_103
-        static let fileReveal = 9_104
-        static let fileQuickLook = 9_105
-        static let filePin = 9_106
-        static let fileUnpin = 9_107
-        static let fileMoveUp = 9_108
-        static let fileMoveDown = 9_109
-        static let fileImportRoot = 9_110
-        static let fileImportCSV = 9_111
-        static let fileImportGPX = 9_112
-        static let fileImportReferenceFolder = 9_113
-        static let fileImportReferenceImage = 9_114
-        static let fileImportEOS1V = 9_115
-        static let fileExportRoot = 9_116
-        static let fileExportExifToolCSV = 9_117
-        static let fileExportSendToPhotos = 9_118
-        static let fileExportSendToLightroom = 9_119
-        static let fileExportSendToLightroomClassic = 9_120
-
-        static let imageApplySelection = 9_301
-        static let imageRefreshSelection = 9_302
-        static let imageClearSelection = 9_303
-        static let imageRestoreSelection = 9_304
-        static let folderApply = 9_305
-        static let folderRefresh = 9_306
-        static let folderClear = 9_307
-        static let folderRestore = 9_308
-        static let imageSavePreset = 9_309
-        static let imageManagePresets = 9_310
-        static let imageApplyPreset = 9_311
-        static let imageBatchRenameSelection = 9_312
-        static let imageAdjustDateTime = 9_314
-        static let imageSetLocation = 9_315
-        static let imageRotateAnticlockwise = 9_316
-        static let imageRotateClockwise = 9_317
-        static let imageFlipHorizontal = 9_318
-        static let imageFlipVertical = 9_319
-        static let folderBatchRename = 9_320
-
-        static let helpWhatsNew = 9_400
-        static let helpExifToolDocs = 9_401
-    }
-
-    private func ensureTopLevelMenu(title: String, insertAfterTitle: String? = nil) -> NSMenu? {
-        guard let mainMenu = NSApp.mainMenu else { return nil }
-        if let existing = mainMenu.items.first(where: { $0.title == title }) {
-            if existing.submenu == nil {
-                existing.submenu = NSMenu(title: title)
-            }
-            if let insertAfterTitle,
-               let anchorIndex = mainMenu.items.firstIndex(where: { $0.title == insertAfterTitle }),
-               let existingIndex = mainMenu.items.firstIndex(of: existing) {
-                let desiredIndex = anchorIndex + 1
-                if existingIndex != desiredIndex {
-                    mainMenu.removeItem(at: existingIndex)
-                    let clampedIndex = min(desiredIndex, mainMenu.items.count)
-                    mainMenu.insertItem(existing, at: clampedIndex)
-                }
-            }
-            return existing.submenu
-        }
-
-        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        item.submenu = NSMenu(title: title)
-
-        if let insertAfterTitle,
-           let anchorIndex = mainMenu.items.firstIndex(where: { $0.title == insertAfterTitle }) {
-            mainMenu.insertItem(item, at: anchorIndex + 1)
-        } else {
-            // Keep the app menu first; append otherwise.
-            let insertIndex = max(1, mainMenu.items.count)
-            if insertIndex <= mainMenu.items.count {
-                mainMenu.insertItem(item, at: insertIndex)
-            } else {
-                mainMenu.addItem(item)
-            }
-        }
-        return item.submenu
-    }
-
-    private func injectFileMenuIfNeeded() {
-        let appMenuTitle = NSApp.mainMenu?.items.first?.title
-        guard let submenu = ensureTopLevelMenu(title: "File", insertAfterTitle: appMenuTitle) else { return }
-        fileMenuForInjection = submenu
-        submenu.delegate = self
-        rebuildFileMenu(submenu)
-    }
-
-    private func injectEditMenuIfNeeded() {
-        guard let submenu = ensureTopLevelMenu(title: "Edit", insertAfterTitle: "File") else { return }
-        editMenuForInjection = submenu
-        submenu.delegate = self
-        rebuildEditMenu(submenu)
-    }
-
-    /// Finds the View menu and registers self as its NSMenuDelegate.
-    /// Also calls rebuildViewMenu immediately so Zoom In/Out keyboard shortcuts
-    /// are registered from launch.
-    private func injectSortMenuIfNeeded() {
-        guard let submenu = ensureTopLevelMenu(title: "View", insertAfterTitle: "Edit") else { return }
-        viewMenuForSortInjection = submenu
-        submenu.delegate = self
-        rebuildViewMenu(submenu)
-    }
-
-    private func injectImageMenuIfNeeded() {
-        guard let submenu = ensureTopLevelMenu(title: "Image", insertAfterTitle: "View") else { return }
-        imageMenuForInjection = submenu
-        submenu.delegate = self
-        rebuildImageMenu(submenu)
-    }
-
-    private func injectFolderMenuIfNeeded() {
-        guard let submenu = ensureTopLevelMenu(title: "Folder", insertAfterTitle: "Image") else { return }
-        folderMenuForInjection = submenu
-        submenu.delegate = self
-        rebuildFolderMenu(submenu)
-    }
-
-    private func injectHelpMenuIfNeeded() {
-        if NSApp.mainMenu?.items.contains(where: { $0.title == "Window" }) == true {
-            guard let submenu = ensureTopLevelMenu(title: "Help", insertAfterTitle: "Window") else { return }
-            helpMenuForInjection = submenu
-            submenu.delegate = self
-            rebuildHelpMenu(submenu)
-            return
-        }
-        guard let submenu = ensureTopLevelMenu(title: "Help", insertAfterTitle: "Folder") else { return }
-        helpMenuForInjection = submenu
-        submenu.delegate = self
-        rebuildHelpMenu(submenu)
-    }
-
-    /// Builds and returns the Sort By NSMenuItem with submenu.
-    private func makeSortByMenuItem() -> NSMenuItem {
-        let sortMenu = NSMenu(title: "Sort By")
-        let nameItem = sortMenu.addItem(withTitle: "Name", action: #selector(sortByNameAction(_:)), keyEquivalent: "1")
-        nameItem.keyEquivalentModifierMask = [.command, .control, .option]
-        let createdItem = sortMenu.addItem(withTitle: "Date Created", action: #selector(sortByCreatedAction(_:)), keyEquivalent: "2")
-        createdItem.keyEquivalentModifierMask = [.command, .control, .option]
-        let modifiedItem = sortMenu.addItem(withTitle: "Date Modified", action: #selector(sortByModifiedAction(_:)), keyEquivalent: "3")
-        modifiedItem.keyEquivalentModifierMask = [.command, .control, .option]
-        let sizeItem = sortMenu.addItem(withTitle: "Size", action: #selector(sortBySizeAction(_:)), keyEquivalent: "4")
-        sizeItem.keyEquivalentModifierMask = [.command, .control, .option]
-        let kindItem = sortMenu.addItem(withTitle: "Kind", action: #selector(sortByKindAction(_:)), keyEquivalent: "5")
-        kindItem.keyEquivalentModifierMask = [.command, .control, .option]
-        let item = NSMenuItem(title: "Sort By", action: nil, keyEquivalent: "")
-        item.image = NSImage(systemSymbolName: "arrow.up.arrow.down", accessibilityDescription: nil)
-        item.submenu = sortMenu
-        return item
-    }
-
-    /// Icon-view-only: a single-select subtitle field shown below each thumbnail's filename.
-    /// Reuses `ListColumnDefinition`'s existing field list and `AppModel.listColumnValue` so
-    /// this can never disagree with List view's column picker about how a field is formatted.
-    private func makeSubtitleMenuItem() -> NSMenuItem {
-        let subtitleMenu = NSMenu(title: "Subtitle")
-
-        let noneItem = NSMenuItem(title: "None", action: #selector(setIconSubtitleAction(_:)), keyEquivalent: "")
-        noneItem.target = self
-        subtitleMenu.addItem(noneItem)
-        subtitleMenu.addItem(.separator())
-
-        for column in ListColumnDefinition.toggleable {
-            let columnItem = NSMenuItem(title: column.label, action: #selector(setIconSubtitleAction(_:)), keyEquivalent: "")
-            columnItem.representedObject = column.id
-            columnItem.target = self
-            subtitleMenu.addItem(columnItem)
-        }
-
-        let item = NSMenuItem(title: "Subtitle", action: nil, keyEquivalent: "")
-        item.image = NSImage(systemSymbolName: "text.below.photo", accessibilityDescription: nil)
-        item.submenu = subtitleMenu
-        return item
-    }
-
-    /// Rebuilds the View menu in the desired order with SF Symbol images.
-    /// Collects SwiftUI-managed items (Toggle Sidebar, Toggle Inspector) and any
-    /// unrecognised AppKit items (Enter Full Screen), clears the menu, then re-adds
-    /// everything in order: As Gallery, As List, Sort By, Zoom In/Out,
-    /// Toggle Sidebar, Toggle Inspector, other (Enter Full Screen).
-    private func rebuildViewMenu(_ menu: NSMenu) {
-        // Early exit if already in the correct order.
-        guard menu.items.first?.title.lowercased() != "as icons" else { return }
-
-        // Collect items we don't own so we can keep them.
-        var sidebarMenuItem: NSMenuItem?
-        var inspectorMenuItem: NSMenuItem?
-        var extraItems: [NSMenuItem] = []
-        let ownedTitles: Set<String> = ["as icons", "as gallery", "as list", "sort by", "zoom in", "zoom out", "show path bar", "hide path bar", "show exiftool console"]
-
-        for item in menu.items where !item.isSeparatorItem {
-            let normalizedTitle = item.title.lowercased()
-            switch normalizedTitle {
-            case "toggle sidebar": sidebarMenuItem = item
-            case "toggle inspector": inspectorMenuItem = item
-            case _ where ownedTitles.contains(normalizedTitle): break  // will be recreated
-            default: extraItems.append(item)
-            }
-        }
-
-        // Build fresh injected items with images.
-        // macOS 27 has AppKit hide menu-item SF Symbol images by default; opt these three back
-        // in explicitly via `makeImagePreferredVisible()` (SharedUI's KVC-based wrapper around
-        // `preferredImageVisibility`, since that property's SDK declaration is macOS-27-only —
-        // see MenuBuilders.swift) so they render the same on 27 as they already do on 26.
-        // `.image` alone isn't enough there.
-        let iconItem = NSMenuItem(title: "as Icons", action: #selector(switchToIconAction(_:)), keyEquivalent: "1")
-        iconItem.keyEquivalentModifierMask = .command
-        iconItem.image = NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: nil)
-        iconItem.makeImagePreferredVisible()
-
-        let listItem = NSMenuItem(title: "as List", action: #selector(switchToListAction(_:)), keyEquivalent: "2")
-        listItem.keyEquivalentModifierMask = .command
-        listItem.image = NSImage(systemSymbolName: "list.bullet", accessibilityDescription: nil)
-        listItem.makeImagePreferredVisible()
-
-        let galleryItem = NSMenuItem(title: "as Gallery", action: #selector(switchToGalleryAction(_:)), keyEquivalent: "3")
-        galleryItem.keyEquivalentModifierMask = .command
-        galleryItem.image = NSImage(systemSymbolName: "squares.below.rectangle", accessibilityDescription: nil)
-        galleryItem.makeImagePreferredVisible()
-
-        let zoomInItem = NSMenuItem(title: "Zoom In", action: #selector(zoomInAction(_:)), keyEquivalent: "+")
-        zoomInItem.keyEquivalentModifierMask = .command
-        zoomInItem.image = NSImage(systemSymbolName: "plus.magnifyingglass", accessibilityDescription: nil)
-
-        let zoomOutItem = NSMenuItem(title: "Zoom Out", action: #selector(zoomOutAction(_:)), keyEquivalent: "-")
-        zoomOutItem.keyEquivalentModifierMask = .command
-        zoomOutItem.image = NSImage(systemSymbolName: "minus.magnifyingglass", accessibilityDescription: nil)
-
-        if sidebarMenuItem == nil {
-            let item = NSMenuItem(title: "Toggle Sidebar", action: #selector(NSSplitViewController.toggleSidebar(_:)), keyEquivalent: "s")
-            item.keyEquivalentModifierMask = [.command, .option]
-            sidebarMenuItem = item
-        }
-        if inspectorMenuItem == nil {
-            let item = NSMenuItem(title: "Toggle Inspector", action: #selector(toggleInspectorAction(_:)), keyEquivalent: "i")
-            item.keyEquivalentModifierMask = [.command, .option]
-            inspectorMenuItem = item
-        }
-        sidebarMenuItem?.image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: nil)
-        inspectorMenuItem?.image = NSImage(systemSymbolName: "sidebar.trailing", accessibilityDescription: nil)
-
-        // Rebuild in desired order.
-        menu.removeAllItems()
-        menu.addItem(iconItem)
-        menu.addItem(listItem)
-        menu.addItem(galleryItem)
-        menu.addItem(.separator())
-        menu.addItem(makeSubtitleMenuItem())
-        menu.addItem(.separator())
-        menu.addItem(makeSortByMenuItem())
-        menu.addItem(.separator())
-        menu.addItem(zoomInItem)
-        menu.addItem(zoomOutItem)
-        menu.addItem(.separator())
-        if let sidebarMenuItem  { menu.addItem(sidebarMenuItem) }
-        if let inspectorMenuItem { menu.addItem(inspectorMenuItem) }
-        let pathBarItem = NSMenuItem(
-            title: browserController.isPathBarVisible ? "Hide Path Bar" : "Show Path Bar",
-            action: #selector(togglePathBarAction(_:)),
-            keyEquivalent: "p"
-        )
-        pathBarItem.keyEquivalentModifierMask = [.command, .option]
-        pathBarItem.image = NSImage(systemSymbolName: "square.bottomhalf.filled", accessibilityDescription: nil)
-        menu.addItem(pathBarItem)
-        let exifToolConsoleItem = NSMenuItem(
-            title: "Show ExifTool Console",
-            action: #selector(AppDelegate.showExifToolConsoleAction(_:)),
-            keyEquivalent: ""
-        )
-        exifToolConsoleItem.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: nil)
-        menu.addItem(exifToolConsoleItem)
-        if !extraItems.isEmpty {
-            menu.addItem(.separator())
-            extraItems.forEach { menu.addItem($0) }
-        }
-    }
-
-    private func rebuildFileMenu(_ menu: NSMenu) {
-        let systemItems = menu.items.filter { item in
-            item.tag < 9_100 && !item.isSeparatorItem && item.title != "New" && item.title != "Open…" && item.title != "Import" && item.title != "Export"
-        }
-
-        menu.removeAllItems()
-
-        let openFolderItem = NSMenuItem(title: "Open Folder…", action: #selector(openFolderAction(_:)), keyEquivalent: "n")
-        openFolderItem.keyEquivalentModifierMask = .command
-        openFolderItem.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
-        openFolderItem.tag = MenuTag.fileOpenFolder
-        menu.addItem(openFolderItem)
-
-        let importItem = NSMenuItem(title: "Import", action: nil, keyEquivalent: "")
-        importItem.image = NSImage(systemSymbolName: "checklist.checked", accessibilityDescription: nil)
-        importItem.tag = MenuTag.fileImportRoot
-        importItem.submenu = makeImportSubmenu()
-        menu.addItem(importItem)
-
-        let exportItem = NSMenuItem(title: "Export", action: nil, keyEquivalent: "")
-        exportItem.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
-        exportItem.tag = MenuTag.fileExportRoot
-        exportItem.submenu = makeExportSubmenu()
-        menu.addItem(exportItem)
-
-        menu.addItem(.separator())
-
-        let openItem = NSMenuItem(title: "Open", action: #selector(openInDefaultAppMenuAction(_:)), keyEquivalent: "o")
-        openItem.keyEquivalentModifierMask = .command
-        openItem.image = NSImage(systemSymbolName: "arrow.up.forward.app", accessibilityDescription: nil)
-        openItem.tag = MenuTag.fileOpenSelection
-        menu.addItem(openItem)
-
-        let openWithItem = NSMenuItem(title: "Open With", action: nil, keyEquivalent: "")
-        openWithItem.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
-        openWithItem.tag = MenuTag.fileOpenWith
-        openWithItem.submenu = makeOpenWithSubmenu()
-        menu.addItem(openWithItem)
-
-        let revealItem = NSMenuItem(title: "Reveal in Finder", action: #selector(revealSelectionInFinderMenuAction(_:)), keyEquivalent: "")
-        revealItem.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
-        revealItem.tag = MenuTag.fileReveal
-        menu.addItem(revealItem)
-
-        let quickLookItem = NSMenuItem(title: "Quick Look", action: #selector(quickLookSelectionMenuAction(_:)), keyEquivalent: "y")
-        quickLookItem.keyEquivalentModifierMask = .command
-        quickLookItem.image = NSImage(systemSymbolName: "eye", accessibilityDescription: nil)
-        quickLookItem.tag = MenuTag.fileQuickLook
-        menu.addItem(quickLookItem)
-
-        menu.addItem(.separator())
-
-        let pinItem = NSMenuItem(title: "Pin Folder", action: #selector(pinFolderToSidebarAction(_:)), keyEquivalent: "t")
-        pinItem.keyEquivalentModifierMask = [.command, .option]
-        pinItem.image = NSImage(systemSymbolName: "pin", accessibilityDescription: nil)
-        pinItem.tag = MenuTag.filePin
-        menu.addItem(pinItem)
-
-        let unpinItem = NSMenuItem(title: "Unpin Folder", action: #selector(unpinFolderFromSidebarAction(_:)), keyEquivalent: "")
-        unpinItem.image = NSImage(systemSymbolName: "pin.slash", accessibilityDescription: nil)
-        unpinItem.tag = MenuTag.fileUnpin
-        menu.addItem(unpinItem)
-
-        let moveUpItem = NSMenuItem(title: "Move Folder Up", action: #selector(moveFolderUpInSidebarAction(_:)), keyEquivalent: "")
-        moveUpItem.image = NSImage(systemSymbolName: "arrow.up", accessibilityDescription: nil)
-        moveUpItem.tag = MenuTag.fileMoveUp
-        menu.addItem(moveUpItem)
-
-        let moveDownItem = NSMenuItem(title: "Move Folder Down", action: #selector(moveFolderDownInSidebarAction(_:)), keyEquivalent: "")
-        moveDownItem.image = NSImage(systemSymbolName: "arrow.down", accessibilityDescription: nil)
-        moveDownItem.tag = MenuTag.fileMoveDown
-        menu.addItem(moveDownItem)
-
-        if !systemItems.isEmpty {
-            menu.addItem(.separator())
-            systemItems.forEach { menu.addItem($0) }
-        }
-    }
-
-    private func makeOpenWithSubmenu() -> NSMenu {
-        let submenu = NSMenu(title: "Open With")
-        let files = Array(model.selectedFileURLs).sorted { $0.path < $1.path }
-        guard let firstFile = files.first else {
-            let item = NSMenuItem(title: "No Compatible Apps", action: nil, keyEquivalent: "")
-            item.isEnabled = false
-            submenu.addItem(item)
-            return submenu
-        }
-
-        let apps = NSWorkspace.shared.urlsForApplications(toOpen: firstFile)
-            .map { appURL -> (name: String, url: URL) in
-                let fallbackName = appURL.deletingPathExtension().lastPathComponent
-                let appName = FileManager.default.displayName(atPath: appURL.path)
-                return (appName.isEmpty ? fallbackName : appName, appURL)
-            }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-
-        if apps.isEmpty {
-            let item = NSMenuItem(title: "No Compatible Apps", action: nil, keyEquivalent: "")
-            item.isEnabled = false
-            submenu.addItem(item)
-            return submenu
-        }
-
-        for app in apps {
-            let item = NSMenuItem(title: app.name, action: #selector(openSelectionWithSpecificAppAction(_:)), keyEquivalent: "")
-            item.representedObject = app.url
-            item.target = self
-            let appIcon = NSWorkspace.shared.icon(forFile: app.url.path)
-            appIcon.size = NSSize(width: 16, height: 16)
-            item.image = appIcon
-            submenu.addItem(item)
-        }
-        return submenu
-    }
-
-    private func makeImportSubmenu() -> NSMenu {
-        Self.buildImportMenu(controller: self, model: model)
-    }
-
-    fileprivate static func buildImportMenu(
-        controller: NativeThreePaneSplitViewController,
-        model: AppModel
-    ) -> NSMenu {
-        let menu = NSMenu(title: "Import")
-        menu.autoenablesItems = false
-        let isEnabled = !model.browserItems.isEmpty
-
-        let items: [(title: String, action: Selector, symbol: String, tag: Int)] = [
-            ("CSV…", #selector(importCSVAction(_:)), "tablecells", MenuTag.fileImportCSV),
-            ("GPX…", #selector(importGPXAction(_:)), "location", MenuTag.fileImportGPX),
-            ("Reference Folder…", #selector(importReferenceFolderAction(_:)), "folder.badge.questionmark", MenuTag.fileImportReferenceFolder),
-            ("Reference Image…", #selector(importReferenceImageAction(_:)), "photo.badge.plus", MenuTag.fileImportReferenceImage),
-            ("EOS-1V…", #selector(importEOS1VAction(_:)), "camera", MenuTag.fileImportEOS1V),
-        ]
-
-        for descriptor in items {
-            let item = NSMenuItem(title: descriptor.title, action: descriptor.action, keyEquivalent: "")
-            item.target = controller
-            item.image = NSImage(systemSymbolName: descriptor.symbol, accessibilityDescription: nil)
-            item.tag = descriptor.tag
-            item.isEnabled = isEnabled
-            menu.addItem(item)
-        }
-        return menu
-    }
-
-    private func makeExportSubmenu() -> NSMenu {
-        Self.buildExportMenu(controller: self, model: model)
-    }
-
-    private static func buildExportMenu(
-        controller: NativeThreePaneSplitViewController,
-        model: AppModel
-    ) -> NSMenu {
-        let menu = NSMenu(title: "Export")
-        menu.autoenablesItems = false
-
-        let hasBrowserItems = !model.browserItems.isEmpty
-        let targetURLs = model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)
-
-        let createCSVItem = NSMenuItem(
-            title: "Create CSV…",
-            action: #selector(NativeThreePaneSplitViewController.exportExifToolCSVAction(_:)),
-            keyEquivalent: ""
-        )
-        createCSVItem.target = controller
-        createCSVItem.tag = MenuTag.fileExportExifToolCSV
-        createCSVItem.isEnabled = hasBrowserItems
-        createCSVItem.image = NSImage(systemSymbolName: "tablecells.badge.ellipsis", accessibilityDescription: nil)
-        menu.addItem(createCSVItem)
-
-        let photosState = model.fileActionState(for: .sendToPhotos, targetURLs: targetURLs)
-        let sendToPhotosItem = NSMenuItem(
-            title: "Send to Photos…",
-            action: #selector(NativeThreePaneSplitViewController.sendToPhotosAction(_:)),
-            keyEquivalent: ""
-        )
-        sendToPhotosItem.target = controller
-        sendToPhotosItem.tag = MenuTag.fileExportSendToPhotos
-        sendToPhotosItem.isEnabled = photosState.isEnabled
-        if let photosAppURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Photos") {
-            let appIcon = NSWorkspace.shared.icon(forFile: photosAppURL.path)
-            appIcon.size = NSSize(width: 16, height: 16)
-            sendToPhotosItem.image = appIcon
-        } else {
-            sendToPhotosItem.image = NSImage(systemSymbolName: "photo.on.rectangle", accessibilityDescription: nil)
-        }
-        menu.addItem(sendToPhotosItem)
-
-        let lightroomState = model.fileActionState(for: .sendToLightroom, targetURLs: targetURLs)
-        let sendToLightroomItem = NSMenuItem(
-            title: "Send to Lightroom…",
-            action: #selector(NativeThreePaneSplitViewController.sendToLightroomAction(_:)),
-            keyEquivalent: ""
-        )
-        sendToLightroomItem.target = controller
-        sendToLightroomItem.tag = MenuTag.fileExportSendToLightroom
-        sendToLightroomItem.isEnabled = lightroomState.isEnabled
-        if let lightroomAppURL = model.lightroomApplicationURL(for: targetURLs) {
-            let appIcon = NSWorkspace.shared.icon(forFile: lightroomAppURL.path)
-            appIcon.size = NSSize(width: 16, height: 16)
-            sendToLightroomItem.image = appIcon
-        } else {
-            sendToLightroomItem.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
-        }
-        menu.addItem(sendToLightroomItem)
-
-        let lightroomClassicState = model.fileActionState(for: .sendToLightroomClassic, targetURLs: targetURLs)
-        let sendToLightroomClassicItem = NSMenuItem(
-            title: "Send to Lightroom Classic…",
-            action: #selector(NativeThreePaneSplitViewController.sendToLightroomClassicAction(_:)),
-            keyEquivalent: ""
-        )
-        sendToLightroomClassicItem.target = controller
-        sendToLightroomClassicItem.tag = MenuTag.fileExportSendToLightroomClassic
-        sendToLightroomClassicItem.isEnabled = lightroomClassicState.isEnabled
-        if let lightroomAppURL = model.lightroomClassicApplicationURL(for: targetURLs) {
-            let appIcon = NSWorkspace.shared.icon(forFile: lightroomAppURL.path)
-            appIcon.size = NSSize(width: 16, height: 16)
-            sendToLightroomClassicItem.image = appIcon
-        } else {
-            sendToLightroomClassicItem.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
-        }
-        menu.addItem(sendToLightroomClassicItem)
-
-        return menu
-    }
-
-    private func rebuildEditMenu(_ menu: NSMenu) {
-        ensureEditMenuBaseline(in: menu)
-
-        menu.items.first(where: { $0.action == #selector(undoMetadataMenuAction(_:)) })?.image =
-            NSImage(systemSymbolName: "arrow.uturn.backward", accessibilityDescription: nil)
-        menu.items.first(where: { $0.action == #selector(redoMetadataMenuAction(_:)) })?.image =
-            NSImage(systemSymbolName: "arrow.uturn.forward", accessibilityDescription: nil)
-    }
-
-    private func ensureEditMenuBaseline(in menu: NSMenu) {
-        let hasUndo = menu.items.contains { $0.action == #selector(undoMetadataMenuAction(_:)) }
-        let hasRedo = menu.items.contains { $0.action == #selector(redoMetadataMenuAction(_:)) }
-        let hasCut = menu.items.contains { $0.action == #selector(NSText.cut(_:)) }
-        let hasCopy = menu.items.contains { $0.action == #selector(NSText.copy(_:)) }
-        let hasPaste = menu.items.contains { $0.action == #selector(NSText.paste(_:)) }
-        let hasSelectAll = menu.items.contains { $0.action == #selector(NSText.selectAll(_:)) }
-        guard !(hasUndo && hasRedo && hasCut && hasCopy && hasPaste && hasSelectAll) else { return }
-
-        menu.removeAllItems()
-
-        let undoItem = NSMenuItem(title: "Undo", action: #selector(undoMetadataMenuAction(_:)), keyEquivalent: "z")
-        undoItem.keyEquivalentModifierMask = .command
-        undoItem.target = self
-        menu.addItem(undoItem)
-
-        let redoItem = NSMenuItem(title: "Redo", action: #selector(redoMetadataMenuAction(_:)), keyEquivalent: "Z")
-        redoItem.keyEquivalentModifierMask = .command
-        redoItem.target = self
-        menu.addItem(redoItem)
-
-        menu.addItem(.separator())
-
-        let cutItem = NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        cutItem.keyEquivalentModifierMask = .command
-        menu.addItem(cutItem)
-
-        let copyItem = NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        copyItem.keyEquivalentModifierMask = .command
-        menu.addItem(copyItem)
-
-        let pasteItem = NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        pasteItem.keyEquivalentModifierMask = .command
-        menu.addItem(pasteItem)
-
-        let selectAllItem = NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
-        selectAllItem.keyEquivalentModifierMask = .command
-        menu.addItem(selectAllItem)
-    }
-
-    private func rebuildImageMenu(_ menu: NSMenu) {
-        menu.removeAllItems()
-
-        let adjustDateTimeItem = NSMenuItem(
-            title: "Adjust Date and Time\u{2026}",
-            action: #selector(adjustDateTimeAction(_:)),
-            keyEquivalent: ""
-        )
-        adjustDateTimeItem.image = NSImage(systemSymbolName: "calendar.badge.clock", accessibilityDescription: nil)
-        adjustDateTimeItem.tag = MenuTag.imageAdjustDateTime
-        adjustDateTimeItem.target = self
-        menu.addItem(adjustDateTimeItem)
-
-        let setLocationItem = NSMenuItem(
-            title: "Set Location\u{2026}",
-            action: #selector(setLocationAction(_:)),
-            keyEquivalent: ""
-        )
-        setLocationItem.image = NSImage(systemSymbolName: "mappin.and.ellipse", accessibilityDescription: nil)
-        setLocationItem.tag = MenuTag.imageSetLocation
-        setLocationItem.target = self
-        menu.addItem(setLocationItem)
-        menu.addItem(.separator())
-
-        let rotateAnticlockwiseItem = NSMenuItem(
-            title: "Rotate Anticlockwise",
-            action: #selector(rotateSelectionAnticlockwiseAction(_:)),
-            keyEquivalent: ""
-        )
-        rotateAnticlockwiseItem.image = NSImage(systemSymbolName: "rotate.left", accessibilityDescription: nil)
-        rotateAnticlockwiseItem.tag = MenuTag.imageRotateAnticlockwise
-        rotateAnticlockwiseItem.target = self
-        rotateAnticlockwiseItem.makeImagePreferredVisible()
-        menu.addItem(rotateAnticlockwiseItem)
-
-        let rotateClockwiseItem = NSMenuItem(
-            title: "Rotate Clockwise",
-            action: #selector(rotateSelectionClockwiseAction(_:)),
-            keyEquivalent: ""
-        )
-        rotateClockwiseItem.image = NSImage(systemSymbolName: "rotate.right", accessibilityDescription: nil)
-        rotateClockwiseItem.tag = MenuTag.imageRotateClockwise
-        rotateClockwiseItem.target = self
-        rotateClockwiseItem.makeImagePreferredVisible()
-        menu.addItem(rotateClockwiseItem)
-
-        let flipHorizontalItem = NSMenuItem(
-            title: "Flip Horizontal",
-            action: #selector(flipSelectionHorizontalAction(_:)),
-            keyEquivalent: ""
-        )
-        flipHorizontalItem.image = NSImage(systemSymbolName: "flip.horizontal", accessibilityDescription: nil)
-        flipHorizontalItem.tag = MenuTag.imageFlipHorizontal
-        flipHorizontalItem.target = self
-        flipHorizontalItem.makeImagePreferredVisible()
-        menu.addItem(flipHorizontalItem)
-
-        let flipVerticalItem = NSMenuItem(
-            title: "Flip Vertical",
-            action: #selector(flipSelectionVerticalAction(_:)),
-            keyEquivalent: ""
-        )
-        flipVerticalItem.image = NSImage(
-            systemSymbolName: "arrow.trianglehead.up.and.down.righttriangle.up.righttriangle.down",
-            accessibilityDescription: nil
-        )
-        flipVerticalItem.tag = MenuTag.imageFlipVertical
-        flipVerticalItem.target = self
-        flipVerticalItem.makeImagePreferredVisible()
-        menu.addItem(flipVerticalItem)
-        menu.addItem(.separator())
-
-        let applySelectionItem = NSMenuItem(title: "Apply Changes", action: #selector(applySelectionAction(_:)), keyEquivalent: "s")
-        applySelectionItem.keyEquivalentModifierMask = .command
-        applySelectionItem.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
-        applySelectionItem.tag = MenuTag.imageApplySelection
-        applySelectionItem.target = self
-        menu.addItem(applySelectionItem)
-
-        let clearSelectionItem = NSMenuItem(title: "Clear Changes", action: #selector(clearChangesAction(_:)), keyEquivalent: "k")
-        clearSelectionItem.keyEquivalentModifierMask = .command
-        clearSelectionItem.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
-        clearSelectionItem.tag = MenuTag.imageClearSelection
-        clearSelectionItem.target = self
-        menu.addItem(clearSelectionItem)
-
-        let refreshSelectionItem = NSMenuItem(title: "Refresh Metadata", action: #selector(refreshSelectionMetadataAction(_:)), keyEquivalent: "R")
-        refreshSelectionItem.keyEquivalentModifierMask = [.command, .shift]
-        refreshSelectionItem.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
-        refreshSelectionItem.tag = MenuTag.imageRefreshSelection
-        refreshSelectionItem.target = self
-        menu.addItem(refreshSelectionItem)
-
-        let restoreSelectionItem = NSMenuItem(title: "Restore from Backup", action: #selector(restoreFromBackupAction(_:)), keyEquivalent: "b")
-        restoreSelectionItem.keyEquivalentModifierMask = .command
-        restoreSelectionItem.image = NSImage(systemSymbolName: "arrow.uturn.backward.circle", accessibilityDescription: nil)
-        restoreSelectionItem.tag = MenuTag.imageRestoreSelection
-        restoreSelectionItem.target = self
-        menu.addItem(restoreSelectionItem)
-
-        menu.addItem(.separator())
-
-        let applyPresetItem = NSMenuItem(title: "Apply Preset", action: nil, keyEquivalent: "")
-        applyPresetItem.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: nil)
-        let applySubmenu = NSMenu(title: "Apply Preset")
-        if model.presets.isEmpty {
-            let noPresetsItem = NSMenuItem(title: "No Presets", action: nil, keyEquivalent: "")
-            noPresetsItem.isEnabled = false
-            applySubmenu.addItem(noPresetsItem)
-        } else {
-            for preset in model.presets {
-                let item = NSMenuItem(title: preset.name, action: #selector(applyPresetFromMenuAction(_:)), keyEquivalent: "")
-                item.representedObject = preset.id.uuidString
-                item.tag = MenuTag.imageApplyPreset
-                item.target = self
-                applySubmenu.addItem(item)
-            }
-        }
-        applyPresetItem.submenu = applySubmenu
-        menu.addItem(applyPresetItem)
-
-        let savePresetItem = NSMenuItem(title: "Save Metadata as Preset…", action: #selector(saveCurrentAsPresetAction(_:)), keyEquivalent: "")
-        savePresetItem.tag = MenuTag.imageSavePreset
-        savePresetItem.image = NSImage(systemSymbolName: "square.and.arrow.down.badge.checkmark", accessibilityDescription: nil)
-        savePresetItem.target = self
-        menu.addItem(savePresetItem)
-
-        let managePresetsItem = NSMenuItem(title: "Manage Presets…", action: #selector(managePresetsAction(_:)), keyEquivalent: "")
-        managePresetsItem.tag = MenuTag.imageManagePresets
-        managePresetsItem.image = NSImage(systemSymbolName: "slider.horizontal.below.square.filled.and.square", accessibilityDescription: nil)
-        managePresetsItem.target = self
-        menu.addItem(managePresetsItem)
-
-        menu.addItem(.separator())
-
-        let batchRenameSelectionItem = NSMenuItem(
-            title: "Batch Rename\u{2026}",
-            action: #selector(batchRenameSelectionAction(_:)),
-            keyEquivalent: ""
-        )
-        batchRenameSelectionItem.image = NSImage(systemSymbolName: "pencil.and.list.clipboard", accessibilityDescription: nil)
-        batchRenameSelectionItem.tag = MenuTag.imageBatchRenameSelection
-        batchRenameSelectionItem.target = self
-        menu.addItem(batchRenameSelectionItem)
-    }
-
-    private func rebuildFolderMenu(_ menu: NSMenu) {
-        menu.removeAllItems()
-
-        let applyFolderItem = NSMenuItem(
-            title: "Apply Changes to Folder",
-            action: #selector(applyFolderAction(_:)),
-            keyEquivalent: "S"
-        )
-        applyFolderItem.keyEquivalentModifierMask = [.command, .option, .shift]
-        applyFolderItem.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
-        applyFolderItem.tag = MenuTag.folderApply
-        applyFolderItem.target = self
-        menu.addItem(applyFolderItem)
-
-        let clearFolderItem = NSMenuItem(
-            title: "Clear Changes from Folder",
-            action: #selector(clearAllChangesAction(_:)),
-            keyEquivalent: "k"
-        )
-        clearFolderItem.keyEquivalentModifierMask = [.command, .option]
-        clearFolderItem.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
-        clearFolderItem.tag = MenuTag.folderClear
-        clearFolderItem.target = self
-        menu.addItem(clearFolderItem)
-
-        let refreshFolderItem = NSMenuItem(
-            title: "Refresh Metadata for Folder",
-            action: #selector(refreshAllMetadataAction(_:)),
-            keyEquivalent: "r"
-        )
-        refreshFolderItem.keyEquivalentModifierMask = [.command, .option]
-        refreshFolderItem.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
-        refreshFolderItem.tag = MenuTag.folderRefresh
-        refreshFolderItem.target = self
-        menu.addItem(refreshFolderItem)
-
-        let restoreFolderItem = NSMenuItem(
-            title: "Restore from Backup for Folder",
-            action: #selector(restoreAllFromBackupAction(_:)),
-            keyEquivalent: "b"
-        )
-        restoreFolderItem.keyEquivalentModifierMask = [.command, .option]
-        restoreFolderItem.image = NSImage(systemSymbolName: "arrow.uturn.backward.circle", accessibilityDescription: nil)
-        restoreFolderItem.tag = MenuTag.folderRestore
-        restoreFolderItem.target = self
-        menu.addItem(restoreFolderItem)
-
-        menu.addItem(.separator())
-
-        let batchRenameFolderItem = NSMenuItem(
-            title: "Batch Rename Folder\u{2026}",
-            action: #selector(batchRenameFolderAction(_:)),
-            keyEquivalent: ""
-        )
-        batchRenameFolderItem.image = NSImage(systemSymbolName: "pencil.and.list.clipboard", accessibilityDescription: nil)
-        batchRenameFolderItem.tag = MenuTag.folderBatchRename
-        batchRenameFolderItem.target = self
-        menu.addItem(batchRenameFolderItem)
-    }
-
-    fileprivate func makeSharedPresetsMenu(model: AppModel) -> NSMenu {
-        let menu = NSMenu(title: "Presets")
-        menu.autoenablesItems = false
-        let hasSelection = !model.selectedFileURLs.isEmpty
-
-        if !model.presets.isEmpty {
-            for preset in model.presets {
-                let item = NSMenuItem(title: preset.name, action: #selector(applyPresetFromMenuAction(_:)), keyEquivalent: "")
-                item.representedObject = preset.id.uuidString
-                item.tag = MenuTag.imageApplyPreset
-                item.target = self
-                item.isEnabled = hasSelection
-                menu.addItem(item)
-            }
-            menu.addItem(.separator())
-        }
-
-        let saveItem = NSMenuItem(title: "Save Metadata as Preset…", action: #selector(saveCurrentAsPresetAction(_:)), keyEquivalent: "")
-        saveItem.tag = MenuTag.imageSavePreset
-        saveItem.image = NSImage(systemSymbolName: "square.and.arrow.down.badge.checkmark", accessibilityDescription: nil)
-        saveItem.target = self
-        saveItem.isEnabled = hasSelection
-        menu.addItem(saveItem)
-
-        let manageItem = NSMenuItem(title: "Manage Presets…", action: #selector(managePresetsAction(_:)), keyEquivalent: "")
-        manageItem.tag = MenuTag.imageManagePresets
-        manageItem.image = NSImage(systemSymbolName: "slider.horizontal.below.square.filled.and.square", accessibilityDescription: nil)
-        manageItem.target = self
-        manageItem.isEnabled = true
-        menu.addItem(manageItem)
-
-        return menu
-    }
-
-    private func rebuildHelpMenu(_ menu: NSMenu) {
-        let existing = menu.items.first { $0.tag == MenuTag.helpExifToolDocs }
-        if existing != nil { return }
-        menu.addItem(.separator())
-        let whatsNewItem = NSMenuItem(title: "What's New in \(AppBrand.displayName)…", action: #selector(openWhatsNewAction(_:)), keyEquivalent: "")
-        whatsNewItem.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil)
-        whatsNewItem.tag = MenuTag.helpWhatsNew
-        menu.addItem(whatsNewItem)
-        let docsItem = NSMenuItem(title: "ExifTool Documentation", action: #selector(openExifToolDocsAction(_:)), keyEquivalent: "")
-        docsItem.image = NSImage(systemSymbolName: "link", accessibilityDescription: nil)
-        docsItem.tag = MenuTag.helpExifToolDocs
-        menu.addItem(docsItem)
-    }
-
-    @objc private func openWhatsNewAction(_: Any?) {
-        (NSApp.delegate as? AppDelegate)?.showWelcomeScreen()
-    }
-
-    // MARK: NSMenuDelegate
-
-    func menuWillOpen(_ menu: NSMenu) {
-        if menu === fileMenuForInjection {
-            rebuildFileMenu(menu)
-        } else if menu === editMenuForInjection {
-            rebuildEditMenu(menu)
-        } else if menu === viewMenuForSortInjection {
-            rebuildViewMenu(menu)
-        } else if menu === imageMenuForInjection {
-            rebuildImageMenu(menu)
-        } else if menu === folderMenuForInjection {
-            rebuildFolderMenu(menu)
-        } else if menu === helpMenuForInjection {
-            rebuildHelpMenu(menu)
-        }
-    }
-
-    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-        let selection = Array(model.selectedFileURLs)
-        if menuItem.action == #selector(undoMetadataMenuAction(_:)) {
-            return model.canUndoMetadataEdits
-        } else if menuItem.action == #selector(redoMetadataMenuAction(_:)) {
-            return model.canRedoMetadataEdits
-        } else if menuItem.action == #selector(openInDefaultAppMenuAction(_:)) {
-            let state = model.fileActionState(for: .openInDefaultApp, targetURLs: selection)
-            menuItem.title = state.title
-            return state.isEnabled
-        } else if menuItem.action == #selector(openSelectionWithSpecificAppAction(_:)) {
-            return !selection.isEmpty
-        } else if menuItem.action == #selector(revealSelectionInFinderMenuAction(_:)) {
-            return !selection.isEmpty
-        } else if menuItem.action == #selector(quickLookSelectionMenuAction(_:)) {
-            return !selection.isEmpty
-        } else if menuItem.action == #selector(importCSVAction(_:))
-            || menuItem.action == #selector(importGPXAction(_:))
-            || menuItem.action == #selector(importReferenceFolderAction(_:))
-            || menuItem.action == #selector(importReferenceImageAction(_:))
-            || menuItem.action == #selector(importEOS1VAction(_:)) {
-            return !model.browserItems.isEmpty
-        } else if menuItem.action == #selector(exportExifToolCSVAction(_:)) {
-            return !model.browserItems.isEmpty
-        } else if menuItem.action == #selector(sendToPhotosAction(_:)) {
-            let targetURLs = model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)
-            let state = model.fileActionState(for: .sendToPhotos, targetURLs: targetURLs)
-            menuItem.title = state.title
-            return state.isEnabled
-        } else if menuItem.action == #selector(sendToLightroomAction(_:)) {
-            let targetURLs = model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)
-            let state = model.fileActionState(for: .sendToLightroom, targetURLs: targetURLs)
-            menuItem.title = state.title
-            return state.isEnabled
-        } else if menuItem.action == #selector(sendToLightroomClassicAction(_:)) {
-            let targetURLs = model.selectedFileURLs.isEmpty ? model.browserItems.map(\.url) : Array(model.selectedFileURLs)
-            let state = model.fileActionState(for: .sendToLightroomClassic, targetURLs: targetURLs)
-            menuItem.title = state.title
-            return state.isEnabled
-        } else if menuItem.action == #selector(pinFolderToSidebarAction(_:)) {
-            return model.canPinSelectedSidebarLocation
-        } else if menuItem.action == #selector(unpinFolderFromSidebarAction(_:)) {
-            return model.canUnpinSelectedSidebarLocation
-        } else if menuItem.action == #selector(moveFolderUpInSidebarAction(_:)) {
-            return model.canMoveSelectedFavoriteUp
-        } else if menuItem.action == #selector(moveFolderDownInSidebarAction(_:)) {
-            return model.canMoveSelectedFavoriteDown
-        } else if menuItem.action == #selector(rotateSelectionAnticlockwiseAction(_:)) {
-            return !selection.isEmpty
-        } else if menuItem.action == #selector(rotateSelectionClockwiseAction(_:)) {
-            return !selection.isEmpty
-        } else if menuItem.action == #selector(flipSelectionHorizontalAction(_:)) {
-            return !selection.isEmpty
-        } else if menuItem.action == #selector(flipSelectionVerticalAction(_:)) {
-            return !selection.isEmpty
-        } else if menuItem.action == #selector(toggleInspectorAction(_:)) {
-            menuItem.title = isInspectorCollapsed ? "Show Inspector" : "Hide Inspector"
-            return !isEOS1VSelected
-        } else if menuItem.action == #selector(togglePathBarAction(_:)) {
-            menuItem.title = browserController.isPathBarVisible ? "Hide Path Bar" : "Show Path Bar"
-        } else if menuItem.action == #selector(switchToIconAction(_:)) {
-            menuItem.state = model.browserViewMode == .icon ? .on : .off
-        } else if menuItem.action == #selector(switchToListAction(_:)) {
-            menuItem.state = model.browserViewMode == .list ? .on : .off
-        } else if menuItem.action == #selector(switchToGalleryAction(_:)) {
-            menuItem.state = model.browserViewMode == .gallery ? .on : .off
-        } else if menuItem.action == #selector(setIconSubtitleAction(_:)) {
-            menuItem.state = model.iconSubtitleColumnID == menuItem.representedObject as? String ? .on : .off
-            return model.browserViewMode == .icon
-        } else if menuItem.action == #selector(applySelectionAction(_:)) {
-            return model.fileActionState(for: .applyMetadataChanges, targetURLs: selection).isEnabled
-        } else if menuItem.action == #selector(applyFolderAction(_:)) {
-            menuItem.title = "Apply Changes to Folder"
-            return model.canApplyMetadataChanges
-        } else if menuItem.action == #selector(clearChangesAction(_:)) {
-            return model.fileActionState(for: .clearMetadataChanges, targetURLs: selection).isEnabled
-        } else if menuItem.action == #selector(restoreFromBackupAction(_:)) {
-            return model.fileActionState(for: .restoreFromLastBackup, targetURLs: selection).isEnabled
-        } else if menuItem.action == #selector(refreshSelectionMetadataAction(_:)) {
-            return !selection.isEmpty
-        } else if menuItem.action == #selector(refreshAllMetadataAction(_:)) {
-            return !model.browserItems.isEmpty
-        } else if menuItem.action == #selector(clearAllChangesAction(_:)) {
-            return model.canApplyMetadataChanges
-        } else if menuItem.action == #selector(restoreAllFromBackupAction(_:)) {
-            return model.hasAnyRestorableBackup(for: model.browserItems.map(\.url))
-        } else if menuItem.action == #selector(saveCurrentAsPresetAction(_:)) {
-            return !selection.isEmpty
-        } else if menuItem.action == #selector(applyPresetFromMenuAction(_:)) {
-            return !selection.isEmpty
-        } else if menuItem.action == #selector(adjustDateTimeAction(_:)) {
-            return !selection.isEmpty
-        } else if menuItem.action == #selector(setLocationAction(_:)) {
-            return model.canOpenLocationAdjustSheet()
-        } else if menuItem.action == #selector(batchRenameSelectionAction(_:)) {
-            return model.fileActionState(for: .batchRenameSelection, targetURLs: Array(model.selectedFileURLs)).isEnabled
-        } else if menuItem.action == #selector(batchRenameFolderAction(_:)) {
-            return model.fileActionState(for: .batchRenameFolder, targetURLs: model.browserItems.map(\.url)).isEnabled
-        } else if menuItem.action == #selector(zoomInAction(_:)) {
-            return model.browserViewMode == .icon && model.canIncreaseGalleryZoom
-        } else if menuItem.action == #selector(zoomOutAction(_:)) {
-            return model.browserViewMode == .icon && model.canDecreaseGalleryZoom
-        } else if menuItem.action == #selector(sortByNameAction(_:)) {
-            menuItem.state = model.browserSort == .name ? .on : .off
-        } else if menuItem.action == #selector(sortByCreatedAction(_:)) {
-            menuItem.state = model.browserSort == .created ? .on : .off
-        } else if menuItem.action == #selector(sortByModifiedAction(_:)) {
-            menuItem.state = model.browserSort == .modified ? .on : .off
-        } else if menuItem.action == #selector(sortBySizeAction(_:)) {
-            menuItem.state = model.browserSort == .size ? .on : .off
-        } else if menuItem.action == #selector(sortByKindAction(_:)) {
-            menuItem.state = model.browserSort == .kind ? .on : .off
-        }
-        return true
-    }
-
     private func focusBrowserPane() {
-        guard let window = view.window else { return }
-        NotificationCenter.default.post(name: .browserDidRequestFocus, object: nil)
-        window.makeFirstResponder(browserController.view)
+        guard view.window != nil else { return }
+        browserController.focusCurrentBrowserView()
     }
 
     private func toolbarTitleText() -> String {
@@ -1730,7 +779,7 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
                     } catch {
                         let alert = NSAlert()
                         alert.alertStyle = .warning
-                        alert.messageText = "Export Failed"
+                        alert.messageText = "Couldn\u{2019}t export."
                         alert.informativeText = error.localizedDescription
                         alert.addButton(withTitle: "OK")
                         alert.runSheetOrModal(for: self.view.window) { _ in }
@@ -1778,44 +827,54 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
         let selectionURLs = Array(model.selectedFileURLs)
         let folderURLs = model.browserItems.map(\.url)
         let hasPendingEdits = model.hasPendingEdits(inImportScope: .folder)
-        let pendingEditsNote = hasPendingEdits
-            ? "\n\nYou have unapplied changes that won't be included. Apply them first if you want them exported."
-            : ""
 
         guard !selectionURLs.isEmpty else {
             // No selection — fall straight through, but warn about pending edits if needed.
-            if hasPendingEdits {
-                let alert = NSAlert()
-                alert.alertStyle = .warning
-                alert.messageText = actionTitle
-                alert.informativeText = "You have unapplied changes that won't be included. Apply them first if you want them exported."
-                alert.addButton(withTitle: "Export Anyway")
-                alert.addButton(withTitle: "Cancel")
-                alert.runSheetOrModal(for: view.window) { response in
-                    guard response == .alertFirstButtonReturn else { return }
-                    completion(.folder, folderURLs)
-                }
-            } else {
+            guard hasPendingEdits else {
+                completion(.folder, folderURLs)
+                return
+            }
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "You have unapplied changes."
+            alert.informativeText = "They won\u{2019}t be included unless you apply them first."
+            alert.addButton(withTitle: actionTitle)
+            alert.addButton(withTitle: "Cancel")
+            alert.runSheetOrModal(for: view.window) { response in
+                guard response == .alertFirstButtonReturn else { return }
                 completion(.folder, folderURLs)
             }
             return
         }
 
+        // Which files to include is a routine choice, not a warning — HIG: alert buttons
+        // should be verbs describing what happens to something at risk, not a stand-in for
+        // an options picker. An accessory segmented control carries the choice; the alert's
+        // two buttons stay a real action-verb + Cancel.
         let n = selectionURLs.count
+        let scopeControl = NSSegmentedControl(labels: ["Selection (\(n))", "Folder"], trackingMode: .selectOne, target: nil, action: nil)
+        scopeControl.selectedSegment = 0
+        scopeControl.translatesAutoresizingMaskIntoConstraints = false
+
         let alert = NSAlert()
-        alert.messageText = actionTitle
-        alert.informativeText = "Export the current selection or all images in the folder?\(pendingEditsNote)"
-        alert.addButton(withTitle: "Selection (\(n) \(n == 1 ? "file" : "files"))")
-        alert.addButton(withTitle: "Folder")
+        if hasPendingEdits {
+            alert.alertStyle = .warning
+            alert.messageText = "You have unapplied changes."
+            alert.informativeText = "They won\u{2019}t be included unless you apply them first. Choose which files to include below."
+        } else {
+            alert.messageText = "Choose which files to include."
+            alert.informativeText = "\(n) \(n == 1 ? "file is" : "files are") selected, or you can include the whole folder."
+        }
+        alert.accessoryView = scopeControl
+        alert.addButton(withTitle: actionTitle)
         alert.addButton(withTitle: "Cancel")
 
         alert.runSheetOrModal(for: view.window) { response in
-            switch response {
-            case .alertFirstButtonReturn:
+            guard response == .alertFirstButtonReturn else { return }
+            if scopeControl.selectedSegment == 0 {
                 completion(.selection, selectionURLs)
-            case .alertSecondButtonReturn:
+            } else {
                 completion(.folder, folderURLs)
-            default: break
             }
         }
     }
@@ -2112,7 +1171,10 @@ final class NativeThreePaneSplitViewController: ThreePaneSplitViewController, NS
 
     @objc func adjustDateTimeAction(_: Any?) {
         let scope: DateTimeAdjustScope = model.selectedFileURLs.count > 1 ? .selection : .single
-        model.beginDateTimeAdjust(scope: scope, launchTag: .dateTimeOriginal, launchContext: .menu)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.model.beginDateTimeAdjust(scope: scope, launchTag: .dateTimeOriginal, launchContext: .menu)
+        }
     }
 
     @objc

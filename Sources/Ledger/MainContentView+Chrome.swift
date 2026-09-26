@@ -3,7 +3,6 @@ import AppKit
 extension Notification.Name {
     static let inspectorDidRequestBrowserFocus = Notification.Name("\(AppBrand.identifierPrefix).InspectorDidRequestBrowserFocus")
     static let inspectorDidRequestFieldNavigation = Notification.Name("\(AppBrand.identifierPrefix).InspectorDidRequestFieldNavigation")
-    static let browserDidRequestFocus = Notification.Name("\(AppBrand.identifierPrefix).BrowserDidRequestFocus")
     static let browserDidSwitchViewMode = Notification.Name("\(AppBrand.identifierPrefix).BrowserDidSwitchViewMode")
 }
 

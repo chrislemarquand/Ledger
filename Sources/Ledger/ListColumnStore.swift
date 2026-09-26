@@ -1,17 +1,15 @@
 import Foundation
 
-/// Persists list column visibility and initial-fit state to UserDefaults.
-///
-/// NSTableView.autosaveTableColumns handles column widths and order natively;
-/// this type handles the visibility state that autosave does not cover.
+/// Persists list column visibility to UserDefaults. Reads the same
+/// `SharedListPersistenceConfig.visibilityDefaultsKey` that `SharedBrowserListViewController`
+/// writes to (via `SharedListColumnStore`), for use in demand-gate checks that need visibility
+/// without pulling in the full shared list controller.
 struct ListColumnStore {
     private let defaults = UserDefaults.standard
     private let visibleKey: String
-    private let initialFitKey: String
 
     init(identifierPrefix: String) {
         visibleKey = "\(identifierPrefix).listColumns.visible"
-        initialFitKey = "\(identifierPrefix).listColumns.initialFitApplied"
     }
 
     /// Returns whether a column should be visible, falling back to the
@@ -34,12 +32,5 @@ struct ListColumnStore {
             currentVisible.remove(columnID)
         }
         defaults.set(Array(currentVisible), forKey: visibleKey)
-    }
-
-    /// True after applyInitialColumnFit has run once. Persisted so that
-    /// NSTableView autosave takes over column widths on subsequent launches.
-    var hasAppliedInitialFit: Bool {
-        get { defaults.bool(forKey: initialFitKey) }
-        set { defaults.set(newValue, forKey: initialFitKey) }
     }
 }

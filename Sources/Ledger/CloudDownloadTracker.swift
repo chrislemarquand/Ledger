@@ -19,6 +19,28 @@ final class CloudDownloadTracker {
     /// instead and map back through this table, which sidesteps the comparison entirely.
     private var urlsByPath: [String: URL] = [:]
     private var pendingDownloads: Set<URL> = []
+    private var pollTasks: [URL: Task<Void, Never>] = [:]
+    private var requestIDs: [URL: UUID] = [:]
+    /// Overridable for tests — see `pollForCompletion`'s doc comment.
+    private let pollTimeout: TimeInterval
+    private let startDownload: (URL) throws -> Void
+    private let resolveState: (URL) -> CloudFileState
+    private let now: () -> Date
+    private let sleep: () async throws -> Void
+
+    init(
+        pollTimeout: TimeInterval = 120,
+        startDownload: @escaping (URL) throws -> Void = { try FileManager.default.startDownloadingUbiquitousItem(at: $0) },
+        resolveState: @escaping (URL) -> CloudFileState = CloudFileStateResolver.resolve,
+        now: @escaping () -> Date = Date.init,
+        sleep: @escaping () async throws -> Void = { try await Task.sleep(for: .seconds(1)) }
+    ) {
+        self.pollTimeout = pollTimeout
+        self.startDownload = startDownload
+        self.resolveState = resolveState
+        self.now = now
+        self.sleep = sleep
+    }
 
     /// Begin watching `urls` for download-state changes. Replaces any existing watch.
     /// `onUpdate` is called with the full state for every URL the query currently knows about,
@@ -47,6 +69,9 @@ final class CloudDownloadTracker {
     }
 
     func stop() {
+        pollTasks.values.forEach { $0.cancel() }
+        pollTasks.removeAll()
+        requestIDs.removeAll()
         query?.stop()
         query = nil
         let center = NotificationCenter.default
@@ -63,7 +88,19 @@ final class CloudDownloadTracker {
         guard !pendingDownloads.contains(url) else { return }
         pendingDownloads.insert(url)
         onUpdate?([url: .downloading], [url: nil])
-        try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+        // v1.4 follow-up: `try?` used to silently swallow a start failure while the optimistic
+        // `.downloading` state (just published above) stayed in place forever — permanent
+        // spinner, and the pending-set guard above suppressed any retry. Undo the optimistic
+        // state immediately on a real start failure instead of leaving it to polling (which
+        // never would have detected this — the file never started downloading, so it never
+        // becomes `.local`).
+        do {
+            try startDownload(url)
+        } catch {
+            pendingDownloads.remove(url)
+            onUpdate?([url: .notDownloaded], [url: nil])
+            return
+        }
         pollForCompletion(of: url)
     }
 
@@ -72,17 +109,40 @@ final class CloudDownloadTracker {
     /// in its result set. Poll the same on-disk resource check the rest of the app trusts
     /// (`CloudFileStateResolver`, which mirrors Finder) until it reports local, so completion is
     /// always detected regardless of whether the query cooperates.
+    ///
+    /// v1.4 follow-up: this used to loop with no deadline at all — a download the provider
+    /// accepted but never actually completes (revoked network access, provider-side failure with
+    /// no error surfaced back to us) polled silently forever. Gives up after `pollTimeout` and
+    /// reports `.notDownloaded` — the same fallback as a start failure above — so the spinner
+    /// clears and the pending-set guard releases, letting the user retry.
     private func pollForCompletion(of url: URL) {
-        Task { @MainActor [weak self] in
+        let deadline = now().addingTimeInterval(pollTimeout)
+        let requestID = UUID()
+        requestIDs[url] = requestID
+        let sleep = self.sleep
+        pollTasks[url] = Task { @MainActor [weak self] in
             while true {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-                guard let self, self.pendingDownloads.contains(url) else { return }
-                guard CloudFileStateResolver.resolve(for: url) == .local else { continue }
-                self.pendingDownloads.remove(url)
-                self.onUpdate?([url: .local], [url: nil])
-                return
+                do { try await sleep() } catch { return }
+                guard !Task.isCancelled, let self,
+                      self.requestIDs[url] == requestID,
+                      self.pendingDownloads.contains(url) else { return }
+                if self.resolveState(url) == .local {
+                    self.finishDownload(for: url, state: .local)
+                    return
+                }
+                if self.now() >= deadline {
+                    self.finishDownload(for: url, state: .notDownloaded)
+                    return
+                }
             }
         }
+    }
+
+    private func finishDownload(for url: URL, state: CloudFileState) {
+        pendingDownloads.remove(url)
+        requestIDs[url] = nil
+        pollTasks.removeValue(forKey: url)?.cancel()
+        onUpdate?([url: state], [url: nil])
     }
 
     private func handleUpdate() {
@@ -102,6 +162,8 @@ final class CloudDownloadTracker {
                 || status == NSMetadataUbiquitousItemDownloadingStatusDownloaded {
                 states[url] = .local
                 pendingDownloads.remove(url)
+                requestIDs[url] = nil
+                pollTasks.removeValue(forKey: url)?.cancel()
             } else {
                 states[url] = pendingDownloads.contains(url) ? .downloading : .notDownloaded
                 if pendingDownloads.contains(url) {

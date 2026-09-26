@@ -35,9 +35,9 @@
             parallelizable = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "A10000620000000000000001"
-               BuildableName = "ExifEditCoreTests.xctest"
-               BlueprintName = "ExifEditCoreTests"
+               BlueprintIdentifier = "E20000140000000000000001"
+               BuildableName = "LedgerTests.xctest"
+               BlueprintName = "LedgerTests"
                ReferencedContainer = "container:Ledger.xcodeproj">
             </BuildableReference>
          </TestableReference>
@@ -46,9 +46,8 @@
             parallelizable = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "E20000140000000000000001"
-               BuildableName = "ExifEditMacTests.xctest"
-               BlueprintName = "ExifEditMacTests"
+               BlueprintIdentifier = "46E8AA573045F8E60033B66F"
+               BuildableName = "LedgerUITests.xctest"
                ReferencedContainer = "container:Ledger.xcodeproj">
             </BuildableReference>
          </TestableReference>

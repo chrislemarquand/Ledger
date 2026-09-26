@@ -164,8 +164,9 @@ final class EOS1VShootingViewController: NSViewController, NSTableViewDataSource
         previewButton.isEnabled = selected.count == 1
         exportButton.isEnabled = !selected.isEmpty
         deleteButton.isEnabled = !selected.isEmpty
-        deleteButton.title = selected.allSatisfy { session.deletedRollIDs.contains($0.id) } && !selected.isEmpty
-            ? "Restore" : "Delete"
+        let restoring = selected.allSatisfy { session.deletedRollIDs.contains($0.id) } && !selected.isEmpty
+        deleteButton.title = restoring ? "Restore" : "Delete"
+        deleteButton.hasDestructiveAction = !restoring
     }
 
     private var selectedRolls: [EOS1VFilmRoll] {

@@ -98,8 +98,8 @@ fail_on_active_swiftpm_process_for_path "$SWIFTPM_SCRATCH_PATH"
 echo "[1/5] Resolving package dependencies"
 xcodebuild -resolvePackageDependencies -project "$PROJECT_PATH" -scheme "$SCHEME_NAME" > /dev/null
 
-if [[ -f "$ROOT_DIR/Package.swift" ]]; then
-  echo "[2/5] Running swift test"
+if [[ -f "$ROOT_DIR/LedgerCore/Package.swift" ]]; then
+  echo "[2/5] Running swift test (LedgerCore)"
   if ! run_with_timeout "$SWIFT_TEST_TIMEOUT_SECONDS" "swift test" ./scripts/test/run_all.sh --scratch-path "$SWIFTPM_SCRATCH_PATH" 2>&1 | tee "$TEST_LOG"; then
     status=${PIPESTATUS[0]}
     if [[ "$status" -eq 124 ]]; then
@@ -109,34 +109,55 @@ if [[ -f "$ROOT_DIR/Package.swift" ]]; then
     fi
     exit "$status"
   fi
+  # A clean exit with zero tests actually run is a pass in name only — verified directly against
+  # this project's own swift-testing output, which prints a separate, always-present "Test run
+  # with 0 tests in 0 suites passed" summary for the (unused here) Swift Testing framework
+  # alongside real XCTest results; counting only that harmless line would silently accept a
+  # regression that broke test discovery entirely.
+  SWIFT_TEST_COUNT="$(grep -cE '^\[[0-9]+/[0-9]+\] Testing' "$TEST_LOG" || true)"
+  if [[ "$SWIFT_TEST_COUNT" -eq 0 ]]; then
+    echo "swift test reported success but ran zero tests. See: $TEST_LOG"
+    exit 1
+  fi
+  echo "  ($SWIFT_TEST_COUNT LedgerCore tests ran)"
 else
-  echo "[2/5] Skipping swift test (no Package.swift at repo root)"
+  echo "[2/5] Skipping swift test (no LedgerCore/Package.swift found)"
 fi
 
 echo "[3/5] Building app target"
 xcodebuild -project "$PROJECT_PATH" -scheme "$SCHEME_NAME" -configuration Debug -destination 'platform=macOS' -derivedDataPath "$DERIVED_DATA_PATH" build > "$BUILD_LOG" 2>&1
 
 echo "[4/5] Running app test pass"
-if ! xcodebuild -project "$PROJECT_PATH" -scheme "$SCHEME_NAME" -configuration Debug -destination 'platform=macOS' -derivedDataPath "$DERIVED_DATA_PATH" test >> "$BUILD_LOG" 2>&1; then
-  if rg -n "not currently configured for the test action|There are no test bundles available to test" "$BUILD_LOG" > /dev/null; then
+APP_TEST_HAD_NO_CONFIGURED_TESTS=0
+if ! xcodebuild -project "$PROJECT_PATH" -scheme "$SCHEME_NAME" -configuration Debug -destination 'platform=macOS' -derivedDataPath "$DERIVED_DATA_PATH" -skip-testing:LedgerUITests test >> "$BUILD_LOG" 2>&1; then
+  if grep -Eq "not currently configured for the test action|There are no test bundles available to test" "$BUILD_LOG"; then
     echo "No configured tests for scheme $SCHEME_NAME; continuing."
+    APP_TEST_HAD_NO_CONFIGURED_TESTS=1
   else
     echo "App test pass failed. See: $BUILD_LOG"
     tail -n 80 "$BUILD_LOG"
     exit 1
   fi
 fi
+if [[ "$APP_TEST_HAD_NO_CONFIGURED_TESTS" -eq 0 ]]; then
+  APP_TEST_COUNT="$(grep -cE "^Test case '.*' passed" "$BUILD_LOG" || true)"
+  if [[ "$APP_TEST_COUNT" -eq 0 ]]; then
+    echo "App test pass reported success but zero tests actually ran. See: $BUILD_LOG"
+    exit 1
+  fi
+  echo "  ($APP_TEST_COUNT app-side tests ran)"
+fi
 
 echo "[5/5] Validating warning and bug gates"
-if rg -n "warning: .*\\.swift" "$BUILD_LOG" > /dev/null; then
+if grep -nE "warning: .*\.swift" "$BUILD_LOG" > /dev/null; then
   echo "Build produced warnings. See: $BUILD_LOG"
-  rg -n "warning: .*\\.swift" "$BUILD_LOG"
+  grep -nE "warning: .*\.swift" "$BUILD_LOG"
   exit 1
 fi
 
-if [[ -f "$BUG_BACKLOG_FILE" ]] && rg -n "^- \[ \] `S0`|^- \[ \] `S1`" "$BUG_BACKLOG_FILE" > /dev/null; then
+if [[ -f "$BUG_BACKLOG_FILE" ]] && grep -nE '^- \[ \] `S0`|^- \[ \] `S1`' "$BUG_BACKLOG_FILE" > /dev/null; then
   echo "Open S0/S1 issues remain in $BUG_BACKLOG_FILE"
-  rg -n "^- \[ \] `S0`|^- \[ \] `S1`" "$BUG_BACKLOG_FILE"
+  grep -nE '^- \[ \] `S0`|^- \[ \] `S1`' "$BUG_BACKLOG_FILE"
   exit 1
 fi
 

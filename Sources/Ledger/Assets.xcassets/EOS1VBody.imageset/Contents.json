@@ -1,17 +1,14 @@
 {
   "images" : [
     {
-      "filename" : "EOS1VBody.png",
+      "filename" : "EOS1VBody@1x.png",
       "idiom" : "universal",
       "scale" : "1x"
     },
     {
+      "filename" : "EOS1VBody@2x.png",
       "idiom" : "universal",
       "scale" : "2x"
-    },
-    {
-      "idiom" : "universal",
-      "scale" : "3x"
     }
   ],
   "info" : {

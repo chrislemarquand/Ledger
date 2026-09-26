@@ -45,6 +45,108 @@ enum ThumbnailService {
               let jpeg = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.82])
         else { return }
         try? jpeg.write(to: diskURL, options: .atomic)
+        scheduleDiskCacheMaintenanceIfNeeded()
+    }
+
+    // MARK: - Disk cache maintenance (Phase 3.3)
+
+    /// Measured against this app's real disk cache contents (2026-09-02): 627 thumbnails
+    /// (a mix of ~180px gallery thumbnails and up to 1400px inspector previews) averaged
+    /// ~224KB each, ~135MB total, for well under one full benchmark-corpus folder (1,012
+    /// files) worth of browsing. With no cap at all, that grows without bound across every
+    /// folder ever visited, forever. 1GB holds roughly 4,000+ thumbnails at that measured
+    /// average — several corpus-folders' worth — as a documented, evidence-derived budget
+    /// rather than an arbitrary number.
+    static let diskCacheBudgetBytes = 1_000 * 1024 * 1024
+    /// Trim back to 80% of budget, not exactly to the limit, so maintenance doesn't re-run
+    /// on essentially every subsequent write once the cache sits right at the boundary.
+    static let diskCacheTrimTargetBytes = 800 * 1024 * 1024
+    private static let diskCacheMaintenanceMinInterval: TimeInterval = 5 * 60
+
+    private nonisolated(unsafe) static var lastDiskCacheMaintenanceAt = Date.distantPast
+    private static let maintenanceScheduleLock = NSLock()
+
+    /// Rate-limited trigger, called after every disk-cache write (already off the hot path —
+    /// `writeDiskCache` itself only ever runs inside a detached background `Task`, never from
+    /// launch, cell-configuration, scrolling, or decode call sites). A cheap timestamp check
+    /// under a lock, not a directory scan, is all that runs synchronously here; the scan itself
+    /// is further dispatched to a detached utility-priority task.
+    private static func scheduleDiskCacheMaintenanceIfNeeded() {
+        maintenanceScheduleLock.lock()
+        let now = Date()
+        guard now.timeIntervalSince(lastDiskCacheMaintenanceAt) >= diskCacheMaintenanceMinInterval else {
+            maintenanceScheduleLock.unlock()
+            return
+        }
+        lastDiskCacheMaintenanceAt = now
+        maintenanceScheduleLock.unlock()
+
+        Task.detached(priority: .utility) {
+            performDiskCacheMaintenance()
+        }
+    }
+
+    /// Pure selection logic, independent of `FileManager` so it's directly unit-testable:
+    /// given every cache entry's size and modification date, returns which URLs to delete —
+    /// oldest-modified first — to bring `totalSize` down to `trimTargetBytes`, or an empty
+    /// array if `totalSize` doesn't exceed `budgetBytes` yet.
+    static func urlsToEvictForDiskCacheMaintenance(
+        items: [(url: URL, size: Int, modifiedAt: Date)],
+        totalSize: Int,
+        budgetBytes: Int,
+        trimTargetBytes: Int
+    ) -> [URL] {
+        guard totalSize > budgetBytes else { return [] }
+        let orderedByAge = items.sorted { $0.modifiedAt < $1.modifiedAt }
+        var remaining = totalSize
+        var toEvict: [URL] = []
+        for item in orderedByAge {
+            guard remaining > trimTargetBytes else { break }
+            toEvict.append(item.url)
+            remaining -= item.size
+        }
+        return toEvict
+    }
+
+    /// Scans a disk cache directory and evicts oldest entries if over budget. Tolerant of
+    /// missing, corrupt, or concurrently-removed files throughout — a file that vanishes or
+    /// fails to read between the scan and the delete is simply skipped, never treated as an
+    /// error worth surfacing (this is disposable cache maintenance, not user data).
+    /// `budgetBytes`/`trimTargetBytes` default to the real production constants; overridable
+    /// so tests can exercise real eviction end-to-end on a small temporary directory without
+    /// needing a multi-gigabyte fixture to cross the real budget.
+    static func performDiskCacheMaintenance(
+        in directory: URL = diskCacheDirectory,
+        budgetBytes: Int = diskCacheBudgetBytes,
+        trimTargetBytes: Int = diskCacheTrimTargetBytes
+    ) {
+        let fileManager = FileManager.default
+        guard let entries = try? fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+
+        var items: [(url: URL, size: Int, modifiedAt: Date)] = []
+        var totalSize = 0
+        for url in entries {
+            guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey]),
+                  let size = values.fileSize
+            else { continue }
+            let modifiedAt = values.contentModificationDate ?? .distantPast
+            items.append((url, size, modifiedAt))
+            totalSize += size
+        }
+
+        let toEvict = urlsToEvictForDiskCacheMaintenance(
+            items: items,
+            totalSize: totalSize,
+            budgetBytes: budgetBytes,
+            trimTargetBytes: trimTargetBytes
+        )
+        for url in toEvict {
+            try? fileManager.removeItem(at: url)
+        }
     }
 
     // MARK: - Cost
@@ -60,58 +162,103 @@ enum ThumbnailService {
 
     // MARK: - Request broker
 
-    private actor Broker {
+    // v1.4 follow-up: three related permit-accounting bugs found and fixed together (they
+    // all touch the same `active`/`waiters`/`inflight` bookkeeping, easy to half-fix):
+    // (1) waiter-overflow eviction used to resume the oldest waiter without granting it a
+    //     permit, so it ran `work()` uncounted against `maxConcurrent` — fixed by making
+    //     `acquirePermit` return `Bool`; an evicted waiter is explicitly denied rather than
+    //     silently let through;
+    // (2) `cancelAll` used to reset `active` to 0 unconditionally. An earlier version of this
+    //     fix tried a generation token to stop *that* accounting from corrupting future
+    //     requests — but the real `work()` closure (`generate(fileURL:maxPixelSize:)`) has no
+    //     internal `Task.isCancelled` checks, so a permit-holding task already past its
+    //     cancellation check keeps running to completion regardless of `cancelAll`. Resetting
+    //     `active` to 0 let brand-new requests be admitted immediately on top of that still-
+    //     physically-running old work, genuinely exceeding `maxConcurrent` for real (not just
+    //     in bookkeeping) until the old work finished. Correct fix: don't reset `active` at
+    //     all — only `releasePermit()`, called when a permit-holder's `work()` actually
+    //     returns, may decrement it. New requests submitted right after `cancelAll` correctly
+    //     queue behind still-executing old work, same as they would without any cancellation
+    //     in progress;
+    // (3) `request`'s unconditional `inflight[key] = nil` on completion could erase a
+    //     *replacement* request registered under the same key after this one was superseded —
+    //     fixed by tagging each registration with an id and only clearing the entry if it's
+    //     still the one this call registered.
+    actor Broker {
+        private struct Waiter {
+            let continuation: CheckedContinuation<Bool, Never>
+        }
+
         private let maxConcurrent: Int
         private var active = 0
-        private var waiters: [CheckedContinuation<Void, Never>] = []
-        private var inflight: [RequestKey: Task<NSImage?, Never>] = [:]
+        private var waiters: [Waiter] = []
+        private var inflight: [RequestKey: (id: UUID, task: Task<NSImage?, Never>)] = [:]
         private static let maxWaiters = 200
 
         init(maxConcurrent: Int) { self.maxConcurrent = maxConcurrent }
+
+        // Read-only state for tests to establish queue ordering without scheduling sleeps.
+        var queuedRequestCount: Int { waiters.count }
 
         func request(
             key: RequestKey,
             priority: TaskPriority,
             work: @escaping @Sendable () async -> NSImage?
         ) async -> NSImage? {
-            if let existing = inflight[key] { return await existing.value }
+            if let existing = inflight[key] { return await existing.task.value }
+            let requestID = UUID()
             let task = Task(priority: priority) { [weak self] in
                 await self?.withPermit(work)
             }
-            inflight[key] = task
+            inflight[key] = (requestID, task)
             let image = await task.value
-            inflight[key] = nil
+            if inflight[key]?.id == requestID {
+                inflight[key] = nil
+            }
             return image
         }
 
         func cancelAll() {
-            inflight.values.forEach { $0.cancel() }
+            inflight.values.forEach { $0.task.cancel() }
             inflight.removeAll()
-            waiters.forEach { $0.resume() }
+            // Deny every currently-queued waiter outright — it holds no real resource yet, so
+            // this is safe regardless of what still-running permit-holders do. `active` is
+            // deliberately untouched: any permit a cancelled task already holds is only truly
+            // free once that task's own `releasePermit()` runs, as it finishes for real.
+            waiters.forEach { $0.continuation.resume(returning: false) }
             waiters.removeAll()
-            active = 0
         }
 
         private func withPermit(_ work: @escaping @Sendable () async -> NSImage?) async -> NSImage? {
-            await acquirePermit()
+            guard await acquirePermit() else { return nil }
             guard !Task.isCancelled else { releasePermit(); return nil }
             defer { releasePermit() }
             return await work()
         }
 
-        private func acquirePermit() async {
-            guard active >= maxConcurrent else { active += 1; return }
-            if waiters.count >= Self.maxWaiters { waiters.removeFirst().resume() }
-            await withCheckedContinuation { waiters.append($0) }
+        /// `false` means this request was evicted (waiter overflow) or denied by a
+        /// `cancelAll` while waiting — the caller must not run `work()` or call
+        /// `releasePermit()`, since it never actually holds a slot.
+        private func acquirePermit() async -> Bool {
+            guard active >= maxConcurrent else { active += 1; return true }
+            if waiters.count >= Self.maxWaiters {
+                waiters.removeFirst().continuation.resume(returning: false)
+            }
+            return await withCheckedContinuation { continuation in
+                waiters.append(Waiter(continuation: continuation))
+            }
         }
 
         private func releasePermit() {
-            if !waiters.isEmpty { waiters.removeFirst().resume() }
-            else { active = max(0, active - 1) }
+            if !waiters.isEmpty {
+                waiters.removeFirst().continuation.resume(returning: true)
+            } else {
+                active = max(0, active - 1)
+            }
         }
     }
 
-    private struct RequestKey: Hashable {
+    struct RequestKey: Hashable {
         let url: URL
         let side: Int
     }
@@ -120,26 +267,25 @@ enum ThumbnailService {
 
     // MARK: - Public cache API
 
-    /// Returns a cached image if one exists and is at least `minRenderedSide` points on its longest edge.
-    /// Pass `minRenderedSide: 1` to accept any cached image regardless of size.
+    /// Returns a cached image if one exists in memory and is at least `minRenderedSide` points on
+    /// its longest edge. Pass `minRenderedSide: 1` to accept any cached image regardless of size.
     ///
-    /// Falls back to a synchronous on-disk cache read on a memory-cache miss (a small local JPEG
-    /// read/decode, cheap enough to do inline on the calling thread) so cells configured
-    /// synchronously — e.g. on folder switch, before the async `request` path has a chance to
-    /// run — don't paint the generic fallback icon for a frame when a perfectly good thumbnail
-    /// is already sitting on disk from a previous visit.
+    /// Memory-only, deliberately — v1.4 Phase 1.1. This used to fall back to a synchronous on-disk
+    /// cache read (a `FileManager.fileExists`/mtime stat plus `NSImage(contentsOf:)` decode) on a
+    /// memory-cache miss, so cells configured synchronously wouldn't paint the generic fallback
+    /// icon for a frame when a thumbnail was already sitting on disk. That fallback ran inline on
+    /// every caller's thread, including genuine cell-configuration and selection hot paths
+    /// (`collectionView(_:itemForRepresentedObjectAt:)`, `didSelectItemsAt`, list row
+    /// configuration) — real disk I/O and image decode on the main thread during scrolling,
+    /// folder switching, and selection. Disk-cache reads still happen, just asynchronously, via
+    /// `request(url:requiredSide:forceRefresh:)` → `generate(fileURL:maxPixelSize:)`. The accepted
+    /// trade-off (per the plan): a cold-cache-in-memory-but-warm-on-disk thumbnail may show a
+    /// placeholder for one more render pass instead of appearing synchronously.
     static func cachedImage(for fileURL: URL, minRenderedSide: CGFloat) -> NSImage? {
-        if let image = memoryCache.object(forKey: fileURL as NSURL) {
-            guard minRenderedSide > 1 else { return image }
-            let cachedSide = max(image.size.width, image.size.height)
-            return cachedSide >= minRenderedSide * 0.9 ? image : nil
-        }
-
-        guard let disk = readDiskCache(sourceURL: fileURL, at: diskURL(for: fileURL)) else { return nil }
-        memoryCache.setObject(disk, forKey: fileURL as NSURL, cost: costBytes(for: disk))
-        guard minRenderedSide > 1 else { return disk }
-        let diskSide = max(disk.size.width, disk.size.height)
-        return diskSide >= minRenderedSide * 0.9 ? disk : nil
+        guard let image = memoryCache.object(forKey: fileURL as NSURL) else { return nil }
+        guard minRenderedSide > 1 else { return image }
+        let cachedSide = max(image.size.width, image.size.height)
+        return cachedSide >= minRenderedSide * 0.9 ? image : nil
     }
 
     static func storeCachedImage(_ image: NSImage, for fileURL: URL, renderedSide: CGFloat) {
@@ -175,6 +321,10 @@ enum ThumbnailService {
     /// If the cached image is smaller than requested, falls through to generate at full size —
     /// callers can use `cachedImage(for:minRenderedSide:1)` to show a placeholder while waiting.
     static func request(url: URL, requiredSide: CGFloat, forceRefresh: Bool) async -> NSImage? {
+        let signpostID = Signposts.thumbnail.makeSignpostID()
+        let state = Signposts.thumbnail.beginInterval("ThumbnailRequest", id: signpostID)
+        defer { Signposts.thumbnail.endInterval("ThumbnailRequest", state) }
+
         if forceRefresh {
             invalidateCachedImages(for: [url])
         } else if let cached = memoryCache.object(forKey: url as NSURL) {

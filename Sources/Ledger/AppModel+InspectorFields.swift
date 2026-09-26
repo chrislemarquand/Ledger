@@ -1,5 +1,5 @@
 import Foundation
-import ExifEditCore
+import LedgerCore
 
 @MainActor
 extension AppModel {

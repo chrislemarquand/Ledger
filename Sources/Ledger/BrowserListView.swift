@@ -1,5 +1,5 @@
 @preconcurrency import AppKit
-import ExifEditCore
+import LedgerCore
 import SharedUI
 
 @MainActor
@@ -149,7 +149,6 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
     private var lastRenderedDetailSignatures: [RowDetailSignature] = []
     private var lastRenderedViewMode: AppModel.BrowserViewMode?
     private var contextMenuTargetURLs: [URL] = []
-    private var browserFocusObserver: NSObjectProtocol?
     private var viewModeObserver: NSObjectProtocol?
     private var pendingSelectionAdoptionTask: Task<Void, Never>?
 
@@ -174,8 +173,7 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
             columns: Self.sharedColumns(from: ListColumnDefinition.all),
             persistence: SharedListPersistenceConfig(
                 autosaveName: "\(AppBrand.identifierPrefix).BrowserList",
-                visibilityDefaultsKey: "\(AppBrand.identifierPrefix).listColumns.visible",
-                initialFitDefaultsKey: "\(AppBrand.identifierPrefix).listColumns.initialFitApplied"
+                visibilityDefaultsKey: "\(AppBrand.identifierPrefix).listColumns.visible"
             ),
             layoutConfig: SharedListLayoutConfig(
                 primaryColumnID: ListColumnDefinition.idName,
@@ -200,15 +198,6 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
     override func viewDidLoad() {
         super.viewDidLoad()
         configureList()
-        browserFocusObserver = NotificationCenter.default.addObserver(
-            forName: .browserDidRequestFocus,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.focusListForKeyboardNavigation()
-            }
-        }
         viewModeObserver = NotificationCenter.default.addObserver(
             forName: .browserDidSwitchViewMode,
             object: nil,
@@ -237,10 +226,6 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
                     }
                 }
             }
-        }
-        if let browserFocusObserver {
-            NotificationCenter.default.removeObserver(browserFocusObserver)
-            self.browserFocusObserver = nil
         }
         if let viewModeObserver {
             NotificationCenter.default.removeObserver(viewModeObserver)
@@ -287,6 +272,10 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
             tableView.selectRowIndexes([], byExtendingSelection: false)
             isApplyingProgrammaticSelection = false
             sharedListController.reloadData()
+            Signposts.browserReload.emitEvent(
+                "ListReload",
+                "trigger=list kind=full count=\(currentURLs.count, privacy: .public)"
+            )
         } else {
             let rowsNeedingNameReload = IndexSet(items.enumerated().compactMap { index, item in
                 if pendingInvalidatedThumbnailURLs.contains(item.url) || pendingThumbnailRefreshURLs.contains(item.url) {
@@ -304,8 +293,16 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
                 let nameColumn = tableView.column(withIdentifier: NSUserInterfaceItemIdentifier("name"))
                 if nameColumn >= 0 {
                     tableView.reloadData(forRowIndexes: rowsNeedingNameReload, columnIndexes: IndexSet(integer: nameColumn))
+                    Signposts.browserReload.emitEvent(
+                        "ListReload",
+                        "trigger=nameSignature kind=targeted count=\(rowsNeedingNameReload.count, privacy: .public)"
+                    )
                 } else {
                     tableView.reloadData()
+                    Signposts.browserReload.emitEvent(
+                        "ListReload",
+                        "trigger=nameSignatureNoColumn kind=full count=\(currentURLs.count, privacy: .public)"
+                    )
                 }
             }
             if !rowsNeedingDetailReload.isEmpty && !detailColumnIDs.isEmpty {
@@ -315,6 +312,10 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
                 })
                 if !detailColumnIndexes.isEmpty {
                     tableView.reloadData(forRowIndexes: rowsNeedingDetailReload, columnIndexes: detailColumnIndexes)
+                    Signposts.browserReload.emitEvent(
+                        "ListReload",
+                        "trigger=detailSignature kind=targeted count=\(rowsNeedingDetailReload.count, privacy: .public)"
+                    )
                 }
             }
         }
@@ -405,7 +406,7 @@ final class BrowserListViewController: NSViewController, SharedBrowserListHostin
         )
     }
 
-    private func focusListForKeyboardNavigation() {
+    func focusListForKeyboardNavigation() {
         guard model.browserViewMode == .list else { return }
         guard let window = view.window else { return }
         window.makeFirstResponder(tableView)

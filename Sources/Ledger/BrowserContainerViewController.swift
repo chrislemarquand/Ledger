@@ -22,6 +22,27 @@ final class BrowserContainerViewController: NSViewController {
     private var renderObservers: [AnyCancellable] = []
     private var lastOverlayState: OverlayState = .none
     private var lastRenderedMode: AppModel.BrowserViewMode?
+    /// Tracks whether `FirstStablePaint` has fired for the folder currently
+    /// selected. Reset on `selectedSidebarID` change, not on observing
+    /// `.loading` — a load fast enough to complete before the coalescer's
+    /// next `render()` pass never surfaces `.loading` as an intermediate
+    /// state at all, which silently starved the old "transitioned away from
+    /// .loading" check (verified directly: a benchmark run against a
+    /// 1000+ file corpus produced zero FirstStablePaint events because
+    /// enumeration alone — before per-item attribute hydration — is fast
+    /// enough to coalesce away).
+    private var hasPaintedCurrentLoad = false
+    /// `selectedSidebarID` changes synchronously, but the actual `loadFiles()`
+    /// call runs on a separately-scheduled `Task` — so the *first* `render()`
+    /// pass after a selection change can observe stale "nothing loading yet,
+    /// nothing loaded yet" state (`.emptyFolder`) before loading has even
+    /// started, which would otherwise satisfy the "settled state" check for
+    /// FirstStablePaint immediately and incorrectly. Verified directly: a
+    /// benchmark run showed FirstStablePaint firing for a `-openFolderPath`
+    /// launch before that folder's `FolderLoad` signpost had even begun.
+    /// Requiring more than one render pass since the selection changed skips
+    /// that premature first read.
+    private var renderPassesSinceSelection = 0
     private let renderCoalescer = MainActorCoalescer()
 
     // Path bar
@@ -33,6 +54,22 @@ final class BrowserContainerViewController: NSViewController {
 
     var isPathBarVisible: Bool {
         UserDefaults.standard.bool(forKey: pathBarDefaultsKey)
+    }
+
+    /// Hands keyboard focus to whichever concrete browser view (list/icon/filmstrip) is
+    /// currently active. v1.4 Phase 4.3: this used to also run on every sidebar folder
+    /// selection via a `.browserDidRequestFocus` broadcast, which produced a visible
+    /// accent-then-grey flash on the sidebar's just-clicked row — default AppKit correctly
+    /// showing a real first-responder change we were forcing. Removed that broadcast entirely
+    /// (see AppModel+Navigation.swift) rather than trying to hide it; this method now only
+    /// runs at launch and on toolbar view-mode switches, called directly instead of via a
+    /// notification three view controllers each separately subscribed to.
+    func focusCurrentBrowserView() {
+        switch model.browserViewMode {
+        case .list: listController.focusListForKeyboardNavigation()
+        case .icon: iconController.focusGalleryForKeyboardNavigation()
+        case .gallery: filmstripController.focusFilmstripForKeyboardNavigation()
+        }
     }
 
     init(model: AppModel) {
@@ -125,6 +162,12 @@ final class BrowserContainerViewController: NSViewController {
         observe(model.$browserItems)
         observe(model.$selectedFileURLs)
         observe(model.$selectedSidebarID)
+        // Separate subscription purely to reset the FirstStablePaint tracker
+        // for the new folder — see hasPaintedCurrentLoad's doc comment.
+        observeEquatable(model.$selectedSidebarID, storeIn: &renderObservers) { [weak self] in
+            self?.hasPaintedCurrentLoad = false
+            self?.renderPassesSinceSelection = 0
+        }
         observe(model.$browserEnumerationError.map { $0?.localizedDescription ?? "" }.eraseToAnyPublisher())
         observe(model.$isFolderContentLoading)
         observe(model.$isFolderMetadataLoading)
@@ -145,6 +188,23 @@ final class BrowserContainerViewController: NSViewController {
             guard let self else { return }
             self.render()
         }
+    }
+
+    // v1.4 follow-up: render subscriptions used to be installed only once, in `viewDidLoad`,
+    // and torn down in `viewWillDisappear` with no corresponding reinstall — correct as long
+    // as this view controller's own lifecycle only ever runs once, which the code's own
+    // justification (closing the last window terminates the app) assumed but doesn't actually
+    // guarantee: an auxiliary window (Settings, ExifTool Console — both ordinary `NSWindow`s)
+    // can keep the app alive after the main window closes, and reopening it via the Dock
+    // brings this same, still-retained view controller back with zero live subscriptions,
+    // permanently unresponsive to model changes. `viewWillAppear` reinstalls only when
+    // `renderObservers` is actually empty, so the normal `viewDidLoad` → `viewWillAppear`
+    // sequence on first appearance doesn't double-install.
+    override func viewWillAppear() {
+        super.viewWillAppear()
+        guard renderObservers.isEmpty else { return }
+        installRenderObservers()
+        render()
     }
 
     override func viewWillDisappear() {
@@ -189,12 +249,34 @@ final class BrowserContainerViewController: NSViewController {
     private func render() {
         updatePathBarURL()
         applyBrowserModeIfNeeded(force: false)
+        // v1.4 Phase 1.2: route the item/render update only to the active
+        // controller. All three used to be updated unconditionally on every
+        // render regardless of which one was visible — for Filmstrip this
+        // also meant its `previewHostingView.rootView` (a hosted SwiftUI
+        // root) got replaced on every render even while Gallery wasn't
+        // active, since that assignment ran before Filmstrip's own
+        // Gallery-active guard. Because `applyBrowserModeIfNeeded` above
+        // already swapped visibility for this same render pass,
+        // `model.browserViewMode` here is already current, so the
+        // newly-active controller (on a mode switch) still gets a correct,
+        // immediate update — no staleness window.
         let items = model.filteredBrowserItems
-        iconController.update(model: model, items: items)
-        listController.update(model: model, items: items)
-        filmstripController.update(model: model, items: items)
+        switch model.browserViewMode {
+        case .icon:
+            iconController.update(model: model, items: items)
+        case .list:
+            listController.update(model: model, items: items)
+        case .gallery:
+            filmstripController.update(model: model, items: items)
+        }
 
+        renderPassesSinceSelection += 1
         let nextOverlayState = currentOverlayState()
+        if !hasPaintedCurrentLoad, renderPassesSinceSelection > 1,
+           nextOverlayState != .loading, nextOverlayState != .noSelection {
+            hasPaintedCurrentLoad = true
+            Signposts.folderLoad.emitEvent("FirstStablePaint")
+        }
         if nextOverlayState == lastOverlayState, nextOverlayState != .loading {
             return
         }
@@ -216,6 +298,8 @@ final class BrowserContainerViewController: NSViewController {
     private func applyBrowserModeIfNeeded(force: Bool) {
         let mode = model.browserViewMode
         if !force, mode == lastRenderedMode { return }
+        let state = Signposts.browserTransition.beginInterval("ViewModeSwitch")
+        defer { Signposts.browserTransition.endInterval("ViewModeSwitch", state) }
         lastRenderedMode = mode
 
         switch mode {

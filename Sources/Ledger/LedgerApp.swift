@@ -4,15 +4,25 @@ import SharedUI
 @MainActor
 @main
 enum LedgerMain {
-    private static var appDelegate: AppDelegate?
-
+    // v1.4 Phase 4.1 slice 1: NSApplicationMain loads MainMenu.xib (NSMainNibFile in
+    // Config/Ledger-Info.plist) -- which establishes NSApp.mainMenu and connects
+    // AppDelegate via the nib's own delegate outlet -- before applicationWillFinishLaunching
+    // is even sent, materially earlier than anything reachable from delegate-method code.
+    // This replaces a manual NSApplication.shared/app.delegate=/app.run() bootstrap that
+    // built the menu bar entirely from inside applicationDidFinishLaunching, which had a
+    // measured, intermittent race against the WindowServer's menu-bar-activation handoff
+    // (window visible, menu bar still showing only the app name, for up to several
+    // seconds) -- not reproducible with nib-loaded menus (confirmed against Photos.app,
+    // whose menu appears even while its own window is still a blank loading spinner).
+    // AppDelegate needs no code changes: it has no custom init, and nib-instantiated
+    // top-level objects loaded via the specific NSMainNibFile pathway are retained
+    // automatically by that mechanism -- the same reason every classic Xcode "Cocoa
+    // Application" template's App Delegate has never needed an explicit retaining
+    // reference anywhere in code. .regular activation policy needs no explicit call
+    // either -- it's already the default for a normal app bundle (no LSUIElement/
+    // LSBackgroundOnly set).
     static func main() {
-        let app = NSApplication.shared
-        let delegate = AppDelegate()
-        self.appDelegate = delegate
-        app.delegate = delegate
-        app.setActivationPolicy(.regular)
-        app.run()
+        _ = NSApplicationMain(CommandLine.argc, CommandLine.unsafeArgv)
     }
 }
 
@@ -26,12 +36,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var allowImmediateTermination = false
     var appModel: AppModel? { mainWindowController?.appModel }
 
-    func showAboutPanel() {
-        let exifToolVersion = bundledExifToolVersion() ?? "Unknown"
+    func showAboutPanel() async {
+        let exifToolVersion = await Self.boundedBundledExifToolVersion() ?? "Unknown"
         presentAboutPanel(
             purpose: "Edit photo metadata — EXIF, IPTC, and XMP — powered by ExifTool.",
             credits: [
                 .init(text: "Uses ExifTool \(exifToolVersion) by Phil Harvey", linkURL: "https://exiftool.org/"),
+                .init(text: "EOS-1V support uses eos1v-serial, originally by epvucclaude", linkURL: "https://github.com/epvucclaude/eos1v-serial"),
+                .init(text: "eos1v-serial uses PyUSB and Python (PSF License)", linkURL: "https://www.python.org/psf/license/"),
+                .init(text: "eos1v-serial uses libusb (LGPL-2.1)", linkURL: "https://github.com/libusb/libusb/blob/master/COPYING"),
             ],
             copyright: "© 2026 Chris Le Marquand"
         )
@@ -39,38 +52,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc
     func showAboutPanelMenuAction(_: Any?) {
-        showAboutPanel()
+        Task { @MainActor in
+            await showAboutPanel()
+        }
     }
-
-    func showWelcomeScreen() {
-        guard let appModel else { return }
-        appModel.activeWelcomePresentation = AppWelcomePresentation(
-            appName: AppBrand.displayName,
-            features: Self.welcomeFeatures,
-            primaryButtonTitle: "Get Started",
-            onPrimaryAction: {
-                WelcomeCoordinator.markSeen()
-            }
-        )
-    }
-
-    @objc
-    func showWhatsNewAction(_: Any?) {
-        showWelcomeScreen()
-    }
-
-    private static let welcomeFeatures: [AppWelcomeFeature] = [
-        .init(
-            symbolName: "character.cursor.ibeam",
-            title: "Batch Rename",
-            subtitle: "Rename folders of files using custom patterns with date, sequence, and metadata tokens."
-        ),
-        .init(
-            symbolName: "star.leadinghalf.filled",
-            title: "Expanded Inspector",
-            subtitle: "Edit star ratings, flags, colour labels, and a wider range of EXIF and IPTC fields."
-        ),
-    ]
 
     @objc
     func showSettingsWindowAction(_: Any?) {
@@ -110,7 +95,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func bundledExifToolVersion() -> String? {
+    /// v1.4 follow-up: dispatches the actual version read to a background task — see
+    /// `bundledExifToolVersion()` below for why the read itself also needs a bounded
+    /// deadline, not just being off the main actor.
+    private nonisolated static func boundedBundledExifToolVersion() async -> String? {
+        await Task.detached(priority: .userInitiated) {
+            bundledExifToolVersion()
+        }.value
+    }
+
+    /// v1.4 follow-up: this used to call `process.waitUntilExit()` with no deadline at all,
+    /// directly on the main actor (`showAboutPanel` called it synchronously) — a hung or
+    /// stuck bundled `exiftool -ver` would block the entire app, forever, just from opening
+    /// the About panel. `nonisolated static` (no `self` capture, touches only `Bundle.main`)
+    /// so it can run on a detached task; deadline/kill loop matches
+    /// `LedgerCore.ExifToolService.run`'s established timeout pattern.
+    private nonisolated static func bundledExifToolVersion() -> String? {
         guard let executablePath = Bundle.main.path(forResource: "exiftool/bin/exiftool", ofType: nil) else {
             return nil
         }
@@ -125,6 +125,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         do {
             try process.run()
+            let deadline = Date().addingTimeInterval(5)
+            while process.isRunning {
+                if Date() >= deadline {
+                    process.terminate()
+                    Thread.sleep(forTimeInterval: 0.2)
+                    if process.isRunning {
+                        kill(process.processIdentifier, SIGKILL)
+                    }
+                    return nil
+                }
+                Thread.sleep(forTimeInterval: 0.05)
+            }
             process.waitUntilExit()
             guard process.terminationStatus == 0 else { return nil }
             let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
@@ -144,10 +156,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let launchState = Signposts.launch.beginInterval("Launch")
+        defer { Signposts.launch.endInterval("Launch", launchState) }
+
         NSWindow.allowsAutomaticWindowTabbing = false
         updateService = UpdateService()
+        // v1.4 Phase 4.1 slice 1: the six top-level menus' shells (File/Edit/View/Image/
+        // Folder/Help) already exist by this point, loaded from MainMenu.xib before this
+        // method was even called — configureApplicationMenu() only needs to replace the
+        // App menu's content (mainMenu.items.first), same as before.
         configureApplicationMenu()
-        updateService?.performBackgroundCheck()
+        Signposts.launch.emitEvent("MenuReady")
+        if !Self.isSparkleAutoupdateDisabled() {
+            updateService?.performBackgroundCheck()
+        }
         let model = AppModel()
         settingsWindowController = SettingsWindowController(tabs: [
             SettingsTabDescriptor(symbolName: "gearshape", label: "General",
@@ -158,15 +180,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         exifToolConsoleWindowController = ExifToolConsoleWindowController(model: model)
         let windowController = MainWindowController(model: model)
         mainWindowController = windowController
+        // v1.4 Phase 4.1: populate the six menus' real content synchronously here — after
+        // every launch-time NSHostingController exists but before the window is shown, so
+        // there's no frame where the user could see or click an incomplete menu, and no
+        // NSMenu.didBeginTrackingNotification reinjection needed (removed from
+        // configureWindowIfNeeded — see its comment).
+        let content = windowController.contentController
+        content.injectFileMenuIfNeeded()
+        content.injectEditMenuIfNeeded()
+        content.injectSortMenuIfNeeded()
+        content.injectImageMenuIfNeeded()
+        content.injectFolderMenuIfNeeded()
+        content.injectHelpMenuIfNeeded()
         windowController.showWindow(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        if WelcomeCoordinator.shouldShowOnLaunch {
-            Task { @MainActor in self.showWelcomeScreen() }
+        if let openFolderPath = Self.openFolderPathFromLaunchArguments() {
+            model.openFolder(at: URL(fileURLWithPath: openFolderPath))
+        } else if !Self.isStateRestorationDisabled() {
+            // v1.4: reopen the last-session folder/selection on a clean launch — mutually
+            // exclusive with -openFolderPath (an explicit launch-argument folder always wins,
+            // e.g. UI tests/benchmarks) and gated by the same flag AppKit's own window-state
+            // restoration already uses, for the same benchmark-isolation reason. See
+            // docs/last-folder-selection-restore-plan-2026-09.md.
+            Task { @MainActor in
+                await model.restoreLastSessionSelectionIfAvailable()
+            }
         }
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    /// Non-interactive folder open for UI tests and benchmarks: `-openFolderPath <path>`
+    /// bypasses the NSOpenPanel in `AppModel.openFolder()`, which UI automation cannot
+    /// drive reliably. Inert unless the flag is explicitly passed.
+    private static func openFolderPathFromLaunchArguments() -> String? {
+        let args = CommandLine.arguments
+        guard let index = args.firstIndex(of: "-openFolderPath"), index + 1 < args.count else {
+            return nil
+        }
+        return args[index + 1]
+    }
+
+    /// `-disableSparkleAutoupdate` skips the background update check entirely for UI
+    /// tests and benchmarks. Seeding the `SUEnableAutomaticChecks` default was tried
+    /// first and does not reliably suppress it — the update window was observed
+    /// appearing during UI test runs regardless — so this gates the call in code
+    /// instead of hoping Sparkle honors a preference.
+    private static func isSparkleAutoupdateDisabled() -> Bool {
+        CommandLine.arguments.contains("-disableSparkleAutoupdate")
+    }
+
+    /// `-disableStateRestoration` skips restoring the previous session's window/selection
+    /// state for UI tests and benchmarks. Found during v1.4 Phase 6 re-baselining: secure
+    /// state restoration racing against `-openFolderPath` made some benchmark launches
+    /// non-deterministically restore a prior real selection, firing an unconditional
+    /// `loadMetadataForSelection()` (and an ExifTool subprocess) on some iterations but not
+    /// others — the same class of real-preference/state contamination as the Phase 2.1/2.3
+    /// incidents, just via window-state restoration instead of a demand-gate default. See
+    /// docs/v1.4-progress.md's Phase 6 section.
+    private static func isStateRestorationDisabled() -> Bool {
+        CommandLine.arguments.contains("-disableStateRestoration")
     }
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
@@ -178,7 +253,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldRestoreApplicationState(_ sender: NSApplication) -> Bool {
-        true
+        !Self.isStateRestorationDisabled()
     }
 
     // MARK: - Dock Menu
@@ -250,9 +325,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "You have unsaved changes."
-        alert.informativeText = "Quit and discard your prepared changes?"
-        alert.addButton(withTitle: "Quit and Discard")
+        alert.messageText = "Quit and discard your prepared changes?"
+        alert.informativeText = "You have unsaved changes. They\u{2019}ll be lost if you quit now."
+        let quitButton = alert.addButton(withTitle: "Quit and Discard")
+        quitButton.hasDestructiveAction = true
         alert.addButton(withTitle: "Cancel")
 
         let keyWindow = NSApp.keyWindow ?? mainWindowController?.window
@@ -345,16 +421,39 @@ private func presentAboutPanel(
 @MainActor
 final class MainWindowController: NSWindowController {
     let appModel: AppModel
+    // v1.4 Phase 4.1: exposed so AppDelegate can populate the top-level menus' real content
+    // synchronously right after construction, before the window is ever shown — see
+    // applicationDidFinishLaunching.
+    let contentController: NativeThreePaneSplitViewController
     private var framePersistenceController: WindowFramePersistenceController?
 
     init(model: AppModel) {
         appModel = model
         let contentController = NativeThreePaneSplitViewController(model: model)
-        let window = NSWindow(contentViewController: contentController)
+        self.contentController = contentController
+
+        // v1.4 Phase 4.3: built without a content view controller and with the toolbar
+        // installed before one is attached — NSWindow(contentViewController:) (the previous
+        // approach) forces contentController's view through a real, geometry-bearing layout
+        // pass immediately, before this initializer's caller can set window.toolbar. At that
+        // point NSScrollView.automaticallyAdjustsContentInsets computes a zero top inset for
+        // the sidebar (no toolbar exists yet to account for), and never retroactively
+        // corrects it once the toolbar appears later — the root cause of the sidebar's
+        // launch-time scroll snap (see AppKitSidebarController.applyInitialScrollPositionIfNeeded,
+        // which patches the symptom; this fixes the actual cause). The styleMask below matches
+        // what NSWindow(contentViewController:) used to set implicitly.
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: ThreePaneSplitViewController.Metrics.windowDefault),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
         window.title = AppBrand.displayName
         window.isReleasedWhenClosed = false
         window.isRestorable = true
         configureWindowForToolbar(window)
+        contentController.installMainToolbar(on: window, resetDelegateState: true)
+        window.contentViewController = contentController
         let frameAutosaveName = "\(AppBrand.identifierPrefix).MainWindow"
         super.init(window: window)
         framePersistenceController = WindowFramePersistenceController(

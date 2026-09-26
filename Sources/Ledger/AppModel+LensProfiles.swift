@@ -1,5 +1,5 @@
 import AppKit
-import ExifEditCore
+import LedgerCore
 import Foundation
 
 @MainActor
@@ -9,7 +9,7 @@ extension AppModel {
             lensProfiles = try lensProfileStore.loadLensProfiles().sorted {
                 $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
             }
-        } catch ExifEditError.lensProfileSchemaVersionTooNew {
+        } catch MetadataEditError.lensProfileSchemaVersionTooNew {
             lensProfiles = []
             Task { @MainActor in
                 let alert = NSAlert()

@@ -1,5 +1,5 @@
 import AppKit
-import ExifEditCore
+import LedgerCore
 import Foundation
 import SharedUI
 
@@ -46,6 +46,7 @@ extension AppModel {
                 counts[id] = count
                 self.sidebarImageCounts = counts
                 self.sidebarImageCountTasks[id] = nil
+                self.checkQuiescenceIfNeeded()
             }
         }
     }
@@ -56,18 +57,12 @@ extension AppModel {
             if selectedSidebarID != item.id {
                 selectedSidebarID = item.id
             }
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                await self.loadFiles(for: item.kind)
-            }
+            startLoadingFiles(for: item.kind)
         } else {
             // If the folder is invalid/unreadable, still route through loadFiles so
             // browserEnumerationError is populated for error-state rendering/tests.
             let fallbackURL = folderURL.standardizedFileURL
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                await self.loadFiles(for: .folder(fallbackURL))
-            }
+            startLoadingFiles(for: .folder(fallbackURL))
         }
         NotificationCenter.default.post(
             name: Notification.Name("\(AppBrand.identifierPrefix).SidebarShouldResignFocus"),
@@ -75,7 +70,57 @@ extension AppModel {
         )
     }
 
-    func loadFiles(for kind: SidebarKind) async {
+    /// Await an owned load from a sequential workflow. Fire-and-forget UI actions use
+    /// startLoadingFiles directly; both paths share cancellation and loading-state ownership.
+    /// False means cancelled or superseded, so callers must not continue reload-dependent work.
+    @discardableResult
+    func loadFiles(for kind: SidebarKind) async -> Bool {
+        guard !Task.isCancelled else { return false }
+        let task = startLoadingFiles(for: kind)
+        return await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    @discardableResult
+    func startLoadingFiles(for kind: SidebarKind) -> Task<Bool, Never> {
+        loadFilesTask?.cancel()
+        let loadID = UUID()
+        activeFolderLoadID = loadID
+        isFolderContentLoading = true
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return false }
+            defer {
+                if self.activeFolderLoadID == loadID {
+                    self.loadFilesTask = nil
+                    self.isFolderContentLoading = false
+                    self.checkQuiescenceIfNeeded()
+                }
+            }
+            guard !Task.isCancelled, self.activeFolderLoadID == loadID else { return false }
+            return await self.performFileLoad(for: kind, loadID: loadID)
+        }
+        loadFilesTask = task
+        return task
+    }
+
+    func cancelFileLoad() {
+        activeFolderLoadID = UUID()
+        loadFilesTask?.cancel()
+        loadFilesTask = nil
+        isFolderContentLoading = false
+    }
+
+    private func performFileLoad(for kind: SidebarKind, loadID: UUID) async -> Bool {
+        let folderLoadSignpostID = Signposts.folderLoad.makeSignpostID()
+        let folderLoadState = Signposts.folderLoad.beginInterval("FolderLoad", id: folderLoadSignpostID)
+        defer { Signposts.folderLoad.endInterval("FolderLoad", folderLoadState) }
+        // v1.4 Phase 2.3: covers both "initial display" and "folder switch" — both are the
+        // same "make a folder visible" journey for quiescence purposes.
+        beginQuiescenceTracking(reason: "FolderLoad")
+
         deferredFolderMetadataPrefetchTask?.cancel()
         deferredFolderMetadataPrefetchTask = nil
         folderMetadataLoadTask?.cancel()
@@ -86,6 +131,8 @@ extension AppModel {
         browserItemHydrationID = UUID()
         selectionMetadataLoadTask?.cancel()
         selectionMetadataLoadTask = nil
+        initialThumbnailWarmupTask?.cancel()
+        initialThumbnailWarmupTask = nil
         previewPreloadTask?.cancel()
         previewPreloadTask = nil
         deferredPreviewPreloadTask?.cancel()
@@ -93,30 +140,57 @@ extension AppModel {
         previewPreloadID = UUID()
         cloudStateByURL = [:]
 
+        let folderToEnumerate: URL?
+        switch kind {
+        case .pictures:
+            folderToEnumerate = picturesDirectoryURL()
+        case .desktop:
+            folderToEnumerate = desktopDirectoryURL()
+        case .downloads:
+            folderToEnumerate = downloadsDirectoryURL()
+        case .eos1vDevice:
+            folderToEnumerate = nil
+        case let .mountedVolume(volumeURL):
+            folderToEnumerate = volumeURL
+        case let .favorite(favoriteURL):
+            folderToEnumerate = favoriteURL
+        case let .folder(folder):
+            folderToEnumerate = folder
+        }
+
+        // startLoadingFiles assigned loadID before scheduling this task. Check it after
+        // every suspension before publishing either results or enumeration errors.
         let urls: [URL]
         var enumerationError: Error?
-
-        do {
-            switch kind {
-            case .pictures:
-                urls = try enumerateImages(in: picturesDirectoryURL())
-            case .desktop:
-                urls = try enumerateImages(in: desktopDirectoryURL())
-            case .downloads:
-                urls = try enumerateImages(in: downloadsDirectoryURL())
-            case .eos1vDevice:
+        if let folderToEnumerate {
+            do {
+                // v1.4 follow-up: contentsOfDirectory + per-file resourceValues used to run
+                // synchronously on the main actor here, blocking input/drawing for however
+                // long enumeration took — a real gap on a slow external/network-backed
+                // volume, not just a local-corpus timing artifact. enumerateImages itself is
+                // `nonisolated static` (no `self` capture, no actor-isolated state) so it can
+                // run on a detached task instead. `Task.detached` is unstructured — same as
+                // `readBrowserFileAttributes` below — so its handle is retained and
+                // cancellation is forwarded explicitly rather than just awaited directly;
+                // now that every `loadFiles` call site cancels its predecessor's wrapping
+                // task (`loadFilesTask`), that cancellation needs somewhere real to go.
+                let enumerationTask = Task.detached(priority: .userInitiated) {
+                    try Self.enumerateImages(in: folderToEnumerate)
+                }
+                urls = try await withTaskCancellationHandler {
+                    try await enumerationTask.value
+                } onCancel: {
+                    enumerationTask.cancel()
+                }
+            } catch {
+                enumerationError = error
                 urls = []
-            case let .mountedVolume(volumeURL):
-                urls = try enumerateImages(in: volumeURL)
-            case let .favorite(favoriteURL):
-                urls = try enumerateImages(in: favoriteURL)
-            case let .folder(folder):
-                urls = try enumerateImages(in: folder)
             }
-        } catch {
-            enumerationError = error
+        } else {
             urls = []
         }
+
+        guard !Task.isCancelled, activeFolderLoadID == loadID else { return false }
 
         // If enumeration failed because the folder no longer exists, remove the sidebar entry now
         // so stale entries don't persist after relaunch. Permission errors are NOT pruned —
@@ -150,25 +224,29 @@ extension AppModel {
             }
             selectedSidebarID = nil
 
-            if !folderName.isEmpty {
-                let alert = NSAlert()
-                alert.alertStyle = .informational
-                alert.messageText = "\u{201c}\(folderName)\u{201d} No Longer Available"
-                alert.informativeText = "This folder could not be found — it may have been deleted or moved. It has been removed from \(sectionLabel) in \(AppBrand.displayName)."
-                alert.addButton(withTitle: "OK")
-                alert.runSheetOrModal(for: NSApp.keyWindow) { _ in }
+            if !folderName.isEmpty, !isRunningUnitTests {
+                // The stale sidebar entry is already removed above by the time this runs —
+                // there's no decision left for the user to make, so this is status text
+                // rather than a modal alert (HIG: alerts are for situations requiring a
+                // choice, not for reporting a correction the app already made).
+                statusMessage = "\u{201c}\(folderName)\u{201d} removed from \(sectionLabel) \u{2014} folder no longer found."
             }
+        } else {
+            // A genuinely successful open (no enumeration error) supersedes whatever
+            // status text was showing before — most importantly a persistent
+            // "External source was disconnected." left by clearToEmptyStateAfterSourceLoss,
+            // which otherwise lingers forever since it's set with autoClearAfterSuccess: false
+            // and nothing else was clearing it on the next successful load.
+            statusMessage = "Ready"
         }
 
-        let loadID = UUID()
-        activeFolderLoadID = loadID
         let hydrationID = UUID()
 
         let shouldPublishHydratedOnly = browserSort != .name
         let prehydratedItems: [BrowserItem]?
         if shouldPublishHydratedOnly {
             let attributesByURL = await readBrowserFileAttributes(for: urls)
-            guard !Task.isCancelled, activeFolderLoadID == loadID else { return }
+            guard !Task.isCancelled, activeFolderLoadID == loadID else { return false }
             mergeCloudStates(from: attributesByURL)
             prehydratedItems = urls.map { url in
                 let attrs = attributesByURL[url]
@@ -213,15 +291,29 @@ extension AppModel {
         }
 
         startInitialThumbnailWarmup(for: urls, loadID: loadID)
-        scheduleDeferredFolderMetadataPrefetch(
-            for: urls,
-            batchSize: metadataBatchSize(for: kind),
-            loadID: loadID
-        )
+        // v1.4 Phase 2.1: don't eagerly read every file's metadata for the whole
+        // folder unless something visible actually needs it (see
+        // hasVisibleMetadataColumnDemand's doc comment for what was verified
+        // safe). Selected-file metadata still loads on demand via
+        // loadMetadataForSelection() regardless of this gate.
+        if hasVisibleMetadataColumnDemand {
+            scheduleDeferredFolderMetadataPrefetch(
+                for: urls,
+                batchSize: metadataBatchSize(for: kind),
+                loadID: loadID
+            )
+        } else {
+            // Folder metadata prefetch is what used to chain into preview
+            // preload once it finished (or immediately, on its "nothing to
+            // load" path) — preserve that side effect since we're skipping
+            // the prefetch itself.
+            scheduleDeferredPreviewPreload(for: urls)
+        }
 
         cloudDownloadTracker.start(for: urls) { [weak self] states, progress in
             self?.applyCloudStateUpdates(states, progress: progress)
         }
+        return true
     }
 
     func requestCloudDownload(for url: URL) {
@@ -355,6 +447,8 @@ extension AppModel {
         deferredPreviewPreloadTask = nil
         previewPreloadID = UUID()
         isPreviewPreloading = false
+        initialThumbnailWarmupTask?.cancel()
+        initialThumbnailWarmupTask = nil
 
         if !preserveBrowserItemsDuringSwitch {
             browserItems = []
@@ -365,6 +459,7 @@ extension AppModel {
         if !preserveSessionCaches {
             metadataByFile = [:]
             staleMetadataFiles = []
+            metadataLastLoadedAt = [:]
         }
         pendingEditsByFile = [:]
         pendingImageOpsByFile = [:]
@@ -384,9 +479,27 @@ extension AppModel {
 
     private func startInitialThumbnailWarmup(for files: [URL], loadID: UUID) {
         let warmupTargets = Array(files.prefix(Self.initialThumbnailWarmupCount))
-        guard !warmupTargets.isEmpty else { return }
+        guard !warmupTargets.isEmpty else {
+            checkQuiescenceIfNeeded()
+            return
+        }
 
-        Task.detached(priority: .userInitiated) { [weak self] in
+        // v1.4 Phase 2.3: stored (previously fire-and-forget) so it's visible to the
+        // unified quiescence signal and can be cancelled immediately on folder switch
+        // rather than only self-terminating cooperatively on its next iteration.
+        // Generation-guarded for the same reason as selectionMetadataLoadGenerationID —
+        // a superseded warmup's belated cleanup must not clobber a newer one's reference.
+        let generationID = UUID()
+        initialThumbnailWarmupGenerationID = generationID
+        initialThumbnailWarmupTask = Task.detached(priority: .userInitiated) { [weak self] in
+            defer {
+                Task { @MainActor [weak self] in
+                    if self?.initialThumbnailWarmupGenerationID == generationID {
+                        self?.initialThumbnailWarmupTask = nil
+                    }
+                    self?.checkQuiescenceIfNeeded()
+                }
+            }
             guard let self else { return }
             for fileURL in warmupTargets {
                 if Task.isCancelled { return }
@@ -402,11 +515,46 @@ extension AppModel {
         }
     }
 
+    /// v1.4 Phase 2.1: whether anything the user can currently see actually needs
+    /// whole-folder ExifTool metadata. Confirmed via a full-codebase audit before
+    /// writing this: no sort mode, the search/filter path, or any export/CSV/console
+    /// path reads `metadataByFile` for correctness — they're filesystem-attribute-only
+    /// or do their own fresh independent reads. The only genuine "visible requirement"
+    /// for metadata is a metadata-backed List column or Icon/Gallery subtitle the user
+    /// has explicitly enabled (all metadata columns default to hidden — see
+    /// `ListColumnDefinition.metadata`). Checked regardless of the currently active
+    /// browser view mode, since switching modes doesn't reset `metadataByFile` and a
+    /// persisted preference for a metadata column counts as an active requirement
+    /// even when a different mode happens to be showing right now.
+    private var hasVisibleMetadataColumnDemand: Bool {
+        if let iconSubtitleColumnID, ListColumnDefinition.metadata.contains(where: { $0.id == iconSubtitleColumnID }) {
+            return true
+        }
+        let columnStore = ListColumnStore(identifierPrefix: AppBrand.identifierPrefix)
+        return ListColumnDefinition.metadata.contains { columnStore.isVisible($0) }
+    }
+
     private func scheduleDeferredFolderMetadataPrefetch(for files: [URL], batchSize: Int, loadID: UUID) {
         deferredFolderMetadataPrefetchTask?.cancel()
         deferredFolderMetadataPrefetchTask = nil
+        // v1.4 Phase 2.3: this task previously never nilled itself once its sleep
+        // finished and it handed off to startFolderMetadataPrefetch — a stale
+        // non-nil reference to an already-completed task, discovered while wiring
+        // up the isFolderWorkActive quiescence signal (it would have permanently
+        // reported "busy" after the very first folder load with a metadata column
+        // enabled). Guarded by a generation id, same pattern as
+        // selectionMetadataLoadGenerationID, so a superseded task's belated
+        // cleanup can't clobber a newer task's reference.
+        let generationID = UUID()
+        deferredFolderMetadataPrefetchGenerationID = generationID
         deferredFolderMetadataPrefetchTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            defer {
+                if self.deferredFolderMetadataPrefetchGenerationID == generationID {
+                    self.deferredFolderMetadataPrefetchTask = nil
+                }
+                self.checkQuiescenceIfNeeded()
+            }
             do { try await Task.sleep(nanoseconds: Self.metadataPrefetchStartDelayNanoseconds) } catch { return }
             guard self.activeFolderLoadID == loadID else { return }
             self.startFolderMetadataPrefetch(for: files, batchSize: batchSize)
@@ -416,10 +564,17 @@ extension AppModel {
     private func startBrowserItemHydration(for files: [URL], hydrationID: UUID) {
         browserItemHydrationTask?.cancel()
         browserItemHydrationTask = nil
-        guard !files.isEmpty else { return }
+        guard !files.isEmpty else {
+            checkQuiescenceIfNeeded()
+            return
+        }
 
         browserItemHydrationTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            let signpostID = Signposts.attributeHydration.makeSignpostID()
+            let state = Signposts.attributeHydration.beginInterval("AttributeHydration", id: signpostID)
+            defer { Signposts.attributeHydration.endInterval("AttributeHydration", state) }
+
             let attributesByURL = await self.readBrowserFileAttributes(for: files)
 
             guard !Task.isCancelled, self.browserItemHydrationID == hydrationID else { return }
@@ -441,6 +596,7 @@ extension AppModel {
                 }
             }
             self.browserItemHydrationTask = nil
+            self.checkQuiescenceIfNeeded()
         }
     }
 
@@ -453,7 +609,12 @@ extension AppModel {
     )
 
     private func readBrowserFileAttributes(for files: [URL]) async -> [URL: BrowserFileAttributes] {
-        await Task.detached(priority: .utility) { () -> [URL: BrowserFileAttributes] in
+        // v1.4 follow-up: `Task.detached` is genuinely unstructured — cancelling the caller
+        // (e.g. `browserItemHydrationTask`) never used to reach this worker, so switching
+        // folders mid-hydration left the old folder's attribute reads running to completion
+        // in the background (invisible to the quiescence predicate, wasted I/O). Retain the
+        // detached task's handle and forward cancellation into it explicitly.
+        let task = Task.detached(priority: .utility) { () -> [URL: BrowserFileAttributes] in
             var result: [URL: BrowserFileAttributes] = [:]
             result.reserveCapacity(files.count)
             let batchSize = 96
@@ -480,10 +641,18 @@ extension AppModel {
                 }
             }
             return result
-        }.value
+        }
+        return await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     func sortBrowserItems(_ items: [BrowserItem]) -> [BrowserItem] {
+        let sortState = Signposts.browserTransition.beginInterval("SortItems")
+        defer { Signposts.browserTransition.endInterval("SortItems", sortState) }
+
         let asc = browserSortAscending
         // cmp(before) returns true when lhs should precede rhs, flipping for descending.
         // Nil values are always sorted last regardless of direction.
@@ -549,7 +718,7 @@ extension AppModel {
         return path.hasPrefix("/Volumes/")
     }
 
-    private func isReachableDirectory(_ url: URL) -> Bool {
+    func isReachableDirectory(_ url: URL) -> Bool {
         var isDirectory: ObjCBool = false
         return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
             && isDirectory.boolValue
@@ -583,19 +752,33 @@ extension AppModel {
         if let previousSelection,
            let sourceURL = sidebarSourceURL(for: previousSelection.kind),
            !isReachableDirectory(sourceURL) {
-            clearToEmptyStateAfterSourceLoss()
+            clearToEmptyStateAfterSourceLoss(staleItem: previousSelection)
             return
         }
 
         guard selectedSidebarID != previousSelectionID, let replacement = selectedSidebarItem else { return }
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            await self.loadFiles(for: replacement.kind)
-        }
+        startLoadingFiles(for: replacement.kind)
     }
 
-    private func clearToEmptyStateAfterSourceLoss() {
+    private func clearToEmptyStateAfterSourceLoss(staleItem: SidebarItem) {
+        // v1.4 follow-up: this used to leave `activeFolderLoadID` untouched, so a `loadFiles`
+        // enumeration already in flight when the source is lost (now genuinely suspendable —
+        // enumeration runs off the main actor) could resume, still pass its stale-result
+        // guard unchanged, and publish browser content for a folder whose sidebar entry was
+        // just cleared.
+        cancelFileLoad()
         selectedSidebarID = nil
+
+        // On a genuine physical/surprise removal (as opposed to a clean Finder "Eject"),
+        // `refreshSidebarItems()` above can run before `FileManager.mountedVolumeURLs()`
+        // has caught up, so the just-lost volume's row survives that recompute. This
+        // `isReachableDirectory` check is a filesystem-level signal, more reliable than the
+        // mount-table snapshot, so once it's confirmed gone, prune it directly rather than
+        // waiting for a second workspace notification that never arrives.
+        if case .mountedVolume = staleItem.kind {
+            sidebarItems.removeAll { $0.id == staleItem.id }
+        }
+
         clearLoadedContentState(preserveSessionCaches: true)
         setStatusMessage(
             "External source was disconnected.",
@@ -646,14 +829,16 @@ extension AppModel {
             ?? URL(fileURLWithPath: NSHomeDirectory())
     }
 
-    private func enumerateImages(in folder: URL) throws -> [URL] {
+    nonisolated static func enumerateImages(in folder: URL) throws -> [URL] {
+        try Task.checkCancellation()
         let urls = try FileManager.default.contentsOfDirectory(
             at: folder,
             includingPropertiesForKeys: [.isRegularFileKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         )
 
-        return urls.filter { url in
+        return try urls.filter { url in
+            try Task.checkCancellation()
             guard Self.supportedImageExtensions.contains(url.pathExtension.lowercased()) else { return false }
             let isRegular = (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false
             return isRegular

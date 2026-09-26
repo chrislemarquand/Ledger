@@ -1,5 +1,5 @@
 import AppKit
-import ExifEditCore
+import LedgerCore
 import Foundation
 import SharedUI
 
@@ -57,14 +57,14 @@ final class QuickLookPreviewController: NSObject {
 
 struct UnavailableExifToolService: ExifToolServiceProtocol {
     func readMetadata(files _: [URL]) async throws -> [FileMetadataSnapshot] {
-        throw ExifEditError.exifToolNotFound
+        throw MetadataEditError.exifToolNotFound
     }
 
     func writeMetadata(operation: EditOperation) async -> OperationResult {
         OperationResult(
             operationID: operation.id,
             succeeded: [],
-            failed: operation.targetFiles.map { FileError(fileURL: $0, message: ExifEditError.exifToolNotFound.localizedDescription) },
+            failed: operation.targetFiles.map { FileError(fileURL: $0, message: MetadataEditError.exifToolNotFound.localizedDescription) },
             backupLocation: nil,
             duration: 0
         )

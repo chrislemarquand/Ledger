@@ -1,5 +1,5 @@
 import AppKit
-import ExifEditCore
+import LedgerCore
 import Foundation
 
 @MainActor
@@ -50,10 +50,7 @@ extension AppModel {
     func refresh() {
         invalidateAllBrowserThumbnails()
         if let item = selectedSidebarItem {
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                await self.loadFiles(for: item.kind)
-            }
+            startLoadingFiles(for: item.kind)
         }
 
         Task {
@@ -71,10 +68,7 @@ extension AppModel {
     func reloadFilesIfBrowserEmpty() {
         guard let item = selectedSidebarItem, browserItems.isEmpty else { return }
         guard !isPrivacySensitiveSidebarKind(item.kind) || hasHadExplicitSidebarSelection else { return }
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            await self.loadFiles(for: item.kind)
-        }
+        startLoadingFiles(for: item.kind)
     }
 
     func refreshMetadata(for fileURLs: [URL], allowFolderReloadFallback: Bool = true) {
@@ -86,7 +80,7 @@ extension AppModel {
             let missingCount = files.count - existingFiles.count
 
             if allowFolderReloadFallback, missingCount > 0, let item = selectedSidebarItem {
-                await loadFiles(for: item.kind)
+                guard await loadFiles(for: item.kind) else { return }
                 refreshMetadata(for: browserItems.map(\.url), allowFolderReloadFallback: false)
                 return
             }
@@ -102,12 +96,9 @@ extension AppModel {
             do {
                 let snapshots = try await engine.readMetadata(files: existingFiles)
                 var map = metadataByFile
-                for snapshot in snapshots {
-                    map[snapshot.fileURL] = snapshot
-                    staleMetadataFiles.remove(snapshot.fileURL)
-                    pendingCommitsByFile.removeValue(forKey: snapshot.fileURL)
-                }
+                mergeMetadataSnapshots(snapshots, into: &map)
                 metadataByFile = map
+                trimMetadataCacheIfNeeded()
                 invalidateInspectorPreviews(for: existingFiles)
                 ThumbnailPipeline.invalidateCachedImages(for: Set(existingFiles))
                 for fileURL in existingFiles {
@@ -133,19 +124,23 @@ extension AppModel {
         }
     }
 
-    func selectSidebar(id: String?) {
+    @discardableResult
+    func selectSidebar(id: String?) -> Task<Bool, Never>? {
         hasHadExplicitSidebarSelection = true
         selectedSidebarID = id
         if let id {
             backgroundWarmTasksBySelectionID[id]?.cancel()
             backgroundWarmTasksBySelectionID[id] = nil
         }
-        guard let itemToLoad = selectedSidebarItem else { return }
+        guard let itemToLoad = selectedSidebarItem else {
+            cancelFileLoad()
+            return nil
+        }
 
         guard itemToLoad.kind != .eos1vDevice else {
             // No filesystem content for the device — nothing to load or show loading for.
-            isFolderContentLoading = false
-            return
+            cancelFileLoad()
+            return nil
         }
         lastNonDeviceSidebarID = itemToLoad.id
 
@@ -154,13 +149,8 @@ extension AppModel {
 
         // Show the loading skeleton immediately so the gallery's reloadData() flash is masked.
         // loadFiles is deferred to the next task so SwiftUI renders the skeleton before clearing state.
-        isFolderContentLoading = true
         let kind = itemToLoad.kind
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            await self.loadFiles(for: kind)
-            self.isFolderContentLoading = false
-        }
+        return startLoadingFiles(for: kind)
     }
 
     /// Explicit user-initiated sidebar selection path from the SwiftUI sidebar.
@@ -183,11 +173,13 @@ extension AppModel {
             scheduleBackgroundWarm(forSelectionID: oldID, files: browserItems.map(\.url))
         }
         selectSidebar(id: newID)
-        // Navigating (sidebar click, breadcrumb, Recents) commonly moves first responder onto
-        // whatever was clicked (e.g. the sidebar outline view itself). Without this, the
-        // browser pane loses keyboard focus on every folder change and arrow-key navigation
-        // stops working until the user clicks into it — matches the .browserDidRequestFocus
-        // posted at launch and on toolbar view-mode switches (see focusBrowserPane()).
-        NotificationCenter.default.post(name: .browserDidRequestFocus, object: nil)
+        // v1.4 Phase 4.3: deliberately does NOT steal keyboard focus to the browser pane here.
+        // That used to happen via a .browserDidRequestFocus broadcast on every sidebar
+        // selection, which produced a visible accent-then-grey flash on the sidebar's
+        // just-clicked row — default AppKit correctly rendering the real first-responder
+        // change we were forcing. Removed per explicit product decision: the sidebar keeps
+        // keyboard focus (and its selection stays visibly accented) after a folder switch,
+        // same as it would with zero custom focus-management code; the user clicks into the
+        // browser pane to interact with it, same as any plain AppKit split view.
     }
 }

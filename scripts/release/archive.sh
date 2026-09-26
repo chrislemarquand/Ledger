@@ -65,6 +65,29 @@ if [[ "$EXIFTOOL_BUNDLED_VERSION" != "$EXIFTOOL_REQUIRED_VERSION" ]]; then
 fi
 echo "Bundled ExifTool version verified: $EXIFTOOL_BUNDLED_VERSION" >&2
 
+# Same staleness risk as ExifTool above, for the bundled eos1v-tool (see
+# scripts/build/bundle_eos1v_tool.sh and docs/eos1v-tool-bundling.md).
+EOS1V_TOOL_BIN="$APP_PATH/Contents/Resources/eos1v-tool/bin/eos1v_tool"
+EOS1V_TOOL_REQUIRED_SUBMODULE_COMMIT="$(awk -F'=' '/^EOS1V_TOOL_REQUIRED_SUBMODULE_COMMIT[[:space:]]*=/{gsub(/[[:space:]]/, "", $2); print $2}' "$ROOT_DIR/Config/Base.xcconfig")"
+if [[ ! -x "$EOS1V_TOOL_BIN" ]]; then
+  echo "error: bundled eos1v-tool not found at $EOS1V_TOOL_BIN" >&2
+  exit 1
+fi
+EOS1V_TOOL_BUILD_INFO="$ROOT_DIR/Vendor/eos1v-tool/BUILD_INFO.json"
+if [[ ! -f "$EOS1V_TOOL_BUILD_INFO" ]]; then
+  echo "error: $EOS1V_TOOL_BUILD_INFO not found — cannot verify the archived eos1v-tool's provenance." >&2
+  exit 1
+fi
+EOS1V_TOOL_BUNDLED_COMMIT="$(python3 -c "import json; print(json.load(open('$EOS1V_TOOL_BUILD_INFO'))['submoduleCommit'])")"
+if [[ "$EOS1V_TOOL_BUNDLED_COMMIT" != "$EOS1V_TOOL_REQUIRED_SUBMODULE_COMMIT" ]]; then
+  echo "error: archive bundles eos1v-tool built from submodule commit $EOS1V_TOOL_BUNDLED_COMMIT," >&2
+  echo "error: but Config/Base.xcconfig requires $EOS1V_TOOL_REQUIRED_SUBMODULE_COMMIT." >&2
+  echo "error: likely a stale incremental build reused an old copy, or Vendor/eos1v-tool needs" >&2
+  echo "error: rebuilding against the current submodule commit (see docs/eos1v-tool-bundling.md)." >&2
+  exit 1
+fi
+echo "Bundled eos1v-tool submodule commit verified: $EOS1V_TOOL_BUNDLED_COMMIT" >&2
+
 # Sign all nested Mach-O binaries that xcodebuild didn't sign (bundled tools,
 # Perl XS extensions, etc.). Detect by file content, not extension, to catch
 # plain executables like osxphotos.
