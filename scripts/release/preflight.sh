@@ -65,7 +65,10 @@ pass "Config/Base.xcconfig already says ${INTENDED_VERSION}"
 echo "[4/8] Version / tag relationship"
 GIT_TAG="v${MARKETING_VERSION}"
 if git rev-parse -q --verify "refs/tags/${GIT_TAG}" >/dev/null 2>&1; then
-  TAG_COMMIT="$(git rev-parse "refs/tags/${GIT_TAG}")"
+  # Peel to the commit: an annotated tag ref (git tag -a) resolves via plain rev-parse to the
+  # tag OBJECT's own hash, not the commit it points at, so comparing that directly against
+  # LEDGER_COMMIT always mismatches for an annotated tag even when it's exactly right.
+  TAG_COMMIT="$(git rev-parse "refs/tags/${GIT_TAG}^{commit}")"
   if [[ "$TAG_COMMIT" != "$LEDGER_COMMIT" ]]; then
     fail "Tag ${GIT_TAG} already exists but points at ${TAG_COMMIT}, not the current commit ${LEDGER_COMMIT}."
   fi
