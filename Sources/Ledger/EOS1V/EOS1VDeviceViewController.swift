@@ -73,12 +73,7 @@ final class EOS1VDeviceViewController: NSViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        session.objectWillChange
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                DispatchQueue.main.async { self?.refresh() }
-            }
-            .store(in: &observations)
+        installObservationsIfNeeded()
         refresh()
     }
 
@@ -87,9 +82,36 @@ final class EOS1VDeviceViewController: NSViewController {
     // (BrowserIconViewController, BrowserListViewController,
     // BrowserFilmstripViewController, NativeThreePaneSplitViewController) —
     // this one didn't, breaking that convention.
+    //
+    // v1.4 architecture-outcome review (2026-09-27, R1): that fix was still
+    // only half the lifecycle. Verified directly (MainContentView.swift's
+    // installEOS1VDeviceOverlay/updateEOS1VVisibilityIfNeeded) that *this*
+    // specific controller is added once and thereafter only ever toggled via
+    // view.isHidden, which does not itself invoke viewWillAppear/
+    // viewWillDisappear — so this fix is currently a no-op defensive measure,
+    // not a live bug fix, unlike the identical pattern in the nested
+    // EOS1VConnectViewController below (a genuine NSTabViewController child,
+    // which does undergo real appear/disappear on every tab switch). Left in
+    // for consistency and to guard against a future refactor of this
+    // controller's own hosting that would make it a real bug too.
+    override func viewWillAppear() {
+        super.viewWillAppear()
+        installObservationsIfNeeded()
+    }
+
     override func viewWillDisappear() {
         super.viewWillDisappear()
         observations.removeAll()
+    }
+
+    private func installObservationsIfNeeded() {
+        guard observations.isEmpty else { return }
+        session.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                DispatchQueue.main.async { self?.refresh() }
+            }
+            .store(in: &observations)
     }
 
     private func refresh() {
@@ -263,18 +285,34 @@ private final class EOS1VConnectViewController: NSViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        installObservationsIfNeeded()
+        refresh()
+    }
+
+    // v1.4 architecture-outcome review (2026-09-27, R1): viewDidLoad-install/
+    // viewWillDisappear-teardown alone is only half the native tab-controller
+    // lifecycle — NSTabViewController reuses the same child controller instance
+    // across tab switches, calling viewWillDisappear/viewWillAppear each time
+    // rather than deallocating it, so leaving this tab and coming back left
+    // `observations` empty forever after the first disappearance. Matches the
+    // reinstall-on-reappear convention `BrowserContainerViewController` already
+    // established for the exact same reuse pattern.
+    override func viewWillAppear() {
+        super.viewWillAppear()
+        installObservationsIfNeeded()
+    }
+
+    override func viewWillDisappear() {
+        super.viewWillDisappear()
+        observations.removeAll()
+    }
+
+    private func installObservationsIfNeeded() {
+        guard observations.isEmpty else { return }
         session.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in DispatchQueue.main.async { self?.refresh() } }
             .store(in: &observations)
-        refresh()
-    }
-
-    // v1.4 Phase 1.4: see EOS1VDeviceViewController.viewWillDisappear — same
-    // missing-teardown gap, same fix, matching the convention used elsewhere.
-    override func viewWillDisappear() {
-        super.viewWillDisappear()
-        observations.removeAll()
     }
 
     private func refresh() {
