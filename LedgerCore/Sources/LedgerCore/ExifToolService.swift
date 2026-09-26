@@ -306,7 +306,17 @@ public struct ExifToolService: ExifToolServiceProtocol {
         try process.run()
         let deadline = startedAt.addingTimeInterval(timeout(for: kind))
         var timedOut = false
+        var wasCancelled = false
         while process.isRunning {
+            if Task.isCancelled {
+                wasCancelled = true
+                process.terminate()
+                Thread.sleep(forTimeInterval: 0.2)
+                if process.isRunning {
+                    kill(process.processIdentifier, SIGKILL)
+                }
+                break
+            }
             if Date() >= deadline {
                 timedOut = true
                 process.terminate()
@@ -326,6 +336,11 @@ public struct ExifToolService: ExifToolServiceProtocol {
         let stderrData = stderrAccumulator.finalize(with: stderrHandle.readDataToEndOfFile())
         let stdoutText = String(decoding: stdoutData, as: UTF8.self)
         var stderrText = String(decoding: stderrData, as: UTF8.self)
+
+        if wasCancelled {
+            throw CancellationError()
+        }
+
         if timedOut {
             let timeoutText = "Timed out after \(Int(timeout(for: kind)))s while running exiftool."
             stderrText = stderrText.isEmpty ? timeoutText : "\(stderrText)\n\(timeoutText)"

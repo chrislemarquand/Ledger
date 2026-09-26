@@ -219,11 +219,17 @@ extension AppModel {
                 await Task.yield()
 
                 self.inspectorPreviewInflight.insert(fileURL)
-                if let image = await Self.requestInspectorPreviewFromThumbnailService(
+                let image = await Self.requestInspectorPreviewFromThumbnailService(
                     for: fileURL,
                     priority: .utility,
                     forceRefresh: false
-                ) {
+                )
+                // v1.4 architecture-outcome review (2026-09-27, R3): the fetch above runs on a
+                // detached task that does not inherit this task's cancellation, so re-check here
+                // before publishing — a preload superseded mid-fetch (a newer selection bumped
+                // previewPreloadID) must not overwrite state a newer preload already owns.
+                guard !Task.isCancelled, self.previewPreloadID == preloadID else { return }
+                if let image {
                     self.storeInspectorPreview(
                         image,
                         for: fileURL,
@@ -405,6 +411,12 @@ extension AppModel {
                 priority: requestPriority,
                 forceRefresh: force
             )
+            // v1.4 architecture-outcome review (2026-09-27, R3): the fetch above runs on a
+            // detached task that does not inherit this task's cancellation, so a force-refresh
+            // that cancelled this task (line above, on supersession) can still resume here after
+            // the underlying fetch completes. Bail out without touching inflight/tasksByURL —
+            // the newer request that cancelled us already re-initialised both for this URL.
+            guard !Task.isCancelled else { return }
             if let image {
                 self.storeInspectorPreview(
                     image,
@@ -600,11 +612,16 @@ extension AppModel {
                 continue
             }
             inspectorPreviewInflight.insert(fileURL)
-            if let image = await Self.requestInspectorPreviewFromThumbnailService(
+            let image = await Self.requestInspectorPreviewFromThumbnailService(
                 for: fileURL,
                 priority: .utility,
                 forceRefresh: false
-            ) {
+            )
+            // v1.4 architecture-outcome review (2026-09-27, R3): re-check after the detached
+            // fetch (which does not inherit this task's cancellation) before publishing, so a
+            // supersession that happened mid-fetch isn't silently overwritten.
+            guard !Task.isCancelled, !isFolderMetadataLoading, !isPreviewPreloading else { return }
+            if let image {
                 storeInspectorPreview(
                     image,
                     for: fileURL,
