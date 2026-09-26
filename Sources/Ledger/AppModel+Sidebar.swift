@@ -711,6 +711,7 @@ extension AppModel {
             .volumeIsRootFileSystemKey,
             .volumeIsBrowsableKey,
             .volumeLocalizedNameKey,
+            .volumeIdentifierKey,
             .nameKey
         ]
         let mounted = FileManager.default.mountedVolumeURLs(
@@ -718,11 +719,31 @@ extension AppModel {
             options: [.skipHiddenVolumes]
         ) ?? []
 
+        // During a genuine physical/surprise disconnect (as opposed to a clean Finder
+        // "Eject"), the just-vacated mountpoint directory (e.g. /Volumes/EOS_DIGITAL) can
+        // briefly still enumerate here even though its backing device is gone — and querying
+        // resourceValues on it then falls back to whatever volume now actually contains that
+        // now-empty directory, i.e. the boot volume, WITH volumeIsRootFileSystem reporting
+        // false (that flag means "is this exact path the mount root", which a subdirectory of
+        // the boot volume never is, even though it's the boot volume). That let a stale entry
+        // through relabelled as "Macintosh HD" instead of just disappearing. Comparing volume
+        // identity directly — rather than trusting the transient root/internal flags — closes
+        // that gap regardless of how the OS reports the other flags in this liminal state.
+        let bootVolumeIdentifier = try? URL(fileURLWithPath: "/")
+            .resourceValues(forKeys: [.volumeIdentifierKey])
+            .volumeIdentifier as? NSObject
+
         return mounted.compactMap { url in
             guard let values = try? url.resourceValues(forKeys: Set(keys)),
                   values.volumeIsRootFileSystem == false,
                   values.volumeIsBrowsable == true
             else {
+                return nil
+            }
+
+            if let bootVolumeIdentifier,
+               let candidateIdentifier = values.volumeIdentifier as? NSObject,
+               candidateIdentifier.isEqual(bootVolumeIdentifier) {
                 return nil
             }
 

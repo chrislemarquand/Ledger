@@ -231,6 +231,13 @@ extension AppModel {
                 // choice, not for reporting a correction the app already made).
                 statusMessage = "\u{201c}\(folderName)\u{201d} removed from \(sectionLabel) \u{2014} folder no longer found."
             }
+        } else {
+            // A genuinely successful open (no enumeration error) supersedes whatever
+            // status text was showing before — most importantly a persistent
+            // "External source was disconnected." left by clearToEmptyStateAfterSourceLoss,
+            // which otherwise lingers forever since it's set with autoClearAfterSuccess: false
+            // and nothing else was clearing it on the next successful load.
+            statusMessage = "Ready"
         }
 
         let hydrationID = UUID()
@@ -745,7 +752,7 @@ extension AppModel {
         if let previousSelection,
            let sourceURL = sidebarSourceURL(for: previousSelection.kind),
            !isReachableDirectory(sourceURL) {
-            clearToEmptyStateAfterSourceLoss()
+            clearToEmptyStateAfterSourceLoss(staleItem: previousSelection)
             return
         }
 
@@ -753,7 +760,7 @@ extension AppModel {
         startLoadingFiles(for: replacement.kind)
     }
 
-    private func clearToEmptyStateAfterSourceLoss() {
+    private func clearToEmptyStateAfterSourceLoss(staleItem: SidebarItem) {
         // v1.4 follow-up: this used to leave `activeFolderLoadID` untouched, so a `loadFiles`
         // enumeration already in flight when the source is lost (now genuinely suspendable —
         // enumeration runs off the main actor) could resume, still pass its stale-result
@@ -761,6 +768,17 @@ extension AppModel {
         // just cleared.
         cancelFileLoad()
         selectedSidebarID = nil
+
+        // On a genuine physical/surprise removal (as opposed to a clean Finder "Eject"),
+        // `refreshSidebarItems()` above can run before `FileManager.mountedVolumeURLs()`
+        // has caught up, so the just-lost volume's row survives that recompute. This
+        // `isReachableDirectory` check is a filesystem-level signal, more reliable than the
+        // mount-table snapshot, so once it's confirmed gone, prune it directly rather than
+        // waiting for a second workspace notification that never arrives.
+        if case .mountedVolume = staleItem.kind {
+            sidebarItems.removeAll { $0.id == staleItem.id }
+        }
+
         clearLoadedContentState(preserveSessionCaches: true)
         setStatusMessage(
             "External source was disconnected.",
