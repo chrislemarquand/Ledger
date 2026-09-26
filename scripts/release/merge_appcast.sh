@@ -39,7 +39,7 @@ cp "$GENERATED" "$NEW_ITEM_FEED"
 # but say so loudly, since silently dropping history is the exact bug being fixed here.
 LIVE_FEED="$APPCAST_OUTPUT_DIR/live-before-merge.xml"
 if curl -fsSL -o "$LIVE_FEED" "$LIVE_APPCAST_URL" 2>/dev/null; then
-  echo "Fetched current live feed from $LIVE_APPCAST_URL for merging."
+  echo "Fetched current live feed from $LIVE_APPCAST_URL for merging." >&2
 else
   echo "warning: could not fetch $LIVE_APPCAST_URL — treating this as the first release (no history to preserve)." >&2
   rm -f "$LIVE_FEED"
@@ -90,8 +90,9 @@ for existing in existing_items:
                   f"different bytes.", file=sys.stderr)
             sys.exit(1)
         print(f"Version {new_version} already present in the live feed with matching enclosure — "
-              f"nothing to merge, output is the live feed unchanged.")
+              f"nothing to merge, output is the live feed unchanged.", file=sys.stderr)
         live_tree.write(out_path, encoding="UTF-8", xml_declaration=True)
+        print(out_path)
         sys.exit(0)
 
 if channel is not new_channel:
@@ -111,7 +112,7 @@ else:
     new_tree.write(out_path, encoding="UTF-8", xml_declaration=True)
 
 print(f"Merged feed written to {out_path}: {1 + len(existing_items) if channel is not new_channel and existing_items else len(new_items)} total item(s) "
-      f"({len(existing_items)} preserved from the live feed + this release).")
+      f"({len(existing_items)} preserved from the live feed + this release).", file=sys.stderr)
 PYEOF
 
 echo "$MERGED_OUTPUT"
