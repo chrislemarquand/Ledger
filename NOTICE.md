@@ -26,15 +26,6 @@ build environment).
 - **License**: MIT
 - **Homepage**: https://github.com/sparkle-project/Sparkle
 
-## WhatsNewKit
-
-Used for the Welcome/What's New screen (`AppWelcomeViewController`, via
-SharedUI). Pinned in `Package.resolved` at version 2.2.1.
-
-- **Author**: Sven Tiigi
-- **License**: MIT
-- **Homepage**: https://github.com/SvenTiigi/WhatsNewKit
-
 ## eos1v-serial
 
 Ledger's EOS-1V device connection feature (Connect/Shooting Data/Date and
@@ -50,3 +41,10 @@ fork, no live link back to the original.
 - All credit for the original Canon EOS-1V protocol reverse-engineering
   work belongs there; see that repository's own README for the author's
   account of how it was derived.
+
+`eos1v_tool.py` itself depends on:
+
+- **Python** — PSF License — https://www.python.org/psf/license/
+- **PyUSB** — MIT License — https://github.com/pyusb/pyusb
+- **libusb** — LGPL-2.1 — https://github.com/libusb/libusb/blob/master/COPYING
+  (full license text bundled at `Licenses/libusb-LGPL-2.1.txt`)
