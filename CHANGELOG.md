@@ -4,16 +4,47 @@ All notable changes to Ledger are documented here.
 
 ---
 
-## [1.4] — YYYY-MM-DD
+## [1.4] — 2026-09-26
+
+This release is a native-shell cleanup pass: no new user-facing features, focused
+on making Ledger feel and behave like a genuinely native, lightweight AppKit app —
+launch/menu timing, window and sidebar chrome, memory and responsiveness, and a
+round of reliability fixes found along the way.
 
 ### Improved
 
-- **Native UI polish pass**: Gallery and Icon view selection highlighting now dims when focus moves elsewhere in the window, matching List's native behaviour; the Preset editor's rating, flag, and label fields are now proper controls instead of raw text entry; destructive actions in alerts show the standard red tint — small consistency fixes throughout aimed at making the app feel as native as possible.
-- **Overall responsiveness and memory use**: metadata and thumbnails now load on demand rather than being speculatively warmed ahead of need, browser re-renders are routed only to the active view, and both the in-memory metadata cache and the on-disk thumbnail cache (bounded to 1GB) now have real limits instead of growing unbounded during a long session.
+- **Menu bar now appears complete immediately on launch** — no more brief window
+  where only the app menu is present before the rest fills in.
+- **Native UI polish pass**: Gallery and Icon view selection highlighting now dims
+  when focus moves elsewhere in the window, matching List's native behaviour;
+  the sidebar's launch-time scroll position and selection-highlight no longer
+  flash or snap; the Preset editor's rating, flag, and label fields are now
+  proper controls instead of raw text entry; destructive actions in alerts and
+  buttons show the standard red tint; SF Symbol bounce effects on rating, flag,
+  rotate, flip, and open now respect Reduce Motion — small consistency fixes
+  throughout aimed at making the app feel as native as possible.
+- **Overall responsiveness and memory use**: metadata and thumbnails now load on
+  demand rather than being speculatively warmed ahead of need, browser
+  re-renders are routed only to the active view, and both the in-memory
+  metadata cache and the on-disk thumbnail cache (bounded to 1GB) now have real
+  limits instead of growing unbounded during a long session.
+- **Ledger now reopens your last folder and selection on launch**, instead of
+  always starting empty.
+- **Disconnecting an external or iCloud-backed volume mid-browse** now shows a
+  clear "external source disconnected" state instead of a stuck spinner or
+  crash; reconnecting clears that message properly, and the sidebar no longer
+  mislabels the volume's entry after a physical disconnect.
 
 ### Fixed
 
-- Fixed a glitch where clicking a row in List view could cause a brief incorrect accent-colour flash.
+- Fixed a glitch where clicking a row in List view could cause a brief incorrect
+  accent-colour flash.
+- Fixed the EOS-1V Connect tab losing live session updates after switching away
+  and back, and List view's column widths/order failing to persist after the
+  same kind of tab/view switch.
+- Fixed metadata reads and preview loads not reliably stopping when superseded
+  by a newer request (e.g. quickly changing selection), which could waste work
+  or, rarely, let a stale result overwrite a newer one.
 
 ### Removed
 
