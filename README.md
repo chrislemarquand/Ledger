@@ -2,7 +2,7 @@
 
 **Edit your photo metadata the right way.**
 
-Ledger is a native macOS app for browsing and editing photo metadata — EXIF, IPTC, and XMP — across single images or entire folders at once. It's built around ExifTool, the most trusted metadata engine available, wrapped in a clean, fast Mac interface.
+Ledger is a native macOS app for browsing and editing photo metadata — EXIF, IPTC, and XMP — across single images or entire folders at once. It's built around [ExifTool](https://github.com/exiftool/exiftool), the most trusted metadata engine available, wrapped in a clean, fast Mac interface.
 
 ---
 
