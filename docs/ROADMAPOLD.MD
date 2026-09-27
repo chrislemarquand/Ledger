@@ -7,7 +7,7 @@ to keep it focused on what's actually next. Two parts:
   backlog used to ship v1.0, preserved as originally written (its own ID
   system: `B#` bugs, `P#` polish, `N#` native rewrites, `A#` architecture,
   `R#` post-v1.0 items raised during that work).
-- **Shipped v1.x releases** (`v1.0.1` through `v1.2.3`) — moved here from
+- **Shipped v1.x releases** (`v1.0.1` through `v1.4`) — moved here from
   `docs/ROADMAP.md` once fully shipped and also captured in `CHANGELOG.md`.
 
 ---
@@ -326,5 +326,108 @@ Compatibility and modernisation pass for macOS 27 on Xcode 27. Full build agains
 - [x] **Geocoder migration**: `CLGeocoder` / `reverseGeocodeLocation` / `placemark` in `DateTimeAdjustSheetView.swift` are deprecated as of macOS 26. Migrated to MapKit `MKReverseGeocodingRequest` + `addressRepresentations` (both reverse-geocode and search paths share `applyResolvedPlace(from:)`). Known behaviour change: the new API exposes no structured administrative area, so **State/Province is removed from the Set Location sheet entirely** (no checkbox, no "no resolved value" warning; `LocationAdvancedField.geocodableCases` is the single source). Manual entry remains via the inspector's IPTC State field — verified against MKAddressRepresentations' runtime surface, decision 2026-08-15.
 - [x] Fix SharedUI concurrency warning: capture of non-Sendable `SourceID.Type` in an isolated closure (`QuickLookPanelCoordinator.swift`). Fixed by constraining `SourceID: Hashable & Sendable` — correct semantics for an ID that crosses the KVO/main-actor boundary; both consumers (Ledger `URL`, Librarian `String`) already satisfy it.
 - [x] Fix capture-semantics warning in apply/restore path (`AppModel+ApplyRestore.swift`): inner post-apply task used `[weak self]` while the enclosing apply closure held `self` strongly. Dropped the weak capture to match the sibling alert task — `AppModel` is app-lifetime and the task is short and unstored, so no cycle risk; state reset (`isApplyingMetadata`) now reliably runs.
+
+---
+
+## v1.3 — Import Maturity + Polish
+
+Released: **2026-08-31**. User-facing summary in `CHANGELOG.md`.
+
+### Import
+
+- [x] **EOS-1V lens-tag policy system**: originally scoped as policy modes + unknown-focal-length handling + named lens profiles + override selector. Decision 2026-08-29: the `Do not write lens`/`Single lens for import` policy modes are **not being pursued** — the EOS-1V CSV is a source of truth and this feature is just interpreting it into accurate EXIF values; if a resolved lens is wrong for a given frame, editing it after import is trivial, so a dedicated policy switch isn't worth the complexity. Scope narrowed to just the registry and the picker UI:
+  - [x] **Named lens profiles**: `LensProfile` registry (`LensProfiles.swift`) replacing the hardcoded embedded CSV (`EOSLensMappingEmbedded.swift`, deleted in v1.4 Phase 3.4 once confirmed unused at runtime). Editable via Settings → General → "Manage Lenses…" (bridging to SwiftUI via `NSHostingController` + `presentAsSheet`), Prime/Zoom radio toggle, per-lens focal range + aperture(s). `applyEOSLensPolicy`'s matching sources from `AppModel.lensProfiles` instead of the embedded table.
+  - [x] **Ambiguous-lens picker → one sheet**: `EOSLensChoiceSheetView` replaces the old loop of blocking `NSAlert`s (`ImportSession.chooseLens`, removed). One sheet lists every ambiguous frame at once (filename, focal length, frame aperture, a native grey `InspectorPopupField` dropdown per row), grouped by focal length with a live-linked "Apply to all at this focal length" checkbox per group. A frame left on "Leave Blank" now just skips that one field — the rest of the batch still stages, unlike the old alert's full-abort cancel.
+  - [x] **Unknown focal length behaviour** (no registered lens covers a row's focal length): one aggregated "No Registered Lens Matches" alert per import, listing every affected focal length and total frame count. "Manage Lenses…" (default) opens the lens registry sheet and automatically retries matching on close; "Continue Without Lens Tags" skips the `exif-lens` field for just those focal lengths for the current import only; "Cancel Import" aborts.
+
+### EOS-1V Direct Connection
+
+- [x] **Direct EOS-1V connection over the ES-E1 cable** (unplanned addition, built 2026-08-29–31): a new sidebar device entry with Connect / Shooting Data / Date and Time tabs, backed by `eos1v-serial`'s versioned `machine` JSON subprocess interface (`EOS1VSessionController`, `EOS1VToolClient`).
+  - [x] Connect: wake/search/download flow with live status.
+  - [x] Shooting Data: flat multi-select roll table, roll detail sheet (SwiftUI `Table`, one column per frame field), local-only delete/restore (tombstone — never touches the camera or downloaded files, see `EOS1VDeletedRollsStore`).
+  - [x] Canon-format CSV export verified byte-for-byte against real Windows XP ES-E1 exports (`EOS1VRollCSVExporter`).
+  - [x] Date and Time tab: frozen camera-clock-vs-macOS-clock comparison snapshot (not live-ticking).
+  - Personal/Custom Functions screens were built but hidden — not part of this release's scope; code and data plumbing stay intact for future reactivation.
+  - Camera clock **write** capability exists end-to-end but is disabled pending a real-hardware wake-failure diagnosis — see `docs/eos1v-set-clock-review-2026-08.md`.
+  - Future editable roll-metadata layer parked — see the v2.0+ entry in `docs/ROADMAP.md` and `docs/eos1v-roll-metadata-plan-2026-08.md`.
+
+### Browse
+
+- [x] **iCloud Drive file-state UI**: badge undownloaded/cloud-placeholder files with an iCloud symbol (SharedUI's `Gallery/GalleryOverlay.swift`), detected via `URLResourceValues` (`isUbiquitousItem` / `ubiquitousItemDownloadingStatus`) — previously looked like a broken thumbnail or metadata-read failure.
+- [x] **Finder-style gallery view**: filmstrip along bottom, large preview at top — third browser mode alongside list and grid.
+- [x] Gallery metadata lines/subtitle customisation.
+
+### Metadata
+
+- [x] Metadata copy/paste: field-level and metadata-set copy/paste.
+- [x] ExifTool console: live readout of ExifTool commands and output as operations run, mirroring what would appear if running ExifTool directly in the terminal.
+
+### Maintenance
+
+- [x] Bump bundled ExifTool from 13.50 to 13.55 (2026-08-31), including the 13.53/13.54 security updates. Homebrew's formula tops out at 13.55 as of this date; exiftool.org's own latest (13.59) would mean vendoring outside the package manager — revisit once Homebrew catches up.
+- [x] No-op batch rename: suppress the staged/applied state when a rename pattern produces no changes; keep the sheet open and explain why.
+
+---
+
+## v1.4 — Performance + Native Foundations (Pre-2.0)
+
+Released: **2026-09-26**. No new user-facing features by design — a measured
+performance, efficiency, and native-macOS-quality pass before the v2.0 browser
+rewrite. Full sequence, benchmark method, and acceptance gates in
+`docs/v1.4-performance-audit-plan.md`; the complete phase-by-phase evidence
+trail is in `docs/v1.4-progress.md` (2800+ lines — every hypothesis, including
+rejected ones, recorded there). User-facing summary in `CHANGELOG.md`. Closed
+out by an external architecture-outcome review (2026-09-27,
+`docs/v1.4-architecture-outcome-review-2026-09-27.md`) which found two real
+remaining defects (observer-lifecycle mismatches, incomplete task
+cancellation) fixed the same day, and confirmed the rest of its findings as
+either already resolved or deliberately, evidence-backed deferred to v1.4.1/v1.5.
+
+### Responsiveness
+
+- [x] **Established the performance baseline** (Phase 0): proportionate Release-build benchmark harness, stable OSSignposter signposts, focused UI automation (`LedgerUITests`, 4 deterministic journeys), repeatable cold/warm browser scenarios against a bounded 1,000+ file corpus.
+- [x] **Kept interaction paths non-blocking** (Phase 1.1, 1.3): `ThumbnailService.cachedImage` made memory-only (no synchronous disk I/O on the browser path); hangs/hitches captured and fixed across launch, scrolling, selection, view switching, menus, live resize.
+- [x] **Narrowed browser rendering** (Phase 1.2, 1.4): browser render updates routed only to the active controller; EOS-1V Combine subscription teardown/lifecycle gap fixed.
+
+### Data + Resource Efficiency
+
+- [x] **Made metadata and preview loading demand-driven** (Phase 2.1–2.3): demand-gated metadata prefetch with benchmark-isolation fix; old-folder speculative preview/metadata warm work bounded; a unified quiescence signal surfaced and correctly attributed a real ~34s idle delay to preference-driven demand (not a bug) rather than to the harness.
+- [x] **Bounded retained state and caches** (Phase 3.1, 3.3): `metadataByFile` bounded by a protected LRU cap; thumbnail disk cache bounded to a measured 1GB budget.
+- [x] **Reduce ExifTool process cost** (Phase 3.2) — **investigated, rejected**: correct batching needs ExifTool's `-stay_open` persistent-process protocol (a later external review, R7, corrected the premise that this is strictly *required* — multiple command groups per invocation via `-execute` are also possible — but backup interleaving and per-file result attribution still make batching genuinely nontrivial), for a benefit that doesn't help the common single/few-file case. User confirmed current write performance already acceptable; no code changed.
+- [x] **Reduced shipping payload** (Phase 3.4): confirmed redundancy removed (including the now-dead `EOSLensMappingEmbedded.swift`), EOS-1V Python tool bundled like ExifTool.
+
+### Native macOS Foundations
+
+- [x] **Owned the menu bar from launch** (Phase 4.0–4.1): static AppKit menu hierarchy (`MainMenu.xib`, `NSApplicationMain`) built before hosted UI or the first window; menu-wiring extracted out of `MainContentView.swift`; responder-chain validation retained for dynamic state; timing/reinjection workarounds removed. Detailed diagnosis: `docs/menu-bar-architecture-audit-2026-08.md`.
+- [x] **Unified window and list persistence** (Phase 4.2): AppKit-native window/split-view/table-column autosave adopted; competing persistence and layout feedback loops removed, including the long-standing List view column-width-doesn't-persist bug. Detailed diagnosis: `docs/window-list-resize-diagnosis-2026-07.md`.
+- [x] **Selection-highlight consistency across Icon/List/Gallery** (Phase 4.3) — resolved opposite to the item's original framing: List's grey-dim-on-focus-loss was confirmed genuine native AppKit behaviour (matches Photos.app), not a bug. The real fix was removing List's focus-stealing accent-flash-on-click glitch, then making Icon/Gallery's `GallerySelectionAppearanceObserver` first-responder-aware to match List's correct behaviour (it previously only checked window-key/app-active state).
+- [x] **Completed the coordinated SharedUI audit** (Phase 4.3): every macOS 26 chrome workaround re-verified live on macOS 27 — most confirmed moot and deleted (`ToolbarAppearanceAdapter`, `ScrollContentInsetMode.manual(top:)`, `SidebarCellView.backgroundStyle` override), one root-caused instead of just re-confirmed (sidebar launch-time scroll snap — traced to toolbar-after-content window construction order, fixed at the root in both Ledger and Librarian). Full detail in SharedUI's `docs/Roadmap.md`.
+
+### Native UI Consistency & Polish
+
+(Added 2026-09-03, in the same "strip out hacks, prefer native" spirit as the
+SharedUI chrome-workaround audit above. Full root-cause detail, exact code
+patterns, and a "how to repeat this on Librarian" section for every item live
+in `docs/ui-consistency-polish-2026-09.md`.)
+
+- [x] Accent colour consistency: confirmed only one accent colour is specified anywhere; the perceived sidebar-vs-list difference is entirely explained by AppKit's own two built-in selection-highlight styles (`.sourceList` vs `.regular`) — nothing to change.
+- [x] User-facing text pass against HIG + `docs/USER_FACING_COPY_GUIDELINES.md`: empty-state subtitle punctuation fixed; 9 concrete issues found and fixed across alerts/buttons/sheet titles (3 alerts converted to inline/status text, wording normalized to sentence-case, "ExifTool" capitalization fixed, "Clear Changes"/"Clear Backups…" renamed to "Discard Changes"/"Delete Backups…").
+- [x] Sheet layout/consistency audit: found and migrated 2 outliers (`PresetEditorSheet`/`PresetManagerSheet`) to the shared `WorkflowSheetContainer` rhythm already used by the other 8 sheets; fixed a real sizing divergence and a stray title-font mismatch along the way.
+- [x] Button colour consistency (grey vs accent) — live-verified with real screenshots, not just code review: destructive buttons needed an explicit `.tint(.red)` (role alone doesn't render red); an ambient `.tint()` on two parent views was bleeding teal into plain `.bordered` buttons that should have been neutral grey, removed.
+- [x] Ellipsis usage audit against HIG (ellipsis = "needs new information before completing"): fixed 2 ("Delete Backups…" and "What's New in Ledger…" both removed — neither actually gathers input).
+- [x] Polish animations: `.symbolEffect(.bounce.up.byLayer, options: .nonRepeating, value:)` added to Inspector star rating, flag, Rotate, Flip, and Open buttons, keyed on real state-change signals so only the cell that actually changed bounces.
+- [x] **Reopened last folder and selection on launch** (2026-09-25): previously the app always launched with no folder selected even though window frame/split/column-width state already survived quit-and-relaunch via Secure State Restoration. Matches the HIG's "Launching" guidance and the app's own existing persistence stance. Full plan: `docs/last-folder-selection-restore-plan-2026-09.md`.
+- Inspector field copy/clear icon visual-height mismatch — investigated twice (2026-09-03/04), no confirmed root cause either time, fully reverted both times. Dropped from the roadmap entirely (2026-09-27) rather than carried forward — cosmetic-only, two failed diagnosis attempts already invested.
+
+### Evidence-Gated Maintenance
+
+- [x] **Decompose only where the work requires it**: menu-wiring extraction (Phase 4.0) and confirmed dead-code removal (`EOSLensMappingEmbedded.swift`, Phase 3.4) both landed; broader `MainContentView.swift`/`AppModel` splitting was deliberately not pursued further — the 2026-09-27 external architecture review confirmed this as "deliberate, reasonable narrowing... further splitting alone would not improve ownership or performance," not unexplained drift.
+- [x] **Optimise browser reloads only when measured** (Phase 5.1): measured via real signpost instrumentation and a driven XCUITest session — full reloads only fire on genuine list-identity changes (folder switch, real sort reorder, view-mode first-activation); per-selection-change work is already bounded to visible cells. No material problem found; no code changed.
+- [x] **Treat Observation as optional** (Phase 5.2): deliberately not opened — no evidence of a residual hosted-SwiftUI problem after Phase 5.1's measurement, matching the plan's own "may be skipped" framing. Combine retained throughout.
+- [x] **Closed with like-for-like verification** (Phase 6, completed 2026-09-27): baseline repeated on the same machine/corpora/toolchain (quiescence's +124ms root-caused to Phase 4.2's `sizeToFit()`, accepted as a deliberate one-time cost, reconfirmed stable twice); automated gate green (49 LedgerCore + 221+ app-side tests); manual gate fully walked and signed off, all 10 sections PASS (§7 macOS 26 chrome explicitly skipped — no machine/VM available).
+
+### Closing architecture-outcome review (2026-09-27)
+
+External frontier-model review of the actual v1.4 outcome against these original criteria (`docs/v1.4-architecture-outcome-review-2026-09-27.md`). Verdict: "a successful native-shell cleanup with unfinished pipeline and lifecycle hardening" — not a full unqualified pass, but a materially clean result. Two concrete findings (R1: observer-lifecycle mismatches in `EOS1VConnectViewController`/`SharedBrowserListViewController`; R3: incomplete `Task` cancellation beneath `ExifToolService`/the metadata pipeline) were real, fixed the same day, and full-suite verified. The remaining six findings (menu-validation synchronous filesystem discovery, hidden-mode metadata demand, an overstated structural-isolation claim, unresolved macOS 26/map-drag verification, a batching-rationale correction, and a since-redundant sidebar scroll-repair) were explicitly deferred to v1.4.1/v1.5 rather than fixed under release pressure — logged in `docs/v1.4-progress.md`'s Decision log, not dropped.
 
 Deferred: HDR-aware previews (moved to v2.0 — belongs with the in-app viewer and gallery-pipeline rewrite; benefit today is limited since film-scan TIFFs are SDR).
